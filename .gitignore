@@ -1,0 +1,7 @@
+db_data/
+redis/
+frontend/node_modules/
+frontend/.next/
+backend/__pycache__/
+*.pyc
+.env
