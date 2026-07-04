@@ -1,11 +1,21 @@
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Section } from "@/components/ui/Section";
+
 export default function TarefasPage() {
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold">Tarefas</h1>
+      <PageHeader
+        title="Tarefas"
+        description="Gestão operacional de tarefas da agência."
+      />
 
-      <p className="mt-2 text-zinc-500">
-        Área reservada para o módulo Kanban.
-      </p>
+      <Section title="Kanban">
+        <EmptyState
+          title="Kanban em desenvolvimento"
+          description="O módulo Kanban será criado na Fase 3."
+        />
+      </Section>
     </div>
   );
 }

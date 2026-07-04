@@ -1,11 +1,18 @@
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+
 export default function RelatoriosPage() {
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold">Relatórios</h1>
+      <PageHeader
+        title="Relatórios"
+        description="Indicadores operacionais e métricas."
+      />
 
-      <p className="mt-2 text-zinc-500">
-        Área reservada para relatórios operacionais.
-      </p>
+      <EmptyState
+        title="Relatórios ainda não disponíveis"
+        description="Os relatórios serão criados em fases futuras."
+      />
     </div>
   );
 }

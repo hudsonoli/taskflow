@@ -1,11 +1,18 @@
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+
 export default function ProjetosPage() {
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold">Projetos</h1>
+      <PageHeader
+        title="Projetos"
+        description="Gestão de projetos e entregas."
+      />
 
-      <p className="mt-2 text-zinc-500">
-        Área reservada para gestão de projetos.
-      </p>
+      <EmptyState
+        title="Projetos ainda não implementados"
+        description="Este módulo será desenvolvido nas próximas fases."
+      />
     </div>
   );
 }

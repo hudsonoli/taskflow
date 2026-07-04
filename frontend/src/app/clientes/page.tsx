@@ -1,11 +1,18 @@
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+
 export default function ClientesPage() {
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold">Clientes</h1>
+      <PageHeader
+        title="Clientes"
+        description="Cadastro e gestão de clientes."
+      />
 
-      <p className="mt-2 text-zinc-500">
-        Área reservada para cadastro de clientes.
-      </p>
+      <EmptyState
+        title="Módulo em construção"
+        description="O cadastro de clientes será implementado futuramente."
+      />
     </div>
   );
 }

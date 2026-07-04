@@ -1,11 +1,18 @@
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+
 export default function EquipePage() {
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold">Equipe</h1>
+      <PageHeader
+        title="Equipe"
+        description="Gestão de colaboradores e produtividade."
+      />
 
-      <p className="mt-2 text-zinc-500">
-        Área reservada para colaboradores.
-      </p>
+      <EmptyState
+        title="Módulo em construção"
+        description="A gestão da equipe será implementada futuramente."
+      />
     </div>
   );
 }

@@ -1,11 +1,18 @@
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+
 export default function ConfiguracoesPage() {
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold">Configurações</h1>
+      <PageHeader
+        title="Configurações"
+        description="Configurações gerais da plataforma."
+      />
 
-      <p className="mt-2 text-zinc-500">
-        Área reservada para configurações do sistema.
-      </p>
+      <EmptyState
+        title="Configurações ainda não implementadas"
+        description="As opções administrativas serão criadas futuramente."
+      />
     </div>
   );
 }
