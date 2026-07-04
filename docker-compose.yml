@@ -1,0 +1,73 @@
+version: "3.8"
+
+services:
+  taskfloww_front:
+    image: node:22-alpine
+    container_name: taskfloww_front
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3010:3000"
+    volumes:
+      - ./frontend:/app
+    networks:
+      - taskfloww_net
+    restart: unless-stopped
+
+  taskfloww_api:
+    image: python:3.12-slim
+    container_name: taskfloww_api
+    working_dir: /app
+    command: >
+      sh -c "
+      pip install
+      fastapi
+      uvicorn[standard]
+      sqlalchemy
+      psycopg2-binary
+      python-multipart
+      pydantic
+      redis
+      &&
+      uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    ports:
+      - "8010:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - taskfloww_db
+      - taskfloww_redis
+    networks:
+      - taskfloww_net
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://taskfloww:taskfloww_senha_segura@taskfloww_db:5432/taskfloww
+      REDIS_URL: redis://taskfloww_redis:6379/0
+
+  taskfloww_db:
+    image: postgres:16-alpine
+    container_name: taskfloww_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: taskfloww
+      POSTGRES_USER: taskfloww
+      POSTGRES_PASSWORD: taskfloww_senha_segura
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    networks:
+      - taskfloww_net
+
+  taskfloww_redis:
+    image: redis:7-alpine
+    container_name: taskfloww_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - ./redis:/data
+    networks:
+      - taskfloww_net
+
+networks:
+  taskfloww_net:
+    driver: bridge
