@@ -1,51 +1,30 @@
-# Skill - Arquitetura TaskFloww
+# Architecture Skill
 
-## Stack
+## Organização frontend
 
-Frontend:
-- Next.js
-- React
-- TypeScript
-- TailwindCSS
+Usar Next.js App Router.
 
-Backend:
-- FastAPI
-- Python
-- SQLAlchemy
+Estrutura esperada:
 
-Banco:
-- PostgreSQL
+src/
+├── app/
+├── components/
+│   ├── layout/
+│   ├── dashboard/
+│   ├── kanban/
+│   ├── forms/
+│   └── ui/
+├── lib/
+├── types/
+└── hooks/
 
-Cache/Fila:
-- Redis
+## Regras
 
-Drag and Drop:
-- dnd-kit
-
-## Separação
-
-Frontend:
-- interface
-- componentes
-- kanban
-- dashboards
-- formulários
-- experiência do usuário
-
-Backend:
-- regras de negócio
-- autenticação
-- APIs
-- persistência
-- relatórios
-- integrações futuras de IA
-
-## Princípios
-
-- Não misturar regra de negócio no frontend.
-- Não transformar o projeto em ERP.
-- Priorizar gestão operacional.
-- Criar componentes reutilizáveis.
-- Manter interface compacta e clara.
-- Usar dados mockados apenas nas primeiras telas.
-- Depois conectar à API.
+- page.tsx deve ser simples.
+- Componentes reutilizáveis ficam em src/components.
+- Lógica auxiliar fica em src/lib.
+- Tipos TypeScript ficam em src/types.
+- Hooks ficam em src/hooks.
+- Não misturar regra de negócio com componente visual.
+- Não criar banco sem fase aprovada.
+- Não criar autenticação sem fase aprovada.
