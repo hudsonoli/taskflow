@@ -9,6 +9,23 @@ const users = [
     email: "hudson@technetgo.com.br",
     department: "TI",
     profile: "SuperAdmin",
+    agency: "Agência Principal",
+    status: "Ativo",
+  },
+  {
+    name: "Ana Costa",
+    email: "ana@empresa.com.br",
+    department: "Direção",
+    profile: "Diretoria",
+    agency: "Agência Principal",
+    status: "Ativo",
+  },
+  {
+    name: "Carlos Lima",
+    email: "carlos@agenciaexemplo.com.br",
+    department: "Administrativo",
+    profile: "Admin",
+    agency: "Agência Exemplo",
     status: "Ativo",
   },
   {
@@ -16,6 +33,7 @@ const users = [
     email: "joao@empresa.com.br",
     department: "Atendimento",
     profile: "Gestor",
+    agency: "Agência Principal",
     status: "Ativo",
   },
   {
@@ -23,6 +41,7 @@ const users = [
     email: "maria@empresa.com.br",
     department: "Criação",
     profile: "Operador",
+    agency: "Agência Principal",
     status: "Ativo",
   },
   {
@@ -30,7 +49,16 @@ const users = [
     email: "pedro@empresa.com.br",
     department: "Mídia",
     profile: "Operador",
+    agency: "Agência Principal",
     status: "Inativo",
+  },
+  {
+    name: "Cliente Exemplo",
+    email: "contato@clienteexemplo.com.br",
+    department: "Externo",
+    profile: "Cliente",
+    agency: "Agência Exemplo",
+    status: "Ativo",
   },
 ];
 
@@ -83,6 +111,7 @@ export default function UsuariosPage() {
               <th className="px-6 py-4 font-medium">E-mail</th>
               <th className="px-6 py-4 font-medium">Departamento</th>
               <th className="px-6 py-4 font-medium">Perfil</th>
+              <th className="px-6 py-4 font-medium">Agência</th>
               <th className="px-6 py-4 font-medium">Status</th>
             </tr>
           </thead>
@@ -107,6 +136,10 @@ export default function UsuariosPage() {
 
                 <td className="px-6 py-4">
                   <Badge>{user.profile}</Badge>
+                </td>
+
+                <td className="px-6 py-4 text-zinc-500">
+                  {user.agency}
                 </td>
 
                 <td className="px-6 py-4">

@@ -8,7 +8,6 @@ const menuItems = [
   { label: "Tarefas", href: "/tarefas" },
   { label: "Projetos", href: "/projetos" },
   { label: "Clientes", href: "/clientes" },
-  { label: "Equipe", href: "/equipe" },
   { label: "Relatórios", href: "/relatorios" },
   { label: "Configurações", href: "/configuracoes" },
 ];
