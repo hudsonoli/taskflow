@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/Badge";
 export type TaskPriority = "Baixa" | "Media" | "Alta";
 
 type KanbanCardProps = {
+  id: string;
   title: string;
   client: string;
   project: string;
@@ -11,6 +12,7 @@ type KanbanCardProps = {
 };
 
 export function KanbanCard({
+  id,
   title,
   client,
   project,
@@ -18,10 +20,11 @@ export function KanbanCard({
   priority,
 }: KanbanCardProps) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <Badge>{priority}</Badge>
-      </div>
+    <div
+      data-task-id={id}
+      className="rounded-2xl bg-white p-4 shadow-sm"
+    >
+      <Badge>{priority}</Badge>
 
       <h3 className="mt-3 text-sm font-semibold text-zinc-900">{title}</h3>
 

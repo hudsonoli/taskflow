@@ -1,3 +1,7 @@
+"use client";
+
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { useState } from "react";
 import { KanbanColumn, type KanbanTask } from "./KanbanColumn";
 
 type KanbanColumnConfig = {
@@ -12,7 +16,7 @@ const columns: KanbanColumnConfig[] = [
   { id: "concluido", title: "Concluído" },
 ];
 
-const tasks: KanbanTask[] = [
+const initialTasks: KanbanTask[] = [
   {
     id: "task-1",
     title: "Landing Page Campanha",
@@ -61,17 +65,37 @@ const tasks: KanbanTask[] = [
 ];
 
 export function KanbanBoard() {
+  const [tasks, setTasks] = useState<KanbanTask[]>(initialTasks);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+
+    if (!over) return;
+
+    const taskId = String(active.id);
+    const newColumnId = String(over.id);
+
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === taskId ? { ...task, columnId: newColumnId } : task
+      )
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <div className="flex gap-6 pb-4">
-        {columns.map((column) => (
-          <KanbanColumn
-            key={column.id}
-            title={column.title}
-            tasks={tasks.filter((task) => task.columnId === column.id)}
-          />
-        ))}
+    <DndContext onDragEnd={handleDragEnd}>
+      <div className="overflow-x-auto">
+        <div className="flex gap-6 pb-4">
+          {columns.map((column) => (
+            <KanbanColumn
+              key={column.id}
+              id={column.id}
+              title={column.title}
+              tasks={tasks.filter((task) => task.columnId === column.id)}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </DndContext>
   );
 }
