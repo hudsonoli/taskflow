@@ -69,9 +69,9 @@ export function EntitySidePanel({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-zinc-200 bg-white shadow-xl sm:max-w-xl sm:rounded-l-3xl lg:max-w-2xl"
+        className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-zinc-200 bg-white shadow-xl sm:max-w-lg sm:rounded-l-3xl lg:max-w-xl"
       >
-        <header className="flex items-start justify-between gap-4 border-b border-zinc-100 px-5 py-5 sm:px-8">
+        <header className="flex items-start justify-between gap-4 border-b border-zinc-100 px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <h2
               id={titleId}
@@ -112,12 +112,12 @@ export function EntitySidePanel({
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8">
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {children}
         </div>
 
         {footer && (
-          <footer className="border-t border-zinc-100 bg-white px-5 py-4 sm:px-8">
+          <footer className="border-t border-zinc-100 bg-white px-4 py-4 sm:px-6">
             {footer}
           </footer>
         )}
