@@ -1,8 +1,12 @@
 "use client";
 
-import { useDroppable, useDraggable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { KanbanCard, type TaskPriority } from "./KanbanCard";
+import {
+  KanbanCard,
+  type TaskPriority,
+  type TaskRework,
+} from "./KanbanCard";
 
 export type KanbanTask = {
   id: string;
@@ -11,6 +15,10 @@ export type KanbanTask = {
   project: string;
   assignee: string;
   priority: TaskPriority;
+  deadline: string;
+  sla: string;
+  taskType: string;
+  rework: TaskRework;
   columnId: string;
 };
 
@@ -44,15 +52,17 @@ function DraggableCard({ task }: { task: KanbanTask }) {
         project={task.project}
         assignee={task.assignee}
         priority={task.priority}
+        deadline={task.deadline}
+        sla={task.sla}
+        taskType={task.taskType}
+        rework={task.rework}
       />
     </div>
   );
 }
 
 export function KanbanColumn({ id, title, tasks }: KanbanColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({
-    id,
-  });
+  const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
     <div
