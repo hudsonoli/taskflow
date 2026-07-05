@@ -248,3 +248,39 @@ Objetivos:
 * Permissões
 * Login
 * Sessões
+
+## Regras de Permissão
+
+O TaskFloww utilizará controle de acesso por perfil.
+
+Perfis previstos:
+
+- SuperAdmin
+- Admin
+- Diretoria
+- Gestor
+- Operador
+- Cliente
+
+### Configurações
+
+O menu Configurações não será visível para todos os usuários.
+
+Terão acesso:
+
+- SuperAdmin
+- Admin
+- Diretoria
+- Gestor
+- Usuários com permissão específica
+
+Não terão acesso:
+
+- Operador
+- Cliente
+
+### Observação
+
+Nesta fase ainda não existe autenticação.
+
+As permissões serão implementadas futuramente após a criação do módulo de usuários e autenticação.

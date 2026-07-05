@@ -72,3 +72,37 @@ Antes de alterar arquivos:
 4. Fazer alterações pequenas
 5. Validar com lint
 6. Commitar com mensagem clara
+
+## Regras de Permissão
+
+O sistema utilizará RBAC (Role Based Access Control).
+
+Perfis previstos:
+
+- SuperAdmin
+- Admin
+- Diretoria
+- Gestor
+- Operador
+- Cliente
+
+### Configurações
+
+Configurações é uma área administrativa.
+
+Não deve ser exibida para:
+
+- Operador
+- Cliente
+
+Deve ser exibida para:
+
+- SuperAdmin
+- Admin
+- Diretoria
+- Gestor
+- Usuários com permissão explícita
+
+Importante:
+
+Enquanto não existir autenticação, as telas podem ser criadas normalmente, porém as regras de permissão devem ser consideradas no design futuro.
