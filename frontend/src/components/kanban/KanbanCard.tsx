@@ -14,6 +14,7 @@ type KanbanCardProps = {
   sla: string;
   taskType: string;
   rework: TaskRework;
+  onClick?: () => void;
 };
 
 export function KanbanCard({
@@ -27,9 +28,14 @@ export function KanbanCard({
   sla,
   taskType,
   rework,
+  onClick,
 }: KanbanCardProps) {
   return (
-    <div data-task-id={id} className="rounded-2xl bg-white p-4 shadow-sm">
+    <div
+      data-task-id={id}
+      onClick={onClick}
+      className="cursor-pointer rounded-2xl bg-white p-4 shadow-sm"
+    >
       <div className="flex items-center justify-between gap-2">
         <Badge>{priority}</Badge>
         <Badge>{taskType}</Badge>

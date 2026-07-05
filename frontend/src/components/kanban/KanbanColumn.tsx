@@ -20,15 +20,23 @@ export type KanbanTask = {
   taskType: string;
   rework: TaskRework;
   columnId: string;
+  description: string;
 };
 
 type KanbanColumnProps = {
   id: string;
   title: string;
   tasks: KanbanTask[];
+  onTaskSelect: (task: KanbanTask) => void;
 };
 
-function DraggableCard({ task }: { task: KanbanTask }) {
+function DraggableCard({
+  task,
+  onSelect,
+}: {
+  task: KanbanTask;
+  onSelect: (task: KanbanTask) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
   });
@@ -56,12 +64,18 @@ function DraggableCard({ task }: { task: KanbanTask }) {
         sla={task.sla}
         taskType={task.taskType}
         rework={task.rework}
+        onClick={() => onSelect(task)}
       />
     </div>
   );
 }
 
-export function KanbanColumn({ id, title, tasks }: KanbanColumnProps) {
+export function KanbanColumn({
+  id,
+  title,
+  tasks,
+  onTaskSelect,
+}: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
@@ -81,7 +95,7 @@ export function KanbanColumn({ id, title, tasks }: KanbanColumnProps) {
 
       <div className="space-y-3">
         {tasks.map((task) => (
-          <DraggableCard key={task.id} task={task} />
+          <DraggableCard key={task.id} task={task} onSelect={onTaskSelect} />
         ))}
       </div>
     </div>
