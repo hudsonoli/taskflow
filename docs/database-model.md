@@ -1,0 +1,12 @@
+Agencias
+Usuarios
+Equipes
+Clientes
+Projetos
+Workflows
+WorkflowEtapas
+Tarefas
+Comentarios
+Anexos
+Permissoes
+Auditoria
