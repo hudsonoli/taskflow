@@ -1,21 +1,15 @@
-import { EmptyState } from "@/components/ui/EmptyState";
+import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Section } from "@/components/ui/Section";
 
 export default function TarefasPage() {
   return (
     <div className="p-8">
       <PageHeader
         title="Tarefas"
-        description="Gestão operacional de tarefas da agência."
+        description="Kanban operacional do TaskFloww."
       />
 
-      <Section title="Kanban">
-        <EmptyState
-          title="Kanban em desenvolvimento"
-          description="O módulo Kanban será criado na Fase 3."
-        />
-      </Section>
+      <KanbanBoard />
     </div>
   );
 }
