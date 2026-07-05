@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { EntitySidePanel } from "@/components/ui/EntitySidePanel";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
   EMPRESA_PADRAO_ID,
@@ -11,6 +13,7 @@ import {
 } from "@/lib/cliente-mock";
 import type { ClienteDraft } from "@/types/cliente";
 import { NovoClienteButton } from "./NovoClienteButton";
+import { NovoClienteModal } from "./NovoClienteModal";
 
 function resolveEquipeNome(equipeId?: string): string {
   if (!equipeId) return "-";
@@ -156,6 +159,17 @@ const initialClientes: ClienteDraft[] = [
 
 export function ClientesView() {
   const [clientes, setClientes] = useState<ClienteDraft[]>(initialClientes);
+  const [selectedClienteId, setSelectedClienteId] = useState<string | null>(
+    null
+  );
+  const [editingClienteId, setEditingClienteId] = useState<string | null>(null);
+
+  const selectedCliente = clientes.find(
+    (cliente) => cliente.clienteId === selectedClienteId
+  );
+  const editingCliente = clientes.find(
+    (cliente) => cliente.clienteId === editingClienteId
+  );
 
   const clientesAtivos = clientes.filter(
     (cliente) => cliente.status === "Ativo"
@@ -166,8 +180,27 @@ export function ClientesView() {
     0
   );
 
-  function handleCreate(draft: ClienteDraft) {
-    setClientes((current) => [draft, ...current]);
+  function handleUpsert(draft: ClienteDraft) {
+    setClientes((current) => {
+      const exists = current.some(
+        (cliente) => cliente.clienteId === draft.clienteId
+      );
+
+      if (!exists) return [draft, ...current];
+
+      return current.map((cliente) =>
+        cliente.clienteId === draft.clienteId ? draft : cliente
+      );
+    });
+  }
+
+  function openEdit(clienteId: string) {
+    setSelectedClienteId(null);
+    setEditingClienteId(clienteId);
+  }
+
+  function closeEdit() {
+    setEditingClienteId(null);
   }
 
   return (
@@ -178,7 +211,7 @@ export function ClientesView() {
           description="Cadastro e gestão de clientes."
         />
 
-        <NovoClienteButton onCreate={handleCreate} />
+        <NovoClienteButton onCreate={handleUpsert} />
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
@@ -214,7 +247,18 @@ export function ClientesView() {
             {clientes.map((cliente) => (
               <tr
                 key={cliente.clienteId}
-                className="border-b border-zinc-100 last:border-0"
+                tabIndex={0}
+                onClick={() => setSelectedClienteId(cliente.clienteId)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedClienteId(cliente.clienteId);
+                  }
+                }}
+                aria-label={`Ver cliente ${
+                  cliente.nomeFantasia || cliente.nomeRazaoSocial
+                }`}
+                className="cursor-pointer border-b border-zinc-100 transition last:border-0 hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none"
               >
                 <td className="px-6 py-4 font-medium text-zinc-900">
                   {cliente.nomeFantasia || cliente.nomeRazaoSocial}
@@ -240,6 +284,141 @@ export function ClientesView() {
           </tbody>
         </table>
       </div>
+
+      <EntitySidePanel
+        open={selectedCliente !== undefined}
+        onClose={() => setSelectedClienteId(null)}
+        onEdit={
+          selectedCliente
+            ? () => openEdit(selectedCliente.clienteId)
+            : undefined
+        }
+        editLabel="Editar cliente"
+        title={
+          selectedCliente
+            ? selectedCliente.nomeFantasia || selectedCliente.nomeRazaoSocial
+            : "Cliente"
+        }
+        description={selectedCliente?.codigoInterno}
+        footer={
+          <div className="flex justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => setSelectedClienteId(null)}
+            >
+              Fechar
+            </Button>
+          </div>
+        }
+      >
+        {selectedCliente && (
+          <div className="space-y-8">
+            <section>
+              <h3 className="text-sm font-semibold text-zinc-900">
+                Informações
+              </h3>
+              <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-zinc-400">Nome</dt>
+                  <dd className="mt-1 text-sm font-medium text-zinc-800">
+                    {selectedCliente.nomeFantasia ||
+                      selectedCliente.nomeRazaoSocial}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-400">Código interno</dt>
+                  <dd className="mt-1 text-sm font-medium text-zinc-800">
+                    {selectedCliente.codigoInterno}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-400">Documento</dt>
+                  <dd className="mt-1 text-sm font-medium text-zinc-800">
+                    {selectedCliente.documento}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-400">Contato</dt>
+                  <dd className="mt-1 text-sm font-medium text-zinc-800">
+                    {selectedCliente.email ||
+                      selectedCliente.telefone ||
+                      selectedCliente.celular ||
+                      "-"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-400">
+                    Equipe responsável
+                  </dt>
+                  <dd className="mt-1 text-sm font-medium text-zinc-800">
+                    {resolveEquipeNome(selectedCliente.equipeResponsavelId)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-400">
+                    Responsável comercial
+                  </dt>
+                  <dd className="mt-1 text-sm font-medium text-zinc-800">
+                    {resolveResponsavelNome(
+                      selectedCliente.responsavelComercialId
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-400">Status</dt>
+                  <dd className="mt-1">
+                    <Badge>{selectedCliente.status}</Badge>
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-zinc-900">
+                Último histórico
+              </h3>
+              {selectedCliente.historico.length > 0 ? (
+                <div className="mt-4 rounded-2xl bg-[#faf8f4] p-4">
+                  <p className="text-sm text-zinc-700">
+                    {
+                      selectedCliente.historico[
+                        selectedCliente.historico.length - 1
+                      ].acao
+                    }
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    {
+                      selectedCliente.historico[
+                        selectedCliente.historico.length - 1
+                      ].usuario
+                    }{" "}
+                    ·{" "}
+                    {
+                      selectedCliente.historico[
+                        selectedCliente.historico.length - 1
+                      ].dataHora
+                    }
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-zinc-500">
+                  Nenhum histórico registrado.
+                </p>
+              )}
+            </section>
+          </div>
+        )}
+      </EntitySidePanel>
+
+      {editingCliente && (
+        <NovoClienteModal
+          key={editingCliente.clienteId}
+          open
+          cliente={editingCliente}
+          onClose={closeEdit}
+          onCreate={handleUpsert}
+        />
+      )}
     </div>
   );
 }

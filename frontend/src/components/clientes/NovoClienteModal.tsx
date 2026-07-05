@@ -32,6 +32,15 @@ const tabs = [
   { id: "historico", label: "Histórico" },
 ];
 
+function cloneCliente(cliente: ClienteDraft): ClienteDraft {
+  return {
+    ...cliente,
+    endereco: { ...cliente.endereco },
+    contatos: cliente.contatos.map((contato) => ({ ...contato })),
+    historico: cliente.historico.map((evento) => ({ ...evento })),
+  };
+}
+
 function createEmptyDraft(): ClienteDraft {
   return {
     clienteId: generateId("cliente"),
@@ -70,19 +79,28 @@ type NovoClienteModalProps = {
   open: boolean;
   onClose: () => void;
   onCreate: (draft: ClienteDraft) => void;
+  cliente?: ClienteDraft;
 };
 
 export function NovoClienteModal({
   open,
   onClose,
   onCreate,
+  cliente,
 }: NovoClienteModalProps) {
-  const [step, setStep] = useState<"documento" | "cadastro">("documento");
-  const [documentoInput, setDocumentoInput] = useState("");
+  const editing = cliente !== undefined;
+  const [step, setStep] = useState<"documento" | "cadastro">(
+    editing ? "cadastro" : "documento"
+  );
+  const [documentoInput, setDocumentoInput] = useState(
+    cliente?.documento ?? ""
+  );
   const [loadingLookup, setLoadingLookup] = useState(false);
   const [activeTab, setActiveTab] = useState("dados");
-  const [siglaTouched, setSiglaTouched] = useState(false);
-  const [draft, setDraft] = useState<ClienteDraft>(createEmptyDraft());
+  const [siglaTouched, setSiglaTouched] = useState(editing);
+  const [draft, setDraft] = useState<ClienteDraft>(() =>
+    cliente ? cloneCliente(cliente) : createEmptyDraft()
+  );
 
   const documentType = detectDocumentType(documentoInput);
   const canContinue = documentType !== null;
@@ -159,7 +177,7 @@ export function NovoClienteModal({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">
-            Novo Cliente
+            {editing ? "Editar Cliente" : "Novo Cliente"}
           </h2>
 
           <p className="mt-1 text-sm text-zinc-500">
@@ -253,7 +271,9 @@ export function NovoClienteModal({
               Cancelar
             </Button>
 
-            <Button onClick={handleSave}>Salvar Cliente</Button>
+            <Button onClick={handleSave}>
+              {editing ? "Salvar Alterações" : "Salvar Cliente"}
+            </Button>
           </div>
         </div>
       )}
