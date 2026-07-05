@@ -6,9 +6,15 @@ type ModalProps = {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  maxWidthClassName?: string;
 };
 
-export function Modal({ open, onClose, children }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
   useEffect(() => {
     if (!open) return;
 
@@ -30,7 +36,9 @@ export function Modal({ open, onClose, children }: ModalProps) {
         aria-hidden="true"
       />
 
-      <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-lg">
+      <div
+        className={`relative max-h-[90vh] w-full ${maxWidthClassName} overflow-y-auto rounded-3xl bg-white p-6 shadow-lg`}
+      >
         {children}
       </div>
     </div>
