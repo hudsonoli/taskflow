@@ -7,7 +7,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { KanbanColumn, type KanbanTask } from "./KanbanColumn";
 import { TaskDetailModal } from "./TaskDetailModal";
 
@@ -100,7 +100,7 @@ const initialTasks: KanbanTask[] = [
   },
 ];
 
-export function KanbanBoard() {
+function KanbanDndBoard() {
   const [tasks, setTasks] = useState<KanbanTask[]>(initialTasks);
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
 
@@ -127,7 +127,11 @@ export function KanbanBoard() {
 
   return (
     <>
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <DndContext
+        id="taskfloww-kanban"
+        sensors={sensors}
+        onDragEnd={handleDragEnd}
+      >
         <div className="overflow-x-auto">
           <div className="flex gap-6 pb-4">
             {columns.map((column) => (
@@ -149,4 +153,25 @@ export function KanbanBoard() {
       />
     </>
   );
+}
+
+export function KanbanBoard() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setMounted(true));
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div
+        aria-hidden="true"
+        className="h-48 rounded-3xl bg-[#faf8f4]"
+      />
+    );
+  }
+
+  return <KanbanDndBoard />;
 }
