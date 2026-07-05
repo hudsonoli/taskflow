@@ -1,19 +1,12 @@
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { Textarea } from "@/components/ui/Textarea";
-import type { ClienteContato, ClienteDraft } from "@/types/cliente";
+import { equipesDisponiveis, responsaveisDisponiveis } from "@/lib/cliente-mock";
+import type { ClienteContato, ClienteDraft, HistoricoCliente } from "@/types/cliente";
 
-const situacaoOptions = [
+const statusOptions = [
   { value: "Ativo", label: "Ativo" },
   { value: "Inativo", label: "Inativo" },
-];
-
-const grupoOptions = [
-  { value: "", label: "Selecione" },
-  { value: "Padrão", label: "Padrão" },
-  { value: "Premium", label: "Premium" },
-  { value: "Institucional", label: "Institucional" },
 ];
 
 const ufOptions = [
@@ -33,7 +26,18 @@ const tipoEnderecoOptions = [
   { value: "Entrega", label: "Entrega" },
 ];
 
-const retencoesDisponiveis = ["IRRF", "PIS", "COFINS", "CSLL", "INSS", "ISS"];
+const equipeResponsavelOptions = [
+  { value: "", label: "Nenhuma" },
+  ...equipesDisponiveis.map((equipe) => ({ value: equipe.id, label: equipe.nome })),
+];
+
+const responsavelOptions = [
+  { value: "", label: "Nenhum" },
+  ...responsaveisDisponiveis.map((responsavel) => ({
+    value: responsavel.id,
+    label: responsavel.nome,
+  })),
+];
 
 type SectionProps = {
   draft: ClienteDraft;
@@ -54,6 +58,13 @@ export function DadosSection({
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Input
+        label="Código Interno"
+        value={draft.codigoInterno}
+        readOnly
+        className="bg-zinc-50 text-zinc-500"
+      />
+
+      <Input
         label="CNPJ/CPF"
         value={draft.documento}
         readOnly
@@ -67,12 +78,30 @@ export function DadosSection({
       />
 
       <Input
-        label="Razão Social"
-        value={draft.razaoSocial}
+        label="Razão Social / Nome"
+        value={draft.nomeRazaoSocial}
         onChange={(event) =>
           onChange((current) => ({
             ...current,
-            razaoSocial: event.target.value,
+            nomeRazaoSocial: event.target.value,
+          }))
+        }
+      />
+
+      <Input
+        label="Sigla"
+        value={draft.sigla}
+        onChange={(event) => onSiglaChange(event.target.value)}
+      />
+
+      <Select
+        label="Status"
+        options={statusOptions}
+        value={draft.status}
+        onChange={(event) =>
+          onChange((current) => ({
+            ...current,
+            status: event.target.value as ClienteDraft["status"],
           }))
         }
       />
@@ -107,52 +136,6 @@ export function DadosSection({
         value={draft.site}
         onChange={(event) =>
           onChange((current) => ({ ...current, site: event.target.value }))
-        }
-      />
-
-      <Select
-        label="Grupo de Clientes"
-        options={grupoOptions}
-        value={draft.grupoCliente}
-        onChange={(event) =>
-          onChange((current) => ({
-            ...current,
-            grupoCliente: event.target.value,
-          }))
-        }
-      />
-
-      <Input
-        label="Atendimento"
-        value={draft.atendimento}
-        onChange={(event) =>
-          onChange((current) => ({
-            ...current,
-            atendimento: event.target.value,
-          }))
-        }
-      />
-
-      <Input
-        label="Auxiliar"
-        value={draft.auxiliar}
-        onChange={(event) =>
-          onChange((current) => ({ ...current, auxiliar: event.target.value }))
-        }
-      />
-
-      <Input
-        label="Sigla"
-        value={draft.sigla}
-        onChange={(event) => onSiglaChange(event.target.value)}
-      />
-
-      <Select
-        label="Situação"
-        options={situacaoOptions}
-        value={draft.situacao}
-        onChange={(event) =>
-          onChange((current) => ({ ...current, situacao: event.target.value }))
         }
       />
     </div>
@@ -228,104 +211,44 @@ export function EnderecoSection({ draft, onChange }: SectionProps) {
   );
 }
 
-export function ComplementaresSection({ draft, onChange }: SectionProps) {
-  function update(
-    field: keyof Omit<ClienteDraft["complementares"], "retencoesFiscais">,
-    value: string
-  ) {
-    onChange((current) => ({
-      ...current,
-      complementares: { ...current.complementares, [field]: value },
-    }));
-  }
-
-  function toggleRetencao(retencao: string) {
-    onChange((current) => {
-      const jaSelecionada =
-        current.complementares.retencoesFiscais.includes(retencao);
-
-      const retencoesFiscais = jaSelecionada
-        ? current.complementares.retencoesFiscais.filter(
-            (item) => item !== retencao
-          )
-        : [...current.complementares.retencoesFiscais, retencao];
-
-      return {
-        ...current,
-        complementares: { ...current.complementares, retencoesFiscais },
-      };
-    });
-  }
-
+export function EquipeSection({ draft, onChange }: SectionProps) {
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Input
-          label="Banco"
-          value={draft.complementares.banco}
-          onChange={(event) => update("banco", event.target.value)}
-        />
-
-        <Input
-          label="Agência"
-          value={draft.complementares.agencia}
-          onChange={(event) => update("agencia", event.target.value)}
-        />
-
-        <Input
-          label="Conta"
-          value={draft.complementares.conta}
-          onChange={(event) => update("conta", event.target.value)}
-        />
-
-        <Input
-          label="Chave Pix"
-          value={draft.complementares.chavePix}
-          onChange={(event) => update("chavePix", event.target.value)}
-        />
-
-        <Input
-          label="Setor"
-          value={draft.complementares.setor}
-          onChange={(event) => update("setor", event.target.value)}
-        />
-      </div>
-
-      <Textarea
-        label="Produtos e Serviços"
-        value={draft.complementares.produtosServicos}
-        onChange={(event) => update("produtosServicos", event.target.value)}
+    <div className="grid gap-4 md:grid-cols-2">
+      <Select
+        label="Equipe Responsável"
+        options={equipeResponsavelOptions}
+        value={draft.equipeResponsavelId ?? ""}
+        onChange={(event) =>
+          onChange((current) => ({
+            ...current,
+            equipeResponsavelId: event.target.value || undefined,
+          }))
+        }
       />
 
-      <Textarea
-        label="Observação"
-        value={draft.complementares.observacao}
-        onChange={(event) => update("observacao", event.target.value)}
+      <Select
+        label="Responsável Comercial"
+        options={responsavelOptions}
+        value={draft.responsavelComercialId ?? ""}
+        onChange={(event) =>
+          onChange((current) => ({
+            ...current,
+            responsavelComercialId: event.target.value || undefined,
+          }))
+        }
       />
 
-      <div>
-        <p className="mb-2 text-sm font-medium text-zinc-700">
-          Retenções fiscais (mock)
-        </p>
-
-        <div className="flex flex-wrap gap-3">
-          {retencoesDisponiveis.map((retencao) => (
-            <label
-              key={retencao}
-              className="flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700"
-            >
-              <input
-                type="checkbox"
-                checked={draft.complementares.retencoesFiscais.includes(
-                  retencao
-                )}
-                onChange={() => toggleRetencao(retencao)}
-              />
-              {retencao}
-            </label>
-          ))}
-        </div>
-      </div>
+      <Select
+        label="Responsável pelo Atendimento"
+        options={responsavelOptions}
+        value={draft.responsavelAtendimentoId ?? ""}
+        onChange={(event) =>
+          onChange((current) => ({
+            ...current,
+            responsavelAtendimentoId: event.target.value || undefined,
+          }))
+        }
+      />
     </div>
   );
 }
@@ -381,10 +304,7 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
       )}
 
       {draft.contatos.map((contato) => (
-        <div
-          key={contato.id}
-          className="rounded-2xl border border-zinc-200 p-4"
-        >
+        <div key={contato.id} className="rounded-2xl border border-zinc-200 p-4">
           <div className="grid gap-4 md:grid-cols-2">
             <Input
               label="Nome"
@@ -443,11 +363,7 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
                 type="checkbox"
                 checked={contato.acessoPortal}
                 onChange={(event) =>
-                  updateContato(
-                    contato.id,
-                    "acessoPortal",
-                    event.target.checked
-                  )
+                  updateContato(contato.id, "acessoPortal", event.target.checked)
                 }
               />
               Permitir acesso ao portal
@@ -475,15 +391,48 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
   );
 }
 
+const historicoMock: HistoricoCliente[] = [
+  {
+    id: "evento-cliente-1",
+    usuarioId: "sistema",
+    usuario: "Sistema",
+    dataHora: "05/07/2026 09:00",
+    dispositivo: "Desktop - Chrome",
+    ipOrigem: "192.168.0.10",
+    acao: "Cliente criado.",
+  },
+];
+
 export function HistoricoSection() {
   return (
     <div className="space-y-4">
-      <Input label="Buscar por palavra-chave" placeholder="Buscar eventos..." />
+      <Input label="Buscar por palavra-chave" placeholder="Buscar alterações..." />
 
-      <EmptyState
-        title="Nenhum evento registrado"
-        description="O histórico de alterações deste cliente aparecerá aqui."
-      />
+      <div className="overflow-hidden rounded-2xl border border-zinc-200">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
+            <tr>
+              <th className="px-4 py-3 font-medium">Usuário</th>
+              <th className="px-4 py-3 font-medium">Data</th>
+              <th className="px-4 py-3 font-medium">Dispositivo</th>
+              <th className="px-4 py-3 font-medium">IP de Origem</th>
+              <th className="px-4 py-3 font-medium">Descrição</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {historicoMock.map((evento) => (
+              <tr key={evento.id} className="border-b border-zinc-100 last:border-0">
+                <td className="px-4 py-3 font-medium text-zinc-900">{evento.usuario}</td>
+                <td className="px-4 py-3 text-zinc-500">{evento.dataHora}</td>
+                <td className="px-4 py-3 text-zinc-500">{evento.dispositivo}</td>
+                <td className="px-4 py-3 text-zinc-500">{evento.ipOrigem}</td>
+                <td className="px-4 py-3 text-zinc-500">{evento.acao}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

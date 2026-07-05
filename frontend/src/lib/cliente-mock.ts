@@ -1,4 +1,21 @@
+import {
+  EMPRESA_PADRAO_ID,
+  equipesDisponiveis,
+  generateCodigoInterno,
+  generateId,
+  generateSigla,
+  responsaveisDisponiveis,
+} from "@/lib/equipe-mock";
 import type { DocumentoTipo } from "@/types/cliente";
+
+export {
+  EMPRESA_PADRAO_ID,
+  equipesDisponiveis,
+  generateCodigoInterno,
+  generateId,
+  generateSigla,
+  responsaveisDisponiveis,
+};
 
 export function detectDocumentType(rawValue: string): DocumentoTipo | null {
   const digits = rawValue.replace(/\D/g, "");
@@ -25,29 +42,11 @@ export function formatDocument(rawValue: string): string {
     .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
 }
 
-export function generateSigla(nome: string): string {
-  const words = nome.trim().split(/\s+/).filter(Boolean);
-
-  if (words.length === 0) return "";
-  if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
-
-  return words
-    .slice(0, 4)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-}
-
-export function generateCodigoInterno(): string {
-  const numero = Math.floor(1000 + Math.random() * 9000);
-  return `#${numero}`;
-}
-
 export function mockCnpjLookup(cnpjDigits: string) {
   const sufixo = cnpjDigits.slice(-4);
 
   return {
     nomeFantasia: `Empresa ${sufixo}`,
-    razaoSocial: `Empresa ${sufixo} Ltda`,
+    nomeRazaoSocial: `Empresa ${sufixo} Ltda`,
   };
 }

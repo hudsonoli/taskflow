@@ -13,6 +13,11 @@ const settingsItems = [
     href: "/configuracoes/usuarios",
   },
   {
+    title: "Clientes",
+    description: "Cadastro e gestão de clientes da agência.",
+    href: "/configuracoes/clientes",
+  },
+  {
     title: "Equipes",
     description: "Organização de times e departamentos.",
     href: "/configuracoes/equipes",

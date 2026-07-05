@@ -7,45 +7,49 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Tabs } from "@/components/ui/Tabs";
 import {
+  EMPRESA_PADRAO_ID,
   detectDocumentType,
   formatDocument,
   generateCodigoInterno,
+  generateId,
   generateSigla,
   mockCnpjLookup,
 } from "@/lib/cliente-mock";
 import type { ClienteDraft } from "@/types/cliente";
 import {
-  ComplementaresSection,
   ContatosSection,
   DadosSection,
   EnderecoSection,
+  EquipeSection,
   HistoricoSection,
 } from "./ClienteFormSections";
 
 const tabs = [
   { id: "dados", label: "Dados" },
   { id: "endereco", label: "Endereço" },
-  { id: "complementares", label: "Informações Complementares" },
   { id: "contatos", label: "Contatos" },
+  { id: "equipe", label: "Equipe" },
   { id: "historico", label: "Histórico" },
 ];
 
 function createEmptyDraft(): ClienteDraft {
   return {
+    clienteId: generateId("cliente"),
+    empresaId: EMPRESA_PADRAO_ID,
     codigoInterno: "",
-    documentoTipo: "cnpj",
+    tipoDocumento: "cnpj",
     documento: "",
+    nomeRazaoSocial: "",
     nomeFantasia: "",
-    razaoSocial: "",
+    sigla: "",
     email: "",
     telefone: "",
     celular: "",
     site: "",
-    grupoCliente: "",
-    atendimento: "",
-    auxiliar: "",
-    sigla: "",
-    situacao: "Ativo",
+    status: "Ativo",
+    equipeResponsavelId: undefined,
+    responsavelComercialId: undefined,
+    responsavelAtendimentoId: undefined,
     endereco: {
       cep: "",
       logradouro: "",
@@ -57,17 +61,8 @@ function createEmptyDraft(): ClienteDraft {
       pais: "Brasil",
       tipo: "Comercial",
     },
-    complementares: {
-      banco: "",
-      agencia: "",
-      conta: "",
-      chavePix: "",
-      observacao: "",
-      setor: "",
-      produtosServicos: "",
-      retencoesFiscais: [],
-    },
     contatos: [],
+    historico: [],
   };
 }
 
@@ -116,11 +111,11 @@ export function NovoClienteModal({
 
         setDraft((current) => ({
           ...current,
-          documentoTipo: "cnpj",
+          tipoDocumento: "cnpj",
           documento: formatDocument(documentoInput),
           codigoInterno,
           nomeFantasia: lookup.nomeFantasia,
-          razaoSocial: lookup.razaoSocial,
+          nomeRazaoSocial: lookup.nomeRazaoSocial,
           sigla: generateSigla(lookup.nomeFantasia),
         }));
 
@@ -133,7 +128,7 @@ export function NovoClienteModal({
 
     setDraft((current) => ({
       ...current,
-      documentoTipo: "cpf",
+      tipoDocumento: "cpf",
       documento: formatDocument(documentoInput),
       codigoInterno,
     }));
@@ -221,7 +216,7 @@ export function NovoClienteModal({
       {step === "cadastro" && (
         <div className="mt-6">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{draft.documentoTipo === "cnpj" ? "CNPJ" : "CPF"}</Badge>
+            <Badge>{draft.tipoDocumento === "cnpj" ? "CNPJ" : "CPF"}</Badge>
           </div>
 
           <div className="mt-4">
@@ -242,12 +237,12 @@ export function NovoClienteModal({
               <EnderecoSection draft={draft} onChange={setDraft} />
             )}
 
-            {activeTab === "complementares" && (
-              <ComplementaresSection draft={draft} onChange={setDraft} />
-            )}
-
             {activeTab === "contatos" && (
               <ContatosSection draft={draft} onChange={setDraft} />
+            )}
+
+            {activeTab === "equipe" && (
+              <EquipeSection draft={draft} onChange={setDraft} />
             )}
 
             {activeTab === "historico" && <HistoricoSection />}

@@ -1,5 +1,7 @@
 export type DocumentoTipo = "cnpj" | "cpf";
 
+export type ClienteStatus = "Ativo" | "Inativo";
+
 export type ClienteContato = {
   id: string;
   nome: string;
@@ -23,33 +25,34 @@ export type ClienteEndereco = {
   tipo: string;
 };
 
-export type ClienteComplementares = {
-  banco: string;
-  agencia: string;
-  conta: string;
-  chavePix: string;
-  observacao: string;
-  setor: string;
-  produtosServicos: string;
-  retencoesFiscais: string[];
+export type HistoricoCliente = {
+  id: string;
+  usuarioId: string;
+  usuario: string;
+  dataHora: string;
+  dispositivo: string;
+  ipOrigem: string;
+  acao: string;
 };
 
 export type ClienteDraft = {
+  clienteId: string;
+  empresaId: string;
   codigoInterno: string;
-  documentoTipo: DocumentoTipo;
+  tipoDocumento: DocumentoTipo;
   documento: string;
+  nomeRazaoSocial: string;
   nomeFantasia: string;
-  razaoSocial: string;
+  sigla: string;
   email: string;
   telefone: string;
   celular: string;
   site: string;
-  grupoCliente: string;
-  atendimento: string;
-  auxiliar: string;
-  sigla: string;
-  situacao: string;
+  status: ClienteStatus;
+  equipeResponsavelId?: string;
+  responsavelComercialId?: string;
+  responsavelAtendimentoId?: string;
   endereco: ClienteEndereco;
-  complementares: ClienteComplementares;
   contatos: ClienteContato[];
+  historico: HistoricoCliente[];
 };

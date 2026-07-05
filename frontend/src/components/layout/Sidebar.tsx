@@ -7,7 +7,6 @@ const menuItems = [
   { label: "Dashboard", href: "/" },
   { label: "Tarefas", href: "/tarefas" },
   { label: "Projetos", href: "/projetos" },
-  { label: "Clientes", href: "/clientes" },
   { label: "Relatórios", href: "/relatorios" },
   { label: "Configurações", href: "/configuracoes" },
 ];

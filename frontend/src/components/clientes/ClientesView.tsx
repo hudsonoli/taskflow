@@ -4,78 +4,170 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  EMPRESA_PADRAO_ID,
+  equipesDisponiveis,
+  responsaveisDisponiveis,
+} from "@/lib/cliente-mock";
 import type { ClienteDraft } from "@/types/cliente";
 import { NovoClienteButton } from "./NovoClienteButton";
 
-type ClienteRow = {
-  name: string;
-  document: string;
-  agency: string;
-  owner: string;
-  projects: number;
-  status: string;
-};
+function resolveEquipeNome(equipeId?: string): string {
+  if (!equipeId) return "-";
 
-const initialClients: ClienteRow[] = [
+  return (
+    equipesDisponiveis.find((equipe) => equipe.id === equipeId)?.nome ??
+    equipeId
+  );
+}
+
+function resolveResponsavelNome(responsavelId?: string): string {
+  if (!responsavelId) return "-";
+
+  return (
+    responsaveisDisponiveis.find((usuario) => usuario.id === responsavelId)
+      ?.nome ?? responsavelId
+  );
+}
+
+const initialClientes: ClienteDraft[] = [
   {
-    name: "Cliente Exemplo",
-    document: "12.345.678/0001-90",
-    agency: "Agência Principal",
-    owner: "João Silva",
-    projects: 3,
+    clienteId: "cliente-1",
+    empresaId: EMPRESA_PADRAO_ID,
+    codigoInterno: "#1001",
+    tipoDocumento: "cnpj",
+    documento: "12.345.678/0001-90",
+    nomeRazaoSocial: "Cliente Exemplo Ltda",
+    nomeFantasia: "Cliente Exemplo",
+    sigla: "CEX",
+    email: "contato@clienteexemplo.com.br",
+    telefone: "",
+    celular: "",
+    site: "",
     status: "Ativo",
+    equipeResponsavelId: "equipe-1",
+    responsavelComercialId: "user-4",
+    responsavelAtendimentoId: "user-4",
+    endereco: {
+      cep: "",
+      logradouro: "",
+      numero: "",
+      complemento: "",
+      bairro: "",
+      cidade: "",
+      uf: "",
+      pais: "Brasil",
+      tipo: "Comercial",
+    },
+    contatos: [],
+    historico: [],
   },
   {
-    name: "Clínica Clare",
-    document: "98.765.432/0001-10",
-    agency: "Agência Exemplo",
-    owner: "Maria Souza",
-    projects: 2,
+    clienteId: "cliente-2",
+    empresaId: EMPRESA_PADRAO_ID,
+    codigoInterno: "#1002",
+    tipoDocumento: "cnpj",
+    documento: "98.765.432/0001-10",
+    nomeRazaoSocial: "Clínica Clare Ltda",
+    nomeFantasia: "Clínica Clare",
+    sigla: "CLC",
+    email: "contato@clinicaclare.com.br",
+    telefone: "",
+    celular: "",
+    site: "",
     status: "Ativo",
+    equipeResponsavelId: "equipe-2",
+    responsavelComercialId: "user-5",
+    responsavelAtendimentoId: "user-5",
+    endereco: {
+      cep: "",
+      logradouro: "",
+      numero: "",
+      complemento: "",
+      bairro: "",
+      cidade: "",
+      uf: "",
+      pais: "Brasil",
+      tipo: "Comercial",
+    },
+    contatos: [],
+    historico: [],
   },
   {
-    name: "Loja Boxx",
-    document: "11.222.333/0001-44",
-    agency: "Agência Principal",
-    owner: "Pedro Santos",
-    projects: 1,
+    clienteId: "cliente-3",
+    empresaId: EMPRESA_PADRAO_ID,
+    codigoInterno: "#1003",
+    tipoDocumento: "cnpj",
+    documento: "11.222.333/0001-44",
+    nomeRazaoSocial: "Loja Boxx Ltda",
+    nomeFantasia: "Loja Boxx",
+    sigla: "LBX",
+    email: "contato@lojaboxx.com.br",
+    telefone: "",
+    celular: "",
+    site: "",
     status: "Ativo",
+    equipeResponsavelId: "equipe-4",
+    responsavelComercialId: "user-2",
+    responsavelAtendimentoId: "user-2",
+    endereco: {
+      cep: "",
+      logradouro: "",
+      numero: "",
+      complemento: "",
+      bairro: "",
+      cidade: "",
+      uf: "",
+      pais: "Brasil",
+      tipo: "Comercial",
+    },
+    contatos: [],
+    historico: [],
   },
   {
-    name: "Cliente Inativo",
-    document: "55.666.777/0001-88",
-    agency: "Agência Exemplo",
-    owner: "Ana Costa",
-    projects: 0,
+    clienteId: "cliente-4",
+    empresaId: EMPRESA_PADRAO_ID,
+    codigoInterno: "#1004",
+    tipoDocumento: "cnpj",
+    documento: "55.666.777/0001-88",
+    nomeRazaoSocial: "Cliente Inativo Ltda",
+    nomeFantasia: "Cliente Inativo",
+    sigla: "CIN",
+    email: "",
+    telefone: "",
+    celular: "",
+    site: "",
     status: "Inativo",
+    endereco: {
+      cep: "",
+      logradouro: "",
+      numero: "",
+      complemento: "",
+      bairro: "",
+      cidade: "",
+      uf: "",
+      pais: "Brasil",
+      tipo: "Comercial",
+    },
+    contatos: [],
+    historico: [],
   },
 ];
 
-function draftToRow(draft: ClienteDraft): ClienteRow {
-  return {
-    name: draft.nomeFantasia || draft.razaoSocial || "Novo Cliente",
-    document: draft.documento,
-    agency: "Agência Principal",
-    owner: draft.atendimento || "-",
-    projects: 0,
-    status: draft.situacao,
-  };
-}
-
 export function ClientesView() {
-  const [clients, setClients] = useState<ClienteRow[]>(initialClients);
+  const [clientes, setClientes] = useState<ClienteDraft[]>(initialClientes);
 
-  const activeClients = clients.filter(
-    (client) => client.status === "Ativo"
+  const clientesAtivos = clientes.filter(
+    (cliente) => cliente.status === "Ativo"
   ).length;
 
-  const totalProjects = clients.reduce(
-    (total, client) => total + client.projects,
+  const totalContatos = clientes.reduce(
+    (total, cliente) => total + cliente.contatos.length,
     0
   );
 
   function handleCreate(draft: ClienteDraft) {
-    setClients((current) => [draftToRow(draft), ...current]);
+    setClientes((current) => [draft, ...current]);
   }
 
   return (
@@ -92,17 +184,17 @@ export function ClientesView() {
       <div className="grid gap-5 md:grid-cols-3">
         <Card>
           <p className="text-sm text-zinc-500">Total Clientes</p>
-          <p className="mt-3 text-3xl font-bold">{clients.length}</p>
+          <p className="mt-3 text-3xl font-bold">{clientes.length}</p>
         </Card>
 
         <Card>
           <p className="text-sm text-zinc-500">Ativos</p>
-          <p className="mt-3 text-3xl font-bold">{activeClients}</p>
+          <p className="mt-3 text-3xl font-bold">{clientesAtivos}</p>
         </Card>
 
         <Card>
-          <p className="text-sm text-zinc-500">Total de Projetos</p>
-          <p className="mt-3 text-3xl font-bold">{totalProjects}</p>
+          <p className="text-sm text-zinc-500">Total de Contatos</p>
+          <p className="mt-3 text-3xl font-bold">{totalContatos}</p>
         </Card>
       </div>
 
@@ -111,42 +203,37 @@ export function ClientesView() {
           <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
             <tr>
               <th className="px-6 py-4 font-medium">Cliente</th>
-              <th className="px-6 py-4 font-medium">CNPJ</th>
-              <th className="px-6 py-4 font-medium">Agência</th>
-              <th className="px-6 py-4 font-medium">Responsável</th>
-              <th className="px-6 py-4 font-medium">Projetos</th>
+              <th className="px-6 py-4 font-medium">Documento</th>
+              <th className="px-6 py-4 font-medium">Equipe Responsável</th>
+              <th className="px-6 py-4 font-medium">Responsável Comercial</th>
               <th className="px-6 py-4 font-medium">Status</th>
             </tr>
           </thead>
 
           <tbody>
-            {clients.map((client, index) => (
+            {clientes.map((cliente) => (
               <tr
-                key={`${client.document}-${index}`}
+                key={cliente.clienteId}
                 className="border-b border-zinc-100 last:border-0"
               >
                 <td className="px-6 py-4 font-medium text-zinc-900">
-                  {client.name}
+                  {cliente.nomeFantasia || cliente.nomeRazaoSocial}
                 </td>
 
                 <td className="px-6 py-4 text-zinc-500">
-                  {client.document}
+                  {cliente.documento}
                 </td>
 
                 <td className="px-6 py-4 text-zinc-500">
-                  {client.agency}
+                  {resolveEquipeNome(cliente.equipeResponsavelId)}
                 </td>
 
                 <td className="px-6 py-4 text-zinc-500">
-                  {client.owner}
-                </td>
-
-                <td className="px-6 py-4 text-zinc-500">
-                  {client.projects}
+                  {resolveResponsavelNome(cliente.responsavelComercialId)}
                 </td>
 
                 <td className="px-6 py-4">
-                  <Badge>{client.status}</Badge>
+                  <Badge>{cliente.status}</Badge>
                 </td>
               </tr>
             ))}

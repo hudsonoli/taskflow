@@ -21,6 +21,15 @@ export const clientesDisponiveis = [
   { id: "cliente-4", nome: "Cliente Inativo" },
 ];
 
+export const equipesDisponiveis = [
+  { id: "equipe-1", nome: "Atendimento" },
+  { id: "equipe-2", nome: "Criação" },
+  { id: "equipe-3", nome: "Mídia" },
+  { id: "equipe-4", nome: "Produção" },
+  { id: "equipe-5", nome: "Financeiro" },
+  { id: "equipe-6", nome: "TI" },
+];
+
 export function generateId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
