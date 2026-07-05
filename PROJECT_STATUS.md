@@ -130,20 +130,6 @@ Entregas:
 * Componentes de dashboard separados
 * Estrutura reutilizável criada
 
-Estrutura:
-
-```text
-src/components/
-├── dashboard/
-│   ├── DashboardView.tsx
-│   └── StatCard.tsx
-│
-└── layout/
-    ├── Header.tsx
-    ├── Shell.tsx
-    └── Sidebar.tsx
-```
-
 Commit:
 
 * 7a4a76c
@@ -163,13 +149,11 @@ Entregas:
 * Header dinâmico
 * Layout persistente
 
-Rotas:
+Rotas base:
 
 * /
 * /tarefas
 * /projetos
-* /clientes
-* /equipe
 * /relatorios
 * /configuracoes
 
@@ -199,47 +183,203 @@ Commit:
 
 ---
 
+### Fase 3.5 — Estrutura Base de Configurações
+
+Concluído.
+
+Entregas:
+
+* Área administrativa de Configurações criada
+* Estrutura preparada para módulos administrativos
+* Organização inicial do menu de configurações
+
+Commit:
+
+* 7a75287
+
+---
+
+### Fase 3.7 — Agências e Usuários
+
+Concluído.
+
+Entregas:
+
+* Cadastro mock de Agências
+* Cadastro mock de Usuários
+* Estrutura administrativa inicial
+
+Commit:
+
+* a062e69
+
+---
+
+### Fase 3.8 — Equipes
+
+Concluído.
+
+Entregas:
+
+* Cadastro administrativo de Equipes
+* Estrutura inicial para organização interna
+
+Commit:
+
+* d1a9961
+
+---
+
+### Fase 3.9 — Workflows
+
+Concluído.
+
+Entregas:
+
+* Tela administrativa de Workflows
+* Estrutura mock inicial
+* Preparação para automações futuras
+
+Commit:
+
+* a9cd9c7
+
+---
+
+### Fase 3.10 — Configurações Operacionais
+
+Concluído.
+
+Entregas:
+
+* Reorganização da área administrativa
+* Estrutura operacional das configurações
+* Ajustes de navegação
+
+Commit:
+
+* aaba63c
+
+---
+
+### Fase 3.11 — Usuários V2
+
+Concluído.
+
+Entregas:
+
+* Cadastro completo de usuários
+* Controle de permissões
+* Histórico
+* Estrutura multiempresa
+* Relacionamentos por ID
+
+Commit:
+
+* 4120221
+
+---
+
+### Fase 3.12 — Equipes V2
+
+Concluído.
+
+Entregas:
+
+* Cadastro completo de equipes
+* Membros
+* Permissões
+* Histórico
+* Estrutura multiempresa
+* Relacionamentos por ID
+
+Commit:
+
+* 1a2a3d4
+
+---
+
+### Fase 3.13 — Clientes V2
+
+Concluído.
+
+Entregas:
+
+* ClienteDraft reescrito com clienteId e empresaId
+* Relacionamentos por ID:
+
+  * equipeResponsavelId
+  * responsavelComercialId
+  * responsavelAtendimentoId
+* Remoção de referências por nome
+* Remoção de dados financeiros fora do escopo do TaskFloww
+* Aba "Equipe" substitui "Informações Complementares"
+* Cadastro migrado de /clientes para /configuracoes/clientes
+* Remoção do item "Clientes" do menu principal
+* Inclusão do card "Clientes" em Configurações
+* TypeScript validado
+* ESLint validado
+* Build validado
+
+Commit:
+
+* fce0a08
+
+---
+
 ## Próxima Fase
 
-### Fase 2.3 — Design System Boxx
+### Fase 3.14 — Departamentos V2
 
 Objetivos:
 
-* Componentes UI reutilizáveis
-* Card
-* Button
-* Input
-* Badge
-* Empty State
-* Page Header
-* Section
+* departamentoId
+* codigoInterno
+* sigla
+* responsável pelo departamento
+* vínculo com equipes
+* vínculo com usuários
+* histórico de alterações
+* permissões
+* padrão visual alinhado a Usuários, Equipes e Clientes
 
 ---
 
-### Fase 3 — Kanban Visual
+## Fases Futuras
+
+### Workflows Reais
 
 Objetivos:
 
-* Colunas
-* Cards
-* Drag and Drop
-* dnd-kit
-* Estrutura visual sem banco
+* Substituir estruturas mock
+* Workflow por cliente
+* Workflow por departamento
+* Regras operacionais
 
 ---
 
-### Fase 4 — Backend
+### Projetos
+
+Objetivos:
+
+* Cliente → Projeto → Tarefas
+* Integração com workflow
+* Kanban operacional
+
+---
+
+### Backend
 
 Objetivos:
 
 * PostgreSQL
-* Models
 * SQLAlchemy
-* API FastAPI
+* FastAPI
+* APIs reais
 
 ---
 
-### Fase 5 — Autenticação
+### Autenticação
 
 Objetivos:
 
@@ -249,18 +389,20 @@ Objetivos:
 * Login
 * Sessões
 
+---
+
 ## Regras de Permissão
 
 O TaskFloww utilizará controle de acesso por perfil.
 
 Perfis previstos:
 
-- SuperAdmin
-- Admin
-- Diretoria
-- Gestor
-- Operador
-- Cliente
+* SuperAdmin
+* Admin
+* Diretoria
+* Gestor
+* Operador
+* Cliente
 
 ### Configurações
 
@@ -268,16 +410,16 @@ O menu Configurações não será visível para todos os usuários.
 
 Terão acesso:
 
-- SuperAdmin
-- Admin
-- Diretoria
-- Gestor
-- Usuários com permissão específica
+* SuperAdmin
+* Admin
+* Diretoria
+* Gestor
+* Usuários com permissão específica
 
 Não terão acesso:
 
-- Operador
-- Cliente
+* Operador
+* Cliente
 
 ### Observação
 
