@@ -1,72 +1,76 @@
-import { KanbanColumn } from "./KanbanColumn";
+import { KanbanColumn, type KanbanTask } from "./KanbanColumn";
 
-const mockData = {
-  backlog: [
-    {
-      id: "1",
-      title: "Landing Page Campanha",
-      client: "Cliente Exemplo",
-      priority: "Alta",
-    },
-    {
-      id: "2",
-      title: "Criar anúncios Meta",
-      client: "Cliente Exemplo",
-      priority: "Média",
-    },
-  ],
-
-  andamento: [
-    {
-      id: "3",
-      title: "Revisar identidade visual",
-      client: "Cliente Exemplo",
-      priority: "Alta",
-    },
-  ],
-
-  revisao: [
-    {
-      id: "4",
-      title: "Validar peças da campanha",
-      client: "Cliente Exemplo",
-      priority: "Baixa",
-    },
-  ],
-
-  concluido: [
-    {
-      id: "5",
-      title: "Publicação de conteúdo",
-      client: "Cliente Exemplo",
-      priority: "Baixa",
-    },
-  ],
+type KanbanColumnConfig = {
+  id: string;
+  title: string;
 };
+
+const columns: KanbanColumnConfig[] = [
+  { id: "backlog", title: "Backlog" },
+  { id: "em-andamento", title: "Em andamento" },
+  { id: "revisao", title: "Revisão" },
+  { id: "concluido", title: "Concluído" },
+];
+
+const tasks: KanbanTask[] = [
+  {
+    id: "task-1",
+    title: "Landing Page Campanha",
+    client: "Cliente Exemplo",
+    project: "Campanha Institucional",
+    assignee: "Equipe",
+    priority: "Alta",
+    columnId: "backlog",
+  },
+  {
+    id: "task-2",
+    title: "Criar anúncios Meta",
+    client: "Cliente Exemplo",
+    project: "Performance",
+    assignee: "Mídia",
+    priority: "Media",
+    columnId: "backlog",
+  },
+  {
+    id: "task-3",
+    title: "Revisar identidade visual",
+    client: "Cliente Exemplo",
+    project: "Branding",
+    assignee: "Criação",
+    priority: "Alta",
+    columnId: "em-andamento",
+  },
+  {
+    id: "task-4",
+    title: "Validar peças da campanha",
+    client: "Cliente Exemplo",
+    project: "Social Media",
+    assignee: "Atendimento",
+    priority: "Baixa",
+    columnId: "revisao",
+  },
+  {
+    id: "task-5",
+    title: "Publicação de conteúdo",
+    client: "Cliente Exemplo",
+    project: "Redes Sociais",
+    assignee: "Operação",
+    priority: "Baixa",
+    columnId: "concluido",
+  },
+];
 
 export function KanbanBoard() {
   return (
     <div className="overflow-x-auto">
       <div className="flex gap-6 pb-4">
-        <KanbanColumn
-          title="Backlog"
-          tasks={mockData.backlog}
-        />
-
-        <KanbanColumn
-          title="Em andamento"
-          tasks={mockData.andamento}
-        />
-
-        <KanbanColumn
-          title="Revisão"
-          tasks={mockData.revisao}
-        />
-
-        <KanbanColumn
-          title="Concluído"
-          tasks={mockData.concluido}
-        />
+        {columns.map((column) => (
+          <KanbanColumn
+            key={column.id}
+            title={column.title}
+            tasks={tasks.filter((task) => task.columnId === column.id)}
+          />
+        ))}
       </div>
     </div>
   );
