@@ -11,6 +11,9 @@ const titles: Record<string, string> = {
   "/equipe": "Equipe",
   "/relatorios": "Relatórios",
   "/configuracoes": "Configurações",
+  "/conta/perfil": "Perfil",
+  "/conta/notificacoes": "Notificações",
+  "/conta/alterar-senha": "Alterar senha",
 };
 
 export function Header() {
