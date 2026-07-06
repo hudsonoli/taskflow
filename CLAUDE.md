@@ -2,7 +2,7 @@
 
 TaskFloww é uma plataforma SaaS de gestão operacional desenvolvida para agências, equipes de marketing, comunicação e operações.
 
-O foco do sistema é centralizar processos, tarefas, projetos, fluxos de trabalho, indicadores operacionais e produtividade em uma única plataforma moderna, escalável e multiempresa.
+O objetivo é centralizar processos, tarefas, projetos, workflows, indicadores e produtividade em uma plataforma moderna, escalável e multiempresa.
 
 ---
 
@@ -10,19 +10,19 @@ O foco do sistema é centralizar processos, tarefas, projetos, fluxos de trabalh
 
 ## Frontend
 
-* Next.js
-* React
-* TypeScript
-* Tailwind CSS
-* dnd-kit
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- dnd-kit
 
 ## Backend
 
-* FastAPI
-* Python
-* PostgreSQL
-* Redis
-* Docker
+- FastAPI
+- Python
+- PostgreSQL
+- Redis
+- Docker
 
 ---
 
@@ -32,237 +32,444 @@ O TaskFloww é um sistema SaaS multiempresa.
 
 ## Regras obrigatórias de modelagem
 
-* Toda entidade principal deve possuir `empresaId`.
-* Quando aplicável, utilizar também `clienteId`.
-* Toda entidade principal deve possuir `id`.
-* Toda entidade principal deve possuir `createdAt` e `updatedAt`.
-* Sempre utilizar IDs para relacionamentos.
-* Nunca utilizar nomes como referência principal entre entidades.
-* Exemplo: utilizar `departamentoId` em vez de armazenar o nome do departamento.
-* Sempre que possível, preparar a modelagem para auditoria futura.
+Toda entidade principal deverá possuir:
 
-O sistema deverá ser preparado desde o início para:
+- id
+- empresaId
+- createdAt
+- updatedAt
 
-* Auditoria
-* Controle de permissões
-* Histórico de alterações
-* Escalabilidade multiempresa
-* APIs futuras
-* Inteligência Artificial integrada
+Quando aplicável:
 
----
+- clienteId
+- usuarioId
 
-# Objetivo do Sistema
+Sempre utilizar IDs para relacionamentos.
 
-O TaskFloww serve para:
+Nunca utilizar nomes como chave entre entidades.
 
-* Gestão de tarefas
-* Gestão de projetos
-* Workflow
-* Kanban
-* Controle de refações
-* SLA
-* Produtividade
-* Equipes e Squads
-* Controle operacional
-* Relatórios operacionais
-* Indicadores de desempenho
+Exemplo:
+
+✅ departamentoId
+
+❌ nomeDepartamento
+
+Toda modelagem deve estar preparada para:
+
+- Multiempresa
+- Auditoria
+- Histórico
+- Permissões
+- APIs
+- Inteligência Artificial
 
 ---
 
-# Fora do Escopo
+# Estrutura do Frontend
 
-O TaskFloww não é um ERP financeiro.
+## src/app
 
-Não implementar sem solicitação explícita:
+Responsável APENAS pelas rotas do Next.js.
 
-* Financeiro
-* Estoque
-* Emissão fiscal
-* Faturamento
-* Módulo contábil
-* Folha de pagamento
-* Controle bancário
+Cada módulo deve obrigatoriamente possuir um:
 
----
+page.tsx
 
-# Referência de Interface
+Exemplo:
 
-A principal referência visual e funcional do projeto é o iClips.
+```tsx
+import { UsuariosView } from "@/components/usuarios/UsuariosView";
 
-Utilizar como inspiração:
+export default function UsuariosPage() {
+  return <UsuariosView />;
+}
+```
 
-* Navegação
-* Fluxos operacionais
-* Estrutura de cadastros
-* Permissões
-* Organização de módulos
-
-Não copiar código, layout ou interface literalmente.
-
-Utilizar apenas como referência funcional, estrutural e de experiência do usuário.
+Nunca colocar regras de negócio dentro do page.tsx.
 
 ---
 
-# Estado Atual do Projeto
+## src/components
 
-## Fase 1
+Responsável por:
 
-* Docker funcionando
-* Next.js operacional
-* FastAPI operacional
-* PostgreSQL operacional
-* Redis operacional
+- Views
+- Modais
+- Formulários
+- Componentes reutilizáveis
 
-## Fase 2
+Exemplo:
 
-* Shell Boxx criado
-* Sidebar criada
-* Header criado
-* Dashboard inicial criado
-
-## Fase 2.1
-
-Estrutura inicial organizada em:
-
-* `src/components/layout`
-* `src/components/dashboard`
-
-## Fase 2.2
-
-Módulo de Usuários iniciado:
-
-* Cadastro de usuários
-* Perfis
-* Permissões
-* Endereços
-* Informações complementares
-* Histórico
-* Estrutura preparada para multiempresa
-* Estrutura preparada para auditoria
+```
+components/
+    usuarios/
+        UsuariosView.tsx
+        NovoUsuarioModal.tsx
+        UsuarioFormSections.tsx
+```
 
 ---
 
-# Cadastro de Clientes
+## src/types
 
-Referência funcional: iClips.
+Todos os tipos devem ficar em:
 
-Fluxo previsto:
+```
+src/types/
+```
 
-1. Informar CPF ou CNPJ.
-2. Validar documento.
-3. Buscar dados automaticamente (quando a integração estiver disponível).
-4. Gerar código interno no formato `#0000`.
-5. Gerar sigla automática do cliente.
-6. Abrir cadastro completo.
-
-Abas previstas:
-
-* Dados
-* Endereço
-* Contatos
-* Equipe
-* Histórico
+Nunca declarar grandes tipos dentro dos componentes.
 
 ---
 
-# Regras de Desenvolvimento
+## src/lib
+
+Responsável por:
+
+- mocks
+- helpers
+- geração de IDs
+- máscaras
+- utilidades
+- buscas mock
+
+Nunca colocar componentes React dentro de lib.
+
+---
+
+# Estrutura obrigatória de um módulo
+
+Todo novo módulo deve possuir:
+
+```
+src/app/.../<modulo>/page.tsx
+
+src/components/<modulo>/
+
+src/types/<modulo>.ts
+
+src/lib/<modulo>-mock.ts
+```
+
+Quando aplicável.
+
+---
+
+# Checklist obrigatório
+
+Antes de considerar qualquer módulo concluído:
+
+□ Criar a rota page.tsx
+
+□ Criar a View
+
+□ Criar os componentes
+
+□ Criar os tipos
+
+□ Criar os mocks
+
+□ Adicionar ao menu correspondente
+
+□ Adicionar ao hub de Configurações (quando necessário)
+
+□ Validar acesso direto à URL
+
+□ npm run lint
+
+□ npm run build
+
+□ Mostrar git status
+
+□ Mostrar git diff --stat
+
+Nunca considerar um módulo concluído apenas porque os componentes foram criados.
+
+---
+
+# Organização dos Cadastros
+
+Todo cadastro deve seguir o padrão:
+
+```
+Página
+    ↓
+View
+    ↓
+Tabela
+    ↓
+Modal
+    ↓
+Sections
+```
+
+Exemplo:
+
+```
+UsuariosPage
+
+↓
+
+UsuariosView
+
+↓
+
+NovoUsuarioModal
+
+↓
+
+UsuarioFormSections
+```
+
+---
+
+# Componentes UI
+
+Sempre reutilizar componentes existentes.
+
+Priorizar:
+
+- Badge
+- Button
+- Card
+- EmptyState
+- Input
+- Modal
+- PageHeader
+- Section
+- Select
+- Tabs
+- Textarea
+
+Evitar criar componentes duplicados.
+
+---
+
+# Estado Atual
+
+## Infraestrutura
+
+- Docker
+- Next.js
+- FastAPI
+- PostgreSQL
+- Redis
+
+## Interface
+
+- Shell Boxx
+- Sidebar
+- Header
+- Dashboard
+
+## Configurações
+
+Implementados:
+
+- Usuários
+- Agências
+- Clientes
+- Grupos de Clientes
+- Equipes
+- Workflows
+- Permissões
+- SLA
+- Prioridades
+- Tipos de Tarefa
+
+Todos atualmente utilizando mocks.
+
+---
+
+# Desenvolvimento
 
 Sempre respeitar a fase atual do projeto.
 
-Não criar funcionalidades fora do escopo da fase sem solicitação explícita.
+Durante a fase de prototipação:
 
-Antes de alterar arquivos:
+NÃO criar:
 
-1. Ler `PROJECT_STATUS.md`.
-2. Ler `CLAUDE.md`.
-3. Analisar a estrutura atual do projeto.
-4. Utilizar componentes já existentes sempre que possível.
-5. Realizar alterações pequenas e incrementais.
-6. Validar TypeScript.
-7. Executar lint.
-8. Executar build.
-9. Exibir diff final.
-10. Solicitar aprovação antes de aplicar alterações relevantes.
+- migrations
+- banco
+- APIs reais
+- autenticação
+- integrações externas
+
+Utilizar apenas:
+
+- mocks
+- estados React
+- dados locais
+
+---
+
+# Fluxo de Desenvolvimento
+
+Antes de alterar qualquer arquivo:
+
+1. Ler PROJECT_STATUS.md
+2. Ler CLAUDE.md
+3. Analisar estrutura existente
+4. Reutilizar componentes
+5. Apresentar plano
+6. Mostrar diff
+7. Aguardar aprovação
+8. Aplicar alterações
+9. Validar TypeScript
+10. Executar lint
+11. Executar build
+12. Mostrar git status
+13. Mostrar git diff --stat
+
+Nunca realizar commit automaticamente.
 
 ---
 
 # Processo de Validação
 
-Antes de aplicar qualquer alteração relevante:
+Toda alteração relevante deverá:
 
-1. Gerar arquivos em sandbox.
-2. Validar TypeScript.
-3. Validar imports.
-4. Executar lint.
-5. Executar build.
-6. Exibir diff consolidado.
-7. Solicitar aprovação.
+1. Ser criada em sandbox
+2. Validar TypeScript
+3. Validar imports
+4. Executar lint
+5. Executar build
+6. Mostrar diff consolidado
+7. Solicitar aprovação
 
-Nunca aplicar alterações grandes diretamente no projeto sem validação prévia.
+Nunca aplicar grandes alterações diretamente no projeto.
 
 ---
 
-# Regras de Permissão
+# Objetivo do Sistema
 
-O sistema utilizará RBAC (Role Based Access Control).
+O TaskFloww possui foco operacional.
 
-Perfis previstos:
+Módulos principais:
 
-* SuperAdmin
-* Admin
-* Diretoria
-* Gestor
-* Operador
-* Cliente
+- Gestão de Tarefas
+- Projetos
+- Workflows
+- Kanban
+- SLA
+- Refações
+- Equipes
+- Squads
+- Produtividade
+- Relatórios
+- Indicadores
+
+---
+
+# Fora do Escopo
+
+Não implementar sem solicitação explícita:
+
+- ERP Financeiro
+- Estoque
+- Emissão Fiscal
+- Contabilidade
+- Folha
+- Controle Bancário
+
+---
+
+# Referência de Interface
+
+A principal referência funcional é o iClips.
+
+Utilizar como inspiração:
+
+- Fluxos
+- Organização
+- Navegação
+- Cadastros
+- Permissões
+
+Nunca copiar código ou layout.
+
+---
+
+# Cadastro de Clientes
+
+Fluxo previsto:
+
+1. CPF/CNPJ
+2. Validação
+3. Busca automática (quando existir integração)
+4. Código interno (#0000)
+5. Sigla automática
+6. Cadastro completo
+
+Abas:
+
+- Dados
+- Endereço
+- Contatos
+- Equipe
+- Histórico
+
+---
+
+# Permissões
+
+Modelo RBAC.
+
+Perfis:
+
+- SuperAdmin
+- Admin
+- Diretoria
+- Gestor
+- Operador
+- Cliente
 
 ---
 
 # Configurações
 
-Configurações é uma área administrativa.
+Área administrativa.
 
-Não deve ser exibida para:
+Não exibir para:
 
-* Operador
-* Cliente
+- Operador
+- Cliente
 
-Deve ser exibida para:
+Exibir para:
 
-* SuperAdmin
-* Admin
-* Diretoria
-* Gestor
-* Usuários com permissão explícita
-
-Enquanto não existir autenticação, as telas podem ser criadas normalmente, porém todas as decisões de interface devem considerar as futuras regras de permissão.
+- SuperAdmin
+- Admin
+- Diretoria
+- Gestor
+- Usuários com permissão explícita
 
 ---
 
 # Auditoria
 
-O sistema deverá possuir futuramente um módulo de Auditoria.
+Toda modelagem deverá prever:
 
-Toda modelagem nova deve considerar:
+- Usuário
+- Data/Hora
+- Histórico
+- IP
+- Dispositivo
 
-* Usuário responsável
-* Data e hora da alteração
-* Histórico de alterações
-* IP de origem
-* Dispositivo de origem
-* Logs de ações críticas
+Ainda não implementar.
+
+Preparar a estrutura.
 
 ---
 
 # Integrações Futuras
 
-Planejadas para fases futuras:
+Planejadas:
 
-* Importação de dados do iClips
-* Inteligência Artificial integrada ao TaskFloww
-* Relatórios avançados
-* Dashboard executivo
-* Automações
-* APIs externas
+- Importação iClips
+- Inteligência Artificial
+- Dashboard Executivo
+- APIs
+- Relatórios avançados
+- Automações
 
-Nenhuma dessas integrações deve ser implementada sem definição explícita da fase correspondente.
+Somente implementar quando a fase correspondente for iniciada.
