@@ -18,6 +18,11 @@ const settingsItems = [
     href: "/configuracoes/clientes",
   },
   {
+    title: "Grupos de Clientes",
+    description: "Segmentação e organização dos clientes.",
+    href: "/configuracoes/grupos-clientes",
+  },
+  {
     title: "Equipes",
     description: "Organização de times e departamentos.",
     href: "/configuracoes/equipes",
