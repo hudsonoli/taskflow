@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  BookUser,
   FolderKanban,
   LayoutDashboard,
   ListTodo,
@@ -16,6 +17,7 @@ const menuItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Tarefas", href: "/tarefas", icon: ListTodo },
   { label: "Projetos", href: "/projetos", icon: FolderKanban },
+  { label: "Agenda", href: "/agenda", icon: BookUser },
   { label: "Fornecedores", href: "/fornecedores", icon: Truck },
   { label: "Relatórios", href: "/relatorios", icon: BarChart3 },
   { label: "Configurações", href: "/configuracoes", icon: Settings },
