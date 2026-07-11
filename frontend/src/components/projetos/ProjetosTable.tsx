@@ -5,6 +5,8 @@ import { WorkspaceTable } from "@/components/workspace/WorkspaceTable";
 import {
   prioridadeProjetoLabels,
   resolveClienteProjetoNome,
+  resolveDepartamentosProjetoNomes,
+  resolveResponsaveisProjetoNomes,
   statusProjetoLabels,
 } from "@/lib/projetos-mock";
 import type { Projeto } from "@/types/projeto";
@@ -36,7 +38,8 @@ export function ProjetosTable({
         "Projeto",
         "Cliente",
         "Campanha",
-        "Responsável",
+        "Responsáveis",
+        "Departamentos",
         "Status",
         "Prioridade",
         "Prazo",
@@ -65,7 +68,12 @@ export function ProjetosTable({
           </td>
           <td className="px-6 py-4 text-zinc-500">{projeto.campanha}</td>
           <td className="px-6 py-4 text-zinc-500">
-            {projeto.responsavelNome}
+            {resolveResponsaveisProjetoNomes(projeto.responsavelIds)}
+          </td>
+          <td className="px-6 py-4 text-zinc-500">
+            {resolveDepartamentosProjetoNomes(
+              projeto.departamentoResponsavelIds
+            )}
           </td>
           <td className="px-6 py-4">
             <Badge>{statusProjetoLabels[projeto.status]}</Badge>

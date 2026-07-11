@@ -4,15 +4,22 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import {
   clientesProjetoDisponiveis,
+  departamentosProjetoDisponiveis,
   prioridadeProjetoLabels,
   responsaveisProjetoDisponiveis,
   statusProjetoLabels,
 } from "@/lib/projetos-mock";
-import type { Projeto, ProjetoFormDraft, ProjetoPrioridade, ProjetoStatus } from "@/types/projeto";
+import type {
+  Projeto,
+  ProjetoFormDraft,
+  ProjetoPrioridade,
+  ProjetoStatus,
+} from "@/types/projeto";
 
 type NovoProjetoModalProps = {
   open: boolean;
@@ -27,8 +34,12 @@ function createInitialDraft(projeto?: Projeto): ProjetoFormDraft {
     nome: projeto?.nome ?? "",
     clienteId: projeto?.clienteId ?? clientesProjetoDisponiveis[0].id,
     campanha: projeto?.campanha ?? "",
-    responsavelId:
-      projeto?.responsavelId ?? responsaveisProjetoDisponiveis[0].id,
+    responsavelIds:
+      projeto?.responsavelIds ?? [responsaveisProjetoDisponiveis[0].id],
+    departamentoResponsavelIds:
+      projeto?.departamentoResponsavelIds ?? [
+        departamentosProjetoDisponiveis[0].id,
+      ],
     dataInicio: projeto?.dataInicio ?? "",
     dataFimPrevista: projeto?.dataFimPrevista ?? "",
     status: projeto?.status ?? "planejamento",
@@ -49,7 +60,8 @@ export function NovoProjetoModal({
   );
 
   const editing = projeto !== undefined;
-  const canSave = draft.nome.trim().length > 0 && draft.campanha.trim().length > 0;
+  const canSave =
+    draft.nome.trim().length > 0 && draft.campanha.trim().length > 0;
 
   function updateDraft(patch: Partial<ProjetoFormDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -99,17 +111,6 @@ export function NovoProjetoModal({
           value={draft.campanha}
           onChange={(event) => updateDraft({ campanha: event.target.value })}
         />
-        <Select
-          label="Responsável"
-          value={draft.responsavelId}
-          onChange={(event) =>
-            updateDraft({ responsavelId: event.target.value })
-          }
-          options={responsaveisProjetoDisponiveis.map((responsavel) => ({
-            value: responsavel.id,
-            label: responsavel.nome,
-          }))}
-        />
         <Input
           label="Data de início"
           type="date"
@@ -149,6 +150,31 @@ export function NovoProjetoModal({
               label,
             })
           )}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <MultiSelect
+          label="Usuários responsáveis"
+          placeholder="Selecione usuários"
+          values={draft.responsavelIds}
+          onChange={(values) => updateDraft({ responsavelIds: values })}
+          options={responsaveisProjetoDisponiveis.map((responsavel) => ({
+            value: responsavel.id,
+            label: responsavel.nome,
+          }))}
+        />
+        <MultiSelect
+          label="Departamentos responsáveis"
+          placeholder="Selecione departamentos"
+          values={draft.departamentoResponsavelIds}
+          onChange={(values) =>
+            updateDraft({ departamentoResponsavelIds: values })
+          }
+          options={departamentosProjetoDisponiveis.map((departamento) => ({
+            value: departamento.id,
+            label: departamento.nome,
+          }))}
         />
       </div>
 

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { WorkspaceEmptyState } from "@/components/workspace/WorkspaceEmptyState";
@@ -10,6 +11,9 @@ import {
   generateId,
   prioridadeProjetoLabels,
   resolveClienteProjetoNome,
+  resolveDepartamentosProjetoNomes,
+  resolveResponsaveisProjetoNomes,
+  responsaveisProjetoDisponiveis,
   statusProjetoLabels,
   tiposTarefaProjetoDisponiveis,
   workflowsProjetoDisponiveis,
@@ -59,7 +63,6 @@ export function DadosProjetoSection({ projeto, onChange }: ProjetoSectionProps) 
             updateProjeto(projeto, { campanha: event.target.value }, onChange)
           }
         />
-        <Input label="Responsável" value={projeto.responsavelNome} disabled />
         <Input
           label="Data de início"
           type="date"
@@ -112,14 +115,52 @@ export function DadosProjetoSection({ projeto, onChange }: ProjetoSectionProps) 
             })
           )}
         />
+        <Input label="PIT do Publi" value="Integração futura" disabled />
+        <Input label="OCs vinculadas" value="Consulta futura" disabled />
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <MultiSelect
+          label="Usuários responsáveis"
+          placeholder="Selecione usuários"
+          values={projeto.responsavelIds}
+          onChange={(values) =>
+            updateProjeto(projeto, { responsavelIds: values }, onChange)
+          }
+          options={responsaveisProjetoDisponiveis.map((responsavel) => ({
+            value: responsavel.id,
+            label: responsavel.nome,
+          }))}
+        />
+        <MultiSelect
+          label="Departamentos responsáveis"
+          placeholder="Selecione departamentos"
+          values={projeto.departamentoResponsavelIds}
+          onChange={(values) =>
+            updateProjeto(
+              projeto,
+              { departamentoResponsavelIds: values },
+              onChange
+            )
+          }
+          options={departamentosProjetoDisponiveis.map((departamento) => ({
+            value: departamento.id,
+            label: departamento.nome,
+          }))}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
         <Input
-          label="PIT do Publi"
-          value="Integração futura"
+          label="Usuários responsáveis selecionados"
+          value={resolveResponsaveisProjetoNomes(projeto.responsavelIds)}
           disabled
         />
         <Input
-          label="OCs vinculadas"
-          value="Consulta futura"
+          label="Departamentos responsáveis selecionados"
+          value={resolveDepartamentosProjetoNomes(
+            projeto.departamentoResponsavelIds
+          )}
           disabled
         />
       </div>

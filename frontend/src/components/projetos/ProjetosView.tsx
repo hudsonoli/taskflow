@@ -11,7 +11,8 @@ import {
   generateId,
   projetosMock,
   resolveClienteProjetoNome,
-  resolveResponsavelProjetoNome,
+  resolveDepartamentosProjetoNomes,
+  resolveResponsaveisProjetoNomes,
 } from "@/lib/projetos-mock";
 import type { Projeto, ProjetoFormDraft } from "@/types/projeto";
 import { NovoProjetoModal } from "./NovoProjetoModal";
@@ -35,7 +36,8 @@ function matchesProjeto(projeto: Projeto, query: string) {
     projeto.nome,
     resolveClienteProjetoNome(projeto.clienteId),
     projeto.campanha,
-    projeto.responsavelNome,
+    resolveResponsaveisProjetoNomes(projeto.responsavelIds),
+    resolveDepartamentosProjetoNomes(projeto.departamentoResponsavelIds),
     projeto.codigoInterno,
   ].join(" ");
 
@@ -68,8 +70,8 @@ function createProjetoFromDraft(draft: ProjetoFormDraft): Projeto {
     descricao: draft.descricao,
     status: draft.status,
     prioridade: draft.prioridade,
-    responsavelId: draft.responsavelId,
-    responsavelNome: resolveResponsavelProjetoNome(draft.responsavelId),
+    responsavelIds: draft.responsavelIds,
+    departamentoResponsavelIds: draft.departamentoResponsavelIds,
     dataInicio: draft.dataInicio,
     dataFimPrevista: draft.dataFimPrevista,
     createdAt: now,
@@ -95,8 +97,8 @@ function updateProjetoFromDraft(
     descricao: draft.descricao,
     status: draft.status,
     prioridade: draft.prioridade,
-    responsavelId: draft.responsavelId,
-    responsavelNome: resolveResponsavelProjetoNome(draft.responsavelId),
+    responsavelIds: draft.responsavelIds,
+    departamentoResponsavelIds: draft.departamentoResponsavelIds,
     dataInicio: draft.dataInicio,
     dataFimPrevista: draft.dataFimPrevista,
     updatedAt: new Date().toISOString(),

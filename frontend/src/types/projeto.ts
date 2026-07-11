@@ -49,6 +49,11 @@ export type ProjetoModeloCampanhaItem = {
   responsavelOuSetorSugeridoNome: string;
 };
 
+export type ProjetoWorkflowEtapaConceitual = {
+  usuarioResponsavelIds: string[];
+  departamentoResponsavelIds: string[];
+};
+
 export type Projeto = {
   id: string;
   empresaId: string;
@@ -60,8 +65,8 @@ export type Projeto = {
   descricao: string;
   status: ProjetoStatus;
   prioridade: ProjetoPrioridade;
-  responsavelId: string;
-  responsavelNome: string;
+  responsavelIds: string[];
+  departamentoResponsavelIds: string[];
   dataInicio: string;
   dataFimPrevista: string;
   createdAt: string;
@@ -79,7 +84,8 @@ export type ProjetoFormDraft = Pick<
   | "nome"
   | "clienteId"
   | "campanha"
-  | "responsavelId"
+  | "responsavelIds"
+  | "departamentoResponsavelIds"
   | "dataInicio"
   | "dataFimPrevista"
   | "status"

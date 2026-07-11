@@ -1,4 +1,8 @@
-import { EMPRESA_PADRAO_ID, generateCodigoInterno, generateId } from "@/lib/equipe-mock";
+import {
+  EMPRESA_PADRAO_ID,
+  generateCodigoInterno,
+  generateId,
+} from "@/lib/equipe-mock";
 import type {
   Projeto,
   ProjetoEquipeMembro,
@@ -147,8 +151,8 @@ export const projetosMock: Projeto[] = [
     descricao: "Projeto de comunicação para atualização de posicionamento e presença digital.",
     status: "ativo",
     prioridade: "alta",
-    responsavelId: "user-2",
-    responsavelNome: "Ana Costa",
+    responsavelIds: ["user-2", "user-3"],
+    departamentoResponsavelIds: ["dep-atendimento", "dep-criacao"],
     dataInicio: "2026-07-01",
     dataFimPrevista: "2026-08-16",
     createdAt: "2026-07-01T09:00:00-03:00",
@@ -172,8 +176,8 @@ export const projetosMock: Projeto[] = [
     descricao: "Campanha recorrente para aquisição de leads qualificados.",
     status: "planejamento",
     prioridade: "media",
-    responsavelId: "user-5",
-    responsavelNome: "Maria Souza",
+    responsavelIds: ["user-5"],
+    departamentoResponsavelIds: ["dep-midia"],
     dataInicio: "2026-07-15",
     dataFimPrevista: "2026-09-05",
     createdAt: "2026-07-05T10:00:00-03:00",
@@ -196,8 +200,8 @@ export const projetosMock: Projeto[] = [
     descricao: "Projeto de calendário mensal para campanhas comerciais e datas promocionais.",
     status: "concluido",
     prioridade: "baixa",
-    responsavelId: "user-4",
-    responsavelNome: "João Silva",
+    responsavelIds: ["user-4"],
+    departamentoResponsavelIds: ["dep-criacao", "dep-conteudo"],
     dataInicio: "2026-06-01",
     dataFimPrevista: "2026-06-30",
     createdAt: "2026-06-01T08:45:00-03:00",
@@ -218,9 +222,28 @@ export function resolveClienteProjetoNome(clienteId: string): string {
   );
 }
 
-export function resolveResponsavelProjetoNome(responsavelId: string): string {
-  return (
-    responsaveisProjetoDisponiveis.find((responsavel) => responsavel.id === responsavelId)
-      ?.nome ?? responsavelId
-  );
+export function resolveResponsaveisProjetoNomes(ids: string[]): string {
+  if (ids.length === 0) return "-";
+
+  return ids
+    .map(
+      (id) =>
+        responsaveisProjetoDisponiveis.find(
+          (responsavel) => responsavel.id === id
+        )?.nome ?? id
+    )
+    .join(", ");
+}
+
+export function resolveDepartamentosProjetoNomes(ids: string[]): string {
+  if (ids.length === 0) return "-";
+
+  return ids
+    .map(
+      (id) =>
+        departamentosProjetoDisponiveis.find(
+          (departamento) => departamento.id === id
+        )?.nome ?? id
+    )
+    .join(", ");
 }
