@@ -1,13 +1,12 @@
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { WorkspaceSection } from "@/components/workspace/WorkspaceSection";
+import { WorkflowEditor } from "@/components/workflows/WorkflowEditor";
 import {
   departamentosProjetoDisponiveis,
-  generateId,
   prioridadeDemandaLabels,
   resolveClienteProjetoNome,
   resolveDepartamentosProjetoNomes,
@@ -15,15 +14,16 @@ import {
   resolveResponsaveisProjetoNomes,
   responsaveisProjetoDisponiveis,
   statusDemandaLabels,
-  workflowEtapaStatusLabels,
 } from "@/lib/demandas-mock";
 import type {
   Demanda,
   DemandaPrioridade,
   DemandaStatus,
-  DemandaWorkflowEtapa,
-  DemandaWorkflowEtapaStatus,
 } from "@/types/demanda";
+import type {
+  WorkflowInstancia,
+  WorkflowTransicaoHistorico,
+} from "@/types/workflow";
 
 type DemandaSectionProps = {
   demanda: Demanda;
@@ -123,170 +123,31 @@ export function BriefingDemandaSection({
   );
 }
 
-function createWorkflowEtapa(ordem: number): DemandaWorkflowEtapa {
-  return {
-    id: generateId("etapa-demanda"),
-    nome: "Nova etapa",
-    ordem,
-    usuarioResponsavelIds: [],
-    departamentoResponsavelIds: [],
-    prazoHoras: 8,
-    status: "pendente",
-  };
-}
-
 export function WorkflowDemandaSection({
   demanda,
   onChange,
 }: DemandaSectionProps) {
-  function updateEtapa(etapaId: string, patch: Partial<DemandaWorkflowEtapa>) {
+  function handleWorkflowChange(
+    workflow: WorkflowInstancia,
+    workflowHistorico: WorkflowTransicaoHistorico[]
+  ) {
     updateDemanda(
       demanda,
       {
-        workflowEtapas: demanda.workflowEtapas.map((etapa) =>
-          etapa.id === etapaId ? { ...etapa, ...patch } : etapa
-        ),
-      },
-      onChange
-    );
-  }
-
-  function removeEtapa(etapaId: string) {
-    const nextEtapas = demanda.workflowEtapas
-      .filter((etapa) => etapa.id !== etapaId)
-      .map((etapa, index) => ({ ...etapa, ordem: index + 1 }));
-
-    updateDemanda(
-      demanda,
-      {
-        workflowEtapas: nextEtapas,
-        etapaAtualId:
-          demanda.etapaAtualId === etapaId
-            ? nextEtapas[0]?.id ?? ""
-            : demanda.etapaAtualId,
+        workflow,
+        workflowHistorico,
       },
       onChange
     );
   }
 
   return (
-    <WorkspaceSection
-      title="Workflow"
-      description="Etapas mock por demanda. Não há motor real, Kanban ou drag-and-drop nesta fase."
-    >
-      <div className="mb-4 flex justify-end">
-        <Button
-          type="button"
-          onClick={() =>
-            updateDemanda(
-              demanda,
-              {
-                workflowEtapas: [
-                  ...demanda.workflowEtapas,
-                  createWorkflowEtapa(demanda.workflowEtapas.length + 1),
-                ],
-              },
-              onChange
-            )
-          }
-        >
-          Adicionar etapa
-        </Button>
-      </div>
-
-      <div className="space-y-4">
-        {demanda.workflowEtapas.map((etapa) => (
-          <div
-            key={etapa.id}
-            className="rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm"
-          >
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <Badge>Etapa {etapa.ordem}</Badge>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => removeEtapa(etapa.id)}
-              >
-                Remover etapa
-              </Button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                label="Nome da etapa"
-                value={etapa.nome}
-                onChange={(event) =>
-                  updateEtapa(etapa.id, { nome: event.target.value })
-                }
-              />
-              <Input
-                label="Prazo em horas"
-                type="number"
-                min={1}
-                value={etapa.prazoHoras}
-                onChange={(event) =>
-                  updateEtapa(etapa.id, {
-                    prazoHoras: Number(event.target.value),
-                  })
-                }
-              />
-              <Select
-                label="Status da etapa"
-                value={etapa.status}
-                onChange={(event) =>
-                  updateEtapa(etapa.id, {
-                    status: event.target.value as DemandaWorkflowEtapaStatus,
-                  })
-                }
-                options={Object.entries(workflowEtapaStatusLabels).map(
-                  ([value, label]) => ({ value, label })
-                )}
-              />
-              <Select
-                label="Etapa atual"
-                value={demanda.etapaAtualId === etapa.id ? etapa.id : ""}
-                onChange={() =>
-                  updateDemanda(demanda, { etapaAtualId: etapa.id }, onChange)
-                }
-                options={[
-                  { value: "", label: "Não" },
-                  { value: etapa.id, label: "Sim" },
-                ]}
-              />
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <MultiSelect
-                label="Usuários da etapa"
-                placeholder="Selecione usuários"
-                values={etapa.usuarioResponsavelIds}
-                onChange={(values) =>
-                  updateEtapa(etapa.id, { usuarioResponsavelIds: values })
-                }
-                options={responsaveisProjetoDisponiveis.map((responsavel) => ({
-                  value: responsavel.id,
-                  label: responsavel.nome,
-                }))}
-              />
-              <MultiSelect
-                label="Departamentos da etapa"
-                placeholder="Selecione departamentos"
-                values={etapa.departamentoResponsavelIds}
-                onChange={(values) =>
-                  updateEtapa(etapa.id, {
-                    departamentoResponsavelIds: values,
-                  })
-                }
-                options={departamentosProjetoDisponiveis.map((departamento) => ({
-                  value: departamento.id,
-                  label: departamento.nome,
-                }))}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </WorkspaceSection>
+    <WorkflowEditor
+      demandaId={demanda.id}
+      workflow={demanda.workflow}
+      history={demanda.workflowHistorico}
+      onWorkflowChange={handleWorkflowChange}
+    />
   );
 }
 

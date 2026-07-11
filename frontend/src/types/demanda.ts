@@ -1,3 +1,8 @@
+import type {
+  WorkflowInstancia,
+  WorkflowTransicaoHistorico,
+} from "@/types/workflow";
+
 export type DemandaStatus =
   | "rascunho"
   | "planejada"
@@ -9,22 +14,6 @@ export type DemandaStatus =
   | "cancelada";
 
 export type DemandaPrioridade = "baixa" | "media" | "alta";
-
-export type DemandaWorkflowEtapaStatus =
-  | "pendente"
-  | "em_execucao"
-  | "pausada"
-  | "concluida";
-
-export type DemandaWorkflowEtapa = {
-  id: string;
-  nome: string;
-  ordem: number;
-  usuarioResponsavelIds: string[];
-  departamentoResponsavelIds: string[];
-  prazoHoras: number;
-  status: DemandaWorkflowEtapaStatus;
-};
 
 export type DemandaHistoricoEvento = {
   id: string;
@@ -67,8 +56,8 @@ export type Demanda = {
   prioridade: DemandaPrioridade;
   usuarioResponsavelIds: string[];
   departamentoResponsavelIds: string[];
-  workflowEtapas: DemandaWorkflowEtapa[];
-  etapaAtualId: string;
+  workflow: WorkflowInstancia;
+  workflowHistorico: WorkflowTransicaoHistorico[];
   prazoEtapaAtual: string;
   dataCriacao: string;
   dataInicio: string;

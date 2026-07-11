@@ -15,11 +15,11 @@ import {
   resolveProjetoDemandaNome,
   resolveResponsaveisProjetoNomes,
 } from "@/lib/demandas-mock";
-import type {
-  Demanda,
-  DemandaFormDraft,
-  DemandaWorkflowEtapa,
-} from "@/types/demanda";
+import {
+  createWorkflowInstanceFromTemplate,
+  workflowTemplatesMock,
+} from "@/lib/workflows-mock";
+import type { Demanda, DemandaFormDraft } from "@/types/demanda";
 import { DemandaDetailsDrawer } from "./DemandaDetailsDrawer";
 import { DemandasStats } from "./DemandasStats";
 import { DemandasTable } from "./DemandasTable";
@@ -61,27 +61,17 @@ function createHistoricoDemanda(acao: string) {
   };
 }
 
-function createInitialWorkflow(draft: DemandaFormDraft): DemandaWorkflowEtapa[] {
-  return [
-    {
-      id: generateId("etapa-demanda"),
-      nome: "Atendimento",
-      ordem: 1,
-      usuarioResponsavelIds: draft.usuarioResponsavelIds,
-      departamentoResponsavelIds: draft.departamentoResponsavelIds,
-      prazoHoras: 8,
-      status: "pendente",
-    },
-  ];
-}
-
 function createDemandaFromDraft(draft: DemandaFormDraft): Demanda {
   const now = new Date().toISOString();
-  const workflowEtapas = createInitialWorkflow(draft);
   const today = now.slice(0, 10);
+  const demandaId = generateId("demanda");
+  const workflow = createWorkflowInstanceFromTemplate(
+    workflowTemplatesMock[0],
+    demandaId
+  );
 
   return {
-    id: generateId("demanda"),
+    id: demandaId,
     empresaId: EMPRESA_PADRAO_ID,
     agenciaId: AGENCIA_PADRAO_ID,
     projetoId: draft.projetoId,
@@ -93,8 +83,8 @@ function createDemandaFromDraft(draft: DemandaFormDraft): Demanda {
     prioridade: draft.prioridade,
     usuarioResponsavelIds: draft.usuarioResponsavelIds,
     departamentoResponsavelIds: draft.departamentoResponsavelIds,
-    workflowEtapas,
-    etapaAtualId: workflowEtapas[0].id,
+    workflow,
+    workflowHistorico: [],
     prazoEtapaAtual: draft.dataFimPrevista,
     dataCriacao: today,
     dataInicio: today,

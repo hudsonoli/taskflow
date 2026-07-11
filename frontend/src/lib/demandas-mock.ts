@@ -10,13 +10,15 @@ import {
   resolveResponsaveisProjetoNomes,
   responsaveisProjetoDisponiveis,
 } from "@/lib/projetos-mock";
+import {
+  createWorkflowInstanceFromTemplate,
+  workflowTemplatesMock,
+} from "@/lib/workflows-mock";
 import type {
   Demanda,
   DemandaHistoricoEvento,
   DemandaPrioridade,
   DemandaStatus,
-  DemandaWorkflowEtapa,
-  DemandaWorkflowEtapaStatus,
 } from "@/types/demanda";
 
 export {
@@ -54,16 +56,6 @@ export const prioridadeDemandaLabels: Record<DemandaPrioridade, string> = {
   alta: "Alta",
 };
 
-export const workflowEtapaStatusLabels: Record<
-  DemandaWorkflowEtapaStatus,
-  string
-> = {
-  pendente: "Pendente",
-  em_execucao: "Em execução",
-  pausada: "Pausada",
-  concluida: "Concluída",
-};
-
 function createHistorico(acao: string): DemandaHistoricoEvento[] {
   return [
     {
@@ -87,41 +79,22 @@ function createHistorico(acao: string): DemandaHistoricoEvento[] {
   ];
 }
 
-function createWorkflowEtapas(): DemandaWorkflowEtapa[] {
-  return [
-    {
-      id: generateId("etapa-demanda"),
-      nome: "Atendimento",
-      ordem: 1,
-      usuarioResponsavelIds: ["user-2"],
-      departamentoResponsavelIds: ["dep-atendimento"],
-      prazoHoras: 8,
-      status: "concluida",
-    },
-    {
-      id: generateId("etapa-demanda"),
-      nome: "Criação",
-      ordem: 2,
-      usuarioResponsavelIds: ["user-3"],
-      departamentoResponsavelIds: ["dep-criacao"],
-      prazoHoras: 24,
-      status: "em_execucao",
-    },
-    {
-      id: generateId("etapa-demanda"),
-      nome: "Revisão",
-      ordem: 3,
-      usuarioResponsavelIds: ["user-5"],
-      departamentoResponsavelIds: ["dep-conteudo"],
-      prazoHoras: 12,
-      status: "pendente",
-    },
-  ];
-}
-
-const workflowA = createWorkflowEtapas();
-const workflowB = createWorkflowEtapas();
-const workflowC = createWorkflowEtapas();
+const workflowA = createWorkflowInstanceFromTemplate(
+  workflowTemplatesMock[0],
+  "demanda-1"
+);
+const workflowB = createWorkflowInstanceFromTemplate(
+  workflowTemplatesMock[1],
+  "demanda-2"
+);
+const workflowC = createWorkflowInstanceFromTemplate(
+  workflowTemplatesMock[2],
+  "demanda-3"
+);
+const workflowCConcluido = {
+  ...workflowC,
+  etapas: workflowC.etapas.map((etapa) => ({ ...etapa, status: "concluida" as const })),
+};
 
 export const demandasMock: Demanda[] = [
   {
@@ -138,8 +111,8 @@ export const demandasMock: Demanda[] = [
     prioridade: "alta",
     usuarioResponsavelIds: ["user-2", "user-3"],
     departamentoResponsavelIds: ["dep-atendimento", "dep-criacao"],
-    workflowEtapas: workflowA,
-    etapaAtualId: workflowA[1].id,
+    workflow: workflowA,
+    workflowHistorico: [],
     prazoEtapaAtual: "2026-07-15",
     dataCriacao: "2026-07-11",
     dataInicio: "2026-07-11",
@@ -162,8 +135,8 @@ export const demandasMock: Demanda[] = [
     prioridade: "media",
     usuarioResponsavelIds: ["user-5"],
     departamentoResponsavelIds: ["dep-conteudo"],
-    workflowEtapas: workflowB,
-    etapaAtualId: workflowB[2].id,
+    workflow: workflowB,
+    workflowHistorico: [],
     prazoEtapaAtual: "2026-07-18",
     dataCriacao: "2026-07-10",
     dataInicio: "2026-07-12",
@@ -186,8 +159,8 @@ export const demandasMock: Demanda[] = [
     prioridade: "baixa",
     usuarioResponsavelIds: ["user-4"],
     departamentoResponsavelIds: ["dep-criacao"],
-    workflowEtapas: workflowC.map((etapa) => ({ ...etapa, status: "concluida" })),
-    etapaAtualId: workflowC[2].id,
+    workflow: workflowCConcluido,
+    workflowHistorico: [],
     prazoEtapaAtual: "2026-07-08",
     dataCriacao: "2026-07-01",
     dataInicio: "2026-07-02",
