@@ -18,17 +18,11 @@ services:
     image: python:3.12-slim
     container_name: taskfloww_api
     working_dir: /app
+    # Development compose installs dev requirements for pytest/Alembic checks.
+    # Future production compose should install only requirements.txt and avoid --reload.
     command: >
       sh -c "
-      pip install
-      fastapi
-      uvicorn[standard]
-      sqlalchemy
-      psycopg2-binary
-      python-multipart
-      pydantic
-      redis
-      &&
+      pip install -r requirements.txt -r requirements-dev.txt &&
       uvicorn main:app --host 0.0.0.0 --port 8000 --reload
       "
     ports:
