@@ -7,10 +7,13 @@ from app.models.evento import Evento
 
 
 class EventoRepository:
-    def create(self, db: Session, evento: Evento) -> Evento:
+    def create(self, db: Session, evento: Evento, *, commit: bool = True) -> Evento:
         db.add(evento)
-        db.commit()
-        db.refresh(evento)
+        if commit:
+            db.commit()
+            db.refresh(evento)
+        else:
+            db.flush()
         return evento
 
     def get_by_id(self, db: Session, evento_id: str) -> Evento | None:

@@ -18,7 +18,7 @@ class EventoService:
     def __init__(self, repository: EventoRepository | None = None) -> None:
         self.repository = repository or EventoRepository()
 
-    def create_evento(self, db: Session, data: EventoCreate) -> Evento:
+    def create_evento(self, db: Session, data: EventoCreate, *, commit: bool = True) -> Evento:
         now = datetime.now(timezone.utc)
         evento = Evento(
             id=str(uuid4()),
@@ -35,7 +35,7 @@ class EventoService:
             occurred_at=data.occurred_at or now,
             created_at=now,
         )
-        return self.repository.create(db, evento)
+        return self.repository.create(db, evento, commit=commit)
 
     def get_evento(self, db: Session, evento_id: str) -> Evento | None:
         return self.repository.get_by_id(db, evento_id)
