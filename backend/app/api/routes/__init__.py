@@ -1,3 +1,3 @@
-from app.api.routes import health, root, status
+from app.api.routes import eventos, health, root, status
 
-__all__ = ["health", "root", "status"]
+__all__ = ["eventos", "health", "root", "status"]
