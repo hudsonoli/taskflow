@@ -27,6 +27,7 @@ class EventoRepository:
         entidade_tipo: str | None = None,
         entidade_id: str | None = None,
         tipo: str | None = None,
+        usuario_id: str | None = None,
         correlation_id: str | None = None,
         data_inicio: datetime | None = None,
         data_fim: datetime | None = None,
@@ -43,6 +44,8 @@ class EventoRepository:
             statement = statement.where(Evento.entidade_id == entidade_id)
         if tipo:
             statement = statement.where(Evento.tipo == tipo)
+        if usuario_id:
+            statement = statement.where(Evento.usuario_id == usuario_id)
         if correlation_id:
             statement = statement.where(Evento.correlation_id == correlation_id)
         if data_inicio:
