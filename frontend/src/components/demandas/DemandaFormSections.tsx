@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import {
+  CalendarDays,
+  CheckCircle2,
   ClipboardList,
+  CircleDot,
   FileText,
   GitBranch,
   History,
@@ -11,6 +14,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select } from "@/components/ui/Select";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -56,7 +60,7 @@ const workflowStatusTone: Record<
   pendente: "neutral",
   em_execucao: "green",
   pausada: "amber",
-  concluida: "blue",
+  concluida: "green",
 };
 
 function DemandaSectionShell({
@@ -235,6 +239,17 @@ export function WorkflowDemandaSection({
     );
   }
 
+  const totalEtapas = demanda.workflowEtapas.length;
+  const etapasConcluidas = demanda.workflowEtapas.filter(
+    (etapa) => etapa.status === "concluida"
+  ).length;
+  const progressoEtapas = totalEtapas
+    ? Math.round((etapasConcluidas / totalEtapas) * 100)
+    : 0;
+  const etapaAtual = demanda.workflowEtapas.find(
+    (etapa) => etapa.id === demanda.etapaAtualId
+  );
+
   return (
     <DemandaSectionShell
       eyebrow="Workflow"
@@ -263,109 +278,182 @@ export function WorkflowDemandaSection({
         </Button>
       }
     >
-      <div className="space-y-4">
-        {demanda.workflowEtapas.map((etapa) => (
-          <div
-            key={etapa.id}
-            className="rounded-3xl border border-zinc-100 bg-zinc-50/60 p-4 shadow-sm"
-          >
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusPill tone={workflowStatusTone[etapa.status]}>
-                  Etapa {etapa.ordem}
-                </StatusPill>
-                {demanda.etapaAtualId === etapa.id && (
-                  <StatusPill tone="blue">Etapa atual</StatusPill>
-                )}
-                <span className="text-sm font-semibold text-zinc-900">
-                  {etapa.nome}
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => removeEtapa(etapa.id)}
-                className="inline-flex items-center gap-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                Remover etapa
-              </Button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                label="Nome da etapa"
-                value={etapa.nome}
-                onChange={(event) =>
-                  updateEtapa(etapa.id, { nome: event.target.value })
-                }
-              />
-              <Input
-                label="Prazo em horas"
-                type="number"
-                min={1}
-                value={etapa.prazoHoras}
-                onChange={(event) =>
-                  updateEtapa(etapa.id, {
-                    prazoHoras: Number(event.target.value),
-                  })
-                }
-              />
-              <Select
-                label="Status da etapa"
-                value={etapa.status}
-                onChange={(event) =>
-                  updateEtapa(etapa.id, {
-                    status: event.target.value as DemandaWorkflowEtapaStatus,
-                  })
-                }
-                options={Object.entries(workflowEtapaStatusLabels).map(
-                  ([value, label]) => ({ value, label })
-                )}
-              />
-              <Select
-                label="Etapa atual"
-                value={demanda.etapaAtualId === etapa.id ? etapa.id : ""}
-                onChange={() =>
-                  updateDemanda(demanda, { etapaAtualId: etapa.id }, onChange)
-                }
-                options={[
-                  { value: "", label: "Não" },
-                  { value: etapa.id, label: "Sim" },
-                ]}
-              />
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <MultiSelect
-                label="Usuários da etapa"
-                placeholder="Selecione usuários"
-                values={etapa.usuarioResponsavelIds}
-                onChange={(values) =>
-                  updateEtapa(etapa.id, { usuarioResponsavelIds: values })
-                }
-                options={responsaveisProjetoDisponiveis.map((responsavel) => ({
-                  value: responsavel.id,
-                  label: responsavel.nome,
-                }))}
-              />
-              <MultiSelect
-                label="Departamentos da etapa"
-                placeholder="Selecione departamentos"
-                values={etapa.departamentoResponsavelIds}
-                onChange={(values) =>
-                  updateEtapa(etapa.id, {
-                    departamentoResponsavelIds: values,
-                  })
-                }
-                options={departamentosProjetoDisponiveis.map((departamento) => ({
-                  value: departamento.id,
-                  label: departamento.nome,
-                }))}
-              />
+      <div className="mb-5 rounded-3xl border border-zinc-100 bg-zinc-50/70 p-4">
+        <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+              Fluxo da demanda
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <StatusPill tone="blue">
+                {totalEtapas} etapa(s)
+              </StatusPill>
+              <StatusPill tone={etapaAtual ? workflowStatusTone[etapaAtual.status] : "neutral"}>
+                {etapaAtual ? etapaAtual.nome : "Sem etapa atual"}
+              </StatusPill>
+              <StatusPill tone="green">
+                {etapasConcluidas} concluída(s)
+              </StatusPill>
             </div>
           </div>
-        ))}
+
+          {totalEtapas > 0 && (
+            <div className="rounded-2xl bg-white p-3 ring-1 ring-zinc-100">
+              <ProgressBar
+                value={progressoEtapas}
+                tone="green"
+                label="Etapas concluídas"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {demanda.workflowEtapas.map((etapa) => {
+          const etapaAtualSelecionada = demanda.etapaAtualId === etapa.id;
+
+          return (
+            <div
+              key={etapa.id}
+              className={`rounded-3xl border p-4 shadow-sm transition hover:border-zinc-200 hover:shadow-md ${
+                etapaAtualSelecionada
+                  ? "border-blue-200 bg-blue-50/40"
+                  : "border-zinc-100 bg-zinc-50/60"
+              }`}
+            >
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${
+                      etapaAtualSelecionada
+                        ? "bg-blue-600 text-white ring-blue-600"
+                        : etapa.status === "concluida"
+                          ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                          : "bg-white text-zinc-500 ring-zinc-100"
+                    }`}
+                  >
+                    {etapa.status === "concluida" ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <CircleDot className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusPill tone={workflowStatusTone[etapa.status]}>
+                        Etapa {etapa.ordem}
+                      </StatusPill>
+                      {etapaAtualSelecionada && (
+                        <StatusPill tone="blue">Etapa atual</StatusPill>
+                      )}
+                    </div>
+                    <p className="mt-2 text-base font-semibold text-zinc-950">
+                      {etapa.nome}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-zinc-500">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 font-medium ring-1 ring-zinc-100">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        {etapa.prazoHoras}h
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 font-medium ring-1 ring-zinc-100">
+                        <UsersRound className="h-3.5 w-3.5" />
+                        {resolveResponsaveisProjetoNomes(etapa.usuarioResponsavelIds) || "Sem usuário"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => removeEtapa(etapa.id)}
+                  className="inline-flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Remover etapa
+                </Button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <Input
+                  label="Nome da etapa"
+                  value={etapa.nome}
+                  onChange={(event) =>
+                    updateEtapa(etapa.id, { nome: event.target.value })
+                  }
+                />
+                <Input
+                  label="Prazo em horas"
+                  type="number"
+                  min={1}
+                  value={etapa.prazoHoras}
+                  onChange={(event) =>
+                    updateEtapa(etapa.id, {
+                      prazoHoras: Number(event.target.value),
+                    })
+                  }
+                />
+                <Select
+                  label="Status da etapa"
+                  value={etapa.status}
+                  onChange={(event) =>
+                    updateEtapa(etapa.id, {
+                      status: event.target.value as DemandaWorkflowEtapaStatus,
+                    })
+                  }
+                  options={Object.entries(workflowEtapaStatusLabels).map(
+                    ([value, label]) => ({ value, label })
+                  )}
+                />
+                <Select
+                  label="Etapa atual"
+                  value={demanda.etapaAtualId === etapa.id ? etapa.id : ""}
+                  onChange={() =>
+                    updateDemanda(demanda, { etapaAtualId: etapa.id }, onChange)
+                  }
+                  options={[
+                    { value: "", label: "Não" },
+                    { value: etapa.id, label: "Sim" },
+                  ]}
+                />
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <MultiSelect
+                  label="Usuários da etapa"
+                  placeholder="Selecione usuários"
+                  values={etapa.usuarioResponsavelIds}
+                  onChange={(values) =>
+                    updateEtapa(etapa.id, { usuarioResponsavelIds: values })
+                  }
+                  options={responsaveisProjetoDisponiveis.map((responsavel) => ({
+                    value: responsavel.id,
+                    label: responsavel.nome,
+                  }))}
+                />
+                <MultiSelect
+                  label="Departamentos da etapa"
+                  placeholder="Selecione departamentos"
+                  values={etapa.departamentoResponsavelIds}
+                  onChange={(values) =>
+                    updateEtapa(etapa.id, {
+                      departamentoResponsavelIds: values,
+                    })
+                  }
+                  options={departamentosProjetoDisponiveis.map((departamento) => ({
+                    value: departamento.id,
+                    label: departamento.nome,
+                  }))}
+                />
+              </div>
+
+              <div className="mt-4 rounded-2xl bg-white p-3 text-xs text-zinc-500 ring-1 ring-zinc-100">
+                Departamentos: {resolveDepartamentosProjetoNomes(etapa.departamentoResponsavelIds) || "Sem departamento"}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </DemandaSectionShell>
   );
