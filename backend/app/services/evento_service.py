@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.evento import Evento
 from app.repositories.evento_repository import EventoRepository
 from app.schemas.evento import EventoCreate, EventoRead
+from app.services.trafego_event_handler import TrafegoEventHandler
 
 
 def ensure_utc(value: datetime) -> datetime:
@@ -15,8 +16,13 @@ def ensure_utc(value: datetime) -> datetime:
 
 
 class EventoService:
-    def __init__(self, repository: EventoRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: EventoRepository | None = None,
+        trafego_handler: TrafegoEventHandler | None = None,
+    ) -> None:
         self.repository = repository or EventoRepository()
+        self.trafego_handler = trafego_handler or TrafegoEventHandler()
 
     def create_evento(self, db: Session, data: EventoCreate, *, commit: bool = True) -> Evento:
         now = datetime.now(timezone.utc)
@@ -35,7 +41,17 @@ class EventoService:
             occurred_at=data.occurred_at or now,
             created_at=now,
         )
-        return self.repository.create(db, evento, commit=commit)
+        try:
+            self.repository.create(db, evento, commit=False)
+            self.trafego_handler.handle(db, evento)
+            if commit:
+                db.commit()
+                db.refresh(evento)
+            return evento
+        except Exception:
+            if commit:
+                db.rollback()
+            raise
 
     def get_evento(self, db: Session, evento_id: str) -> Evento | None:
         return self.repository.get_by_id(db, evento_id)

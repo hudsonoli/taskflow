@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.domain.event_types import DomainEventType, EVENT_TYPES
-from app.models import Evento
+from app.models import Evento, SessaoTrabalho
 from app.schemas.evento import EventoCreate
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.evento_service import EventoService
@@ -32,6 +32,11 @@ def session_factory():
 def count_eventos(session_factory) -> int:
     with session_factory() as db:
         return db.scalar(select(func.count()).select_from(Evento))
+
+
+def count_sessoes(session_factory) -> int:
+    with session_factory() as db:
+        return db.scalar(select(func.count()).select_from(SessaoTrabalho))
 
 
 def list_eventos(session_factory) -> list[Evento]:
@@ -243,3 +248,141 @@ def test_event_types_are_centralized_from_enum():
     assert DomainEventType.DEMANDA_CRIADA.value in EVENT_TYPES
     assert DomainEventType.WORKFLOW_ETAPA_AVANCADA.value in EVENT_TYPES
     assert EVENT_TYPES == frozenset(event_type.value for event_type in DomainEventType)
+
+
+class FailingTrafegoHandler:
+    def handle(self, db, evento):
+        raise RuntimeError("handler falhou")
+
+
+class CountingTrafegoHandler:
+    def __init__(self):
+        self.calls = 0
+
+    def handle(self, db, evento):
+        self.calls += 1
+        return None
+
+
+def make_status_event_data(**overrides):
+    payload = {
+        "empresaId": "empresa-1",
+        "agenciaId": "agencia-principal",
+        "tipo": DomainEventType.DEMANDA_STATUS_ALTERADO.value,
+        "entidadeTipo": "demanda",
+        "entidadeId": "demanda-1",
+        "usuarioId": "user-1",
+        "payload": {"statusNovo": "em_execucao", "usuarioId": "user-1"},
+        "metadata": {"source": "test"},
+    }
+    payload.update(overrides)
+    return EventoCreate(**payload)
+
+
+def test_create_evento_commit_true_persists_event_and_session(session_factory):
+    service = EventoService()
+
+    with session_factory() as db:
+        evento = service.create_evento(db, make_status_event_data(), commit=True)
+        evento_id = evento.id
+
+    with session_factory() as db:
+        eventos = list(db.scalars(select(Evento)).all())
+        sessoes = list(db.scalars(select(SessaoTrabalho)).all())
+        assert [item.id for item in eventos] == [evento_id]
+        assert len(sessoes) == 1
+        assert sessoes[0].evento_inicio_id == evento_id
+
+
+def test_create_evento_commit_false_with_external_commit_persists_event_and_session(session_factory):
+    service = EventoService()
+
+    with session_factory() as db:
+        with db.begin():
+            evento = service.create_evento(db, make_status_event_data(), commit=False)
+            evento_id = evento.id
+
+    with session_factory() as db:
+        assert db.get(Evento, evento_id) is not None
+        sessoes = list(db.scalars(select(SessaoTrabalho)).all())
+        assert len(sessoes) == 1
+        assert sessoes[0].evento_inicio_id == evento_id
+
+
+def test_create_evento_commit_false_with_external_rollback_removes_event_and_session(session_factory):
+    service = EventoService()
+
+    with pytest.raises(RuntimeError):
+        with session_factory() as db:
+            with db.begin():
+                service.create_evento(db, make_status_event_data(), commit=False)
+                raise RuntimeError("forca rollback")
+
+    assert count_eventos(session_factory) == 0
+    assert count_sessoes(session_factory) == 0
+
+
+def test_handler_exception_with_commit_true_rolls_back_event_and_session(session_factory):
+    service = EventoService(trafego_handler=FailingTrafegoHandler())
+
+    with pytest.raises(RuntimeError, match="handler falhou"):
+        with session_factory() as db:
+            service.create_evento(db, make_status_event_data(), commit=True)
+
+    assert count_eventos(session_factory) == 0
+    assert count_sessoes(session_factory) == 0
+
+
+def test_handler_exception_with_commit_false_allows_external_rollback(session_factory):
+    service = EventoService(trafego_handler=FailingTrafegoHandler())
+
+    with pytest.raises(RuntimeError, match="handler falhou"):
+        with session_factory() as db:
+            with db.begin():
+                service.create_evento(db, make_status_event_data(), commit=False)
+
+    assert count_eventos(session_factory) == 0
+    assert count_sessoes(session_factory) == 0
+
+
+def test_irrelevant_event_persists_without_session(session_factory):
+    service = EventoService()
+    data = EventoCreate(
+        empresaId="empresa-1",
+        agenciaId="agencia-principal",
+        tipo=DomainEventType.PROJETO_CRIADO.value,
+        entidadeTipo="projeto",
+        entidadeId="projeto-1",
+        usuarioId="user-1",
+        payload={"nome": "Campanha Julho"},
+        metadata={"source": "test"},
+    )
+
+    with session_factory() as db:
+        service.create_evento(db, data, commit=True)
+
+    assert count_eventos(session_factory) == 1
+    assert count_sessoes(session_factory) == 0
+
+
+def test_trafego_handler_is_called_once_by_evento_service(session_factory):
+    handler = CountingTrafegoHandler()
+    service = EventoService(trafego_handler=handler)
+
+    with session_factory() as db:
+        service.create_evento(db, make_status_event_data(), commit=True)
+
+    assert handler.calls == 1
+
+
+def test_same_start_event_remains_idempotent_through_evento_service(session_factory):
+    service = EventoService()
+    data = make_status_event_data()
+
+    with session_factory() as db:
+        with db.begin():
+            evento = service.create_evento(db, data, commit=False)
+            service.trafego_handler.handle(db, evento)
+
+    assert count_eventos(session_factory) == 1
+    assert count_sessoes(session_factory) == 1

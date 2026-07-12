@@ -3,14 +3,14 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models import Evento
+from app.models import Evento, SessaoTrabalho
 
 
 @pytest.fixture()
@@ -32,6 +32,7 @@ def client():
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
+        test_client.session_factory = TestingSessionLocal
         yield test_client
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=engine)
@@ -235,3 +236,82 @@ def test_model_uses_metadata_column_without_reserved_attribute_conflict(client):
 
     assert evento["metadata"] == {"canal": "api"}
     assert hasattr(Evento, "metadata_")
+
+
+
+def test_post_eventos_compatible_event_creates_session(client):
+    payload = make_payload(
+        tipo="demanda.status_alterado",
+        entidadeTipo="demanda",
+        entidadeId="demanda-post-1",
+        usuarioId="user-2",
+        payload={"statusNovo": "em_execucao", "usuarioId": "user-2"},
+    )
+
+    response = client.post("/eventos", json=payload)
+
+    assert response.status_code == 201
+    evento = response.json()
+    with client.session_factory() as db:
+        sessoes = list(db.scalars(select(SessaoTrabalho)).all())
+        assert len(sessoes) == 1
+        assert sessoes[0].evento_inicio_id == evento["id"]
+        assert sessoes[0].demanda_id == "demanda-post-1"
+
+
+def test_post_repeated_compatible_events_with_distinct_ids_are_distinct_events(client):
+    payload = make_payload(
+        tipo="demanda.status_alterado",
+        entidadeTipo="demanda",
+        entidadeId="demanda-post-2",
+        usuarioId="user-2",
+        payload={"statusNovo": "em_execucao", "usuarioId": "user-2"},
+    )
+
+    first = client.post("/eventos", json=payload)
+    second = client.post("/eventos", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] != second.json()["id"]
+    with client.session_factory() as db:
+        eventos = list(db.scalars(select(Evento)).all())
+        sessoes = list(db.scalars(select(SessaoTrabalho).order_by(SessaoTrabalho.inicio_em)).all())
+        assert len(eventos) == 2
+        assert len(sessoes) == 2
+        assert sessoes[0].status == "encerrada"
+        assert sessoes[1].status == "ativa"
+
+
+def test_timeline_shows_event_created_with_automatic_handler(client):
+    created = create_evento(
+        client,
+        tipo="demanda.status_alterado",
+        entidadeTipo="demanda",
+        entidadeId="demanda-timeline-1",
+        usuarioId="user-2",
+        payload={"statusNovo": "em_execucao", "usuarioId": "user-2"},
+    )
+
+    response = client.get("/timeline", params={"entidadeTipo": "demanda", "entidadeId": "demanda-timeline-1"})
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [created["id"]]
+
+
+def test_get_sessoes_trabalho_returns_session_created_by_post_eventos(client):
+    created = create_evento(
+        client,
+        tipo="demanda.status_alterado",
+        entidadeTipo="demanda",
+        entidadeId="demanda-sessao-1",
+        usuarioId="user-2",
+        payload={"statusNovo": "em_execucao", "usuarioId": "user-2"},
+    )
+
+    response = client.get("/sessoes-trabalho", params={"demandaId": "demanda-sessao-1"})
+
+    assert response.status_code == 200
+    sessoes = response.json()
+    assert len(sessoes) == 1
+    assert sessoes[0]["eventoInicioId"] == created["id"]
