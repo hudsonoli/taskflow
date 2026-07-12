@@ -1,4 +1,12 @@
-import { WorkspaceStats } from "@/components/workspace/WorkspaceStats";
+import {
+  CheckCircle2,
+  Clock3,
+  Hourglass,
+  ListChecks,
+  PauseCircle,
+} from "lucide-react";
+import { DashboardGrid } from "@/components/ui/DashboardGrid";
+import { MetricCard } from "@/components/ui/MetricCard";
 import type { Demanda } from "@/types/demanda";
 
 type DemandasStatsProps = {
@@ -20,14 +28,42 @@ export function DemandasStats({ demandas }: DemandasStatsProps) {
   ).length;
 
   return (
-    <WorkspaceStats
-      stats={[
-        { label: "Total", value: demandas.length, description: "Demandas no mock local." },
-        { label: "Em execução", value: emExecucao, description: "Demandas em andamento." },
-        { label: "Pausadas/Bloqueadas", value: pausadasOuBloqueadas, description: "Fluxos suspensos temporariamente." },
-        { label: "Aguardando cliente", value: aguardandoCliente, description: "Retorno externo pendente." },
-        { label: "Concluídas", value: concluidas, description: "Demandas finalizadas." },
-      ]}
-    />
+    <DashboardGrid columns="five">
+      <MetricCard
+        title="Total"
+        value={demandas.length}
+        description="Demandas no mock local."
+        icon={<ListChecks className="h-5 w-5" />}
+        tone="blue"
+      />
+      <MetricCard
+        title="Em execução"
+        value={emExecucao}
+        description="Demandas em andamento."
+        icon={<Clock3 className="h-5 w-5" />}
+        tone="green"
+      />
+      <MetricCard
+        title="Pausadas/Bloqueadas"
+        value={pausadasOuBloqueadas}
+        description="Fluxos suspensos temporariamente."
+        icon={<PauseCircle className="h-5 w-5" />}
+        tone="amber"
+      />
+      <MetricCard
+        title="Aguardando cliente"
+        value={aguardandoCliente}
+        description="Retorno externo pendente."
+        icon={<Hourglass className="h-5 w-5" />}
+        tone="amber"
+      />
+      <MetricCard
+        title="Concluídas"
+        value={concluidas}
+        description="Demandas finalizadas."
+        icon={<CheckCircle2 className="h-5 w-5" />}
+        tone="neutral"
+      />
+    </DashboardGrid>
   );
 }
