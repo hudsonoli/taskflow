@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Index, Integer, String, text
+from sqlalchemy import CheckConstraint, DateTime, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -62,9 +62,9 @@ class SessaoTrabalho(Base):
     evento_inicio_id: Mapped[str] = mapped_column(String(36), nullable=False)
     evento_fim_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
-    inicio_em: Mapped[datetime] = mapped_column(nullable=False)
-    fim_em: Mapped[datetime | None] = mapped_column(nullable=True)
+    inicio_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fim_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duracao_segundos: Mapped[int | None] = mapped_column(Integer, nullable=True)
     motivo_encerramento: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

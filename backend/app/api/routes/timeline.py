@@ -16,7 +16,7 @@ def normalize_datetime(value: datetime | None) -> datetime | None:
         return None
     if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Filtros de data devem incluir timezone",
         )
     return value.astimezone(timezone.utc)
