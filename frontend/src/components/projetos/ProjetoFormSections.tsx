@@ -1,11 +1,20 @@
-import { Badge } from "@/components/ui/Badge";
+import {
+  Archive,
+  FileText,
+  History,
+  Layers3,
+  Plus,
+  Trash2,
+  UsersRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { EmptyStateIllustration } from "@/components/ui/EmptyStateIllustration";
 import { Input } from "@/components/ui/Input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select } from "@/components/ui/Select";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { Textarea } from "@/components/ui/Textarea";
-import { WorkspaceEmptyState } from "@/components/workspace/WorkspaceEmptyState";
-import { WorkspaceSection } from "@/components/workspace/WorkspaceSection";
 import {
   departamentosProjetoDisponiveis,
   generateId,
@@ -31,6 +40,43 @@ type ProjetoSectionProps = {
   onChange: (projeto: Projeto) => void;
 };
 
+type ProjetoSectionShellProps = {
+  title: string;
+  description: string;
+  eyebrow: string;
+  icon: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+};
+
+function ProjetoSectionShell({
+  title,
+  description,
+  eyebrow,
+  icon,
+  action,
+  children,
+}: ProjetoSectionShellProps) {
+  return (
+    <section className="rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm sm:p-5">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <SectionHeader
+            eyebrow={eyebrow}
+            title={title}
+            description={description}
+            action={action}
+          />
+        </div>
+      </div>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
 function updateProjeto(
   projeto: Projeto,
   patch: Partial<Projeto>,
@@ -45,10 +91,19 @@ function updateProjeto(
 
 export function DadosProjetoSection({ projeto, onChange }: ProjetoSectionProps) {
   return (
-    <WorkspaceSection
-      title="Dados"
+    <ProjetoSectionShell
+      eyebrow="Dados"
+      title="Informações do projeto"
       description="Informações principais do projeto e campos reservados para integrações futuras."
+      icon={<FileText className="h-5 w-5" />}
     >
+      <div className="mb-5 flex flex-wrap gap-2">
+        <StatusPill tone="blue">{statusProjetoLabels[projeto.status]}</StatusPill>
+        <StatusPill tone="neutral">
+          {prioridadeProjetoLabels[projeto.prioridade]}
+        </StatusPill>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <Input label="Código interno" value={projeto.codigoInterno} disabled />
         <Input
@@ -119,53 +174,60 @@ export function DadosProjetoSection({ projeto, onChange }: ProjetoSectionProps) 
         <Input label="OCs vinculadas" value="Consulta futura" disabled />
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MultiSelect
-          label="Usuários responsáveis"
-          placeholder="Selecione usuários"
-          values={projeto.responsavelIds}
-          onChange={(values) =>
-            updateProjeto(projeto, { responsavelIds: values }, onChange)
-          }
-          options={responsaveisProjetoDisponiveis.map((responsavel) => ({
-            value: responsavel.id,
-            label: responsavel.nome,
-          }))}
+      <div className="mt-5 rounded-3xl border border-zinc-100 bg-zinc-50/70 p-4">
+        <SectionHeader
+          eyebrow="Responsáveis"
+          title="Usuários e departamentos"
+          description="Relações preservadas por IDs, com nomes resolvidos apenas para exibição."
         />
-        <MultiSelect
-          label="Departamentos responsáveis"
-          placeholder="Selecione departamentos"
-          values={projeto.departamentoResponsavelIds}
-          onChange={(values) =>
-            updateProjeto(
-              projeto,
-              { departamentoResponsavelIds: values },
-              onChange
-            )
-          }
-          options={departamentosProjetoDisponiveis.map((departamento) => ({
-            value: departamento.id,
-            label: departamento.nome,
-          }))}
-        />
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <MultiSelect
+            label="Usuários responsáveis"
+            placeholder="Selecione usuários"
+            values={projeto.responsavelIds}
+            onChange={(values) =>
+              updateProjeto(projeto, { responsavelIds: values }, onChange)
+            }
+            options={responsaveisProjetoDisponiveis.map((responsavel) => ({
+              value: responsavel.id,
+              label: responsavel.nome,
+            }))}
+          />
+          <MultiSelect
+            label="Departamentos responsáveis"
+            placeholder="Selecione departamentos"
+            values={projeto.departamentoResponsavelIds}
+            onChange={(values) =>
+              updateProjeto(
+                projeto,
+                { departamentoResponsavelIds: values },
+                onChange
+              )
+            }
+            options={departamentosProjetoDisponiveis.map((departamento) => ({
+              value: departamento.id,
+              label: departamento.nome,
+            }))}
+          />
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <Input
+            label="Usuários responsáveis selecionados"
+            value={resolveResponsaveisProjetoNomes(projeto.responsavelIds)}
+            disabled
+          />
+          <Input
+            label="Departamentos responsáveis selecionados"
+            value={resolveDepartamentosProjetoNomes(
+              projeto.departamentoResponsavelIds
+            )}
+            disabled
+          />
+        </div>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <Input
-          label="Usuários responsáveis selecionados"
-          value={resolveResponsaveisProjetoNomes(projeto.responsavelIds)}
-          disabled
-        />
-        <Input
-          label="Departamentos responsáveis selecionados"
-          value={resolveDepartamentosProjetoNomes(
-            projeto.departamentoResponsavelIds
-          )}
-          disabled
-        />
-      </div>
-
-      <div className="mt-4">
+      <div className="mt-5">
         <Textarea
           label="Descrição"
           rows={4}
@@ -175,7 +237,7 @@ export function DadosProjetoSection({ projeto, onChange }: ProjetoSectionProps) 
           }
         />
       </div>
-    </WorkspaceSection>
+    </ProjetoSectionShell>
   );
 }
 
@@ -184,9 +246,11 @@ export function ResumoProjetoSection({
   onChange,
 }: ProjetoSectionProps) {
   return (
-    <WorkspaceSection
-      title="Resumo"
+    <ProjetoSectionShell
+      eyebrow="Resumo"
+      title="Resumo operacional"
       description="Conteúdo operacional que será exibido futuramente nas demandas vinculadas."
+      icon={<FileText className="h-5 w-5" />}
     >
       <Textarea
         label="Resumo do projeto"
@@ -196,7 +260,7 @@ export function ResumoProjetoSection({
           updateProjeto(projeto, { resumo: event.target.value }, onChange)
         }
       />
-    </WorkspaceSection>
+    </ProjetoSectionShell>
   );
 }
 
@@ -244,11 +308,12 @@ export function ModeloCampanhaSection({
   }
 
   return (
-    <WorkspaceSection
+    <ProjetoSectionShell
+      eyebrow="Modelo"
       title="Modelo de Campanha"
       description="Backlog mock para campanhas recorrentes. Não gera demandas reais nesta fase."
-    >
-      <div className="mb-4 flex justify-end">
+      icon={<Layers3 className="h-5 w-5" />}
+      action={
         <Button
           type="button"
           onClick={() =>
@@ -263,23 +328,40 @@ export function ModeloCampanhaSection({
               onChange
             )
           }
+          className="inline-flex items-center gap-2"
         >
+          <Plus className="h-4 w-4" />
           Adicionar item
         </Button>
-      </div>
-
+      }
+    >
       {projeto.modeloCampanha.length === 0 ? (
-        <WorkspaceEmptyState
+        <EmptyStateIllustration
           title="Nenhum item no modelo"
           description="Adicione demandas padrão para campanhas recorrentes."
+          icon={<Layers3 className="h-6 w-6" />}
         />
       ) : (
         <div className="space-y-4">
           {projeto.modeloCampanha.map((item) => (
             <div
               key={item.id}
-              className="rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm"
+              className="rounded-3xl border border-zinc-100 bg-zinc-50/60 p-4 shadow-sm"
             >
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-950">
+                    {item.nomeDemanda}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {item.tipoTarefaNome} · {item.workflowSugeridoNome}
+                  </p>
+                </div>
+                <StatusPill tone="blue">
+                  {prioridadeProjetoLabels[item.prioridadePadrao]}
+                </StatusPill>
+              </div>
+
               <div className="grid gap-4 lg:grid-cols-2">
                 <Input
                   label="Nome da demanda"
@@ -310,8 +392,7 @@ export function ModeloCampanhaSection({
                   value={item.prioridadePadrao}
                   onChange={(event) =>
                     updateItem(item.id, {
-                      prioridadePadrao: event.target
-                        .value as ProjetoPrioridade,
+                      prioridadePadrao: event.target.value as ProjetoPrioridade,
                     })
                   }
                   options={Object.entries(prioridadeProjetoLabels).map(
@@ -327,8 +408,7 @@ export function ModeloCampanhaSection({
                     );
                     updateItem(item.id, {
                       workflowSugeridoId: event.target.value,
-                      workflowSugeridoNome:
-                        selected?.nome ?? event.target.value,
+                      workflowSugeridoNome: selected?.nome ?? event.target.value,
                     });
                   }}
                   options={workflowsProjetoDisponiveis.map((workflow) => ({
@@ -374,7 +454,9 @@ export function ModeloCampanhaSection({
                   type="button"
                   variant="secondary"
                   onClick={() => removeItem(item.id)}
+                  className="inline-flex items-center gap-2"
                 >
+                  <Trash2 className="h-4 w-4" />
                   Remover item
                 </Button>
               </div>
@@ -382,7 +464,7 @@ export function ModeloCampanhaSection({
           ))}
         </div>
       )}
-    </WorkspaceSection>
+    </ProjetoSectionShell>
   );
 }
 
@@ -416,11 +498,12 @@ export function EquipeProjetoSection({
   }
 
   return (
-    <WorkspaceSection
-      title="Equipe"
+    <ProjetoSectionShell
+      eyebrow="Equipe"
+      title="Equipe do projeto"
       description="Membros mock vinculados localmente ao projeto."
-    >
-      <div className="mb-4 flex justify-end">
+      icon={<UsersRound className="h-5 w-5" />}
+      action={
         <Button
           type="button"
           onClick={() =>
@@ -430,16 +513,18 @@ export function EquipeProjetoSection({
               onChange
             )
           }
+          className="inline-flex items-center gap-2"
         >
+          <Plus className="h-4 w-4" />
           Adicionar membro
         </Button>
-      </div>
-
+      }
+    >
       <div className="space-y-3">
         {projeto.equipe.map((membro) => (
           <div
             key={membro.id}
-            className="grid gap-3 rounded-3xl border border-zinc-100 p-4 md:grid-cols-[1fr_1fr_1fr_auto]"
+            className="grid gap-3 rounded-3xl border border-zinc-100 bg-zinc-50/60 p-4 md:grid-cols-[1fr_1fr_1fr_auto]"
           >
             <Input
               label="Nome"
@@ -487,64 +572,73 @@ export function EquipeProjetoSection({
                     onChange
                   )
                 }
+                className="inline-flex items-center gap-2"
               >
+                <Trash2 className="h-4 w-4" />
                 Remover
               </Button>
             </div>
           </div>
         ))}
       </div>
-    </WorkspaceSection>
+    </ProjetoSectionShell>
   );
 }
 
 export function ArquivosProjetoSection() {
   return (
-    <WorkspaceSection
+    <ProjetoSectionShell
+      eyebrow="Arquivos"
       title="Arquivos"
       description="Área reservada para anexos futuros do projeto."
+      icon={<Archive className="h-5 w-5" />}
     >
-      <WorkspaceEmptyState
+      <EmptyStateIllustration
         title="Nenhum arquivo anexado."
         description="O upload real de arquivos será tratado em fase futura."
+        icon={<Archive className="h-6 w-6" />}
+        action={
+          <Button type="button" variant="secondary">
+            Adicionar arquivo
+          </Button>
+        }
       />
-
-      <div className="mt-4 flex justify-end">
-        <Button type="button" variant="secondary">
-          Adicionar arquivo
-        </Button>
-      </div>
-    </WorkspaceSection>
+    </ProjetoSectionShell>
   );
 }
 
 export function HistoricoProjetoSection({ projeto }: { projeto: Projeto }) {
   return (
-    <WorkspaceSection
+    <ProjetoSectionShell
+      eyebrow="Histórico"
       title="Histórico"
       description="Eventos mock preparados visualmente para auditoria futura."
+      icon={<History className="h-5 w-5" />}
     >
       <div className="space-y-3">
         {projeto.historico.map((evento) => (
           <div
             key={evento.id}
-            className="rounded-3xl border border-zinc-100 bg-white p-4"
+            className="rounded-3xl border border-zinc-100 bg-zinc-50/60 p-4"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-medium text-zinc-900">{evento.acao}</p>
-                <p className="mt-1 text-sm text-zinc-500">
-                  {evento.usuario} · {evento.dataHora}
-                </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex gap-3">
+                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-blue-500" />
+                <div>
+                  <p className="font-semibold text-zinc-950">{evento.acao}</p>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    {evento.usuario} · {evento.dataHora}
+                  </p>
+                </div>
               </div>
 
-              <Badge>{evento.dispositivo}</Badge>
+              <StatusPill tone="neutral">{evento.dispositivo}</StatusPill>
             </div>
 
             <p className="mt-3 text-sm text-zinc-500">IP: {evento.ip}</p>
           </div>
         ))}
       </div>
-    </WorkspaceSection>
+    </ProjetoSectionShell>
   );
 }
