@@ -22,9 +22,11 @@ import type {
   DemandaWorkflowEtapa,
 } from "@/types/demanda";
 import { DemandaDetailsDrawer } from "./DemandaDetailsDrawer";
+import { DemandasKanban } from "./DemandasKanban";
 import { DemandasStats } from "./DemandasStats";
 import { DemandasTable } from "./DemandasTable";
 import {
+  type DemandasViewMode,
   DemandaStatusFiltro,
   DemandasToolbar,
 } from "./DemandasToolbar";
@@ -147,6 +149,7 @@ export function DemandasView() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<DemandaStatusFiltro>("todos");
+  const [viewMode, setViewMode] = useState<DemandasViewMode>("lista");
   const [creatingDemand, setCreatingDemand] = useState(false);
   const [editingDemandId, setEditingDemandId] = useState<string | null>(null);
   const [selectedDemandId, setSelectedDemandId] = useState<string | null>(null);
@@ -247,6 +250,8 @@ export function DemandasView() {
         onQueryChange={setQuery}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
         onNewDemand={() => setCreatingDemand(true)}
       />
 
@@ -254,6 +259,11 @@ export function DemandasView() {
         <WorkspaceEmptyState
           title="Nenhuma demanda encontrada"
           description="Ajuste a busca ou os filtros para visualizar as demandas cadastradas."
+        />
+      ) : viewMode === "kanban" ? (
+        <DemandasKanban
+          demandas={filteredDemands}
+          onOpenDetails={setSelectedDemandId}
         />
       ) : (
         <DemandasTable
