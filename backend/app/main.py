@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.routes import eventos, health, root, status, timeline
+from app.api.routes import eventos, health, root, sessoes_trabalho, status, timeline
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -11,3 +11,4 @@ app.include_router(health.router)
 app.include_router(status.router)
 app.include_router(eventos.router)
 app.include_router(timeline.router)
+app.include_router(sessoes_trabalho.router)
