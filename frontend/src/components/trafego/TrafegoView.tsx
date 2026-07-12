@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { DashboardGrid } from "@/components/ui/DashboardGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { WorkspacePage } from "@/components/workspace/WorkspacePage";
-import { WorkspaceSection } from "@/components/workspace/WorkspaceSection";
 import {
   EMPRESA_TRAFEGO_PADRAO_ID,
   getTrafegoAgora,
@@ -52,35 +52,24 @@ export function TrafegoView() {
       />
 
       <TrafegoHeader />
-
       <TrafegoFilters filters={filters} onChange={setFilters} />
 
       {loading ? (
-        <div className="grid gap-5 md:grid-cols-3">
+        <DashboardGrid columns="three">
           {[1, 2, 3].map((item) => (
-            <div
-              key={item}
-              className="h-32 animate-pulse rounded-3xl border border-zinc-100 bg-white shadow-sm"
-            />
+            <div key={item} className="h-32 animate-pulse rounded-3xl border border-zinc-100 bg-white shadow-sm" />
           ))}
-        </div>
+        </DashboardGrid>
       ) : (
         <>
           <TrafegoResumoCards resumo={resumo} />
-
           <TempoOperacionalCard resumo={resumo} />
+          <TrafegoAgoraTable sessions={sessions} />
 
-          <div className="grid gap-5 xl:grid-cols-2">
+          <DashboardGrid columns="two">
             <TrafegoCargaUsuarios cargas={cargaUsuarios} />
             <TrafegoCargaDepartamentos cargas={cargaDepartamentos} />
-          </div>
-
-          <WorkspaceSection
-            title="Quem está trabalhando agora"
-            description="Sessões ativas ordenadas por maior tempo em execução."
-          >
-            <TrafegoAgoraTable sessions={sessions} />
-          </WorkspaceSection>
+          </DashboardGrid>
         </>
       )}
     </WorkspacePage>

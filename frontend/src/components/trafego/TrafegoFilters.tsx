@@ -1,9 +1,11 @@
 "use client";
 
+import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
+import { ToolbarCard } from "@/components/ui/ToolbarCard";
 import {
   trafegoDepartamentosMock,
   trafegoEmpresasMock,
@@ -25,8 +27,44 @@ export function TrafegoFilters({ filters, onChange }: TrafegoFiltersProps) {
   }
 
   return (
-    <div className="rounded-3xl border border-zinc-100 bg-white p-5 shadow-sm">
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr_1.2fr_1fr_0.8fr]">
+    <ToolbarCard>
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white">
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-zinc-950">Filtros operacionais</p>
+            <p className="text-xs text-zinc-500">Ajuste a visão sem alterar dados.</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { value: "hoje", label: "Hoje" },
+            { value: "24h", label: "24h" },
+            { value: "7d", label: "7 dias" },
+            { value: "30d", label: "30 dias" },
+          ].map((periodo) => (
+            <Button
+              key={periodo.value}
+              type="button"
+              variant={filters.periodo === periodo.value ? "primary" : "secondary"}
+              onClick={() =>
+                updateFilter(
+                  "periodo",
+                  periodo.value as TrafegoFiltersState["periodo"]
+                )
+              }
+              className="px-3 py-1.5 text-xs"
+            >
+              {periodo.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-[0.9fr_1.15fr_1.15fr_1fr_0.85fr]">
         <Select
           label="Empresa"
           value={filters.empresaId}
@@ -84,29 +122,6 @@ export function TrafegoFilters({ filters, onChange }: TrafegoFiltersProps) {
           ]}
         />
       </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {[
-          { value: "hoje", label: "Hoje" },
-          { value: "24h", label: "Últimas 24 horas" },
-          { value: "7d", label: "7 dias" },
-          { value: "30d", label: "30 dias" },
-        ].map((periodo) => (
-          <Button
-            key={periodo.value}
-            type="button"
-            variant={filters.periodo === periodo.value ? "primary" : "secondary"}
-            onClick={() =>
-              updateFilter(
-                "periodo",
-                periodo.value as TrafegoFiltersState["periodo"]
-              )
-            }
-          >
-            {periodo.label}
-          </Button>
-        ))}
-      </div>
-    </div>
+    </ToolbarCard>
   );
 }
