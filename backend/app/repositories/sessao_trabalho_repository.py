@@ -47,6 +47,64 @@ class SessaoTrabalhoRepository:
             )
         return db.scalar(statement)
 
+
+
+    def list_active(
+        self,
+        db: Session,
+        *,
+        empresa_id: str | None = None,
+        demanda_id: str | None = None,
+        usuario_id: str | None = None,
+        departamento_id: str | None = None,
+        workflow_etapa_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[SessaoTrabalho]:
+        statement = select(SessaoTrabalho).where(SessaoTrabalho.status == "ativa")
+
+        if empresa_id:
+            statement = statement.where(SessaoTrabalho.empresa_id == empresa_id)
+        if demanda_id:
+            statement = statement.where(SessaoTrabalho.demanda_id == demanda_id)
+        if usuario_id:
+            statement = statement.where(SessaoTrabalho.usuario_id == usuario_id)
+        if departamento_id:
+            statement = statement.where(SessaoTrabalho.departamento_id == departamento_id)
+        if workflow_etapa_id:
+            statement = statement.where(SessaoTrabalho.workflow_etapa_id == workflow_etapa_id)
+
+        statement = statement.order_by(SessaoTrabalho.inicio_em.asc(), SessaoTrabalho.created_at.asc())
+        statement = statement.limit(limit).offset(offset)
+        return list(db.scalars(statement).all())
+
+    def list_overlapping_period(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        data_inicio: datetime,
+        data_fim: datetime,
+        usuario_id: str | None = None,
+        departamento_id: str | None = None,
+        demanda_id: str | None = None,
+    ) -> list[SessaoTrabalho]:
+        statement = select(SessaoTrabalho).where(
+            SessaoTrabalho.empresa_id == empresa_id,
+            SessaoTrabalho.inicio_em <= data_fim,
+            (SessaoTrabalho.fim_em.is_(None)) | (SessaoTrabalho.fim_em >= data_inicio),
+        )
+
+        if usuario_id:
+            statement = statement.where(SessaoTrabalho.usuario_id == usuario_id)
+        if departamento_id:
+            statement = statement.where(SessaoTrabalho.departamento_id == departamento_id)
+        if demanda_id:
+            statement = statement.where(SessaoTrabalho.demanda_id == demanda_id)
+
+        statement = statement.order_by(SessaoTrabalho.inicio_em.asc(), SessaoTrabalho.created_at.asc())
+        return list(db.scalars(statement).all())
+
     def list(
         self,
         db: Session,
