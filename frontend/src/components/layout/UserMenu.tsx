@@ -38,7 +38,14 @@ const currentUserMeta = {
   ultimoIp: "192.168.0.24",
 };
 
-export function UserMenu() {
+// Contador visual temporário até existir fonte real de notificações.
+const notificationBadge = "3";
+
+type UserMenuProps = {
+  isCollapsed?: boolean;
+};
+
+export function UserMenu({ isCollapsed = false }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const avatarSrc = currentUser.avatarThumbnail ?? currentUser.avatarUrl;
@@ -76,21 +83,28 @@ export function UserMenu() {
   }
 
   return (
-    <div ref={menuRef} className="relative mt-auto flex justify-center pt-4">
+    <div
+      ref={menuRef}
+      className={`relative flex ${isCollapsed ? "justify-center" : "w-full"}`}
+    >
       <button
         type="button"
         title={currentUser.nome}
         aria-label={currentUser.nome}
         onClick={() => setOpen((value) => !value)}
-        className="group relative flex h-12 w-12 items-center justify-center rounded-2xl text-zinc-600 transition hover:bg-zinc-100"
+        className={`group relative flex rounded-2xl text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
+          isCollapsed
+            ? "h-8 w-8 items-center justify-center"
+            : "w-full items-center gap-2 px-1.5 py-1 text-left"
+        }`}
       >
-        <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-zinc-900 text-sm font-semibold text-white shadow-sm">
+        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-900 text-sm font-semibold text-white shadow-sm">
           {avatarSrc ? (
             <Image
               src={avatarSrc}
               alt={currentUser.nome}
-              width={48}
-              height={48}
+              width={32}
+              height={32}
               className="h-full w-full object-cover"
             />
           ) : (
@@ -100,10 +114,21 @@ export function UserMenu() {
             {/* Badge futuro */}
           </div>
         </div>
+
+        {!isCollapsed ? (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold text-zinc-900">
+              {currentUser.nome}
+            </span>
+            <span className="block truncate text-[11px] text-zinc-500">
+              {currentUser.cargo}
+            </span>
+          </span>
+        ) : null}
       </button>
 
       <div
-        className={`absolute bottom-0 left-full z-50 ml-3 w-72 origin-bottom-left rounded-3xl border border-zinc-200 bg-white p-2 shadow-xl transition-all duration-200 ${
+        className={`absolute bottom-0 left-full z-50 ml-3 w-64 origin-bottom-left rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl transition-[opacity,transform] duration-200 ${
           open
             ? "pointer-events-auto translate-x-0 scale-100 opacity-100"
             : "pointer-events-none translate-x-2 scale-95 opacity-0"
@@ -121,7 +146,7 @@ export function UserMenu() {
         {menuSections.map((section, sectionIndex) => (
           <div key={section.title ?? `section-${sectionIndex}`} className="space-y-1">
             {section.title ? (
-              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
+              <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
                 {section.title}
               </p>
             ) : null}
@@ -129,7 +154,7 @@ export function UserMenu() {
             {section.items.map((item) => {
               const Icon = item.icon;
               const baseClassName =
-                "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm font-medium transition";
+                "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-medium transition";
               const variantClassName =
                 item.variant === "danger"
                   ? "text-red-600 hover:bg-red-50"
@@ -144,7 +169,12 @@ export function UserMenu() {
                     className={`${baseClassName} ${variantClassName}`}
                   >
                     <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                    <span>{item.label}</span>
+                    <span className="min-w-0 flex-1">{item.label}</span>
+                    {item.label === "Notificações" ? (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                        {notificationBadge}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               }
@@ -157,7 +187,7 @@ export function UserMenu() {
                   className={`${baseClassName} ${variantClassName}`}
                 >
                   <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                  <span>{item.label}</span>
+                  <span className="min-w-0 flex-1">{item.label}</span>
                 </button>
               );
             })}

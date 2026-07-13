@@ -30,20 +30,20 @@ export function MetricCard({
   footer,
 }: MetricCardProps) {
   return (
-    <div className="group rounded-3xl border border-zinc-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-200 hover:shadow-md">
-      <div className="flex items-start justify-between gap-4">
+    <div className="group rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-200 hover:shadow-md">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
             {title}
           </p>
-          <div className="mt-3 text-3xl font-bold tracking-tight text-zinc-950">
+          <div className="mt-2 text-2xl font-bold tracking-tight text-zinc-950">
             {value}
           </div>
         </div>
 
         {icon && (
           <div
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ${toneClassNames[tone]}`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${toneClassNames[tone]}`}
           >
             {icon}
           </div>
@@ -51,13 +51,13 @@ export function MetricCard({
       </div>
 
       {(description || badge) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {description && <p className="text-sm text-zinc-500">{description}</p>}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {description && <p className="text-xs text-zinc-500">{description}</p>}
           {badge}
         </div>
       )}
 
-      {footer && <div className="mt-4 border-t border-zinc-100 pt-3">{footer}</div>}
+      {footer && <div className="mt-3 border-t border-zinc-100 pt-3">{footer}</div>}
     </div>
   );
 }

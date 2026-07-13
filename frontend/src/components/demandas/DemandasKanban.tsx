@@ -78,7 +78,7 @@ export function DemandasKanban({
   );
 
   return (
-    <div className="rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm sm:p-5">
+    <div className="rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm">
       <SectionHeader
         eyebrow="Kanban de demandas"
         title="Fluxo por status"
@@ -91,8 +91,8 @@ export function DemandasKanban({
         }
       />
 
-      <div className="mt-5 overflow-x-auto pb-2">
-        <div className="flex gap-4">
+      <div className="mt-4 overflow-x-auto pb-2">
+        <div className="flex gap-3">
           {groupedDemands.map((column) => (
             <DemandaKanbanColumn
               key={column.id}

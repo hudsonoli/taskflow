@@ -20,8 +20,8 @@ function formatDateTime(value: string) {
 
 export function TempoOperacionalCard({ resumo }: TempoOperacionalCardProps) {
   return (
-    <section className="rounded-3xl border border-zinc-100 bg-zinc-950 p-5 text-white shadow-sm lg:p-6">
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_1fr] xl:items-center">
+    <section className="rounded-3xl border border-zinc-100 bg-zinc-950 p-5 text-white shadow-sm">
+      <div className="grid gap-5 xl:grid-cols-[1.15fr_1fr] xl:items-center">
         <div>
           <SectionHeader
             eyebrow="tempo operacional"
@@ -30,14 +30,14 @@ export function TempoOperacionalCard({ resumo }: TempoOperacionalCardProps) {
             action={<StatusPill tone="blue">não é folha de ponto</StatusPill>}
           />
 
-          <div className="mt-6 flex items-end gap-3">
-            <p className="font-mono text-5xl font-bold tracking-tight text-white">
+          <div className="mt-4 flex items-end gap-3">
+            <p className="font-mono text-4xl font-bold tracking-tight text-white">
               {formatTempoOperacional(resumo.tempoOperacionalEstimadoSegundos)}
             </p>
             <Clock className="mb-2 h-5 w-5 text-zinc-400" aria-hidden="true" />
           </div>
 
-          <p className="mt-3 text-sm text-zinc-400">
+          <p className="mt-2 text-sm text-zinc-400">
             De {formatDateTime(resumo.inicioPeriodo)} até{" "}
             {formatDateTime(resumo.fimPeriodo)}.
           </p>

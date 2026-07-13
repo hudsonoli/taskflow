@@ -31,10 +31,10 @@ export function RankingCard({
   const maxValue = Math.max(...items.map((item) => item.value), 1);
 
   return (
-    <section className="rounded-3xl border border-zinc-100 bg-white p-5 shadow-sm">
+    <section className="rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm">
       <SectionHeader title={title} description={description} />
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-4 space-y-3">
         {items.length === 0 ? (
           <EmptyStateIllustration title={emptyTitle} description={emptyDescription} />
         ) : (
@@ -42,7 +42,7 @@ export function RankingCard({
             const percent = Math.max(2, Math.round((item.value / maxValue) * 100));
 
             return (
-              <div key={item.id} className="rounded-2xl border border-zinc-100 p-3.5 transition hover:bg-zinc-50">
+              <div key={item.id} className="rounded-2xl border border-zinc-100 p-3 transition hover:bg-zinc-50">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -67,7 +67,7 @@ export function RankingCard({
                   </div>
                 </div>
 
-                <ProgressBar value={percent} className="mt-3" />
+                <ProgressBar value={percent} className="mt-2.5" />
               </div>
             );
           })
