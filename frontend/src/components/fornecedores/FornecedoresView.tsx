@@ -2,10 +2,21 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
+import { Truck } from "lucide-react";
+import {
+  CadastroAvatar,
+  CadastroIndicators,
+  CadastroPage,
+  CadastroStatusBadge,
+  CadastroTable,
+  CadastroToolbar,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { EntitySidePanel } from "@/components/ui/EntitySidePanel";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { initialFornecedores } from "@/lib/fornecedor-mock";
 import type { FornecedorDraft } from "@/types/fornecedor";
 import { NovoFornecedorButton } from "./NovoFornecedorButton";
@@ -30,6 +41,7 @@ export function FornecedoresView({
 }: FornecedoresViewProps = {}) {
   const [fornecedores, setFornecedores] =
     useState<FornecedorDraft[]>(initialFornecedores);
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedFornecedorId, setSelectedFornecedorId] =
     useState<string | null>(null);
   const [editingFornecedorId, setEditingFornecedorId] =
@@ -52,6 +64,21 @@ export function FornecedoresView({
   const categoriasCadastradas = new Set(
     fornecedores.map((fornecedor) => fornecedor.categoria)
   ).size;
+
+  const fornecedoresFiltrados = fornecedores.filter((fornecedor) =>
+    [
+      fornecedor.codigoInterno,
+      displayName(fornecedor),
+      fornecedor.documento,
+      fornecedor.categoria,
+      fornecedor.email,
+      fornecedor.telefone,
+      fornecedor.celular,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(searchQuery.trim().toLowerCase())
+  );
 
   function openCreate() {
     setEditingFornecedorId(null);
@@ -91,106 +118,84 @@ export function FornecedoresView({
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4">
-        <PageHeader
-          title="Fornecedores"
-          description="Cadastro e gestão operacional de fornecedores."
+    <CadastroPage
+      title="Fornecedores"
+      description="Cadastro e gestão operacional de fornecedores."
+      toolbar={
+        <CadastroToolbar
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Pesquisar fornecedores..."
+          actions={
+            <NovoFornecedorButton onClick={openCreate} disabled={!canCreate} />
+          }
         />
-        <NovoFornecedorButton
-          onClick={openCreate}
-          disabled={!canCreate}
+      }
+      indicators={
+        <CadastroIndicators
+          items={[
+            { label: "Total", value: fornecedores.length },
+            { label: "Ativos", value: ativos },
+            { label: "Inativos", value: inativos },
+            { label: "Categorias", value: categoriasCadastradas },
+          ]}
         />
-      </div>
-
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <p className="text-sm text-zinc-500">
-            Total de Fornecedores
-          </p>
-          <p className="mt-3 text-3xl font-bold">
-            {fornecedores.length}
-          </p>
-        </Card>
-        <Card>
-          <p className="text-sm text-zinc-500">Ativos</p>
-          <p className="mt-3 text-3xl font-bold">{ativos}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-zinc-500">Inativos</p>
-          <p className="mt-3 text-3xl font-bold">{inativos}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-zinc-500">
-            Categorias Cadastradas
-          </p>
-          <p className="mt-3 text-3xl font-bold">
-            {categoriasCadastradas}
-          </p>
-        </Card>
-      </div>
-
-      <div className="mt-8 overflow-x-auto rounded-3xl bg-white shadow-sm">
-        <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
-            <tr>
-              <th className="px-6 py-4 font-medium">Fornecedor</th>
-              <th className="px-6 py-4 font-medium">Documento</th>
-              <th className="px-6 py-4 font-medium">Categoria</th>
-              <th className="px-6 py-4 font-medium">Contato</th>
-              <th className="px-6 py-4 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fornecedores.map((fornecedor) => (
-              <tr
-                key={fornecedor.fornecedorId}
-                tabIndex={0}
-                onClick={() =>
-                  openPanel(fornecedor.fornecedorId)
+      }
+    >
+      <CadastroTable minWidth="820px">
+        <thead className={cadastroTableHeaderClassName}>
+          <tr>
+            <th className={cadastroTableHeaderCellClassName}>Fornecedor</th>
+            <th className={cadastroTableHeaderCellClassName}>Documento</th>
+            <th className={cadastroTableHeaderCellClassName}>Categoria</th>
+            <th className={cadastroTableHeaderCellClassName}>Contato</th>
+            <th className={cadastroTableHeaderCellClassName}>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fornecedoresFiltrados.map((fornecedor) => (
+            <tr
+              key={fornecedor.fornecedorId}
+              tabIndex={0}
+              onClick={() => openPanel(fornecedor.fornecedorId)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openPanel(fornecedor.fornecedorId);
                 }
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" ||
-                    event.key === " "
-                  ) {
-                    event.preventDefault();
-                    openPanel(fornecedor.fornecedorId);
-                  }
-                }}
-                aria-label={`Ver fornecedor ${displayName(
-                  fornecedor
-                )}`}
-                className="cursor-pointer border-b border-zinc-100 transition last:border-0 hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none"
-              >
-                <td className="px-6 py-4">
-                  <p className="font-medium text-zinc-900">
-                    {displayName(fornecedor)}
-                  </p>
-                  <p className="mt-1 text-xs text-zinc-400">
-                    {fornecedor.codigoInterno}
-                  </p>
-                </td>
-                <td className="px-6 py-4 text-zinc-500">
-                  {fornecedor.documento}
-                </td>
-                <td className="px-6 py-4">
-                  <Badge>{fornecedor.categoria}</Badge>
-                </td>
-                <td className="px-6 py-4 text-zinc-500">
-                  {fornecedor.email ||
-                    fornecedor.telefone ||
-                    fornecedor.celular ||
-                    "-"}
-                </td>
-                <td className="px-6 py-4">
-                  <Badge>{fornecedor.status}</Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              }}
+              aria-label={`Ver fornecedor ${displayName(fornecedor)}`}
+              className={`cursor-pointer ${cadastroTableRowClassName}`}
+            >
+              <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
+                <div className="flex items-center gap-2.5">
+                  <CadastroAvatar label={displayName(fornecedor)} icon={Truck} />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-zinc-900">
+                      {displayName(fornecedor)}
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      {fornecedor.codigoInterno}
+                    </p>
+                  </div>
+                </div>
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                {fornecedor.documento}
+              </td>
+              <td className={cadastroTableCellClassName}>
+                <CadastroStatusBadge>{fornecedor.categoria}</CadastroStatusBadge>
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                {fornecedor.email || fornecedor.telefone || fornecedor.celular || "-"}
+              </td>
+              <td className={cadastroTableCellClassName}>
+                <CadastroStatusBadge>{fornecedor.status}</CadastroStatusBadge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </CadastroTable>
 
       <EntitySidePanel
         open={selectedFornecedor !== undefined}
@@ -339,6 +344,6 @@ export function FornecedoresView({
         onSave={handleSave}
         fornecedor={editingFornecedor}
       />
-    </div>
+    </CadastroPage>
   );
 }

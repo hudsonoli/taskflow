@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import {
+  CadastroAvatar,
+  CadastroIndicators,
+  CadastroPage,
+  CadastroStatusBadge,
+  CadastroTable,
+  CadastroToolbar,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros";
 import { EntitySidePanel } from "@/components/ui/EntitySidePanel";
-import { PageHeader } from "@/components/ui/PageHeader";
 import {
   EMPRESA_PADRAO_ID,
   equipesDisponiveis,
@@ -159,6 +168,7 @@ const initialClientes: ClienteDraft[] = [
 
 export function ClientesView() {
   const [clientes, setClientes] = useState<ClienteDraft[]>(initialClientes);
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedClienteId, setSelectedClienteId] = useState<string | null>(
     null
   );
@@ -178,6 +188,19 @@ export function ClientesView() {
   const totalContatos = clientes.reduce(
     (total, cliente) => total + cliente.contatos.length,
     0
+  );
+
+  const clientesFiltrados = clientes.filter((cliente) =>
+    [
+      cliente.codigoInterno,
+      cliente.nomeFantasia,
+      cliente.nomeRazaoSocial,
+      cliente.documento,
+      cliente.email,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(searchQuery.trim().toLowerCase())
   );
 
   function handleUpsert(draft: ClienteDraft) {
@@ -204,47 +227,43 @@ export function ClientesView() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4">
-        <PageHeader
-          title="Clientes"
-          description="Cadastro e gestão de clientes."
+    <CadastroPage
+      title="Clientes"
+      description="Cadastro e gestão de clientes."
+      toolbar={
+        <CadastroToolbar
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Pesquisar clientes..."
+          actions={<NovoClienteButton onCreate={handleUpsert} />}
         />
+      }
+      indicators={
+        <CadastroIndicators
+          items={[
+            { label: "Total", value: clientes.length },
+            { label: "Ativos", value: clientesAtivos },
+            { label: "Contatos", value: totalContatos },
+          ]}
+        />
+      }
+    >
+      <CadastroTable minWidth="860px">
+        <thead className={cadastroTableHeaderClassName}>
+          <tr>
+            <th className={cadastroTableHeaderCellClassName}>Cliente</th>
+            <th className={cadastroTableHeaderCellClassName}>Documento</th>
+            <th className={cadastroTableHeaderCellClassName}>Equipe</th>
+            <th className={cadastroTableHeaderCellClassName}>Responsável</th>
+            <th className={cadastroTableHeaderCellClassName}>Status</th>
+          </tr>
+        </thead>
 
-        <NovoClienteButton onCreate={handleUpsert} />
-      </div>
+        <tbody>
+          {clientesFiltrados.map((cliente) => {
+            const nome = cliente.nomeFantasia || cliente.nomeRazaoSocial;
 
-      <div className="grid gap-5 md:grid-cols-3">
-        <Card>
-          <p className="text-sm text-zinc-500">Total Clientes</p>
-          <p className="mt-3 text-3xl font-bold">{clientes.length}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Ativos</p>
-          <p className="mt-3 text-3xl font-bold">{clientesAtivos}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Total de Contatos</p>
-          <p className="mt-3 text-3xl font-bold">{totalContatos}</p>
-        </Card>
-      </div>
-
-      <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
-            <tr>
-              <th className="px-6 py-4 font-medium">Cliente</th>
-              <th className="px-6 py-4 font-medium">Documento</th>
-              <th className="px-6 py-4 font-medium">Equipe Responsável</th>
-              <th className="px-6 py-4 font-medium">Responsável Comercial</th>
-              <th className="px-6 py-4 font-medium">Status</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {clientes.map((cliente) => (
+            return (
               <tr
                 key={cliente.clienteId}
                 tabIndex={0}
@@ -255,35 +274,39 @@ export function ClientesView() {
                     setSelectedClienteId(cliente.clienteId);
                   }
                 }}
-                aria-label={`Ver cliente ${
-                  cliente.nomeFantasia || cliente.nomeRazaoSocial
-                }`}
-                className="cursor-pointer border-b border-zinc-100 transition last:border-0 hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none"
+                aria-label={`Ver cliente ${nome}`}
+                className={`cursor-pointer ${cadastroTableRowClassName}`}
               >
-                <td className="px-6 py-4 font-medium text-zinc-900">
-                  {cliente.nomeFantasia || cliente.nomeRazaoSocial}
+                <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
+                  <div className="flex items-center gap-2.5">
+                    <CadastroAvatar label={nome} />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-zinc-900">{nome}</p>
+                      <p className="text-xs text-zinc-400">{cliente.codigoInterno}</p>
+                    </div>
+                  </div>
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
-                  {cliente.documento}
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                  {cliente.documento || "-"}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {resolveEquipeNome(cliente.equipeResponsavelId)}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {resolveResponsavelNome(cliente.responsavelComercialId)}
                 </td>
 
-                <td className="px-6 py-4">
-                  <Badge>{cliente.status}</Badge>
+                <td className={cadastroTableCellClassName}>
+                  <CadastroStatusBadge>{cliente.status}</CadastroStatusBadge>
                 </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+        </tbody>
+      </CadastroTable>
 
       <EntitySidePanel
         open={selectedCliente !== undefined}
@@ -367,7 +390,7 @@ export function ClientesView() {
                 <div>
                   <dt className="text-xs text-zinc-400">Status</dt>
                   <dd className="mt-1">
-                    <Badge>{selectedCliente.status}</Badge>
+                    <CadastroStatusBadge>{selectedCliente.status}</CadastroStatusBadge>
                   </dd>
                 </div>
               </dl>
@@ -419,6 +442,6 @@ export function ClientesView() {
           onCreate={handleUpsert}
         />
       )}
-    </div>
+    </CadastroPage>
   );
 }

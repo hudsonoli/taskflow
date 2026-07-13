@@ -42,14 +42,20 @@ function getBreadcrumbSegments(pathname: string) {
     paths.push(current);
   }
 
-  return ["/", ...paths].map((path) => breadcrumbLabels[path] ?? path);
+  const relevantPaths = pathname.startsWith("/configuracoes")
+    ? paths
+    : pathname === "/fornecedores"
+      ? [pathname]
+      : ["/", ...paths];
+
+  return relevantPaths.map((path) => breadcrumbLabels[path] ?? path);
 }
 
 export function Breadcrumb({ pathname }: BreadcrumbProps) {
   const items = getBreadcrumbSegments(pathname);
 
   return (
-    <nav aria-label="Breadcrumb" className="text-sm text-zinc-500">
+    <nav aria-label="Breadcrumb" className="text-xs text-zinc-500">
       <ol className="flex flex-wrap items-center gap-1.5">
         {items.map((item, index) => (
           <li key={`${item}-${index}`} className="flex items-center gap-1.5">
