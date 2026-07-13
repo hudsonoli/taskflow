@@ -13,6 +13,7 @@ import {
   GitBranch,
   LayoutDashboard,
   ListTodo,
+  Network,
   PanelLeftClose,
   PanelLeftOpen,
   RadioTower,
@@ -45,6 +46,11 @@ const operacaoItems: SidebarItem[] = [
 
 const cadastroItems: SidebarItem[] = [
   { label: "Clientes", href: "/configuracoes/clientes", icon: Building2 },
+  {
+    label: "Grupos de Clientes",
+    href: "/configuracoes/grupos-clientes",
+    icon: Network,
+  },
   { label: "Fornecedores", href: "/fornecedores", icon: Truck },
   { label: "Equipes", href: "/configuracoes/equipes", icon: Users },
   { label: "Workflow", href: "/configuracoes/workflows", icon: GitBranch },
