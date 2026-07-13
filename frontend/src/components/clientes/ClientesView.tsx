@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import {
   CadastroAvatar,
   CadastroIndicators,
-  CadastroPage,
   CadastroStatusBadge,
   CadastroTable,
   CadastroToolbar,
@@ -15,6 +15,7 @@ import {
   cadastroTableRowClassName,
 } from "@/components/cadastros";
 import { EntitySidePanel } from "@/components/ui/EntitySidePanel";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   EMPRESA_PADRAO_ID,
   equipesDisponiveis,
@@ -227,27 +228,28 @@ export function ClientesView() {
   }
 
   return (
-    <CadastroPage
-      title="Clientes"
-      description="Cadastro e gestão de clientes."
-      toolbar={
-        <CadastroToolbar
-          searchValue={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder="Pesquisar clientes..."
-          actions={<NovoClienteButton onCreate={handleUpsert} />}
-        />
-      }
-      indicators={
-        <CadastroIndicators
-          items={[
-            { label: "Total", value: clientes.length },
-            { label: "Ativos", value: clientesAtivos },
-            { label: "Contatos", value: totalContatos },
-          ]}
-        />
-      }
-    >
+    <PageShell density="compact">
+      <PageHeader
+        title="Clientes"
+        description="Cadastro e gestão de clientes."
+        size="section"
+        actions={<NovoClienteButton onCreate={handleUpsert} />}
+      />
+
+      <CadastroIndicators
+        items={[
+          { label: "Total", value: clientes.length },
+          { label: "Ativos", value: clientesAtivos },
+          { label: "Contatos", value: totalContatos },
+        ]}
+      />
+
+      <CadastroToolbar
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Pesquisar clientes..."
+      />
+
       <CadastroTable minWidth="860px">
         <thead className={cadastroTableHeaderClassName}>
           <tr>
@@ -442,6 +444,6 @@ export function ClientesView() {
           onCreate={handleUpsert}
         />
       )}
-    </CadastroPage>
+    </PageShell>
   );
 }
