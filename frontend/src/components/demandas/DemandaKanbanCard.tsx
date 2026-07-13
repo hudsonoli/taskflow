@@ -44,13 +44,13 @@ function CompactResponsaveis({ items }: { items: string[] }) {
         <span
           key={item}
           title={item}
-          className="inline-flex max-w-[118px] items-center rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600"
+          className="inline-flex max-w-[112px] items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600"
         >
           <span className="truncate">{item}</span>
         </span>
       ))}
       {extraItems > 0 && (
-        <span className="inline-flex items-center rounded-full bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">
+        <span className="inline-flex items-center rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white">
           +{extraItems}
         </span>
       )}
@@ -70,9 +70,9 @@ export function DemandaKanbanCard({
     <button
       type="button"
       onClick={() => onOpenDetails(demanda.id)}
-      className={`group w-full rounded-2xl border border-l-4 border-zinc-100 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-200 hover:shadow-md ${prioridadeBorderClassNames[demanda.prioridade]}`}
+      className={`group w-full rounded-2xl border border-l-4 border-zinc-100 bg-white p-3.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-200 hover:shadow-md ${prioridadeBorderClassNames[demanda.prioridade]}`}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
             {demanda.codigoInterno}
@@ -89,11 +89,11 @@ export function DemandaKanbanCard({
         </span>
       </div>
 
-      <p className="mt-3 truncate text-xs font-medium text-zinc-500">
+      <p className="mt-2.5 truncate text-xs font-medium text-zinc-500">
         {resolveProjetoDemandaNome(demanda.projetoId)}
       </p>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
+      <div className="mt-3 flex items-center justify-between gap-2">
         <CompactResponsaveis items={responsaveis} />
 
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">

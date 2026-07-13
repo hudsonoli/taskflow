@@ -34,7 +34,7 @@ function formatInicio(value: string) {
 
 export function TrafegoAgoraTable({ sessions }: TrafegoAgoraTableProps) {
   return (
-    <section className="rounded-3xl border border-zinc-100 bg-white p-5 shadow-sm">
+    <section className="rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm">
       <SectionHeader
         eyebrow="ao vivo"
         title="Quem está trabalhando agora"
@@ -42,7 +42,7 @@ export function TrafegoAgoraTable({ sessions }: TrafegoAgoraTableProps) {
         action={<StatusPill tone="green">{sessions.length} ativa(s)</StatusPill>}
       />
 
-      <div className="mt-5">
+      <div className="mt-4">
         {sessions.length === 0 ? (
           <EmptyStateIllustration
             icon={<Inbox className="h-6 w-6" aria-hidden="true" />}
@@ -55,12 +55,12 @@ export function TrafegoAgoraTable({ sessions }: TrafegoAgoraTableProps) {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-zinc-100 bg-[#faf8f4] text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
                   <tr>
-                    <th className="px-4 py-3">Colaborador</th>
-                    <th className="px-4 py-3">Demanda</th>
-                    <th className="px-4 py-3">Etapa</th>
-                    <th className="px-4 py-3">Início</th>
-                    <th className="px-4 py-3 text-right">Tempo estimado</th>
-                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-2.5">Colaborador</th>
+                    <th className="px-4 py-2.5">Demanda</th>
+                    <th className="px-4 py-2.5">Etapa</th>
+                    <th className="px-4 py-2.5">Início</th>
+                    <th className="px-4 py-2.5 text-right">Tempo estimado</th>
+                    <th className="px-4 py-2.5">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -69,9 +69,9 @@ export function TrafegoAgoraTable({ sessions }: TrafegoAgoraTableProps) {
                       key={session.sessaoId}
                       className="border-b border-zinc-100 transition last:border-0 hover:bg-zinc-50"
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-zinc-950 text-white">
                             <Activity className="h-4 w-4" aria-hidden="true" />
                           </span>
                           <div>
@@ -96,7 +96,7 @@ export function TrafegoAgoraTable({ sessions }: TrafegoAgoraTableProps) {
                       <td className="px-4 py-3 text-right font-mono font-bold tabular-nums text-zinc-950">
                         {formatTempoOperacional(session.tempoDecorridoSegundos)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <StatusPill tone={statusTone[session.status]}>
                           {statusTrafegoLabels[session.status]}
                         </StatusPill>
