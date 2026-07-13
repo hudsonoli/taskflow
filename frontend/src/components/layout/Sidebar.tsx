@@ -101,11 +101,8 @@ function SidebarLink({
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
       ) : null}
 
-      {isCollapsed ? (
-        <span className="pointer-events-none absolute left-full z-50 ml-3 min-w-max translate-x-2 whitespace-nowrap rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
-          {item.label}
-        </span>
-      ) : null}
+
+
     </Link>
   );
 }
@@ -119,7 +116,11 @@ function SectionTitle({ title }: { title: string }) {
 }
 
 function CollapsedSeparator() {
-  return <div className="my-1 h-px w-8 bg-zinc-100" aria-hidden="true" />;
+  return (
+    <div className="my-1 flex w-full max-w-full justify-center overflow-x-hidden box-border">
+      <div className="h-px w-8 max-w-full bg-zinc-100" aria-hidden="true" />
+    </div>
+  );
 }
 
 export function Sidebar() {
@@ -194,7 +195,7 @@ export function Sidebar() {
       <nav
         className={`mt-2 min-h-0 flex-1 ${
           isCollapsed
-            ? "flex flex-col items-center overflow-y-hidden"
+            ? "flex min-w-0 max-w-full flex-col items-center overflow-x-hidden overflow-y-hidden"
             : "flex flex-col gap-2 overflow-y-auto"
         }`}
         aria-label="Navegação principal"
@@ -202,7 +203,7 @@ export function Sidebar() {
         {isCollapsed ? (
           <>
             <CollapsedSeparator />
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex w-full max-w-full flex-col items-center gap-0.5 overflow-x-hidden box-border">
               {principalItems.map((item) => (
                 <SidebarLink
                   key={item.href}
@@ -214,7 +215,7 @@ export function Sidebar() {
             </div>
 
             <CollapsedSeparator />
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex w-full max-w-full flex-col items-center gap-0.5 overflow-x-hidden box-border">
               {operacaoItems.map((item) => (
                 <SidebarLink
                   key={item.href}
@@ -242,13 +243,11 @@ export function Sidebar() {
                 />
               ) : null}
               <Database className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-              <span className="pointer-events-none absolute left-full z-50 ml-3 min-w-max translate-x-2 whitespace-nowrap rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-[opacity,transform] duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
-                Cadastros
-              </span>
+
             </button>
 
             <CollapsedSeparator />
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex w-full max-w-full flex-col items-center gap-0.5 overflow-x-hidden box-border">
               {administracaoItems.map((item) => (
                 <SidebarLink
                   key={item.href}

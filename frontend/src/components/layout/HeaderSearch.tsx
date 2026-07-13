@@ -13,7 +13,7 @@ export function HeaderSearch({ variant = "header" }: HeaderSearchProps) {
         type="button"
         title="Pesquisar"
         aria-label="Pesquisar"
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
+        className="mx-auto flex h-8 w-8 min-w-8 max-w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white p-0 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
       >
         <Search className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
       </button>
