@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { Card } from "@/components/ui/Card";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { Pencil } from "lucide-react";
 
 type SettingsItem = {
   title: string;
@@ -20,118 +19,80 @@ const settingsSections: SettingsSection[] = [
     title: "Cadastros",
     description: "Entidades base para operação e organização da plataforma.",
     items: [
-      {
-        title: "Agências",
-        description: "Cadastro e gestão das agências da plataforma.",
-        href: "/configuracoes/agencias",
-      },
-      {
-        title: "Usuários",
-        description: "Gestão de usuários, cargos e acessos.",
-        href: "/configuracoes/usuarios",
-      },
-      {
-        title: "Clientes",
-        description: "Cadastro e gestão de clientes da agência.",
-        href: "/configuracoes/clientes",
-      },
-      {
-        title: "Grupos de Clientes",
-        description: "Segmentação e organização dos clientes.",
-        href: "/configuracoes/grupos-clientes",
-      },
-      {
-        title: "Equipes",
-        description: "Organização de times e departamentos.",
-        href: "/configuracoes/equipes",
-      },
+      { title: "Agências", description: "Gestão das agências da plataforma.", href: "/configuracoes/agencias" },
+      { title: "Usuários", description: "Cargos, acessos e usuários.", href: "/configuracoes/usuarios" },
+      { title: "Clientes", description: "Clientes da agência.", href: "/configuracoes/clientes" },
+      { title: "Grupos de Clientes", description: "Organização de clientes relacionados.", href: "/configuracoes/grupos-clientes" },
+      { title: "Equipes", description: "Times, líderes e departamentos.", href: "/configuracoes/equipes" },
     ],
   },
   {
     title: "Operação",
-    description: "Configurações que orientam o fluxo de trabalho diário.",
+    description: "Configurações que orientam o fluxo diário.",
     items: [
-      {
-        title: "Workflows",
-        description: "Fluxos operacionais e etapas do Kanban.",
-        href: "/configuracoes/workflows",
-      },
-      {
-        title: "SLA",
-        description: "Regras de prazo e atendimento operacional.",
-        href: "/configuracoes/sla",
-      },
-      {
-        title: "Prioridades",
-        description: "Níveis de urgência das tarefas.",
-        href: "/configuracoes/prioridades",
-      },
-      {
-        title: "Tipos de Tarefa",
-        description: "Categorias operacionais das demandas.",
-        href: "/configuracoes/tipos-tarefa",
-      },
+      { title: "Workflows", description: "Fluxos operacionais e etapas.", href: "/configuracoes/workflows" },
+      { title: "SLA", description: "Regras de prazo e atendimento.", href: "/configuracoes/sla" },
+      { title: "Prioridades", description: "Níveis de urgência das tarefas.", href: "/configuracoes/prioridades" },
+      { title: "Tipos de Tarefa", description: "Categorias operacionais.", href: "/configuracoes/tipos-tarefa" },
     ],
   },
   {
     title: "Segurança",
-    description: "Perfis e controles administrativos de acesso.",
+    description: "Perfis e controles administrativos.",
     items: [
-      {
-        title: "Permissões",
-        description: "Perfis, papéis e permissões administrativas.",
-        href: "/configuracoes/permissoes",
-      },
-      {
-        title: "Auditoria",
-        description: "Histórico e rastreio de ações administrativas.",
-        disabled: true,
-      },
+      { title: "Permissões", description: "Papéis e permissões administrativas.", href: "/configuracoes/permissoes" },
+      { title: "Auditoria", description: "Histórico de ações administrativas.", disabled: true },
     ],
   },
 ];
 
 export default function ConfiguracoesPage() {
   return (
-    <div className="p-8">
-      <PageHeader
-        title="Configurações"
-        description="Área administrativa para SuperAdmin, Admin, Diretoria, Gestores e usuários autorizados."
-      />
+    <div className="space-y-4 p-4 sm:p-5">
+      <div>
+        <h2 className="text-lg font-semibold text-zinc-900">Configurações</h2>
+        <p className="mt-0.5 text-sm text-zinc-500">
+          Área administrativa da plataforma.
+        </p>
+      </div>
 
-      <div className="space-y-8">
+      <div className="space-y-4">
         {settingsSections.map((section) => (
-          <Card key={section.title}>
-            <div className="mb-5">
-              <h2 className="text-xl font-semibold text-zinc-900">
-                {section.title}
-              </h2>
-
-              <p className="mt-2 text-sm leading-6 text-zinc-500">
-                {section.description}
-              </p>
+          <section
+            key={section.title}
+            className="rounded-2xl border border-zinc-100 bg-white p-3 shadow-sm"
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-zinc-900">
+                  {section.title}
+                </h3>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  {section.description}
+                </p>
+              </div>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {section.items.map((item) => {
                 if (item.disabled) {
                   return (
                     <div
                       key={item.title}
                       aria-disabled="true"
-                      className="rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 p-6 opacity-70"
+                      className="flex min-h-[58px] items-center justify-between gap-3 rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-3 py-2 opacity-70"
                     >
-                      <h3 className="text-lg font-semibold text-zinc-900">
-                        {item.title}
-                      </h3>
-
-                      <p className="mt-2 text-sm leading-6 text-zinc-500">
-                        {item.description}
-                      </p>
-
-                      <p className="mt-4 text-xs font-medium uppercase tracking-[0.2em] text-zinc-400">
+                      <div className="min-w-0">
+                        <h4 className="truncate text-sm font-semibold text-zinc-900">
+                          {item.title}
+                        </h4>
+                        <p className="mt-0.5 truncate text-xs text-zinc-500">
+                          {item.description}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
                         Em breve
-                      </p>
+                      </span>
                     </div>
                   );
                 }
@@ -140,20 +101,27 @@ export default function ConfiguracoesPage() {
                   <Link
                     key={item.title}
                     href={item.href ?? "#"}
-                    className="rounded-3xl bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+                    aria-label={`Abrir ${item.title}`}
+                    className="flex min-h-[58px] items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-white px-3 py-2 transition-colors hover:border-zinc-200 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
-                    <h3 className="text-lg font-semibold text-zinc-900">
-                      {item.title}
-                    </h3>
-
-                    <p className="mt-2 text-sm leading-6 text-zinc-500">
-                      {item.description}
-                    </p>
+                    <div className="min-w-0">
+                      <h4 className="truncate text-sm font-semibold text-zinc-900">
+                        {item.title}
+                      </h4>
+                      <p className="mt-0.5 truncate text-xs text-zinc-500">
+                        {item.description}
+                      </p>
+                    </div>
+                    <Pencil
+                      className="h-4 w-4 shrink-0 text-zinc-400"
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    />
                   </Link>
                 );
               })}
             </div>
-          </Card>
+          </section>
         ))}
       </div>
     </div>
