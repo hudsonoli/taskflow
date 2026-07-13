@@ -14,17 +14,17 @@ export function SectionHeader({
   action,
 }: SectionHeaderProps) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
             {eyebrow}
           </p>
         )}
-        <h2 className="mt-1 text-lg font-semibold tracking-tight text-zinc-950">
+        <h2 className="mt-1 text-base font-semibold tracking-tight text-zinc-950">
           {title}
         </h2>
-        {description && <p className="mt-1 text-sm text-zinc-500">{description}</p>}
+        {description && <p className="mt-1 text-sm leading-5 text-zinc-500">{description}</p>}
       </div>
 
       {action && <div className="shrink-0">{action}</div>}

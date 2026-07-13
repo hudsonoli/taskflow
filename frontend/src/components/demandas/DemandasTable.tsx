@@ -80,7 +80,7 @@ export function DemandasTable({
 
   return (
     <div className="overflow-hidden rounded-3xl border border-zinc-100 bg-white shadow-sm">
-      <div className="flex flex-col gap-1 border-b border-zinc-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-1 border-b border-zinc-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-zinc-950">Fila operacional</h2>
           <p className="text-sm text-zinc-500">Demandas, prioridades, responsáveis e prazos da etapa atual.</p>
@@ -104,7 +104,7 @@ export function DemandasTable({
                 "Prazo atual",
                 "Ações",
               ].map((column) => (
-                <th key={column} className="px-5 py-3">
+                <th key={column} className="px-4 py-2.5">
                   {column}
                 </th>
               ))}
@@ -121,10 +121,10 @@ export function DemandasTable({
                   key={demanda.id}
                   className="group transition hover:bg-blue-50/30"
                 >
-                  <td className="px-5 py-4 font-semibold text-zinc-900">
+                  <td className="px-4 py-3 font-semibold text-zinc-900">
                     {demanda.codigoInterno}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <button
                       type="button"
                       onClick={() => onOpenDetails(demanda.id)}
@@ -136,31 +136,31 @@ export function DemandasTable({
                       </span>
                     </button>
                   </td>
-                  <td className="px-5 py-4 text-zinc-600">
+                  <td className="px-4 py-3 text-zinc-600">
                     {resolveProjetoDemandaNome(demanda.projetoId)}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <span
                       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${prioridadeClassName[demanda.prioridade]}`}
                     >
                       {prioridadeDemandaLabels[demanda.prioridade]}
                     </span>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <CompactList items={responsaveis} />
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <StatusPill tone={statusTone[demanda.status]}>
                       {statusDemandaLabels[demanda.status]}
                     </StatusPill>
                   </td>
-                  <td className="px-5 py-4 text-zinc-600">
+                  <td className="px-4 py-3 text-zinc-600">
                     <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600">
                       <CalendarDays className="h-3.5 w-3.5" />
                       {demanda.prazoEtapaAtual}
                     </span>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="secondary"

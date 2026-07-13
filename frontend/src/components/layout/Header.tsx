@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { Breadcrumb } from "./Breadcrumb";
 import { HeaderActions } from "./HeaderActions";
-import { HeaderSearch } from "./HeaderSearch";
 
 const titles: Record<string, string> = {
   "/": "Dashboard",
@@ -25,24 +24,17 @@ export function Header() {
   const title = titles[pathname] ?? "TaskFloww";
 
   return (
-    <header className="border-b border-zinc-200 bg-[#f4f1ec] px-8 py-5">
-      <div className="flex items-start justify-between gap-6">
+    <header className="border-b border-zinc-200 bg-[#f4f1ec] px-6 py-2">
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <Breadcrumb pathname={pathname} />
 
-          <h1 className="mt-2 text-2xl font-semibold text-zinc-900">
+          <h1 className="mt-0.5 text-lg font-semibold text-zinc-900">
             {title}
           </h1>
-
-          <p className="mt-1 text-sm text-zinc-500">
-            Plataforma operacional para agências
-          </p>
         </div>
 
-        <div className="flex flex-col items-end gap-3">
-          <HeaderSearch />
-          <HeaderActions />
-        </div>
+        <HeaderActions />
       </div>
     </header>
   );

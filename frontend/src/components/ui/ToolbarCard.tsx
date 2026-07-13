@@ -8,7 +8,7 @@ type ToolbarCardProps = {
 export function ToolbarCard({ children, className }: ToolbarCardProps) {
   return (
     <div
-      className={`rounded-3xl border border-zinc-100 bg-white/95 p-4 shadow-sm ${className ?? ""}`}
+      className={`rounded-3xl border border-zinc-100 bg-white/95 p-3 shadow-sm sm:p-4 ${className ?? ""}`}
     >
       {children}
     </div>

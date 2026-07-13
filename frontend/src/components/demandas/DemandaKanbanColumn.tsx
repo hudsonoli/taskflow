@@ -20,8 +20,8 @@ export function DemandaKanbanColumn({
   onOpenDetails,
 }: DemandaKanbanColumnProps) {
   return (
-    <section className="flex min-h-[360px] w-[310px] shrink-0 flex-col rounded-3xl border border-zinc-100 bg-zinc-50/80 p-3 shadow-sm sm:w-[340px]">
-      <div className="mb-3 flex items-start justify-between gap-3 px-1">
+    <section className="flex min-h-[300px] w-[280px] shrink-0 flex-col rounded-3xl border border-zinc-100 bg-zinc-50/80 p-3 shadow-sm sm:w-[300px]">
+      <div className="mb-2.5 flex items-start justify-between gap-2 px-1">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-sm font-semibold text-zinc-950">
@@ -40,11 +40,12 @@ export function DemandaKanbanColumn({
           <EmptyStateIllustration
             title="Sem demandas"
             description="Nenhuma demanda dos filtros atuais está nesta coluna."
-            icon={<Inbox className="h-5 w-5" />}
+            icon={<Inbox className="h-4 w-4" />}
+            size="compact"
           />
         </div>
       ) : (
-        <div className="space-y-3 overflow-y-auto pr-1">
+        <div className="space-y-2.5 overflow-y-auto pr-1">
           {demandas.map((demanda) => (
             <DemandaKanbanCard
               key={demanda.id}
