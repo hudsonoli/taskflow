@@ -2,13 +2,23 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
+import { Network } from "lucide-react";
+import {
+  CadastroAvatar,
+  CadastroIndicators,
+  CadastroPage,
+  CadastroStatusBadge,
+  CadastroTable,
+  CadastroToolbar,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
 import { EntityFieldRow } from "@/components/ui/EntityFieldRow";
 import { EntitySidePanel } from "@/components/ui/EntitySidePanel";
 import { EntitySummaryPanel } from "@/components/ui/EntitySummaryPanel";
-import { PageHeader } from "@/components/ui/PageHeader";
 import {
   clientesGrupoDisponiveis,
   initialGruposClientes,
@@ -128,137 +138,106 @@ export function GruposClientesView({
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4">
-        <PageHeader
-          title="Grupo de Clientes"
-          description="Agrupe empresas que pertencem ao mesmo cliente para compartilhamento de informações e relatórios."
+    <CadastroPage
+      title="Grupos de Clientes"
+      description="Agrupe empresas que pertencem ao mesmo cliente para compartilhamento de informações e relatórios."
+      toolbar={
+        <CadastroToolbar
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Buscar por nome, código ou sigla"
+          actions={
+            <Button onClick={openCreate} disabled={!canCreate} className="h-10 px-3">
+              Novo Grupo
+            </Button>
+          }
         />
-
-        <Button onClick={openCreate} disabled={!canCreate}>
-          + Novo Grupo de Clientes
-        </Button>
-      </div>
-
-      <div className="grid gap-5 sm:grid-cols-4">
-        <Card>
-          <p className="text-sm text-zinc-500">Total de grupos</p>
-          <p className="mt-3 text-3xl font-bold">{gruposClientes.length}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Grupos ativos</p>
-          <p className="mt-3 text-3xl font-bold">{gruposAtivos}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Grupos inativos</p>
-          <p className="mt-3 text-3xl font-bold">{gruposInativos}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Clientes vinculados</p>
-          <p className="mt-3 text-3xl font-bold">{clientesVinculadosTotal}</p>
-        </Card>
-      </div>
-
-      <div className="mt-8 flex items-end justify-between gap-4">
-        <Input
-          label="Busca"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Buscar por nome, código ou sigla"
-          className="max-w-md"
+      }
+      indicators={
+        <CadastroIndicators
+          items={[
+            { label: "Total", value: gruposClientes.length },
+            { label: "Ativos", value: gruposAtivos },
+            { label: "Inativos", value: gruposInativos },
+            { label: "Clientes", value: clientesVinculadosTotal },
+          ]}
         />
-      </div>
+      }
+    >
+      <CadastroTable minWidth="820px">
+        <thead className={cadastroTableHeaderClassName}>
+          <tr>
+            <th className={cadastroTableHeaderCellClassName}>Grupo</th>
+            <th className={cadastroTableHeaderCellClassName}>Código</th>
+            <th className={cadastroTableHeaderCellClassName}>Sigla</th>
+            <th className={cadastroTableHeaderCellClassName}>Clientes vinculados</th>
+            <th className={cadastroTableHeaderCellClassName}>Status</th>
+          </tr>
+        </thead>
 
-      <div className="mt-6 overflow-hidden rounded-3xl bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
-            <tr>
-              <th className="px-6 py-4 font-medium">Código</th>
-              <th className="px-6 py-4 font-medium">Grupo</th>
-              <th className="px-6 py-4 font-medium">Sigla</th>
-              <th className="px-6 py-4 font-medium">Clientes vinculados</th>
-              <th className="px-6 py-4 font-medium">Status</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {gruposFiltrados.map((grupoCliente) => (
-              <tr
-                key={grupoCliente.grupoClienteId}
-                tabIndex={0}
-                onClick={() =>
-                  setSelectedGrupoClienteId(grupoCliente.grupoClienteId)
+        <tbody>
+          {gruposFiltrados.map((grupoCliente) => (
+            <tr
+              key={grupoCliente.grupoClienteId}
+              tabIndex={0}
+              onClick={() =>
+                setSelectedGrupoClienteId(grupoCliente.grupoClienteId)
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedGrupoClienteId(grupoCliente.grupoClienteId);
                 }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setSelectedGrupoClienteId(grupoCliente.grupoClienteId);
-                  }
-                }}
-                aria-label={`Ver grupo de clientes ${grupoCliente.nome}`}
-                className="cursor-pointer border-b border-zinc-100 transition last:border-0 hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none"
-              >
-                <td className="px-6 py-4 text-zinc-500">
-                  {grupoCliente.codigoInterno}
-                </td>
-                <td className="px-6 py-4 font-medium text-zinc-900">
-                  {grupoCliente.nome}
-                </td>
-                <td className="px-6 py-4 text-zinc-500">
-                  {grupoCliente.sigla}
-                </td>
-                <td className="px-6 py-4 text-zinc-500">
-                  <div className="space-y-0.5">
-                    {grupoCliente.clientesIds.length === 0 ? (
-                      <p>Nenhum cliente</p>
-                    ) : (
-                      (() => {
-                        const clientes = grupoCliente.clientesIds
-                          .map((clienteId) => resolveClienteResumo(clienteId))
-                          .filter(
-                            (cliente): cliente is NonNullable<typeof cliente> =>
-                              cliente !== null
-                          );
-
-                        if (clientes.length === 0) {
-                          return <p>Nenhum cliente</p>;
-                        }
-
-                        if (clientes.length === 1) {
-                          return <p>{clientes[0].nome}</p>;
-                        }
-
-                        if (clientes.length === 2) {
-                          return (
-                            <>
-                              <p>{clientes[0].nome}</p>
-                              <p>{clientes[1].nome}</p>
-                            </>
-                          );
-                        }
-
-                        return (
-                          <>
-                            <p>{clientes[0].nome}</p>
-                            <p>{clientes[1].nome}</p>
-                            <p>+{clientes.length - 2}</p>
-                          </>
+              }}
+              aria-label={`Ver grupo de clientes ${grupoCliente.nome}`}
+              className={`cursor-pointer ${cadastroTableRowClassName}`}
+            >
+              <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
+                <div className="flex items-center gap-2.5">
+                  <CadastroAvatar label={grupoCliente.nome} icon={Network} />
+                  <span>{grupoCliente.nome}</span>
+                </div>
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                {grupoCliente.codigoInterno}
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                {grupoCliente.sigla}
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                <div className="space-y-0.5 text-xs leading-5">
+                  {grupoCliente.clientesIds.length === 0 ? (
+                    <p>Nenhum cliente</p>
+                  ) : (
+                    (() => {
+                      const clientes = grupoCliente.clientesIds
+                        .map((clienteId) => resolveClienteResumo(clienteId))
+                        .filter(
+                          (cliente): cliente is NonNullable<typeof cliente> =>
+                            cliente !== null
                         );
-                      })()
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <Badge>{grupoCliente.status}</Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+
+                      if (clientes.length === 0) return <p>Nenhum cliente</p>;
+                      if (clientes.length === 1) return <p>{clientes[0].nome}</p>;
+
+                      return (
+                        <>
+                          <p>{clientes[0].nome}</p>
+                          <p>{clientes[1].nome}</p>
+                          {clientes.length > 2 ? <p>+{clientes.length - 2}</p> : null}
+                        </>
+                      );
+                    })()
+                  )}
+                </div>
+              </td>
+              <td className={cadastroTableCellClassName}>
+                <CadastroStatusBadge>{grupoCliente.status}</CadastroStatusBadge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </CadastroTable>
 
       <EntitySidePanel
         open={selectedGrupoCliente !== undefined}
@@ -396,6 +375,6 @@ export function GruposClientesView({
           onSave={handleUpsert}
         />
       )}
-    </div>
+    </CadastroPage>
   );
 }

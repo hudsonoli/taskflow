@@ -1,9 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { User } from "lucide-react";
+import {
+  CadastroAvatar,
+  CadastroIndicators,
+  CadastroPage,
+  CadastroStatusBadge,
+  CadastroTable,
+  CadastroToolbar,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros";
 import { departamentos } from "@/lib/usuario-mock";
 import type { UsuarioDraft } from "@/types/usuario";
 import { NovoUsuarioButton } from "./NovoUsuarioButton";
@@ -105,6 +115,7 @@ function draftToRow(draft: UsuarioDraft): UsuarioRow {
 
 export function UsuariosView() {
   const [users, setUsers] = useState<UsuarioRow[]>(initialUsers);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const activeUsers = users.filter((user) => user.status === "Ativo").length;
 
@@ -115,6 +126,13 @@ export function UsuariosView() {
       user.profile === "Diretoria" ||
       user.profile === "Gestor"
   ).length;
+
+  const filteredUsers = users.filter((user) =>
+    [user.name, user.email, user.department, user.profile, user.agency, user.status]
+      .join(" ")
+      .toLowerCase()
+      .includes(searchQuery.trim().toLowerCase())
+  );
 
   function handleUpsert(draft: UsuarioDraft) {
     setUsers((current) => {
@@ -130,76 +148,61 @@ export function UsuariosView() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4">
-        <PageHeader
-          title="Usuários"
-          description="Gestão de usuários, cargos e permissões."
+    <CadastroPage
+      title="Usuários"
+      description="Gestão de usuários, cargos e permissões."
+      toolbar={
+        <CadastroToolbar
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Pesquisar usuários..."
+          actions={<NovoUsuarioButton onUpsert={handleUpsert} />}
         />
+      }
+      indicators={
+        <CadastroIndicators
+          items={[
+            { label: "Total", value: users.length },
+            { label: "Ativos", value: activeUsers },
+            { label: "Gestão", value: managers },
+          ]}
+        />
+      }
+    >
+      <CadastroTable minWidth="920px">
+        <thead className={cadastroTableHeaderClassName}>
+          <tr>
+            <th className={cadastroTableHeaderCellClassName}>Nome</th>
+            <th className={cadastroTableHeaderCellClassName}>E-mail</th>
+            <th className={cadastroTableHeaderCellClassName}>Departamento</th>
+            <th className={cadastroTableHeaderCellClassName}>Perfil</th>
+            <th className={cadastroTableHeaderCellClassName}>Agência</th>
+            <th className={cadastroTableHeaderCellClassName}>Status</th>
+          </tr>
+        </thead>
 
-        <NovoUsuarioButton onUpsert={handleUpsert} />
-      </div>
-
-      <div className="grid gap-5 md:grid-cols-3">
-        <Card>
-          <p className="text-sm text-zinc-500">Total</p>
-          <p className="mt-3 text-3xl font-bold">{users.length}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Ativos</p>
-          <p className="mt-3 text-3xl font-bold">{activeUsers}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Gestão</p>
-          <p className="mt-3 text-3xl font-bold">{managers}</p>
-        </Card>
-      </div>
-
-      <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
-            <tr>
-              <th className="px-6 py-4 font-medium">Nome</th>
-              <th className="px-6 py-4 font-medium">E-mail</th>
-              <th className="px-6 py-4 font-medium">Departamento</th>
-              <th className="px-6 py-4 font-medium">Perfil</th>
-              <th className="px-6 py-4 font-medium">Agência</th>
-              <th className="px-6 py-4 font-medium">Status</th>
+        <tbody>
+          {filteredUsers.map((user) => (
+            <tr key={user.id} className={cadastroTableRowClassName}>
+              <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
+                <div className="flex items-center gap-2.5">
+                  <CadastroAvatar label={user.name} icon={User} />
+                  <span>{user.name}</span>
+                </div>
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>{user.email}</td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>{user.department}</td>
+              <td className={cadastroTableCellClassName}>
+                <CadastroStatusBadge>{user.profile}</CadastroStatusBadge>
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>{user.agency}</td>
+              <td className={cadastroTableCellClassName}>
+                <CadastroStatusBadge>{user.status}</CadastroStatusBadge>
+              </td>
             </tr>
-          </thead>
-
-          <tbody>
-            {users.map((user) => (
-              <tr
-                key={user.id}
-                className="border-b border-zinc-100 last:border-0"
-              >
-                <td className="px-6 py-4 font-medium text-zinc-900">
-                  {user.name}
-                </td>
-
-                <td className="px-6 py-4 text-zinc-500">{user.email}</td>
-
-                <td className="px-6 py-4 text-zinc-500">
-                  {user.department}
-                </td>
-
-                <td className="px-6 py-4">
-                  <Badge>{user.profile}</Badge>
-                </td>
-
-                <td className="px-6 py-4 text-zinc-500">{user.agency}</td>
-
-                <td className="px-6 py-4">
-                  <Badge>{user.status}</Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          ))}
+        </tbody>
+      </CadastroTable>
+    </CadastroPage>
   );
 }

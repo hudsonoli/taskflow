@@ -1,9 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { Users } from "lucide-react";
+import {
+  CadastroAvatar,
+  CadastroIndicators,
+  CadastroPage,
+  CadastroStatusBadge,
+  CadastroTable,
+  CadastroToolbar,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros";
 import {
   createAcessoPadrao,
   departamentos,
@@ -125,12 +135,26 @@ const initialEquipes: EquipeDraft[] = [
 
 export function EquipesView() {
   const [equipes, setEquipes] = useState<EquipeDraft[]>(initialEquipes);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const totalMembros = equipes.reduce(
     (total, equipe) => total + equipe.membros.length,
     0
   );
   const equipesAtivas = equipes.filter((equipe) => equipe.ativa).length;
+
+  const equipesFiltradas = equipes.filter((equipe) =>
+    [
+      equipe.codigoInterno,
+      equipe.nome,
+      equipe.sigla,
+      resolveDepartamentoNome(equipe.departamentoId),
+      resolveResponsavelNome(equipe.responsavelId),
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(searchQuery.trim().toLowerCase())
+  );
 
   function handleUpsert(draft: EquipeDraft) {
     setEquipes((current) => {
@@ -149,71 +173,66 @@ export function EquipesView() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4">
-        <PageHeader
-          title="Equipes"
-          description="Organização de departamentos, líderes e colaboradores."
+    <CadastroPage
+      title="Equipes"
+      description="Organização de departamentos, líderes e colaboradores."
+      toolbar={
+        <CadastroToolbar
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Pesquisar equipes..."
+          actions={<NovaEquipeButton onUpsert={handleUpsert} />}
         />
+      }
+      indicators={
+        <CadastroIndicators
+          items={[
+            { label: "Total", value: equipes.length },
+            { label: "Colaboradores", value: totalMembros },
+            { label: "Ativas", value: equipesAtivas },
+          ]}
+        />
+      }
+    >
+      <CadastroTable minWidth="780px">
+        <thead className={cadastroTableHeaderClassName}>
+          <tr>
+            <th className={cadastroTableHeaderCellClassName}>Equipe</th>
+            <th className={cadastroTableHeaderCellClassName}>Departamento</th>
+            <th className={cadastroTableHeaderCellClassName}>Responsável</th>
+            <th className={cadastroTableHeaderCellClassName}>Membros</th>
+            <th className={cadastroTableHeaderCellClassName}>Status</th>
+          </tr>
+        </thead>
 
-        <NovaEquipeButton onUpsert={handleUpsert} />
-      </div>
-
-      <div className="grid gap-5 md:grid-cols-3">
-        <Card>
-          <p className="text-sm text-zinc-500">Total Equipes</p>
-          <p className="mt-3 text-3xl font-bold">{equipes.length}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Colaboradores</p>
-          <p className="mt-3 text-3xl font-bold">{totalMembros}</p>
-        </Card>
-
-        <Card>
-          <p className="text-sm text-zinc-500">Ativas</p>
-          <p className="mt-3 text-3xl font-bold">{equipesAtivas}</p>
-        </Card>
-      </div>
-
-      <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
-            <tr>
-              <th className="px-6 py-4 font-medium">Equipe</th>
-              <th className="px-6 py-4 font-medium">Departamento</th>
-              <th className="px-6 py-4 font-medium">Responsável</th>
-              <th className="px-6 py-4 font-medium">Membros</th>
-              <th className="px-6 py-4 font-medium">Status</th>
+        <tbody>
+          {equipesFiltradas.map((equipe) => (
+            <tr key={equipe.equipeId} className={cadastroTableRowClassName}>
+              <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
+                <div className="flex items-center gap-2.5">
+                  <CadastroAvatar label={equipe.nome} icon={Users} />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-zinc-900">{equipe.nome}</p>
+                    <p className="text-xs text-zinc-400">{equipe.codigoInterno}</p>
+                  </div>
+                </div>
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                {resolveDepartamentoNome(equipe.departamentoId)}
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                {resolveResponsavelNome(equipe.responsavelId)}
+              </td>
+              <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                {equipe.membros.length}
+              </td>
+              <td className={cadastroTableCellClassName}>
+                <CadastroStatusBadge>{equipe.ativa ? "Ativa" : "Inativa"}</CadastroStatusBadge>
+              </td>
             </tr>
-          </thead>
-
-          <tbody>
-            {equipes.map((equipe) => (
-              <tr
-                key={equipe.equipeId}
-                className="border-b border-zinc-100 last:border-0"
-              >
-                <td className="px-6 py-4 font-medium text-zinc-900">
-                  {equipe.nome}
-                </td>
-                <td className="px-6 py-4 text-zinc-500">
-                  {resolveDepartamentoNome(equipe.departamentoId)}
-                </td>
-                <td className="px-6 py-4 text-zinc-500">
-                  {resolveResponsavelNome(equipe.responsavelId)}
-                </td>
-                <td className="px-6 py-4 text-zinc-500">
-                  {equipe.membros.length}
-                </td>
-                <td className="px-6 py-4">
-                  <Badge>{equipe.ativa ? "Ativa" : "Inativa"}</Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          ))}
+        </tbody>
+      </CadastroTable>
+    </CadastroPage>
   );
 }
