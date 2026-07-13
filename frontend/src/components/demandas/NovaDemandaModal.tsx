@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { ClipboardPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import {
@@ -78,103 +80,123 @@ export function NovaDemandaModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} maxWidthClassName="max-w-3xl">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-900">
-            {editing ? "Editar Demanda" : "Nova Demanda"}
-          </h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Cadastro local para estruturar demandas, briefing e responsáveis.
-          </p>
+    <Modal open={open} onClose={onClose} maxWidthClassName="max-w-4xl">
+      <div className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-5">
+        <div className="flex items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+            <ClipboardPlus className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-zinc-950">
+              {editing ? "Editar Demanda" : "Nova Demanda"}
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500">
+              Cadastro local para estruturar demandas, briefing e responsáveis.
+            </p>
+          </div>
         </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
         >
-          ✕
+          <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <Input
-          label="Nome"
-          value={draft.nome}
-          onChange={(event) => updateDraft({ nome: event.target.value })}
+      <div className="mt-6 rounded-3xl border border-zinc-100 bg-zinc-50/60 p-4">
+        <SectionHeader
+          eyebrow="Cadastro"
+          title="Dados principais"
+          description="Campos essenciais para orientar execução, prioridade e prazo."
         />
-        <Select
-          label="Projeto"
-          value={draft.projetoId}
-          onChange={(event) => handleProjectChange(event.target.value)}
-          options={projetosDemandaDisponiveis.map((projeto) => ({
-            value: projeto.id,
-            label: projeto.nome,
-          }))}
-        />
-        <Input
-          label="Cliente derivado do projeto"
-          value={resolveClienteProjetoNome(draft.clienteId)}
-          disabled
-        />
-        <Input
-          label="Data prevista"
-          type="date"
-          value={draft.dataFimPrevista}
-          onChange={(event) =>
-            updateDraft({ dataFimPrevista: event.target.value })
-          }
-        />
-        <Select
-          label="Prioridade"
-          value={draft.prioridade}
-          onChange={(event) =>
-            updateDraft({ prioridade: event.target.value as DemandaPrioridade })
-          }
-          options={Object.entries(prioridadeDemandaLabels).map(
-            ([value, label]) => ({ value, label })
-          )}
-        />
-        <Select
-          label="Status"
-          value={draft.status}
-          onChange={(event) =>
-            updateDraft({ status: event.target.value as DemandaStatus })
-          }
-          options={Object.entries(statusDemandaLabels).map(([value, label]) => ({
-            value,
-            label,
-          }))}
-        />
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <Input
+            label="Nome"
+            value={draft.nome}
+            onChange={(event) => updateDraft({ nome: event.target.value })}
+          />
+          <Select
+            label="Projeto"
+            value={draft.projetoId}
+            onChange={(event) => handleProjectChange(event.target.value)}
+            options={projetosDemandaDisponiveis.map((projeto) => ({
+              value: projeto.id,
+              label: projeto.nome,
+            }))}
+          />
+          <Input
+            label="Cliente derivado do projeto"
+            value={resolveClienteProjetoNome(draft.clienteId)}
+            disabled
+          />
+          <Input
+            label="Data prevista"
+            type="date"
+            value={draft.dataFimPrevista}
+            onChange={(event) =>
+              updateDraft({ dataFimPrevista: event.target.value })
+            }
+          />
+          <Select
+            label="Prioridade"
+            value={draft.prioridade}
+            onChange={(event) =>
+              updateDraft({ prioridade: event.target.value as DemandaPrioridade })
+            }
+            options={Object.entries(prioridadeDemandaLabels).map(
+              ([value, label]) => ({ value, label })
+            )}
+          />
+          <Select
+            label="Status"
+            value={draft.status}
+            onChange={(event) =>
+              updateDraft({ status: event.target.value as DemandaStatus })
+            }
+            options={Object.entries(statusDemandaLabels).map(([value, label]) => ({
+              value,
+              label,
+            }))}
+          />
+        </div>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MultiSelect
-          label="Usuários responsáveis"
-          placeholder="Selecione usuários"
-          values={draft.usuarioResponsavelIds}
-          onChange={(values) => updateDraft({ usuarioResponsavelIds: values })}
-          options={responsaveisProjetoDisponiveis.map((responsavel) => ({
-            value: responsavel.id,
-            label: responsavel.nome,
-          }))}
+      <div className="mt-4 rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm">
+        <SectionHeader
+          eyebrow="Responsáveis"
+          title="Usuários e departamentos"
+          description="Seleções locais preservadas por IDs para workflow e pauta futura."
         />
-        <MultiSelect
-          label="Departamentos responsáveis"
-          placeholder="Selecione departamentos"
-          values={draft.departamentoResponsavelIds}
-          onChange={(values) =>
-            updateDraft({ departamentoResponsavelIds: values })
-          }
-          options={departamentosProjetoDisponiveis.map((departamento) => ({
-            value: departamento.id,
-            label: departamento.nome,
-          }))}
-        />
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <MultiSelect
+            label="Usuários responsáveis"
+            placeholder="Selecione usuários"
+            values={draft.usuarioResponsavelIds}
+            onChange={(values) => updateDraft({ usuarioResponsavelIds: values })}
+            options={responsaveisProjetoDisponiveis.map((responsavel) => ({
+              value: responsavel.id,
+              label: responsavel.nome,
+            }))}
+          />
+          <MultiSelect
+            label="Departamentos responsáveis"
+            placeholder="Selecione departamentos"
+            values={draft.departamentoResponsavelIds}
+            onChange={(values) =>
+              updateDraft({ departamentoResponsavelIds: values })
+            }
+            options={departamentosProjetoDisponiveis.map((departamento) => ({
+              value: departamento.id,
+              label: departamento.nome,
+            }))}
+          />
+        </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 rounded-3xl border border-zinc-100 bg-white p-4 shadow-sm">
         <Textarea
           label="Briefing"
           rows={5}
