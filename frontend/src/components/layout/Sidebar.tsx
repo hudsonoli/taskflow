@@ -8,6 +8,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   ListTodo,
+  RadioTower,
   Settings,
   Truck,
 } from "lucide-react";
@@ -17,6 +18,7 @@ const menuItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Tarefas", href: "/tarefas", icon: ListTodo },
   { label: "Projetos", href: "/projetos", icon: FolderKanban },
+  { label: "Tráfego", href: "/trafego", icon: RadioTower },
   { label: "Agenda", href: "/agenda", icon: BookUser },
   { label: "Fornecedores", href: "/fornecedores", icon: Truck },
   { label: "Relatórios", href: "/relatorios", icon: BarChart3 },
