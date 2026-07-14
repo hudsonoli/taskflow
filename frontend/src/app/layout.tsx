@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Roboto } from "next/font/google";
 import { Shell } from "@/components/layout/Shell";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Fonte oficial do TaskFloww — substitui Arial/Helvetica (ver globals.css).
+// Pesos alinhados ao uso real de texto na aplicação: 300/400 (corpo e
+// campos), 500 (destaques leves) e 700 (títulos/badges com font-bold).
+const roboto = Roboto({
+  variable: "--font-roboto",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "700"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -24,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="pt-BR" className={`${roboto.variable} ${geistMono.variable}`}>
       <body>
         <Shell>{children}</Shell>
       </body>
