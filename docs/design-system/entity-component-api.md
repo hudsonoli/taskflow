@@ -26,6 +26,7 @@
 15. [Padrões oficiais](#15-padrões-oficiais)
 16. [Extensibilidade](#16-extensibilidade)
 17. [Compatibilidade e depreciação](#17-compatibilidade-e-depreciação)
+18. [Guia Administrativa — autorização e dados sensíveis](#18-guia-administrativa--autorização-e-dados-sensíveis)
 
 ---
 
@@ -785,4 +786,69 @@ Com essa definição, o status de cada componente citado é:
 
 ---
 
-*Fim do documento. Nenhum arquivo `.tsx` foi criado. Nenhum arquivo existente foi alterado. Esta especificação torna-se o contrato oficial da API de `entity/` a partir da aprovação — qualquer implementação subsequente deve segui-la; qualquer necessidade de desvio deve retornar como revisão deste documento antes de ser codificada.*
+---
+
+## 18. Guia Administrativa — autorização e dados sensíveis
+
+> Primeiro consumidor: guia "Administrativa" de Clientes (`ClienteEditFormBody.tsx` + `ClienteFormSections.tsx`, seção `AdministrativoSection`). Documento de referência único para as regras abaixo — outros documentos (`taskfloww-design-system.md`, `entity-architecture-plan.md`) apenas apontam para esta seção, sem duplicar o texto.
+
+### Componentes
+
+Três novos componentes genéricos em `entity/`, sem nome de entidade e sem lógica de permissão própria:
+
+```ts
+type AdministrativeSectionProps = { children: ReactNode };
+
+type FinancialValueFieldProps = {
+  label: string;
+  value: number | null;   // nunca string formatada com moeda
+  onChange: (value: number | null) => void;
+  className?: string;
+};
+
+type BankingFieldsValue = {
+  chavePix: string;
+  banco: string;
+  agencia: string;
+  conta: string;
+  tipoConta: "Corrente" | "Poupança" | "Pagamento";
+};
+
+type BankingFieldsProps = {
+  value: BankingFieldsValue;
+  onChange: (updater: (current: BankingFieldsValue) => BankingFieldsValue) => void;
+  className?: string;
+};
+```
+
+`AdministrativeSection` é puramente apresentacional (aviso visual de conteúdo restrito + `children`) — **não verifica perfil, não importa `lib/access-control.ts`**. Quem decide se ela é renderizada é sempre a página/seção de domínio que a compõe.
+
+### Perfis autorizados (`lib/access-control.ts`)
+
+```ts
+type PerfilAcesso = "Owner" | "Diretoria" | "Gestor" | "Financeiro" | "Operador" | "Cliente";
+
+function hasAdministrativeAccess(perfil: PerfilAcesso): boolean; // true para Owner, Diretoria, Gestor, Financeiro
+```
+
+`PerfilAcesso` é a hierarquia oficial do TaskFloww V2 — não confundir com `perfis` de `lib/usuario-mock.ts` (lista legada do módulo Usuários, ainda não reconciliada; reconciliação fica para a migração de Usuários, seção "Plano de replicação" do relatório desta fase). Nesta fase, `hasAdministrativeAccess` é a única checagem de autorização existente no projeto — não é um RBAC completo, é infraestrutura mínima para esta guia.
+
+A checagem é aplicada **duas vezes** por consumidor: (1) ao montar a lista de seções passada a `EntityFormNav` (a aba nem aparece para quem não tem acesso); (2) de novo, redundantemente, ao decidir renderizar o conteúdo (para que alterar `activeSection` programaticamente não contorne a restrição).
+
+### Regras de dado
+
+- **Fee Mensal** (Clientes) representa **receita**. **Salário** (Usuários, futuro) representa **despesa**. Nunca coexistem no mesmo campo/entidade, nunca são somados ou comparados diretamente.
+- Todo valor financeiro é armazenado como `number | null` — nunca uma string já formatada com moeda (`FinancialValueField` força esse contrato).
+- Dados bancários (`BankingFields`) são sensíveis: nunca aparecem em tabela, `EntityPeek`, resultados de busca, nem em `console.log`/logs de qualquer tipo.
+
+### Frontend oculta, backend autoriza
+
+Ocultar a guia/seção no frontend é apenas UI — **não substitui autorização real**. Quando existir backend, ele deverá aplicar a mesma checagem (equivalente a `hasAdministrativeAccess`) ao servir e ao gravar estes campos; um usuário sem permissão jamais deve receber esses valores na resposta da API, independentemente do que o frontend esconde.
+
+### Reuso previsto (Usuários)
+
+A mesma composição (`AdministrativeSection` + `FinancialValueField` + `BankingFields`) é a base prevista para Usuários: `Administrativa → Financeiro (Salário) → Dados Bancários`, sem nenhuma mudança de contrato nos três componentes — apenas uma nova composição Usuário-específica, análoga a `AdministrativoSection` em `ClienteFormSections.tsx`.
+
+---
+
+*Fim do documento. Esta especificação é o contrato oficial da API de `entity/` — qualquer implementação subsequente deve segui-la; qualquer necessidade de desvio deve retornar como revisão deste documento antes de ser codificada.*

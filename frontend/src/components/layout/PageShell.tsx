@@ -8,7 +8,7 @@ type PageShellProps = {
 };
 
 const densityClassNames: Record<PageShellDensity, string> = {
-  compact: "space-y-3 p-4 sm:p-5",
+  compact: "space-y-2 p-4 sm:p-5",
   default: "space-y-6 p-8",
 };
 

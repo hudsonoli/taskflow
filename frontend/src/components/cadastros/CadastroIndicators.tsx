@@ -4,17 +4,28 @@ type CadastroIndicator = {
   description?: string;
 };
 
+type CadastroIndicatorsDensity = "compact" | "default";
+
 type CadastroIndicatorsProps = {
   items: CadastroIndicator[];
+  density?: CadastroIndicatorsDensity;
 };
 
-export function CadastroIndicators({ items }: CadastroIndicatorsProps) {
+const densityClassNames: Record<CadastroIndicatorsDensity, string> = {
+  compact: "min-h-[40px] px-3 py-1.5",
+  default: "min-h-[58px] px-3 py-2.5",
+};
+
+export function CadastroIndicators({
+  items,
+  density = "default",
+}: CadastroIndicatorsProps) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
       {items.map((item) => (
         <div
           key={item.label}
-          className="flex min-h-[58px] items-center justify-between rounded-2xl border border-zinc-100 bg-white px-3 py-2.5 shadow-sm"
+          className={`flex items-center justify-between rounded-2xl border border-zinc-100 bg-white shadow-sm ${densityClassNames[density]}`}
         >
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-zinc-500">{item.label}</p>

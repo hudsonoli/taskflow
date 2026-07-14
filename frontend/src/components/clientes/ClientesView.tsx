@@ -1,29 +1,35 @@
 "use client";
 
 import { useState } from "react";
+import { Pencil } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import {
   CadastroAvatar,
   CadastroIndicators,
-  CadastroStatusBadge,
   CadastroTable,
   CadastroToolbar,
-  cadastroTableCellClassName,
-  cadastroTableHeaderCellClassName,
   cadastroTableHeaderClassName,
   cadastroTableRowClassName,
+  getCadastroTableCellClassNames,
 } from "@/components/cadastros";
-import { EntitySidePanel } from "@/components/ui/EntitySidePanel";
+import {
+  EntityActions,
+  EntityDrawer,
+  EntityHeader,
+  EntityHistory,
+  EntityPeek,
+} from "@/components/entity";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { StatusPill } from "@/components/ui/StatusPill";
 import {
   EMPRESA_PADRAO_ID,
   equipesDisponiveis,
   responsaveisDisponiveis,
 } from "@/lib/cliente-mock";
-import type { ClienteDraft } from "@/types/cliente";
-import { NovoClienteButton } from "./NovoClienteButton";
-import { NovoClienteModal } from "./NovoClienteModal";
+import type { ClienteDraft, ClienteStatus } from "@/types/cliente";
+import { ClienteEditFormBody } from "./ClienteEditFormBody";
+import { useClienteDraft } from "./useClienteDraft";
 
 function resolveEquipeNome(equipeId?: string): string {
   if (!equipeId) return "-";
@@ -41,6 +47,17 @@ function resolveResponsavelNome(responsavelId?: string): string {
     responsaveisDisponiveis.find((usuario) => usuario.id === responsavelId)
       ?.nome ?? responsavelId
   );
+}
+
+// Mapeamento de cor por estado — específico de Clientes, não vive no
+// CadastroStatusBadge compartilhado (que é usado por outras 6 telas com uma
+// heurística de texto diferente, sem "Suspenso" e com Inativo em cinza).
+// StatusPill já tem os três tons semânticos prontos (green/amber/red),
+// dirigidos aqui por um valor explícito, não por heurística.
+function clienteStatusTone(status: ClienteStatus): "green" | "amber" | "red" {
+  if (status === "Ativo") return "green";
+  if (status === "Suspenso") return "amber";
+  return "red";
 }
 
 const initialClientes: ClienteDraft[] = [
@@ -73,7 +90,53 @@ const initialClientes: ClienteDraft[] = [
       tipo: "Comercial",
     },
     contatos: [],
-    historico: [],
+    administrativo: {
+      feeMensal: {
+        valor: 3500,
+        moeda: "BRL",
+        dataInicio: "2026-01-15",
+        observacao: "",
+      },
+      dadosBancarios: {
+        chavePix: "12.345.678/0001-90",
+        banco: "Banco XP",
+        agencia: "0001",
+        conta: "123456-7",
+        tipoConta: "Corrente",
+      },
+    },
+    historico: [
+      {
+        id: "hist-cliente-1-1",
+        usuarioId: "sistema",
+        usuario: "João Silva",
+        dataHora: "10/07/2026 09:15",
+        dispositivo: "Windows / Chrome",
+        ipOrigem: "192.168.1.10",
+        acao: "Cliente criado.",
+        origem: "Web",
+      },
+      {
+        id: "hist-cliente-1-2",
+        usuarioId: "user-4",
+        usuario: "Maria Souza",
+        dataHora: "12/07/2026 14:30",
+        dispositivo: "macOS / Safari",
+        ipOrigem: "192.168.1.22",
+        acao: "Dados cadastrais alterados.",
+        origem: "Web",
+      },
+      {
+        id: "hist-cliente-1-3",
+        usuarioId: "user-4",
+        usuario: "João Silva",
+        dataHora: "13/07/2026 17:42",
+        dispositivo: "Windows / Chrome",
+        ipOrigem: "192.168.1.20",
+        acao: "Endereço alterado.",
+        origem: "API",
+      },
+    ],
   },
   {
     clienteId: "cliente-2",
@@ -88,7 +151,7 @@ const initialClientes: ClienteDraft[] = [
     telefone: "",
     celular: "",
     site: "",
-    status: "Ativo",
+    status: "Suspenso",
     equipeResponsavelId: "equipe-2",
     responsavelComercialId: "user-5",
     responsavelAtendimentoId: "user-5",
@@ -104,7 +167,43 @@ const initialClientes: ClienteDraft[] = [
       tipo: "Comercial",
     },
     contatos: [],
-    historico: [],
+    administrativo: {
+      feeMensal: {
+        valor: 1800,
+        moeda: "BRL",
+        dataInicio: "2026-02-01",
+        observacao: "Fee reduzido durante suspensão.",
+      },
+      dadosBancarios: {
+        chavePix: "",
+        banco: "",
+        agencia: "",
+        conta: "",
+        tipoConta: "Corrente",
+      },
+    },
+    historico: [
+      {
+        id: "hist-cliente-2-1",
+        usuarioId: "sistema",
+        usuario: "Sistema",
+        dataHora: "02/07/2026 10:00",
+        dispositivo: "Windows / Chrome",
+        ipOrigem: "192.168.1.10",
+        acao: "Cliente criado.",
+        origem: "Importação",
+      },
+      {
+        id: "hist-cliente-2-2",
+        usuarioId: "user-5",
+        usuario: "Maria Souza",
+        dataHora: "11/07/2026 08:50",
+        dispositivo: "macOS / Safari",
+        ipOrigem: "192.168.1.22",
+        acao: "Status alterado de Ativo para Suspenso.",
+        origem: "Web",
+      },
+    ],
   },
   {
     clienteId: "cliente-3",
@@ -135,6 +234,21 @@ const initialClientes: ClienteDraft[] = [
       tipo: "Comercial",
     },
     contatos: [],
+    administrativo: {
+      feeMensal: {
+        valor: null,
+        moeda: "BRL",
+        dataInicio: "",
+        observacao: "",
+      },
+      dadosBancarios: {
+        chavePix: "",
+        banco: "",
+        agencia: "",
+        conta: "",
+        tipoConta: "Corrente",
+      },
+    },
     historico: [],
   },
   {
@@ -163,33 +277,80 @@ const initialClientes: ClienteDraft[] = [
       tipo: "Comercial",
     },
     contatos: [],
-    historico: [],
+    administrativo: {
+      feeMensal: {
+        valor: null,
+        moeda: "BRL",
+        dataInicio: "",
+        observacao: "",
+      },
+      dadosBancarios: {
+        chavePix: "",
+        banco: "",
+        agencia: "",
+        conta: "",
+        tipoConta: "Corrente",
+      },
+    },
+    historico: [
+      {
+        id: "hist-cliente-4-1",
+        usuarioId: "sistema",
+        usuario: "Sistema",
+        dataHora: "01/07/2026 08:00",
+        dispositivo: "Windows / Chrome",
+        ipOrigem: "192.168.1.10",
+        acao: "Cliente criado.",
+        origem: "Integração",
+      },
+      {
+        id: "hist-cliente-4-2",
+        usuarioId: "user-2",
+        usuario: "Usuário Autorizado",
+        dataHora: "05/07/2026 11:20",
+        dispositivo: "Windows / Edge",
+        ipOrigem: "192.168.1.31",
+        acao: "Dados financeiros alterados.",
+        origem: "Web",
+      },
+      {
+        id: "hist-cliente-4-3",
+        usuarioId: "user-2",
+        usuario: "Maria Souza",
+        dataHora: "08/07/2026 16:05",
+        dispositivo: "macOS / Safari",
+        ipOrigem: "192.168.1.22",
+        acao: "Status alterado de Suspenso para Inativo.",
+        origem: "Web",
+      },
+    ],
   },
 ];
+
+type DrawerMode = "closed" | "peek" | "edit";
 
 export function ClientesView() {
   const [clientes, setClientes] = useState<ClienteDraft[]>(initialClientes);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedClienteId, setSelectedClienteId] = useState<string | null>(
-    null
-  );
-  const [editingClienteId, setEditingClienteId] = useState<string | null>(null);
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>("closed");
+  const [selectedClienteId, setSelectedClienteId] = useState<string | null>(null);
+  const [editSessionId, setEditSessionId] = useState(0);
 
   const selectedCliente = clientes.find(
     (cliente) => cliente.clienteId === selectedClienteId
-  );
-  const editingCliente = clientes.find(
-    (cliente) => cliente.clienteId === editingClienteId
   );
 
   const clientesAtivos = clientes.filter(
     (cliente) => cliente.status === "Ativo"
   ).length;
 
-  const totalContatos = clientes.reduce(
-    (total, cliente) => total + cliente.contatos.length,
-    0
-  );
+  const clientesSuspensos = clientes.filter(
+    (cliente) => cliente.status === "Suspenso"
+  ).length;
+
+  const clientesInativos = clientes.filter(
+    (cliente) => cliente.status === "Inativo"
+  ).length;
 
   const clientesFiltrados = clientes.filter((cliente) =>
     [
@@ -203,6 +364,8 @@ export function ClientesView() {
       .toLowerCase()
       .includes(searchQuery.trim().toLowerCase())
   );
+
+  const clienteDraft = useClienteDraft(selectedCliente, editSessionId);
 
   function handleUpsert(draft: ClienteDraft) {
     setClientes((current) => {
@@ -218,14 +381,50 @@ export function ClientesView() {
     });
   }
 
-  function openEdit(clienteId: string) {
-    setSelectedClienteId(null);
-    setEditingClienteId(clienteId);
+  function openPeek(clienteId: string) {
+    setSelectedClienteId(clienteId);
+    setDrawerMode("peek");
   }
 
-  function closeEdit() {
-    setEditingClienteId(null);
+  function openEdit(clienteId: string) {
+    setSelectedClienteId(clienteId);
+    setDrawerMode("edit");
+    setEditSessionId((current) => current + 1);
   }
+
+  function openEditFromPeek() {
+    setDrawerMode("edit");
+    setEditSessionId((current) => current + 1);
+  }
+
+  function openCreate() {
+    setSelectedClienteId(null);
+    setDrawerMode("edit");
+    setEditSessionId((current) => current + 1);
+  }
+
+  // Fluxo oficial: cliente existente → cancelar/fechar durante a edição
+  // volta ao peek da mesma entidade, nunca fecha o Drawer. Cliente novo
+  // (sem selectedClienteId) → fecha por completo. Mesma função atende
+  // Escape, clique no backdrop, botão "X" do cabeçalho e o botão
+  // "Cancelar"/"Fechar" do rodapé — um único ponto de decisão.
+  function handleCloseIntent() {
+    if (drawerMode === "edit" && selectedClienteId) {
+      setDrawerMode("peek");
+      return;
+    }
+
+    setDrawerMode("closed");
+    setSelectedClienteId(null);
+  }
+
+  function handleSaveEdit() {
+    handleUpsert(clienteDraft.draft);
+    setSelectedClienteId(clienteDraft.draft.clienteId);
+    setDrawerMode("peek");
+  }
+
+  const { headerCell, cell } = getCadastroTableCellClassNames("compact");
 
   return (
     <PageShell density="compact">
@@ -233,31 +432,39 @@ export function ClientesView() {
         title="Clientes"
         description="Cadastro e gestão de clientes."
         size="section"
-        actions={<NovoClienteButton onCreate={handleUpsert} />}
+        actions={
+          <Button size="sm" colorScheme="brand" onClick={openCreate}>
+            Novo Cliente
+          </Button>
+        }
       />
 
       <CadastroIndicators
+        density="compact"
         items={[
           { label: "Total", value: clientes.length },
           { label: "Ativos", value: clientesAtivos },
-          { label: "Contatos", value: totalContatos },
+          { label: "Suspensos", value: clientesSuspensos },
+          { label: "Inativos", value: clientesInativos },
         ]}
       />
 
       <CadastroToolbar
+        density="compact"
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Pesquisar clientes..."
       />
 
-      <CadastroTable minWidth="860px">
+      <CadastroTable minWidth="900px">
         <thead className={cadastroTableHeaderClassName}>
           <tr>
-            <th className={cadastroTableHeaderCellClassName}>Cliente</th>
-            <th className={cadastroTableHeaderCellClassName}>Documento</th>
-            <th className={cadastroTableHeaderCellClassName}>Equipe</th>
-            <th className={cadastroTableHeaderCellClassName}>Responsável</th>
-            <th className={cadastroTableHeaderCellClassName}>Status</th>
+            <th className={headerCell}>Cliente</th>
+            <th className={headerCell}>Documento</th>
+            <th className={headerCell}>Equipe</th>
+            <th className={headerCell}>Responsável</th>
+            <th className={headerCell}>Status</th>
+            <th className={`${headerCell} text-right`}>Ações</th>
           </tr>
         </thead>
 
@@ -269,40 +476,61 @@ export function ClientesView() {
               <tr
                 key={cliente.clienteId}
                 tabIndex={0}
-                onClick={() => setSelectedClienteId(cliente.clienteId)}
+                onClick={() => openPeek(cliente.clienteId)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setSelectedClienteId(cliente.clienteId);
+                    openPeek(cliente.clienteId);
                   }
                 }}
                 aria-label={`Ver cliente ${nome}`}
                 className={`cursor-pointer ${cadastroTableRowClassName}`}
               >
-                <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
-                  <div className="flex items-center gap-2.5">
-                    <CadastroAvatar label={nome} />
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-zinc-900">{nome}</p>
-                      <p className="text-xs text-zinc-400">{cliente.codigoInterno}</p>
+                <td className={cell}>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <CadastroAvatar label={nome} density="compact" />
+                    <div className="flex min-w-0 items-baseline gap-1">
+                      <span className="shrink-0 text-[11px] font-normal text-zinc-400">
+                        {cliente.codigoInterno}
+                      </span>
+                      <span className="min-w-0 truncate text-[13px] font-normal text-zinc-900">
+                        {nome}
+                      </span>
                     </div>
                   </div>
                 </td>
 
-                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                <td className={`${cell} text-[11px] font-normal text-zinc-500`}>
                   {cliente.documento || "-"}
                 </td>
 
-                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                <td className={`${cell} text-[11px] font-normal text-zinc-500`}>
                   {resolveEquipeNome(cliente.equipeResponsavelId)}
                 </td>
 
-                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                <td className={`${cell} text-[11px] font-normal text-zinc-500`}>
                   {resolveResponsavelNome(cliente.responsavelComercialId)}
                 </td>
 
-                <td className={cadastroTableCellClassName}>
-                  <CadastroStatusBadge>{cliente.status}</CadastroStatusBadge>
+                <td className={cell}>
+                  <StatusPill tone={clienteStatusTone(cliente.status)} density="compact">
+                    {cliente.status}
+                  </StatusPill>
+                </td>
+
+                <td className={`${cell} text-right`}>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openEdit(cliente.clienteId);
+                    }}
+                    aria-label={`Editar cliente ${nome}`}
+                    title="Editar cliente"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
+                  >
+                    <Pencil className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                  </button>
                 </td>
               </tr>
             );
@@ -310,140 +538,134 @@ export function ClientesView() {
         </tbody>
       </CadastroTable>
 
-      <EntitySidePanel
-        open={selectedCliente !== undefined}
-        onClose={() => setSelectedClienteId(null)}
-        onEdit={
-          selectedCliente
-            ? () => openEdit(selectedCliente.clienteId)
-            : undefined
+      <EntityDrawer
+        open={drawerMode !== "closed"}
+        mode={drawerMode === "edit" ? "edit" : "peek"}
+        onClose={handleCloseIntent}
+        header={
+          drawerMode === "edit" ? (
+            <EntityHeader
+              title={clienteDraft.editing ? "Editar Cliente" : "Novo Cliente"}
+              description={
+                clienteDraft.step === "documento"
+                  ? "Informe o CNPJ ou CPF para iniciar o cadastro."
+                  : `Código interno: ${clienteDraft.draft.codigoInterno}`
+              }
+              onClose={handleCloseIntent}
+            />
+          ) : (
+            <EntityHeader
+              title={
+                selectedCliente
+                  ? selectedCliente.nomeFantasia || selectedCliente.nomeRazaoSocial
+                  : "Cliente"
+              }
+              description={selectedCliente?.codigoInterno}
+              statusBadge={
+                selectedCliente ? (
+                  <StatusPill
+                    tone={clienteStatusTone(selectedCliente.status)}
+                    density="compact"
+                  >
+                    {selectedCliente.status}
+                  </StatusPill>
+                ) : undefined
+              }
+              onClose={handleCloseIntent}
+            />
+          )
         }
-        editLabel="Editar cliente"
-        title={
-          selectedCliente
-            ? selectedCliente.nomeFantasia || selectedCliente.nomeRazaoSocial
-            : "Cliente"
-        }
-        description={selectedCliente?.codigoInterno}
         footer={
-          <div className="flex justify-end">
-            <Button
-              variant="secondary"
-              onClick={() => setSelectedClienteId(null)}
-            >
-              Fechar
-            </Button>
-          </div>
+          drawerMode === "edit" ? (
+            <EntityActions
+              variant="edit"
+              colorScheme="brand"
+              primaryAction={
+                clienteDraft.step === "documento"
+                  ? {
+                      label: clienteDraft.loadingLookup ? "Buscando dados..." : "Continuar",
+                      onClick: clienteDraft.handleDocumentContinue,
+                      disabled: !clienteDraft.canContinue || clienteDraft.loadingLookup,
+                      loading: clienteDraft.loadingLookup,
+                    }
+                  : {
+                      label: clienteDraft.editing ? "Salvar Alterações" : "Salvar Cliente",
+                      onClick: handleSaveEdit,
+                    }
+              }
+              secondaryActions={[{ label: "Cancelar", onClick: handleCloseIntent }]}
+            />
+          ) : (
+            <EntityActions
+              variant="peek"
+              colorScheme="brand"
+              primaryAction={{ label: "Editar", onClick: openEditFromPeek }}
+              secondaryActions={[{ label: "Fechar", onClick: handleCloseIntent }]}
+            />
+          )
         }
       >
-        {selectedCliente && (
-          <div className="space-y-8">
-            <section>
-              <h3 className="text-sm font-semibold text-zinc-900">
-                Informações
-              </h3>
-              <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <dt className="text-xs text-zinc-400">Nome</dt>
-                  <dd className="mt-1 text-sm font-medium text-zinc-800">
-                    {selectedCliente.nomeFantasia ||
-                      selectedCliente.nomeRazaoSocial}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-400">Código interno</dt>
-                  <dd className="mt-1 text-sm font-medium text-zinc-800">
-                    {selectedCliente.codigoInterno}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-400">Documento</dt>
-                  <dd className="mt-1 text-sm font-medium text-zinc-800">
-                    {selectedCliente.documento}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-400">Contato</dt>
-                  <dd className="mt-1 text-sm font-medium text-zinc-800">
-                    {selectedCliente.email ||
-                      selectedCliente.telefone ||
-                      selectedCliente.celular ||
-                      "-"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-400">
-                    Equipe responsável
-                  </dt>
-                  <dd className="mt-1 text-sm font-medium text-zinc-800">
-                    {resolveEquipeNome(selectedCliente.equipeResponsavelId)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-400">
-                    Responsável comercial
-                  </dt>
-                  <dd className="mt-1 text-sm font-medium text-zinc-800">
-                    {resolveResponsavelNome(
-                      selectedCliente.responsavelComercialId
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-400">Status</dt>
-                  <dd className="mt-1">
-                    <CadastroStatusBadge>{selectedCliente.status}</CadastroStatusBadge>
-                  </dd>
-                </div>
-              </dl>
-            </section>
-
-            <section>
-              <h3 className="text-sm font-semibold text-zinc-900">
-                Último histórico
-              </h3>
-              {selectedCliente.historico.length > 0 ? (
-                <div className="mt-4 rounded-2xl bg-[#faf8f4] p-4">
-                  <p className="text-sm text-zinc-700">
+        {drawerMode === "edit" ? (
+          <ClienteEditFormBody
+            step={clienteDraft.step}
+            documentoInput={clienteDraft.documentoInput}
+            onDocumentoInputChange={clienteDraft.setDocumentoInput}
+            documentType={clienteDraft.documentType}
+            draft={clienteDraft.draft}
+            onDraftChange={clienteDraft.setDraft}
+            onNomeFantasiaChange={clienteDraft.handleNomeFantasiaChange}
+            onSiglaChange={clienteDraft.handleSiglaChange}
+            activeSection={clienteDraft.activeSection}
+            onActiveSectionChange={clienteDraft.setActiveSection}
+          />
+        ) : (
+          <EntityPeek
+            summary={
+              selectedCliente
+                ? [
                     {
-                      selectedCliente.historico[
-                        selectedCliente.historico.length - 1
-                      ].acao
-                    }
-                  </p>
-                  <p className="mt-1 text-xs text-zinc-400">
+                      label: "Nome",
+                      value: selectedCliente.nomeFantasia || selectedCliente.nomeRazaoSocial,
+                    },
+                    { label: "Código interno", value: selectedCliente.codigoInterno },
+                    { label: "Documento", value: selectedCliente.documento },
                     {
-                      selectedCliente.historico[
-                        selectedCliente.historico.length - 1
-                      ].usuario
-                    }{" "}
-                    ·{" "}
+                      label: "Contato",
+                      value:
+                        selectedCliente.email ||
+                        selectedCliente.telefone ||
+                        selectedCliente.celular ||
+                        "-",
+                    },
                     {
-                      selectedCliente.historico[
-                        selectedCliente.historico.length - 1
-                      ].dataHora
-                    }
-                  </p>
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-zinc-500">
-                  Nenhum histórico registrado.
-                </p>
-              )}
-            </section>
-          </div>
+                      label: "Equipe responsável",
+                      value: resolveEquipeNome(selectedCliente.equipeResponsavelId),
+                    },
+                    {
+                      label: "Responsável comercial",
+                      value: resolveResponsavelNome(selectedCliente.responsavelComercialId),
+                    },
+                  ]
+                : []
+            }
+            history={
+              selectedCliente ? (
+                <EntityHistory
+                  variant="compact"
+                  events={[...selectedCliente.historico]
+                    .reverse()
+                    .map((evento) => ({
+                      id: evento.id,
+                      usuario: evento.usuario,
+                      dataHora: evento.dataHora,
+                      acao: evento.acao,
+                    }))}
+                />
+              ) : undefined
+            }
+          />
         )}
-      </EntitySidePanel>
-
-      {editingCliente && (
-        <NovoClienteModal
-          key={editingCliente.clienteId}
-          open
-          cliente={editingCliente}
-          onClose={closeEdit}
-          onCreate={handleUpsert}
-        />
-      )}
+      </EntityDrawer>
     </PageShell>
   );
 }

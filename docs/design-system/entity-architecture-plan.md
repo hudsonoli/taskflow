@@ -131,6 +131,10 @@ Não existe prop de densidade/variante — a grade de 12 colunas **é** o único
 
 **Não faz**: não conhece nomes de campos, não valida nada, não conhece Cliente/Projeto.
 
+### `AdministrativeSection` / `FinancialValueField` / `BankingFields`
+
+**Responsabilidade**, contrato de props, regras de autorização (`hasAdministrativeAccess`, `lib/access-control.ts`) e regras de dado sensível (Fee Mensal = receita, Salário = despesa, dados bancários nunca em tabela/Peek/busca/log): ver `entity-component-api.md`, seção 18 — não duplicado aqui.
+
 ### `EntitySection`
 
 **Responsabilidade**: cartão de seção dentro do `EntityForm` — título opcional + conteúdo. Consolida o papel que `12-plano-de-migracao.md` havia reservado para `forms/FormSection.tsx`.
