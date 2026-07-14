@@ -1,11 +1,27 @@
+import {
+  AdministrativeSection,
+  BankingFields,
+  EntityForm,
+  FinancialValueField,
+} from "@/components/entity";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
 import { equipesDisponiveis, responsaveisDisponiveis } from "@/lib/cliente-mock";
-import type { ClienteContato, ClienteDraft, HistoricoCliente } from "@/types/cliente";
+import type { ClienteContato, ClienteDraft } from "@/types/cliente";
 
+// Foco laranja (token color-primary) aplicado via className — sem criar
+// prop nova em Input/Select, que continuam compartilhados por outras 6
+// telas de cadastro sem nenhuma alteração de comportamento.
+const FOCUS_PRIMARY_CLASSNAME = "focus:!border-primary";
+
+// Ordem oficial dos estados de Cliente — mantida em sincronia com
+// ClienteStatus (types/cliente.ts) e com o mapeamento de cor em
+// ClientesView.tsx (clienteStatusTone).
 const statusOptions = [
   { value: "Ativo", label: "Ativo" },
+  { value: "Suspenso", label: "Suspenso" },
   { value: "Inativo", label: "Inativo" },
 ];
 
@@ -56,30 +72,36 @@ export function DadosSection({
   onSiglaChange,
 }: DadosSectionProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
       <Input
         label="Código Interno"
         value={draft.codigoInterno}
         readOnly
-        className="bg-zinc-50 text-zinc-500"
+        density="compact"
+        className={`bg-zinc-50 text-zinc-500 ${FOCUS_PRIMARY_CLASSNAME}`}
       />
 
       <Input
         label="CNPJ/CPF"
         value={draft.documento}
         readOnly
-        className="bg-zinc-50 text-zinc-500"
+        density="compact"
+        className={`bg-zinc-50 text-zinc-500 ${FOCUS_PRIMARY_CLASSNAME}`}
       />
 
       <Input
         label="Nome Fantasia"
         value={draft.nomeFantasia}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => onNomeFantasiaChange(event.target.value)}
       />
 
       <Input
         label="Razão Social / Nome"
         value={draft.nomeRazaoSocial}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({
             ...current,
@@ -91,6 +113,8 @@ export function DadosSection({
       <Input
         label="Sigla"
         value={draft.sigla}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => onSiglaChange(event.target.value)}
       />
 
@@ -98,6 +122,8 @@ export function DadosSection({
         label="Status"
         options={statusOptions}
         value={draft.status}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({
             ...current,
@@ -110,6 +136,8 @@ export function DadosSection({
         label="E-mail"
         type="email"
         value={draft.email}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({ ...current, email: event.target.value }))
         }
@@ -118,6 +146,8 @@ export function DadosSection({
       <Input
         label="Telefone"
         value={draft.telefone}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({ ...current, telefone: event.target.value }))
         }
@@ -126,6 +156,8 @@ export function DadosSection({
       <Input
         label="Celular"
         value={draft.celular}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({ ...current, celular: event.target.value }))
         }
@@ -134,6 +166,8 @@ export function DadosSection({
       <Input
         label="Site"
         value={draft.site}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({ ...current, site: event.target.value }))
         }
@@ -151,40 +185,52 @@ export function EnderecoSection({ draft, onChange }: SectionProps) {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
       <Input
         label="CEP"
         value={draft.endereco.cep}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("cep", event.target.value)}
       />
 
       <Input
         label="Logradouro"
         value={draft.endereco.logradouro}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("logradouro", event.target.value)}
       />
 
       <Input
         label="Número"
         value={draft.endereco.numero}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("numero", event.target.value)}
       />
 
       <Input
         label="Complemento"
         value={draft.endereco.complemento}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("complemento", event.target.value)}
       />
 
       <Input
         label="Bairro"
         value={draft.endereco.bairro}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("bairro", event.target.value)}
       />
 
       <Input
         label="Cidade"
         value={draft.endereco.cidade}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("cidade", event.target.value)}
       />
 
@@ -192,12 +238,16 @@ export function EnderecoSection({ draft, onChange }: SectionProps) {
         label="UF"
         options={ufOptions}
         value={draft.endereco.uf}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("uf", event.target.value)}
       />
 
       <Input
         label="País"
         value={draft.endereco.pais}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("pais", event.target.value)}
       />
 
@@ -205,6 +255,8 @@ export function EnderecoSection({ draft, onChange }: SectionProps) {
         label="Tipo"
         options={tipoEnderecoOptions}
         value={draft.endereco.tipo}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) => update("tipo", event.target.value)}
       />
     </div>
@@ -213,11 +265,13 @@ export function EnderecoSection({ draft, onChange }: SectionProps) {
 
 export function EquipeSection({ draft, onChange }: SectionProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
       <Select
         label="Equipe Responsável"
         options={equipeResponsavelOptions}
         value={draft.equipeResponsavelId ?? ""}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({
             ...current,
@@ -230,6 +284,8 @@ export function EquipeSection({ draft, onChange }: SectionProps) {
         label="Responsável Comercial"
         options={responsavelOptions}
         value={draft.responsavelComercialId ?? ""}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({
             ...current,
@@ -242,6 +298,8 @@ export function EquipeSection({ draft, onChange }: SectionProps) {
         label="Responsável pelo Atendimento"
         options={responsavelOptions}
         value={draft.responsavelAtendimentoId ?? ""}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({
             ...current,
@@ -305,10 +363,12 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
 
       {draft.contatos.map((contato) => (
         <div key={contato.id} className="rounded-2xl border border-zinc-200 p-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
             <Input
               label="Nome"
               value={contato.nome}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateContato(contato.id, "nome", event.target.value)
               }
@@ -318,6 +378,8 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
               label="E-mail"
               type="email"
               value={contato.email}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateContato(contato.id, "email", event.target.value)
               }
@@ -326,6 +388,8 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
             <Input
               label="Telefone"
               value={contato.telefone}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateContato(contato.id, "telefone", event.target.value)
               }
@@ -334,6 +398,8 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
             <Input
               label="Celular"
               value={contato.celular}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateContato(contato.id, "celular", event.target.value)
               }
@@ -342,6 +408,8 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
             <Input
               label="Cargo"
               value={contato.cargo}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateContato(contato.id, "cargo", event.target.value)
               }
@@ -351,6 +419,8 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
               label="Aniversário"
               type="date"
               value={contato.aniversario}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateContato(contato.id, "aniversario", event.target.value)
               }
@@ -358,7 +428,7 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
           </div>
 
           <div className="mt-3 flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <label className="flex items-center gap-2 text-[11px] font-normal text-zinc-500">
               <input
                 type="checkbox"
                 checked={contato.acessoPortal}
@@ -391,48 +461,93 @@ export function ContatosSection({ draft, onChange }: SectionProps) {
   );
 }
 
-const historicoMock: HistoricoCliente[] = [
-  {
-    id: "evento-cliente-1",
-    usuarioId: "sistema",
-    usuario: "Sistema",
-    dataHora: "05/07/2026 09:00",
-    dispositivo: "Desktop - Chrome",
-    ipOrigem: "192.168.0.10",
-    acao: "Cliente criado.",
-  },
-];
+/**
+ * Dados sensíveis (ver comentário de segurança em ClienteAdministrativo,
+ * types/cliente.ts) — só aparece dentro do modo Edit do EntityDrawer, para
+ * perfis autorizados (hasAdministrativeAccess, lib/access-control.ts),
+ * nunca na tabela, no Peek ou em buscas. É a composição Cliente-específica
+ * (lê/grava ClienteDraft.administrativo) dos componentes genéricos e
+ * reutilizáveis de entity/ (AdministrativeSection, FinancialValueField,
+ * BankingFields) — esses componentes não conhecem Cliente nem checam
+ * permissão; quem decide isso é ClienteEditFormBody.tsx.
+ */
+export function AdministrativoSection({ draft, onChange }: SectionProps) {
+  function updateFeeMensal<K extends keyof ClienteDraft["administrativo"]["feeMensal"]>(
+    field: K,
+    value: ClienteDraft["administrativo"]["feeMensal"][K]
+  ) {
+    onChange((current) => ({
+      ...current,
+      administrativo: {
+        ...current.administrativo,
+        feeMensal: { ...current.administrativo.feeMensal, [field]: value },
+      },
+    }));
+  }
 
-export function HistoricoSection() {
   return (
-    <div className="space-y-4">
-      <Input label="Buscar por palavra-chave" placeholder="Buscar alterações..." />
+    <AdministrativeSection>
+      <div>
+        <h4 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          Financeiro
+        </h4>
 
-      <div className="overflow-hidden rounded-2xl border border-zinc-200">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
-            <tr>
-              <th className="px-4 py-3 font-medium">Usuário</th>
-              <th className="px-4 py-3 font-medium">Data</th>
-              <th className="px-4 py-3 font-medium">Dispositivo</th>
-              <th className="px-4 py-3 font-medium">IP de Origem</th>
-              <th className="px-4 py-3 font-medium">Descrição</th>
-            </tr>
-          </thead>
+        <div className="mt-3">
+          <EntityForm>
+            <div className="col-span-12 md:col-span-6">
+              <FinancialValueField
+                label="Fee Mensal"
+                value={draft.administrativo.feeMensal.valor}
+                className={FOCUS_PRIMARY_CLASSNAME}
+                onChange={(valor) => updateFeeMensal("valor", valor)}
+              />
+            </div>
 
-          <tbody>
-            {historicoMock.map((evento) => (
-              <tr key={evento.id} className="border-b border-zinc-100 last:border-0">
-                <td className="px-4 py-3 font-medium text-zinc-900">{evento.usuario}</td>
-                <td className="px-4 py-3 text-zinc-500">{evento.dataHora}</td>
-                <td className="px-4 py-3 text-zinc-500">{evento.dispositivo}</td>
-                <td className="px-4 py-3 text-zinc-500">{evento.ipOrigem}</td>
-                <td className="px-4 py-3 text-zinc-500">{evento.acao}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            <div className="col-span-12 md:col-span-6">
+              <Input
+                label="Data de início"
+                type="date"
+                value={draft.administrativo.feeMensal.dataInicio}
+                density="compact"
+                className={FOCUS_PRIMARY_CLASSNAME}
+                onChange={(event) => updateFeeMensal("dataInicio", event.target.value)}
+              />
+            </div>
+
+            <div className="col-span-12">
+              <Textarea
+                label="Observação"
+                value={draft.administrativo.feeMensal.observacao}
+                density="compact"
+                className={FOCUS_PRIMARY_CLASSNAME}
+                onChange={(event) => updateFeeMensal("observacao", event.target.value)}
+              />
+            </div>
+          </EntityForm>
+        </div>
       </div>
-    </div>
+
+      <div>
+        <h4 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          Dados Bancários
+        </h4>
+
+        <div className="mt-3">
+          <BankingFields
+            value={draft.administrativo.dadosBancarios}
+            className={FOCUS_PRIMARY_CLASSNAME}
+            onChange={(updater) =>
+              onChange((current) => ({
+                ...current,
+                administrativo: {
+                  ...current.administrativo,
+                  dadosBancarios: updater(current.administrativo.dadosBancarios),
+                },
+              }))
+            }
+          />
+        </div>
+      </div>
+    </AdministrativeSection>
   );
 }

@@ -1,3 +1,5 @@
+import type { PerfilAcesso } from "@/lib/access-control";
+
 export type CurrentUser = {
   id: string;
   nome: string;
@@ -6,6 +8,7 @@ export type CurrentUser = {
   celular: string;
   cargo: string;
   departamento: string;
+  perfil: PerfilAcesso;
   avatarUrl: string | null;
   avatarThumbnail: string | null;
 };
@@ -18,6 +21,7 @@ export const currentUser: CurrentUser = {
   celular: "(11) 99999-8888",
   cargo: "Administrador",
   departamento: "Operações",
+  perfil: "Owner",
   avatarUrl: null,
   avatarThumbnail: null,
 };

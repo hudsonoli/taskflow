@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 
 type StatusPillTone = "neutral" | "blue" | "green" | "amber" | "red";
+type StatusPillDensity = "default" | "compact";
 
 type StatusPillProps = {
   children: ReactNode;
   tone?: StatusPillTone;
   dot?: boolean;
+  density?: StatusPillDensity;
 };
 
 const toneClassNames: Record<StatusPillTone, string> = {
@@ -24,14 +26,24 @@ const dotClassNames: Record<StatusPillTone, string> = {
   red: "bg-red-500",
 };
 
+// default preserva exatamente as classes originais (font-semibold, padding
+// px-2.5 py-1) — os ~20 consumidores atuais não mudam de aparência. compact
+// é opt-in, hoje usado somente por Clientes (fonte mais leve, sem negrito,
+// padding menor; ponto e cores de tone preservados).
+const sizeClassNamesByDensity: Record<StatusPillDensity, string> = {
+  default: "px-2.5 py-1 text-xs font-semibold",
+  compact: "px-2 py-0.5 text-[11px] font-normal",
+};
+
 export function StatusPill({
   children,
   tone = "neutral",
   dot = true,
+  density = "default",
 }: StatusPillProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${toneClassNames[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full ring-1 ${sizeClassNamesByDensity[density]} ${toneClassNames[tone]}`}
     >
       {dot && <span className={`h-1.5 w-1.5 rounded-full ${dotClassNames[tone]}`} />}
       {children}
