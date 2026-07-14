@@ -24,6 +24,7 @@ const allSections = [
 
 type ClienteEditFormBodyProps = {
   step: ClienteDraftStep;
+  editing: boolean;
   documentoInput: string;
   onDocumentoInputChange: (value: string) => void;
   documentType: DocumentoTipo | null;
@@ -58,6 +59,7 @@ type ClienteEditFormBodyProps = {
  */
 export function ClienteEditFormBody({
   step,
+  editing,
   documentoInput,
   onDocumentoInputChange,
   documentType,
@@ -119,6 +121,7 @@ export function ClienteEditFormBody({
               onChange={onDraftChange}
               onNomeFantasiaChange={onNomeFantasiaChange}
               onSiglaChange={onSiglaChange}
+              siglaEditavel={!editing}
             />
           )}
 

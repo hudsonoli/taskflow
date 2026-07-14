@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { equipesDisponiveis, responsaveisDisponiveis } from "@/lib/cliente-mock";
+import { toUppercaseField } from "@/lib/uppercase-field";
 import type { ClienteContato, ClienteDraft } from "@/types/cliente";
 
 // Foco laranja (token color-primary) aplicado via className — sem criar
@@ -63,6 +64,7 @@ type SectionProps = {
 type DadosSectionProps = SectionProps & {
   onNomeFantasiaChange: (value: string) => void;
   onSiglaChange: (value: string) => void;
+  siglaEditavel: boolean;
 };
 
 export function DadosSection({
@@ -70,6 +72,7 @@ export function DadosSection({
   onChange,
   onNomeFantasiaChange,
   onSiglaChange,
+  siglaEditavel,
 }: DadosSectionProps) {
   return (
     <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
@@ -94,7 +97,7 @@ export function DadosSection({
         value={draft.nomeFantasia}
         density="compact"
         className={FOCUS_PRIMARY_CLASSNAME}
-        onChange={(event) => onNomeFantasiaChange(event.target.value)}
+        onChange={(event) => onNomeFantasiaChange(toUppercaseField(event.target.value))}
       />
 
       <Input
@@ -105,18 +108,40 @@ export function DadosSection({
         onChange={(event) =>
           onChange((current) => ({
             ...current,
-            nomeRazaoSocial: event.target.value,
+            nomeRazaoSocial: toUppercaseField(event.target.value),
           }))
         }
       />
 
-      <Input
-        label="Sigla"
-        value={draft.sigla}
-        density="compact"
-        className={FOCUS_PRIMARY_CLASSNAME}
-        onChange={(event) => onSiglaChange(event.target.value)}
-      />
+      <div>
+        <Input
+          label="Sigla"
+          value={draft.sigla}
+          density="compact"
+          readOnly={!siglaEditavel}
+          title={
+            siglaEditavel
+              ? undefined
+              : "A sigla é definida no cadastro inicial e não pode ser alterada depois."
+          }
+          className={
+            siglaEditavel
+              ? FOCUS_PRIMARY_CLASSNAME
+              : `cursor-not-allowed bg-zinc-50 text-zinc-500 ${FOCUS_PRIMARY_CLASSNAME}`
+          }
+          onChange={
+            siglaEditavel
+              ? (event) => onSiglaChange(toUppercaseField(event.target.value))
+              : undefined
+          }
+        />
+
+        {!siglaEditavel ? (
+          <p className="mt-1 text-[10px] font-normal leading-snug text-zinc-400">
+            A sigla é definida no cadastro inicial e não pode ser alterada depois.
+          </p>
+        ) : null}
+      </div>
 
       <Select
         label="Status"

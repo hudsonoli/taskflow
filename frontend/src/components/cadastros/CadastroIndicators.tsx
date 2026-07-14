@@ -12,7 +12,7 @@ type CadastroIndicatorsProps = {
 };
 
 const densityClassNames: Record<CadastroIndicatorsDensity, string> = {
-  compact: "min-h-[40px] px-3 py-1.5",
+  compact: "min-h-[32px] px-2.5 py-1",
   default: "min-h-[58px] px-3 py-2.5",
 };
 
