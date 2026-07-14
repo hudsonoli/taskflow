@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { Info } from "lucide-react";
 import { Breadcrumb } from "./Breadcrumb";
 import { HeaderActions } from "./HeaderActions";
 
@@ -51,20 +52,55 @@ function shouldHideHeaderActions(pathname: string) {
   return pathname === "/fornecedores" || pathname.startsWith("/configuracoes");
 }
 
+// Descrições exibidas via tooltip ao lado do título — hoje só Clientes,
+// que também dispensa o breadcrumb (título único na página, sem
+// "Configurações > Clientes" duplicando contexto). Outras rotas continuam
+// sem entrada aqui e mantêm o comportamento anterior inalterado.
+const titleTooltips: Record<string, string> = {
+  "/configuracoes/clientes": "Cadastro e gestão de clientes.",
+};
+
+const routesWithoutBreadcrumb = new Set(Object.keys(titleTooltips));
+
 export function Header() {
   const pathname = usePathname();
   const title = resolveTitle(pathname);
+  const titleTooltip = titleTooltips[pathname];
+  const tooltipId = "header-title-tooltip";
 
   return (
     <header className="border-b border-zinc-200 bg-[#f4f1ec] px-6 py-2">
       <div className="flex min-h-11 items-center justify-between gap-4">
         <div className="min-w-0">
-          <Breadcrumb pathname={pathname} />
+          {!routesWithoutBreadcrumb.has(pathname) ? (
+            <Breadcrumb pathname={pathname} />
+          ) : null}
 
           {title ? (
-            <h1 className="mt-0.5 text-lg font-semibold text-zinc-900">
-              {title}
-            </h1>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <h1 className="text-lg font-semibold text-zinc-900">{title}</h1>
+
+              {titleTooltip ? (
+                <span className="group relative inline-flex">
+                  <button
+                    type="button"
+                    aria-describedby={tooltipId}
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-full text-zinc-400 hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
+                  >
+                    <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                    <span className="sr-only">Sobre esta página</span>
+                  </button>
+
+                  <span
+                    id={tooltipId}
+                    role="tooltip"
+                    className="pointer-events-none absolute left-0 top-full z-10 mt-1 w-max max-w-[220px] rounded-md bg-zinc-900 px-2 py-1 text-xs font-normal text-white opacity-0 shadow-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+                  >
+                    {titleTooltip}
+                  </span>
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
 

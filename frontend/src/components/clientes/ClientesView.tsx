@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import {
-  CadastroAvatar,
   CadastroIndicators,
   CadastroTable,
   CadastroToolbar,
@@ -20,14 +19,15 @@ import {
   EntityHistory,
   EntityPeek,
 } from "@/components/entity";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusPill } from "@/components/ui/StatusPill";
 import {
   EMPRESA_PADRAO_ID,
   equipesDisponiveis,
   responsaveisDisponiveis,
 } from "@/lib/cliente-mock";
+import { normalizeSearchText, normalizeSearchToken } from "@/lib/search-normalize";
 import type { ClienteDraft, ClienteStatus } from "@/types/cliente";
+import { ClienteAvatar } from "./ClienteAvatar";
 import { ClienteEditFormBody } from "./ClienteEditFormBody";
 import { useClienteDraft } from "./useClienteDraft";
 
@@ -47,6 +47,40 @@ function resolveResponsavelNome(responsavelId?: string): string {
     responsaveisDisponiveis.find((usuario) => usuario.id === responsavelId)
       ?.nome ?? responsavelId
   );
+}
+
+// Campos pesquisáveis hoje: código interno, nome fantasia, razão social,
+// documento, e-mail, equipe responsável e responsável comercial. Quando o
+// modelo de Cliente ganhar Tags, basta somar mais um item ao textHaystack —
+// não há estrutura de Tags neste momento (types/cliente.ts não a possui).
+function matchesCliente(cliente: ClienteDraft, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+
+  const textHaystack = normalizeSearchText(
+    [
+      cliente.codigoInterno,
+      cliente.nomeFantasia,
+      cliente.nomeRazaoSocial,
+      cliente.documento,
+      cliente.email,
+      resolveEquipeNome(cliente.equipeResponsavelId),
+      resolveResponsavelNome(cliente.responsavelComercialId),
+    ].join(" ")
+  );
+
+  if (textHaystack.includes(normalizedQuery)) return true;
+
+  // Comparação tolerante a pontuação (ex.: "12345678000190" ↔
+  // "12.345.678/0001-90"), aplicada só aos campos de documento/código.
+  const tokenQuery = normalizeSearchToken(query);
+  if (!tokenQuery) return false;
+
+  const tokenHaystack = normalizeSearchToken(
+    `${cliente.codigoInterno} ${cliente.documento}`
+  );
+
+  return tokenHaystack.includes(tokenQuery);
 }
 
 // Mapeamento de cor por estado — específico de Clientes, não vive no
@@ -352,18 +386,14 @@ export function ClientesView() {
     (cliente) => cliente.status === "Inativo"
   ).length;
 
-  const clientesFiltrados = clientes.filter((cliente) =>
-    [
-      cliente.codigoInterno,
-      cliente.nomeFantasia,
-      cliente.nomeRazaoSocial,
-      cliente.documento,
-      cliente.email,
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(searchQuery.trim().toLowerCase())
+  const clientesFiltrados = useMemo(
+    () => clientes.filter((cliente) => matchesCliente(cliente, searchQuery)),
+    [clientes, searchQuery]
   );
+
+  const resultadosLabel = searchQuery.trim()
+    ? `${clientesFiltrados.length} resultado${clientesFiltrados.length === 1 ? "" : "s"} encontrado${clientesFiltrados.length === 1 ? "" : "s"}`
+    : `${clientesFiltrados.length} cliente${clientesFiltrados.length === 1 ? "" : "s"}`;
 
   const clienteDraft = useClienteDraft(selectedCliente, editSessionId);
 
@@ -408,7 +438,15 @@ export function ClientesView() {
   // (sem selectedClienteId) → fecha por completo. Mesma função atende
   // Escape, clique no backdrop, botão "X" do cabeçalho e o botão
   // "Cancelar"/"Fechar" do rodapé — um único ponto de decisão.
-  function handleCloseIntent() {
+  //
+  // useCallback (não uma function declaration comum) porque é passada como
+  // onClose para o EntityDrawer, cujo efeito de foco/trap depende dessa
+  // referência (entity/EntityDrawer.tsx). Sem memoização, cada tecla
+  // digitada em qualquer campo do formulário re-renderiza a View com uma
+  // nova closure, o efeito reexecuta, e o cleanup+setup do Drawer move o
+  // foco para o primeiro elemento focável do header (o botão fechar) — daí
+  // o bug de precisar reclicar no campo a cada letra.
+  const handleCloseIntent = useCallback(() => {
     if (drawerMode === "edit" && selectedClienteId) {
       setDrawerMode("peek");
       return;
@@ -416,7 +454,7 @@ export function ClientesView() {
 
     setDrawerMode("closed");
     setSelectedClienteId(null);
-  }
+  }, [drawerMode, selectedClienteId]);
 
   function handleSaveEdit() {
     handleUpsert(clienteDraft.draft);
@@ -428,17 +466,6 @@ export function ClientesView() {
 
   return (
     <PageShell density="compact">
-      <PageHeader
-        title="Clientes"
-        description="Cadastro e gestão de clientes."
-        size="section"
-        actions={
-          <Button size="sm" colorScheme="brand" onClick={openCreate}>
-            Novo Cliente
-          </Button>
-        }
-      />
-
       <CadastroIndicators
         density="compact"
         items={[
@@ -454,7 +481,14 @@ export function ClientesView() {
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Pesquisar clientes..."
+        actions={
+          <Button size="sm" colorScheme="brand" onClick={openCreate}>
+            Novo Cliente
+          </Button>
+        }
       />
+
+      <p className="px-1 text-[11px] text-zinc-400">{resultadosLabel}</p>
 
       <CadastroTable minWidth="900px">
         <thead className={cadastroTableHeaderClassName}>
@@ -469,6 +503,16 @@ export function ClientesView() {
         </thead>
 
         <tbody>
+          {clientesFiltrados.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-zinc-400">
+                {searchQuery.trim()
+                  ? `Nenhum cliente encontrado para "${searchQuery.trim()}".`
+                  : "Nenhum cliente encontrado."}
+              </td>
+            </tr>
+          ) : null}
+
           {clientesFiltrados.map((cliente) => {
             const nome = cliente.nomeFantasia || cliente.nomeRazaoSocial;
 
@@ -488,12 +532,12 @@ export function ClientesView() {
               >
                 <td className={cell}>
                   <div className="flex min-w-0 items-center gap-2">
-                    <CadastroAvatar label={nome} density="compact" />
+                    <ClienteAvatar clienteId={cliente.clienteId} sigla={cliente.sigla} />
                     <div className="flex min-w-0 items-baseline gap-1">
-                      <span className="shrink-0 text-[11px] font-normal text-zinc-400">
+                      <span className="shrink-0 text-[10px] font-normal text-zinc-400">
                         {cliente.codigoInterno}
                       </span>
-                      <span className="min-w-0 truncate text-[13px] font-normal text-zinc-900">
+                      <span className="min-w-0 truncate text-[13px] font-normal leading-tight text-zinc-800">
                         {nome}
                       </span>
                     </div>
@@ -608,6 +652,7 @@ export function ClientesView() {
         {drawerMode === "edit" ? (
           <ClienteEditFormBody
             step={clienteDraft.step}
+            editing={clienteDraft.editing}
             documentoInput={clienteDraft.documentoInput}
             onDocumentoInputChange={clienteDraft.setDocumentoInput}
             documentType={clienteDraft.documentType}
