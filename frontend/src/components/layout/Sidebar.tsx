@@ -88,13 +88,13 @@ function SidebarLink({
           : `h-8 w-full gap-2 px-2.5 ${nested ? "pl-7" : ""}`
       } ${
         active
-          ? "bg-blue-50 text-blue-700"
+          ? "bg-primary-soft text-primary"
           : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
       }`}
     >
       {active ? (
         <span
-          className={`absolute left-0 rounded-r-full bg-blue-600 ${
+          className={`absolute left-0 rounded-r-full bg-primary ${
             isCollapsed ? "h-4 w-0.5" : "h-4 w-1"
           }`}
           aria-hidden="true"
@@ -239,12 +239,12 @@ export function Sidebar() {
               aria-label="Cadastros"
               onClick={handleCadastrosClick}
               className={`group relative flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
-                cadastrosActive ? "bg-blue-50 text-blue-700" : ""
+                cadastrosActive ? "bg-primary-soft text-primary" : ""
               }`}
             >
               {cadastrosActive ? (
                 <span
-                  className="absolute left-0 h-4 w-0.5 rounded-r-full bg-blue-600"
+                  className="absolute left-0 h-4 w-0.5 rounded-r-full bg-primary"
                   aria-hidden="true"
                 />
               ) : null}
@@ -300,7 +300,7 @@ export function Sidebar() {
                 onClick={handleCadastrosClick}
                 className={`mb-1 flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
                   cadastrosActive
-                    ? "bg-blue-50 text-blue-700"
+                    ? "bg-primary-soft text-primary"
                     : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
                 }`}
                 aria-expanded={cadastrosExpanded}

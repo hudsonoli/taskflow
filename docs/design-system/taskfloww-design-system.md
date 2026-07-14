@@ -845,6 +845,8 @@ Apenas um: `SidebarProvider` (`src/components/layout/SidebarContext.tsx`), envol
 
 `agenda-mock.ts`, `cliente-mock.ts`, `conta-mock.ts`, `demandas-mock.ts`, `equipe-mock.ts`, `fornecedor-mock.ts`, `grupo-cliente-mock.ts`, `projetos-mock.ts`, `trafego-mock.ts`, `usuario-mock.ts`.
 
+`access-control.ts` (novo) — hierarquia de perfis `PerfilAcesso` e `hasAdministrativeAccess()`; regras completas em `entity-component-api.md`, seção 18 ("Guia Administrativa"), não duplicadas aqui.
+
 ---
 
 ## 17. Mapa visual
