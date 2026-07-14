@@ -13,6 +13,7 @@ type EntitySidePanelProps = {
   children: ReactNode;
   footer?: ReactNode;
   editLabel?: string;
+  overlayClassName?: string;
 };
 
 export function EntitySidePanel({
@@ -24,6 +25,7 @@ export function EntitySidePanel({
   children,
   footer,
   editLabel = "Editar",
+  overlayClassName = "bg-zinc-900/40",
 }: EntitySidePanelProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -59,7 +61,7 @@ export function EntitySidePanel({
   return (
     <div className="fixed inset-0 z-50">
       <div
-        className="absolute inset-0 bg-zinc-900/40"
+        className={`absolute inset-0 ${overlayClassName}`}
         onClick={onClose}
         aria-hidden="true"
       />
