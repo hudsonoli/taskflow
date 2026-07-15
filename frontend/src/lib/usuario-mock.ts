@@ -1,3 +1,4 @@
+import type { PerfilAcesso } from "@/lib/access-control";
 import type { DepartamentoOption, PermissaoItem } from "@/types/usuario";
 
 export const EMPRESA_PADRAO_ID = "empresa-principal";
@@ -16,11 +17,14 @@ export const departamentos: DepartamentoOption[] = [
   { id: "dep-externo", nome: "Externo", ativo: true },
 ];
 
-export const perfis = [
-  "SuperAdmin",
-  "Admin",
+// Lista oficial do projeto (mesma união de lib/access-control.ts,
+// PerfilAcesso) — SuperAdmin/Admin foram eliminados nesta migração.
+// Tipado contra PerfilAcesso para não divergir de novo.
+export const perfis: PerfilAcesso[] = [
+  "Owner",
   "Diretoria",
   "Gestor",
+  "Financeiro",
   "Operador",
   "Cliente",
 ];

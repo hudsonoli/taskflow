@@ -1,6 +1,13 @@
+import {
+  AdministrativeSection,
+  BankingFields,
+  EntityForm,
+  FinancialValueField,
+} from "@/components/entity";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   departamentos,
   generateId,
@@ -9,12 +16,11 @@ import {
   paginasPrincipais,
   perfis,
 } from "@/lib/usuario-mock";
-import type {
-  HistoricoUsuario,
-  UsuarioDraft,
-  UsuarioEndereco,
-  UsuarioInformacoes,
-} from "@/types/usuario";
+import type { UsuarioDraft, UsuarioEndereco } from "@/types/usuario";
+
+// Mesmo padrão de foco laranja de ClienteFormSections.tsx — className
+// passthrough, sem prop nova em Input/Select.
+const FOCUS_PRIMARY_CLASSNAME = "focus:!border-primary";
 
 const departamentoOptions = departamentos
   .filter((departamento) => departamento.ativo)
@@ -55,17 +61,20 @@ type SectionProps = {
 
 export function DadosSection({ draft, onChange }: SectionProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
       <Input
         label="Código Interno"
         value={draft.codigoInterno}
         readOnly
-        className="bg-zinc-50 text-zinc-500"
+        density="compact"
+        className={`bg-zinc-50 text-zinc-500 ${FOCUS_PRIMARY_CLASSNAME}`}
       />
 
       <Input
         label="Nome"
         value={draft.nome}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({ ...current, nome: event.target.value }))
         }
@@ -75,6 +84,8 @@ export function DadosSection({ draft, onChange }: SectionProps) {
         label="E-mail"
         type="email"
         value={draft.email}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({ ...current, email: event.target.value }))
         }
@@ -84,6 +95,8 @@ export function DadosSection({ draft, onChange }: SectionProps) {
         label="Departamento"
         options={departamentoOptions}
         value={draft.departamentoId}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({
             ...current,
@@ -95,6 +108,8 @@ export function DadosSection({ draft, onChange }: SectionProps) {
       <Input
         label="Squad"
         value={draft.squad}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({ ...current, squad: event.target.value }))
         }
@@ -104,6 +119,8 @@ export function DadosSection({ draft, onChange }: SectionProps) {
         label="Página Principal"
         options={paginaOptions}
         value={draft.paginaPrincipal}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
           onChange((current) => ({
             ...current,
@@ -116,12 +133,17 @@ export function DadosSection({ draft, onChange }: SectionProps) {
         label="Perfil"
         options={perfilOptions}
         value={draft.perfil}
+        density="compact"
+        className={FOCUS_PRIMARY_CLASSNAME}
         onChange={(event) =>
-          onChange((current) => ({ ...current, perfil: event.target.value }))
+          onChange((current) => ({
+            ...current,
+            perfil: event.target.value as UsuarioDraft["perfil"],
+          }))
         }
       />
 
-      <label className="flex items-center gap-2 text-sm text-zinc-700">
+      <label className="flex items-center gap-2 text-[11px] font-normal text-zinc-500">
         <input
           type="checkbox"
           checked={draft.acessoSistema}
@@ -135,7 +157,7 @@ export function DadosSection({ draft, onChange }: SectionProps) {
         Acesso ao sistema
       </label>
 
-      <label className="flex items-center gap-2 text-sm text-zinc-700">
+      <label className="flex items-center gap-2 text-[11px] font-normal text-zinc-500">
         <input
           type="checkbox"
           checked={draft.emAtividade}
@@ -152,6 +174,13 @@ export function DadosSection({ draft, onChange }: SectionProps) {
   );
 }
 
+/**
+ * Matriz de permissões — mantida como está (própria tabela interna, não
+ * convertida para EntityForm/12 colunas): é uma grade genuinamente
+ * tabular (módulo × leitura/escrita/excluir/aprovar), não um formulário de
+ * campos. Redesenhar essa matriz está fora do escopo desta migração
+ * visual.
+ */
 export function PermissoesSection({ draft, onChange }: SectionProps) {
   function toggle(
     id: string,
@@ -173,23 +202,25 @@ export function PermissoesSection({ draft, onChange }: SectionProps) {
     <div className="space-y-6">
       {grupos.map((grupo) => (
         <div key={grupo}>
-          <p className="mb-2 text-sm font-semibold text-zinc-900">{grupo}</p>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            {grupo}
+          </p>
 
           <div className="overflow-hidden rounded-2xl border border-zinc-200">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Módulo</th>
-                  <th className="px-4 py-3 text-center font-medium">
+                  <th className="px-4 py-3 text-[11px] font-medium">Módulo</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-medium">
                     Leitura
                   </th>
-                  <th className="px-4 py-3 text-center font-medium">
+                  <th className="px-4 py-3 text-center text-[11px] font-medium">
                     Escrita
                   </th>
-                  <th className="px-4 py-3 text-center font-medium">
+                  <th className="px-4 py-3 text-center text-[11px] font-medium">
                     Excluir
                   </th>
-                  <th className="px-4 py-3 text-center font-medium">
+                  <th className="px-4 py-3 text-center text-[11px] font-medium">
                     Aprovar
                   </th>
                 </tr>
@@ -203,7 +234,7 @@ export function PermissoesSection({ draft, onChange }: SectionProps) {
                       key={item.id}
                       className="border-b border-zinc-100 last:border-0"
                     >
-                      <td className="px-4 py-3 font-medium text-zinc-900">
+                      <td className="px-4 py-3 text-[11px] font-normal text-zinc-900">
                         {item.modulo}
                       </td>
 
@@ -327,29 +358,33 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
           className="rounded-2xl border border-zinc-200 p-4"
         >
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold text-zinc-900">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
               Endereço {index + 1}
             </p>
 
             <button
               type="button"
               onClick={() => removeEndereco(endereco.id)}
-              className="text-xs font-medium text-zinc-400 underline decoration-dotted hover:text-zinc-700"
+              className="text-[11px] font-medium text-zinc-400 underline decoration-dotted hover:text-zinc-700"
             >
               Remover
             </button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
             <Input
               label="CEP"
               value={endereco.cep}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) => updateCep(endereco.id, event.target.value)}
             />
 
             <Input
               label="Logradouro"
               value={endereco.logradouro}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "logradouro", event.target.value)
               }
@@ -358,6 +393,8 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
             <Input
               label="Número"
               value={endereco.numero}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "numero", event.target.value)
               }
@@ -366,6 +403,8 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
             <Input
               label="Complemento"
               value={endereco.complemento}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "complemento", event.target.value)
               }
@@ -374,6 +413,8 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
             <Input
               label="Bairro"
               value={endereco.bairro}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "bairro", event.target.value)
               }
@@ -382,6 +423,8 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
             <Input
               label="Caixa Postal"
               value={endereco.caixaPostal}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "caixaPostal", event.target.value)
               }
@@ -390,6 +433,8 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
             <Input
               label="País"
               value={endereco.pais}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "pais", event.target.value)
               }
@@ -399,6 +444,8 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
               label="UF"
               options={ufOptions}
               value={endereco.uf}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "uf", event.target.value)
               }
@@ -407,6 +454,8 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
             <Input
               label="Cidade"
               value={endereco.cidade}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "cidade", event.target.value)
               }
@@ -416,6 +465,8 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
               label="Tipo"
               options={tipoEnderecoOptions}
               value={endereco.tipo}
+              density="compact"
+              className={FOCUS_PRIMARY_CLASSNAME}
               onChange={(event) =>
                 updateEndereco(endereco.id, "tipo", event.target.value)
               }
@@ -427,7 +478,7 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
       <button
         type="button"
         onClick={addEndereco}
-        className="w-full rounded-2xl border border-dashed border-zinc-300 px-4 py-3 text-sm font-medium text-zinc-500 hover:bg-zinc-50"
+        className="w-full rounded-2xl border border-dashed border-zinc-300 px-4 py-3 text-[13px] font-medium text-zinc-500 hover:bg-zinc-50"
       >
         + Novo Endereço
       </button>
@@ -435,8 +486,14 @@ export function EnderecosSection({ draft, onChange }: SectionProps) {
   );
 }
 
+/**
+ * Dados pessoais apenas — chavePix/banco/agencia/conta não vivem mais aqui
+ * (Opção A aprovada): saíram para AdministrativoSection, protegidos por
+ * hasAdministrativeAccess. Esta seção nunca deve voltar a acumular dado
+ * financeiro/bancário.
+ */
 export function InformacoesSection({ draft, onChange }: SectionProps) {
-  function update(field: keyof UsuarioInformacoes, value: string) {
+  function update(field: keyof UsuarioDraft["informacoes"], value: string) {
     onChange((current) => ({
       ...current,
       informacoes: { ...current.informacoes, [field]: value },
@@ -444,30 +501,34 @@ export function InformacoesSection({ draft, onChange }: SectionProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-900 text-lg font-semibold text-white">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white">
           {generateInitials(draft.nome)}
         </div>
 
         <button
           type="button"
-          className="rounded-2xl border border-dashed border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-500 hover:bg-zinc-50"
+          className="rounded-2xl border border-dashed border-zinc-300 px-4 py-2 text-[13px] font-medium text-zinc-500 hover:bg-zinc-50"
         >
           Alterar foto (mock)
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
         <Input
           label="Telefone"
           value={draft.informacoes.telefone}
+          density="compact"
+          className={FOCUS_PRIMARY_CLASSNAME}
           onChange={(event) => update("telefone", event.target.value)}
         />
 
         <Input
           label="Celular"
           value={draft.informacoes.celular}
+          density="compact"
+          className={FOCUS_PRIMARY_CLASSNAME}
           onChange={(event) => update("celular", event.target.value)}
         />
 
@@ -475,42 +536,24 @@ export function InformacoesSection({ draft, onChange }: SectionProps) {
           label="Data de Nascimento"
           type="date"
           value={draft.informacoes.dataNascimento}
+          density="compact"
+          className={FOCUS_PRIMARY_CLASSNAME}
           onChange={(event) => update("dataNascimento", event.target.value)}
-        />
-
-        <Input
-          label="Chave Pix"
-          value={draft.informacoes.chavePix}
-          onChange={(event) => update("chavePix", event.target.value)}
-        />
-
-        <Input
-          label="Banco"
-          value={draft.informacoes.banco}
-          onChange={(event) => update("banco", event.target.value)}
-        />
-
-        <Input
-          label="Agência"
-          value={draft.informacoes.agencia}
-          onChange={(event) => update("agencia", event.target.value)}
-        />
-
-        <Input
-          label="Conta"
-          value={draft.informacoes.conta}
-          onChange={(event) => update("conta", event.target.value)}
         />
 
         <Input
           label="RG"
           value={draft.informacoes.rg}
+          density="compact"
+          className={FOCUS_PRIMARY_CLASSNAME}
           onChange={(event) => update("rg", event.target.value)}
         />
 
         <Input
           label="CPF"
           value={draft.informacoes.cpf}
+          density="compact"
+          className={FOCUS_PRIMARY_CLASSNAME}
           onChange={(event) => update("cpf", event.target.value)}
         />
       </div>
@@ -518,69 +561,93 @@ export function InformacoesSection({ draft, onChange }: SectionProps) {
   );
 }
 
-const historicoMock: HistoricoUsuario[] = [
-  {
-    id: "evento-1",
-    usuarioId: "sistema",
-    usuario: "Sistema",
-    dataHora: "04/07/2026 09:12",
-    dispositivo: "Desktop - Chrome",
-    ipOrigem: "192.168.0.10",
-    acao: "Cadastro criado.",
-  },
-  {
-    id: "evento-2",
-    usuarioId: "user-1",
-    usuario: "Hudson Cunha",
-    dataHora: "04/07/2026 09:20",
-    dispositivo: "Desktop - Chrome",
-    ipOrigem: "192.168.0.10",
-    acao: "Departamento atualizado.",
-  },
-];
+/**
+ * Dados sensíveis (ver comentário de segurança em UsuarioAdministrativo,
+ * types/usuario.ts) — só aparece dentro do modo Edit do EntityDrawer, para
+ * perfis autorizados (hasAdministrativeAccess, lib/access-control.ts),
+ * nunca na tabela, no Peek ou em buscas. Composição Usuário-específica dos
+ * componentes genéricos e reutilizáveis de entity/ (AdministrativeSection,
+ * FinancialValueField, BankingFields) — os mesmos usados por Clientes, sem
+ * nenhuma duplicação de componente. salario é despesa; nunca confundido
+ * com Fee Mensal de Clientes (receita).
+ */
+export function AdministrativoSection({ draft, onChange }: SectionProps) {
+  function updateSalario<K extends keyof UsuarioDraft["administrativo"]["salario"]>(
+    field: K,
+    value: UsuarioDraft["administrativo"]["salario"][K]
+  ) {
+    onChange((current) => ({
+      ...current,
+      administrativo: {
+        ...current.administrativo,
+        salario: { ...current.administrativo.salario, [field]: value },
+      },
+    }));
+  }
 
-export function HistoricoSection() {
   return (
-    <div className="space-y-4">
-      <Input
-        label="Buscar por palavra-chave"
-        placeholder="Buscar alterações..."
-      />
+    <AdministrativeSection>
+      <div>
+        <h4 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          Financeiro
+        </h4>
 
-      <div className="overflow-hidden rounded-2xl border border-zinc-200">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
-            <tr>
-              <th className="px-4 py-3 font-medium">Usuário</th>
-              <th className="px-4 py-3 font-medium">Data</th>
-              <th className="px-4 py-3 font-medium">Dispositivo</th>
-              <th className="px-4 py-3 font-medium">IP de Origem</th>
-              <th className="px-4 py-3 font-medium">Descrição</th>
-            </tr>
-          </thead>
+        <div className="mt-3">
+          <EntityForm>
+            <div className="col-span-12 md:col-span-6">
+              <FinancialValueField
+                label="Salário"
+                value={draft.administrativo.salario.valor}
+                className={FOCUS_PRIMARY_CLASSNAME}
+                onChange={(valor) => updateSalario("valor", valor)}
+              />
+            </div>
 
-          <tbody>
-            {historicoMock.map((evento) => (
-              <tr
-                key={evento.id}
-                className="border-b border-zinc-100 last:border-0"
-              >
-                <td className="px-4 py-3 font-medium text-zinc-900">
-                  {evento.usuario}
-                </td>
-                <td className="px-4 py-3 text-zinc-500">{evento.dataHora}</td>
-                <td className="px-4 py-3 text-zinc-500">
-                  {evento.dispositivo}
-                </td>
-                <td className="px-4 py-3 text-zinc-500">
-                  {evento.ipOrigem}
-                </td>
-                <td className="px-4 py-3 text-zinc-500">{evento.acao}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            <div className="col-span-12 md:col-span-6">
+              <Input
+                label="Data de início"
+                type="date"
+                value={draft.administrativo.salario.dataInicio}
+                density="compact"
+                className={FOCUS_PRIMARY_CLASSNAME}
+                onChange={(event) => updateSalario("dataInicio", event.target.value)}
+              />
+            </div>
+
+            <div className="col-span-12">
+              <Textarea
+                label="Observação"
+                value={draft.administrativo.salario.observacao}
+                density="compact"
+                className={FOCUS_PRIMARY_CLASSNAME}
+                onChange={(event) => updateSalario("observacao", event.target.value)}
+              />
+            </div>
+          </EntityForm>
+        </div>
       </div>
-    </div>
+
+      <div>
+        <h4 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          Dados Bancários
+        </h4>
+
+        <div className="mt-3">
+          <BankingFields
+            value={draft.administrativo.dadosBancarios}
+            className={FOCUS_PRIMARY_CLASSNAME}
+            onChange={(updater) =>
+              onChange((current) => ({
+                ...current,
+                administrativo: {
+                  ...current.administrativo,
+                  dadosBancarios: updater(current.administrativo.dadosBancarios),
+                },
+              }))
+            }
+          />
+        </div>
+      </div>
+    </AdministrativeSection>
   );
 }
