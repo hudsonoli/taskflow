@@ -12,7 +12,10 @@
  */
 export type PerfilAcesso =
   | "Owner"
+  | "SuperAdmin"
+  | "Admin"
   | "Diretoria"
+  | "Gerente"
   | "Gestor"
   | "Financeiro"
   | "Operador"
@@ -31,4 +34,22 @@ const ADMINISTRATIVE_ROLES: readonly PerfilAcesso[] = [
  */
 export function hasAdministrativeAccess(perfil: PerfilAcesso): boolean {
   return ADMINISTRATIVE_ROLES.includes(perfil);
+}
+
+const DASHBOARD_ROLES: readonly PerfilAcesso[] = [
+  "Owner",
+  "SuperAdmin",
+  "Admin",
+  "Gerente",
+  "Gestor",
+  "Financeiro",
+];
+
+/**
+ * Acesso ao item "Dashboard" da Sidebar — Operador, Cliente e demais
+ * perfis não listados não devem enxergar esse item. Only-frontend: apenas
+ * decide o que renderizar (mesma ressalva de hasAdministrativeAccess).
+ */
+export function hasDashboardAccess(perfil: PerfilAcesso): boolean {
+  return DASHBOARD_ROLES.includes(perfil);
 }

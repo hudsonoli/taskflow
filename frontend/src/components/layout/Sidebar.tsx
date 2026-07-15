@@ -21,6 +21,8 @@ import {
   Truck,
   Users,
 } from "lucide-react";
+import { hasDashboardAccess, type PerfilAcesso } from "@/lib/access-control";
+import { currentUser } from "@/lib/conta-mock";
 import { HeaderSearch } from "./HeaderSearch";
 import { QuickCreateMenu } from "./QuickCreateMenu";
 import { useSidebar } from "./SidebarContext";
@@ -30,10 +32,16 @@ type SidebarItem = {
   label: string;
   href: string;
   icon: typeof LayoutDashboard;
+  // Regra de visibilidade por perfil — só quando o item não é para todos
+  // (hoje só o Dashboard). Centralizada aqui e resolvida uma única vez em
+  // Sidebar() (visiblePrincipalItems), para não espalhar checagem de
+  // perfil pelos dois branches de render (colapsado/expandido). A regra em
+  // si (quais perfis têm acesso) vive em lib/access-control.ts.
+  visible?: (perfil: PerfilAcesso) => boolean;
 };
 
 const principalItems: SidebarItem[] = [
-  { label: "Dashboard do Usuário", href: "/", icon: LayoutDashboard },
+  { label: "Dashboard", href: "/", icon: LayoutDashboard, visible: hasDashboardAccess },
   { label: "Tarefas", href: "/tarefas", icon: ListTodo },
   { label: "Projetos", href: "/projetos", icon: FolderKanban },
   { label: "Agenda", href: "/agenda", icon: BookUser },
@@ -82,7 +90,7 @@ function SidebarLink({
       href={item.href}
       title={isCollapsed ? item.label : undefined}
       aria-label={item.label}
-      className={`group relative flex items-center rounded-lg text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
+      className={`group relative flex items-center rounded-lg text-[13px] font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
         isCollapsed
           ? "h-8 w-8 justify-center"
           : `h-8 w-full gap-2 px-2.5 ${nested ? "pl-7" : ""}`
@@ -115,7 +123,7 @@ function SidebarLink({
 
 function SectionTitle({ title }: { title: string }) {
   return (
-    <p className="mb-1 px-2.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+    <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
       {title}
     </p>
   );
@@ -132,6 +140,9 @@ function CollapsedSeparator() {
 export function Sidebar() {
   const pathname = usePathname();
   const { isCollapsed, toggleSidebar } = useSidebar();
+  const visiblePrincipalItems = principalItems.filter(
+    (item) => item.visible?.(currentUser.perfil) ?? true,
+  );
   const cadastrosActive = cadastroItems.some((item) =>
     isItemActive(pathname, item.href),
   );
@@ -210,7 +221,7 @@ export function Sidebar() {
           <>
             <CollapsedSeparator />
             <div className="flex w-full max-w-full flex-col items-center gap-0.5 overflow-x-hidden box-border">
-              {principalItems.map((item) => (
+              {visiblePrincipalItems.map((item) => (
                 <SidebarLink
                   key={item.href}
                   item={item}
@@ -269,7 +280,7 @@ export function Sidebar() {
             <div>
               <SectionTitle title="Principal" />
               <div className="flex flex-col gap-0.5">
-                {principalItems.map((item) => (
+                {visiblePrincipalItems.map((item) => (
                   <SidebarLink
                     key={item.href}
                     item={item}
@@ -298,7 +309,7 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={handleCadastrosClick}
-                className={`mb-1 flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
+                className={`mb-1 flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
                   cadastrosActive
                     ? "bg-primary-soft text-primary"
                     : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
