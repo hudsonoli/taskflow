@@ -7,6 +7,11 @@ class DomainEventType(StrEnum):
     EMPRESA_INATIVADA = "empresa.inativada"
     EMPRESA_REATIVADA = "empresa.reativada"
 
+    AGENCIA_CRIADA = "agencia.criada"
+    AGENCIA_ALTERADA = "agencia.alterada"
+    AGENCIA_INATIVADA = "agencia.inativada"
+    AGENCIA_REATIVADA = "agencia.reativada"
+
     USUARIO_CRIADO = "usuario.criado"
     USUARIO_ALTERADO = "usuario.alterado"
     USUARIO_INATIVADO = "usuario.inativado"
