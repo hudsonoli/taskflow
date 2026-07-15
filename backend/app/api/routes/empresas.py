@@ -5,6 +5,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.dependencies.authorization import ensure_same_empresa, require_admin, require_admin_or_gestor
+from app.models.usuario import Usuario
 from app.schemas.empresa import EmpresaCreate, EmpresaInativar, EmpresaRead, EmpresaUpdate
 from app.services.empresa_service import (
     EmpresaConflictError,
@@ -30,12 +32,12 @@ def handle_empresa_error(exc: Exception) -> None:
 
 
 @router.post("", response_model=EmpresaRead, status_code=status.HTTP_201_CREATED)
-def create_empresa(empresa: EmpresaCreate, db: Session = Depends(get_db)):
-    try:
-        created = empresa_service.create_empresa(db, empresa)
-        return empresa_service.to_read(created)
-    except Exception as exc:
-        handle_empresa_error(exc)
+def create_empresa(
+    empresa: EmpresaCreate,
+    current_user: Usuario = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Criação de Empresa indisponível nesta etapa")
 
 
 @router.get("", response_model=list[EmpresaRead])
@@ -43,14 +45,28 @@ def list_empresas(
     status_empresa: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    current_user: Usuario = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    empresas = empresa_service.list_empresas(db, status=status_empresa, limit=limit, offset=offset)
-    return [empresa_service.to_read(empresa) for empresa in empresas]
+    try:
+        empresa = empresa_service.get_empresa(db, current_user.empresa_id)
+    except Exception as exc:
+        handle_empresa_error(exc)
+    if status_empresa and empresa.status != status_empresa:
+        return []
+    if offset > 0:
+        return []
+    return [empresa_service.to_read(empresa)][:limit]
 
 
 @router.get("/{empresa_id}", response_model=EmpresaRead)
-def get_empresa(empresa_id: UUID, db: Session = Depends(get_db)):
+def get_empresa(
+    empresa_id: UUID,
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    if str(empresa_id) != current_user.empresa_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa não encontrada")
     try:
         empresa = empresa_service.get_empresa(db, str(empresa_id))
         return empresa_service.to_read(empresa)
@@ -62,8 +78,10 @@ def get_empresa(empresa_id: UUID, db: Session = Depends(get_db)):
 def update_empresa(
     empresa_id: UUID,
     payload: dict[str, Any] = Body(...),
+    current_user: Usuario = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    ensure_same_empresa(empresa_id, current_user)
     unexpected_fields = set(payload) - PATCH_ALLOWED_FIELDS
     if unexpected_fields:
         fields = ", ".join(sorted(unexpected_fields))
@@ -74,7 +92,7 @@ def update_empresa(
 
     try:
         data = EmpresaUpdate.model_validate(payload)
-        empresa = empresa_service.update_empresa(db, str(empresa_id), data)
+        empresa = empresa_service.update_empresa(db, str(empresa_id), data, actor_usuario_id=current_user.id)
         return empresa_service.to_read(empresa)
     except Exception as exc:
         handle_empresa_error(exc)
@@ -84,28 +102,17 @@ def update_empresa(
 def inativar_empresa(
     empresa_id: UUID,
     payload: EmpresaInativar | None = None,
+    current_user: Usuario = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    try:
-        empresa = empresa_service.inativar_empresa(
-            db,
-            str(empresa_id),
-            motivo_inativacao=payload.motivo_inativacao if payload else None,
-            actor_usuario_id=payload.actor_usuario_id if payload else None,
-        )
-        return empresa_service.to_read(empresa)
-    except Exception as exc:
-        handle_empresa_error(exc)
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ciclo de vida de Empresa indisponível nesta etapa")
 
 
 @router.post("/{empresa_id}/reativar", response_model=EmpresaRead)
 def reativar_empresa(
     empresa_id: UUID,
     actor_usuario_id: str | None = Body(default=None, embed=True, alias="actorUsuarioId"),
+    current_user: Usuario = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    try:
-        empresa = empresa_service.reativar_empresa(db, str(empresa_id), actor_usuario_id=actor_usuario_id)
-        return empresa_service.to_read(empresa)
-    except Exception as exc:
-        handle_empresa_error(exc)
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ciclo de vida de Empresa indisponível nesta etapa")

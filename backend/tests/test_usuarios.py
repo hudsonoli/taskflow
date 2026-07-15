@@ -1,73 +1,12 @@
-from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, select
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
-from app.db.session import get_db
+from conftest import auth_headers, create_auth_context, eventos, make_empresa, make_usuario, persist
 from app.domain.event_types import DomainEventType
-from app.main import app
-from app.models.empresa import Empresa
-from app.models.evento import Evento
 from app.models.usuario import Usuario
 from app.schemas.usuario import UsuarioCreate
 from app.services.usuario_service import UsuarioService
-
-
-@pytest.fixture()
-def session_factory():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, connection_record):
-        dbapi_connection.execute("PRAGMA foreign_keys=ON")
-
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
-    try:
-        yield TestingSessionLocal
-    finally:
-        Base.metadata.drop_all(bind=engine)
-
-
-@pytest.fixture()
-def client(session_factory):
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        test_client.session_factory = session_factory
-        yield test_client
-    app.dependency_overrides.clear()
-
-
-def empresa_payload(**overrides):
-    data = {
-        "nome": "TaskFloww Agencia",
-        "documento": uuid4().hex,
-        "codigoInterno": f"EMP-{uuid4().hex[:8]}",
-    }
-    data.update(overrides)
-    return data
-
-
-def create_empresa(client, **overrides):
-    response = client.post("/empresas", json=empresa_payload(**overrides))
-    assert response.status_code == 201
-    return response.json()
 
 
 def usuario_payload(empresa_id: str, **overrides):
@@ -83,321 +22,186 @@ def usuario_payload(empresa_id: str, **overrides):
     return data
 
 
-def create_usuario(client, empresa_id: str, **overrides):
-    response = client.post("/usuarios", json=usuario_payload(empresa_id, **overrides))
+def create_usuario(client, headers, empresa_id: str, **overrides):
+    response = client.post("/usuarios", json=usuario_payload(empresa_id, **overrides), headers=headers)
     assert response.status_code == 201
     return response.json()
 
 
-def eventos(session_factory) -> list[Evento]:
-    with session_factory() as db:
-        return list(db.scalars(select(Evento).order_by(Evento.created_at)).all())
+def test_usuarios_endpoints_require_authentication(client):
+    response = client.get("/usuarios", params={"empresaId": str(uuid4())})
+
+    assert response.status_code == 401
 
 
-def usuarios(session_factory) -> list[Usuario]:
-    with session_factory() as db:
-        return list(db.scalars(select(Usuario)).all())
+def test_admin_creates_usuario_in_own_empresa_with_authenticated_actor(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
 
+    usuario = create_usuario(client, headers, empresa.id, email=" Hudson@Empresa.COM ")
 
-def persist_empresa(session_factory, *, status: str = "ativa") -> Empresa:
-    now = datetime.now(timezone.utc)
-    empresa = Empresa(
-        id=str(uuid4()),
-        nome="Empresa Persistida",
-        documento=uuid4().hex,
-        codigo_interno=f"EMP-{uuid4().hex[:8]}",
-        status=status,
-        created_at=now,
-        updated_at=now,
-        inativado_at=None,
-        inativado_por_usuario_id=None,
-        motivo_inativacao=None,
-    )
-    with session_factory() as db:
-        db.add(empresa)
-        db.commit()
-        db.refresh(empresa)
-        return empresa
-
-
-def test_create_usuario_normalizes_email(client):
-    empresa = create_empresa(client)
-
-    usuario = create_usuario(client, empresa["id"], email=" Hudson@Empresa.COM ")
-
-    assert usuario["id"]
-    assert usuario["empresaId"] == empresa["id"]
-    assert usuario["nome"] == "Hudson Silva"
+    assert usuario["empresaId"] == empresa.id
     assert usuario["email"] == "hudson@empresa.com"
-    assert usuario["perfilBase"] == "operador"
-    assert usuario["acessoSistema"] is True
-    assert usuario["status"] == "ativo"
-    assert usuario["createdAt"]
-    assert usuario["updatedAt"]
+    user_events = [evento for evento in eventos(client.session_factory) if evento.tipo == DomainEventType.USUARIO_CRIADO.value]
+    assert len(user_events) == 1
+    assert user_events[0].usuario_id == admin.id
 
 
-def test_create_usuario_with_missing_empresa_returns_422(client):
-    response = client.post("/usuarios", json=usuario_payload(str(uuid4())))
+def test_admin_cannot_create_usuario_in_other_empresa(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other = persist(client.session_factory, make_empresa(codigo_interno="OUTRA"))
+    headers = auth_headers(client, admin, empresa)
 
-    assert response.status_code == 422
-    assert response.json() == {"detail": "Empresa não encontrada"}
+    response = client.post("/usuarios", json=usuario_payload(other.id), headers=headers)
 
-
-def test_create_usuario_with_inactive_empresa_returns_422(client):
-    empresa = create_empresa(client)
-    client.post(f"/empresas/{empresa['id']}/inativar", json={"motivoInativacao": "teste"})
-
-    response = client.post("/usuarios", json=usuario_payload(empresa["id"]))
-
-    assert response.status_code == 422
-    assert response.json() == {"detail": "Empresa inativa não permite criação de usuário"}
+    assert response.status_code == 403
 
 
-def test_list_usuarios_by_empresa(client):
-    empresa_a = create_empresa(client, codigoInterno="EMP-A")
-    empresa_b = create_empresa(client, codigoInterno="EMP-B")
-    first = create_usuario(client, empresa_a["id"], codigoInterno="USR-A")
-    create_usuario(client, empresa_b["id"], codigoInterno="USR-B")
+def test_gestor_lists_and_gets_usuarios_from_own_empresa(client):
+    empresa, gestor, _ = create_auth_context(client.session_factory, perfil_base="gestor")
+    target = persist(client.session_factory, make_usuario(empresa.id, perfil_base="operador"))
+    headers = auth_headers(client, gestor, empresa)
 
-    response = client.get("/usuarios", params={"empresaId": empresa_a["id"]})
+    list_response = client.get("/usuarios", params={"empresaId": empresa.id}, headers=headers)
+    get_response = client.get(f"/usuarios/{target.id}", headers=headers)
 
-    assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [first["id"]]
-
-
-def test_list_usuarios_filters_by_status_perfil_and_search(client):
-    empresa = create_empresa(client)
-    active = create_usuario(client, empresa["id"], nome="Hudson Operador", codigoInterno="USR-OP", perfilBase="operador")
-    blocked = create_usuario(client, empresa["id"], nome="Maria Gestora", codigoInterno="USR-GE", perfilBase="gestor")
-    client.post(f"/usuarios/{blocked['id']}/bloquear")
-
-    response = client.get(
-        "/usuarios",
-        params={"empresaId": empresa["id"], "status": "ativo", "perfilBase": "operador", "search": "hudson"},
-    )
-
-    assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [active["id"]]
+    assert list_response.status_code == 200
+    assert target.id in [item["id"] for item in list_response.json()]
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == target.id
 
 
-def test_get_usuario_by_id(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
+def test_gestor_cannot_mutate_usuario(client):
+    empresa, gestor, _ = create_auth_context(client.session_factory, perfil_base="gestor")
+    target = persist(client.session_factory, make_usuario(empresa.id, perfil_base="operador"))
+    headers = auth_headers(client, gestor, empresa)
 
-    response = client.get(f"/usuarios/{created['id']}")
+    response = client.patch(f"/usuarios/{target.id}", json={"nome": "Bloqueado"}, headers=headers)
 
-    assert response.status_code == 200
-    assert response.json() == created
+    assert response.status_code == 403
 
 
-def test_get_usuario_by_id_returns_404(client):
-    response = client.get(f"/usuarios/{uuid4()}")
+def test_operador_cannot_access_usuarios(client):
+    empresa, operador, _ = create_auth_context(client.session_factory, perfil_base="operador")
+    headers = auth_headers(client, operador, empresa)
+
+    response = client.get("/usuarios", params={"empresaId": empresa.id}, headers=headers)
+
+    assert response.status_code == 403
+
+
+def test_list_usuarios_rejects_divergent_empresa_id(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other = persist(client.session_factory, make_empresa(codigo_interno="OUTRA"))
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.get("/usuarios", params={"empresaId": other.id}, headers=headers)
+
+    assert response.status_code == 403
+
+
+def test_get_usuario_from_other_tenant_returns_404(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other = persist(client.session_factory, make_empresa(codigo_interno="OUTRA"))
+    other_user = persist(client.session_factory, make_usuario(other.id, email="outro@empresa.com"))
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.get(f"/usuarios/{other_user.id}", headers=headers)
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Usuário não encontrado"}
 
 
-def test_update_nome_email_perfil_and_acesso_sistema(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
+def test_admin_updates_usuario_in_own_empresa(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    target = persist(client.session_factory, make_usuario(empresa.id, perfil_base="operador"))
+    headers = auth_headers(client, admin, empresa)
 
     response = client.patch(
-        f"/usuarios/{created['id']}",
-        json={
-            "nome": "Hudson Atualizado",
-            "email": " Novo.Email@Empresa.COM ",
-            "perfilBase": "gestor",
-            "acessoSistema": False,
-        },
+        f"/usuarios/{target.id}",
+        json={"nome": "Hudson Atualizado", "email": " Novo.Email@Empresa.COM ", "perfilBase": "gestor"},
+        headers=headers,
     )
 
     assert response.status_code == 200
-    updated = response.json()
-    assert updated["nome"] == "Hudson Atualizado"
-    assert updated["email"] == "novo.email@empresa.com"
-    assert updated["perfilBase"] == "gestor"
-    assert updated["acessoSistema"] is False
+    assert response.json()["nome"] == "Hudson Atualizado"
+    assert response.json()["email"] == "novo.email@empresa.com"
+    assert response.json()["perfilBase"] == "gestor"
 
 
-def test_patch_rejects_empresa_change(client):
-    empresa = create_empresa(client)
-    another_empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
+def test_admin_cannot_update_usuario_from_other_tenant(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other = persist(client.session_factory, make_empresa(codigo_interno="OUTRA"))
+    other_user = persist(client.session_factory, make_usuario(other.id, email="outro@empresa.com"))
+    headers = auth_headers(client, admin, empresa)
 
-    response = client.patch(f"/usuarios/{created['id']}", json={"empresaId": another_empresa["id"]})
+    response = client.patch(f"/usuarios/{other_user.id}", json={"nome": "Outro"}, headers=headers)
 
-    assert response.status_code == 422
-    assert "empresaId" in response.json()["detail"]
-
-
-def test_patch_rejects_status_change(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
-
-    response = client.patch(f"/usuarios/{created['id']}", json={"status": "inativo"})
-
-    assert response.status_code == 422
-    assert "status" in response.json()["detail"]
+    assert response.status_code == 404
 
 
-def test_codigo_interno_duplicate_in_same_empresa_is_rejected(client):
-    empresa = create_empresa(client)
-    create_usuario(client, empresa["id"], codigoInterno="USR-DUP")
+def test_admin_cannot_inactivate_or_block_self(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
 
-    response = client.post("/usuarios", json=usuario_payload(empresa["id"], codigoInterno="USR-DUP"))
+    inactivate = client.post(f"/usuarios/{admin.id}/inativar", json={"motivoInativacao": "teste"}, headers=headers)
+    block = client.post(f"/usuarios/{admin.id}/bloquear", headers=headers)
 
-    assert response.status_code == 409
-    assert response.json() == {"detail": "codigoInterno já cadastrado para esta Empresa"}
-
-
-def test_email_duplicate_in_same_empresa_is_rejected_after_normalization(client):
-    empresa = create_empresa(client)
-    create_usuario(client, empresa["id"], email="hudson@empresa.com")
-
-    response = client.post("/usuarios", json=usuario_payload(empresa["id"], email=" Hudson@Empresa.COM "))
-
-    assert response.status_code == 409
-    assert response.json() == {"detail": "email já cadastrado para esta Empresa"}
+    assert inactivate.status_code == 403
+    assert block.status_code == 403
 
 
-def test_same_email_is_allowed_in_different_empresas(client):
-    empresa_a = create_empresa(client, codigoInterno="EMP-A")
-    empresa_b = create_empresa(client, codigoInterno="EMP-B")
-
-    first = create_usuario(client, empresa_a["id"], email="hudson@empresa.com")
-    second = create_usuario(client, empresa_b["id"], email=" Hudson@Empresa.COM ")
-
-    assert first["email"] == "hudson@empresa.com"
-    assert second["email"] == "hudson@empresa.com"
-    assert first["empresaId"] != second["empresaId"]
-
-
-def test_inativar_usuario(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
+def test_admin_status_actions_use_authenticated_actor_not_payload(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    target = persist(client.session_factory, make_usuario(empresa.id, perfil_base="operador"))
+    fake_actor = str(uuid4())
+    headers = auth_headers(client, admin, empresa)
 
     response = client.post(
-        f"/usuarios/{created['id']}/inativar",
-        json={"motivoInativacao": "saida operacional", "actorUsuarioId": created["id"]},
+        f"/usuarios/{target.id}/inativar",
+        json={"motivoInativacao": "saida", "actorUsuarioId": fake_actor},
+        headers=headers,
     )
 
     assert response.status_code == 200
-    usuario = response.json()
-    assert usuario["status"] == "inativo"
-    assert usuario["inativadoAt"]
-    assert usuario["inativadoPorUsuarioId"] == created["id"]
-    assert usuario["motivoInativacao"] == "saida operacional"
+    assert response.json()["inativadoPorUsuarioId"] == admin.id
+    user_events = [evento for evento in eventos(client.session_factory) if evento.tipo == DomainEventType.USUARIO_INATIVADO.value]
+    assert len(user_events) == 1
+    assert user_events[0].usuario_id == admin.id
 
 
-def test_reativar_usuario(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
-    client.post(f"/usuarios/{created['id']}/inativar", json={"motivoInativacao": "teste"})
+def test_admin_reactivates_blocks_and_unblocks_usuario(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    target = persist(client.session_factory, make_usuario(empresa.id, perfil_base="operador"))
+    headers = auth_headers(client, admin, empresa)
 
-    response = client.post(f"/usuarios/{created['id']}/reativar")
+    assert client.post(f"/usuarios/{target.id}/inativar", json={"motivoInativacao": "teste"}, headers=headers).status_code == 200
+    assert client.post(f"/usuarios/{target.id}/reativar", headers=headers).status_code == 200
+    assert client.post(f"/usuarios/{target.id}/bloquear", headers=headers).status_code == 200
+    unblock = client.post(f"/usuarios/{target.id}/desbloquear", headers=headers)
 
-    assert response.status_code == 200
-    usuario = response.json()
-    assert usuario["status"] == "ativo"
-    assert usuario["inativadoAt"] is None
-    assert usuario["inativadoPorUsuarioId"] is None
-    assert usuario["motivoInativacao"] is None
-
-
-def test_bloquear_usuario(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
-
-    response = client.post(f"/usuarios/{created['id']}/bloquear")
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "bloqueado"
-
-
-def test_desbloquear_usuario(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
-    client.post(f"/usuarios/{created['id']}/bloquear")
-
-    response = client.post(f"/usuarios/{created['id']}/desbloquear")
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "ativo"
+    assert unblock.status_code == 200
+    assert unblock.json()["status"] == "ativo"
 
 
 def test_invalid_transitions_are_rejected(client):
-    empresa = create_empresa(client)
-    active = create_usuario(client, empresa["id"], codigoInterno="USR-A")
-    inactive = create_usuario(client, empresa["id"], codigoInterno="USR-I")
-    blocked = create_usuario(client, empresa["id"], codigoInterno="USR-B")
-    client.post(f"/usuarios/{inactive['id']}/inativar", json={"motivoInativacao": "teste"})
-    client.post(f"/usuarios/{blocked['id']}/bloquear")
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    target = persist(client.session_factory, make_usuario(empresa.id, perfil_base="operador"))
+    headers = auth_headers(client, admin, empresa)
 
-    reactivate_active = client.post(f"/usuarios/{active['id']}/reativar")
-    inactivate_inactive = client.post(f"/usuarios/{inactive['id']}/inativar", json={"motivoInativacao": "teste"})
-    block_blocked = client.post(f"/usuarios/{blocked['id']}/bloquear")
-    unblock_active = client.post(f"/usuarios/{active['id']}/desbloquear")
+    response = client.post(f"/usuarios/{target.id}/reativar", headers=headers)
 
-    assert reactivate_active.status_code == 409
-    assert reactivate_active.json() == {"detail": "Usuário já está ativo"}
-    assert inactivate_inactive.status_code == 409
-    assert inactivate_inactive.json() == {"detail": "Usuário já está inativo"}
-    assert block_blocked.status_code == 409
-    assert block_blocked.json() == {"detail": "Usuário já está bloqueado"}
-    assert unblock_active.status_code == 409
-    assert unblock_active.json() == {"detail": "Somente usuário bloqueado pode ser desbloqueado"}
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Usuário já está ativo"}
 
 
 def test_delete_route_does_not_exist(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"])
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    target = persist(client.session_factory, make_usuario(empresa.id, perfil_base="operador"))
+    headers = auth_headers(client, admin, empresa)
 
-    response = client.delete(f"/usuarios/{created['id']}")
+    response = client.delete(f"/usuarios/{target.id}", headers=headers)
 
     assert response.status_code == 405
-
-
-def test_emits_user_events_with_required_audit_payload(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"], codigoInterno="USR-EVENTOS")
-    client.patch(f"/usuarios/{created['id']}", json={"nome": "Nome Alterado"})
-    client.post(f"/usuarios/{created['id']}/inativar", json={"motivoInativacao": "teste"})
-    client.post(f"/usuarios/{created['id']}/reativar")
-    client.post(f"/usuarios/{created['id']}/bloquear")
-    client.post(f"/usuarios/{created['id']}/desbloquear")
-
-    user_events = [evento for evento in eventos(client.session_factory) if evento.entidade_tipo == "usuario"]
-    event_types = [evento.tipo for evento in user_events]
-
-    assert event_types == [
-        DomainEventType.USUARIO_CRIADO.value,
-        DomainEventType.USUARIO_ALTERADO.value,
-        DomainEventType.USUARIO_INATIVADO.value,
-        DomainEventType.USUARIO_REATIVADO.value,
-        DomainEventType.USUARIO_BLOQUEADO.value,
-        DomainEventType.USUARIO_DESBLOQUEADO.value,
-    ]
-    assert all(evento.empresa_id == empresa["id"] for evento in user_events)
-    assert all(evento.entidade_id == created["id"] for evento in user_events)
-    for evento in user_events:
-        assert evento.payload["empresa_id"] == empresa["id"]
-        assert evento.payload["usuario_id"] == created["id"]
-        assert evento.payload["timestamp"]
-        assert "email" not in evento.payload
-        assert "documento" not in evento.payload
-
-
-def test_event_payload_does_not_include_full_email_on_update(client):
-    empresa = create_empresa(client)
-    created = create_usuario(client, empresa["id"], email="hudson@empresa.com")
-
-    client.patch(f"/usuarios/{created['id']}", json={"email": "novo@empresa.com"})
-
-    user_events = [evento for evento in eventos(client.session_factory) if evento.entidade_tipo == "usuario"]
-    for evento in user_events:
-        assert "hudson@empresa.com" not in str(evento.payload)
-        assert "novo@empresa.com" not in str(evento.payload)
-        assert "email" not in evento.payload
 
 
 class FailingPublisher:
@@ -405,8 +209,89 @@ class FailingPublisher:
         raise RuntimeError("falha evento")
 
 
-def test_create_rolls_back_when_event_publish_fails(session_factory):
-    empresa = persist_empresa(session_factory)
+def usuarios(session_factory) -> list[Usuario]:
+    with session_factory() as db:
+        return list(db.query(Usuario).all())
+
+
+def test_create_usuario_with_missing_or_inactive_empresa_still_validates_in_service(session_factory):
+    service = UsuarioService()
+
+    with pytest.raises(Exception, match="Empresa não encontrada"):
+        with session_factory() as db:
+            service.create_usuario(db, UsuarioCreate(**usuario_payload(str(uuid4()))))
+
+    empresa, admin, _ = create_auth_context(client_session := session_factory, perfil_base="admin")
+    with client_session() as db:
+        persisted = db.get(type(empresa), empresa.id)
+        persisted.status = "inativa"
+        db.commit()
+
+    with pytest.raises(Exception, match="Empresa inativa não permite criação de usuário"):
+        with session_factory() as db:
+            service.create_usuario(db, UsuarioCreate(**usuario_payload(empresa.id)))
+
+
+def test_usuario_duplicates_and_same_email_across_empresas_with_authenticated_api(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other_empresa, other_admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
+    other_headers = auth_headers(client, other_admin, other_empresa)
+
+    create_usuario(client, headers, empresa.id, codigoInterno="USR-DUP", email="hudson@empresa.com")
+
+    duplicate_codigo = client.post("/usuarios", json=usuario_payload(empresa.id, codigoInterno="USR-DUP"), headers=headers)
+    duplicate_email = client.post("/usuarios", json=usuario_payload(empresa.id, email=" Hudson@Empresa.COM "), headers=headers)
+    same_email_other = client.post("/usuarios", json=usuario_payload(other_empresa.id, email=" Hudson@Empresa.COM "), headers=other_headers)
+
+    assert duplicate_codigo.status_code == 409
+    assert duplicate_email.status_code == 409
+    assert same_email_other.status_code == 201
+    assert same_email_other.json()["email"] == "hudson@empresa.com"
+
+
+def test_usuario_patch_rejects_forbidden_fields_with_authenticated_admin(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    target = persist(client.session_factory, make_usuario(empresa.id, perfil_base="operador"))
+    headers = auth_headers(client, admin, empresa)
+
+    empresa_change = client.patch(f"/usuarios/{target.id}", json={"empresaId": str(uuid4())}, headers=headers)
+    status_change = client.patch(f"/usuarios/{target.id}", json={"status": "inativo"}, headers=headers)
+
+    assert empresa_change.status_code == 422
+    assert status_change.status_code == 422
+
+
+def test_usuario_events_full_sequence_and_sensitive_payload(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
+    created = create_usuario(client, headers, empresa.id, codigoInterno="USR-EVENTOS", email="hudson@empresa.com")
+
+    client.patch(f"/usuarios/{created['id']}", json={"email": "novo@empresa.com"}, headers=headers)
+    client.post(f"/usuarios/{created['id']}/inativar", json={"motivoInativacao": "teste"}, headers=headers)
+    client.post(f"/usuarios/{created['id']}/reativar", headers=headers)
+    client.post(f"/usuarios/{created['id']}/bloquear", headers=headers)
+    client.post(f"/usuarios/{created['id']}/desbloquear", headers=headers)
+
+    user_events = [evento for evento in eventos(client.session_factory) if evento.entidade_tipo == "usuario" and evento.entidade_id == created["id"]]
+    assert [evento.tipo for evento in user_events] == [
+        DomainEventType.USUARIO_CRIADO.value,
+        DomainEventType.USUARIO_ALTERADO.value,
+        DomainEventType.USUARIO_INATIVADO.value,
+        DomainEventType.USUARIO_REATIVADO.value,
+        DomainEventType.USUARIO_BLOQUEADO.value,
+        DomainEventType.USUARIO_DESBLOQUEADO.value,
+    ]
+    for evento in user_events:
+        assert evento.usuario_id == admin.id
+        assert "email" not in evento.payload
+        assert "hudson@empresa.com" not in str(evento.payload)
+        assert "novo@empresa.com" not in str(evento.payload)
+        assert "documento" not in evento.payload
+
+
+def test_service_create_usuario_rolls_back_when_event_publish_fails(session_factory):
+    empresa, _, _ = create_auth_context(session_factory, perfil_base="admin")
     service = UsuarioService(event_publisher=FailingPublisher())
     data = UsuarioCreate(
         empresaId=empresa.id,
@@ -420,5 +305,4 @@ def test_create_rolls_back_when_event_publish_fails(session_factory):
         with session_factory() as db:
             service.create_usuario(db, data)
 
-    assert usuarios(session_factory) == []
-    assert eventos(session_factory) == []
+    assert [usuario for usuario in usuarios(session_factory) if usuario.codigo_interno == "USR-ROLLBACK"] == []

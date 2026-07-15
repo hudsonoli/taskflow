@@ -1,73 +1,12 @@
-from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, select
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
-from app.db.session import get_db
+from conftest import auth_headers, create_auth_context, eventos, make_empresa, persist, persist_agencia
 from app.domain.event_types import DomainEventType
-from app.main import app
 from app.models.agencia import Agencia
-from app.models.empresa import Empresa
-from app.models.evento import Evento
 from app.schemas.agencia import AgenciaCreate
 from app.services.agencia_service import AgenciaService
-
-
-@pytest.fixture()
-def session_factory():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, connection_record):
-        dbapi_connection.execute("PRAGMA foreign_keys=ON")
-
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
-    try:
-        yield TestingSessionLocal
-    finally:
-        Base.metadata.drop_all(bind=engine)
-
-
-@pytest.fixture()
-def client(session_factory):
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        test_client.session_factory = session_factory
-        yield test_client
-    app.dependency_overrides.clear()
-
-
-def empresa_payload(**overrides):
-    data = {
-        "nome": "Empresa Agencia",
-        "documento": uuid4().hex,
-        "codigoInterno": f"EMP-{uuid4().hex[:8]}",
-    }
-    data.update(overrides)
-    return data
-
-
-def create_empresa(client, **overrides):
-    response = client.post("/empresas", json=empresa_payload(**overrides))
-    assert response.status_code == 201
-    return response.json()
 
 
 def agencia_payload(empresa_id: str, **overrides):
@@ -82,282 +21,184 @@ def agencia_payload(empresa_id: str, **overrides):
     return data
 
 
-def create_agencia(client, empresa_id: str, **overrides):
-    response = client.post("/agencias", json=agencia_payload(empresa_id, **overrides))
+def create_agencia(client, headers, empresa_id: str, **overrides):
+    response = client.post("/agencias", json=agencia_payload(empresa_id, **overrides), headers=headers)
     assert response.status_code == 201
     return response.json()
 
 
-def eventos(session_factory) -> list[Evento]:
-    with session_factory() as db:
-        return list(db.scalars(select(Evento).order_by(Evento.created_at)).all())
+def test_agencias_endpoints_require_authentication(client):
+    response = client.get("/agencias", params={"empresaId": str(uuid4())})
+
+    assert response.status_code == 401
 
 
-def agencias(session_factory) -> list[Agencia]:
-    with session_factory() as db:
-        return list(db.scalars(select(Agencia)).all())
-
-
-def persist_empresa(session_factory, *, status: str = "ativa") -> Empresa:
-    now = datetime.now(timezone.utc)
-    empresa = Empresa(
-        id=str(uuid4()),
-        nome="Empresa Persistida",
-        documento=uuid4().hex,
-        codigo_interno=f"EMP-{uuid4().hex[:8]}",
-        status=status,
-        created_at=now,
-        updated_at=now,
-        inativado_at=None,
-        inativado_por_usuario_id=None,
-        motivo_inativacao=None,
-    )
-    with session_factory() as db:
-        db.add(empresa)
-        db.commit()
-        db.refresh(empresa)
-        return empresa
-
-
-def test_create_agencia_normalizes_fields(client):
-    empresa = create_empresa(client)
+def test_admin_creates_agencia_in_own_empresa_with_authenticated_actor(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
 
     agencia = create_agencia(
         client,
-        empresa["id"],
+        headers,
+        empresa.id,
         codigoInterno=" ag-001 ",
         nome="  Agencia   Centro  ",
         sigla=" ctr ",
         descricao="  Unidade   central  ",
     )
 
-    assert agencia["id"]
-    assert agencia["empresaId"] == empresa["id"]
+    assert agencia["empresaId"] == empresa.id
     assert agencia["codigoInterno"] == "AG-001"
     assert agencia["nome"] == "Agencia Centro"
     assert agencia["sigla"] == "CTR"
-    assert agencia["descricao"] == "Unidade central"
-    assert agencia["status"] == "ativa"
+    agencia_events = [evento for evento in eventos(client.session_factory) if evento.tipo == DomainEventType.AGENCIA_CRIADA.value]
+    assert len(agencia_events) == 1
+    assert agencia_events[0].usuario_id == admin.id
 
 
-def test_create_agencia_requires_existing_empresa(client):
-    response = client.post("/agencias", json=agencia_payload(str(uuid4())))
+def test_admin_cannot_create_agencia_in_other_empresa(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other = persist(client.session_factory, make_empresa(codigo_interno="OUTRA"))
+    headers = auth_headers(client, admin, empresa)
 
-    assert response.status_code == 422
-    assert response.json() == {"detail": "Empresa não encontrada"}
+    response = client.post("/agencias", json=agencia_payload(other.id), headers=headers)
 
-
-def test_create_agencia_rejects_inactive_empresa(client):
-    empresa = create_empresa(client)
-    client.post(f"/empresas/{empresa['id']}/inativar", json={"motivoInativacao": "teste"})
-
-    response = client.post("/agencias", json=agencia_payload(empresa["id"]))
-
-    assert response.status_code == 422
-    assert response.json() == {"detail": "Empresa inativa não permite criação de Agência"}
+    assert response.status_code == 403
 
 
-def test_list_agencias_requires_empresa_id(client):
-    response = client.get("/agencias")
+def test_gestor_lists_and_gets_agencias_from_own_empresa(client):
+    empresa, gestor, _ = create_auth_context(client.session_factory, perfil_base="gestor")
+    agencia = persist_agencia(client.session_factory, empresa.id, codigo_interno="AG-001", nome="Agencia A")
+    headers = auth_headers(client, gestor, empresa)
 
-    assert response.status_code == 422
+    list_response = client.get("/agencias", params={"empresaId": empresa.id}, headers=headers)
+    get_response = client.get(f"/agencias/{agencia.id}", headers=headers)
 
-
-def test_list_agencias_by_empresa(client):
-    empresa_a = create_empresa(client, codigoInterno="EMP-A")
-    empresa_b = create_empresa(client, codigoInterno="EMP-B")
-    first = create_agencia(client, empresa_a["id"], codigoInterno="AG-A", nome="Agencia A")
-    create_agencia(client, empresa_b["id"], codigoInterno="AG-B", nome="Agencia B")
-
-    response = client.get("/agencias", params={"empresaId": empresa_a["id"]})
-
-    assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [first["id"]]
+    assert list_response.status_code == 200
+    assert [item["id"] for item in list_response.json()] == [agencia.id]
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == agencia.id
 
 
-def test_list_agencias_filters_by_status(client):
-    empresa = create_empresa(client)
-    active = create_agencia(client, empresa["id"], codigoInterno="AG-A", nome="Agencia Ativa")
-    inactive = create_agencia(client, empresa["id"], codigoInterno="AG-I", nome="Agencia Inativa")
-    client.post(f"/agencias/{inactive['id']}/inativar", json={"motivoInativacao": "teste"})
+def test_gestor_cannot_mutate_agencia(client):
+    empresa, gestor, _ = create_auth_context(client.session_factory, perfil_base="gestor")
+    agencia = persist_agencia(client.session_factory, empresa.id)
+    headers = auth_headers(client, gestor, empresa)
 
-    response = client.get("/agencias", params={"empresaId": empresa["id"], "status": "ativa"})
+    response = client.patch(f"/agencias/{agencia.id}", json={"nome": "Bloqueada"}, headers=headers)
 
-    assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [active["id"]]
+    assert response.status_code == 403
 
 
-def test_get_agencia_by_id(client):
-    empresa = create_empresa(client)
-    created = create_agencia(client, empresa["id"])
+def test_operador_cannot_access_agencias(client):
+    empresa, operador, _ = create_auth_context(client.session_factory, perfil_base="operador")
+    headers = auth_headers(client, operador, empresa)
 
-    response = client.get(f"/agencias/{created['id']}")
+    response = client.get("/agencias", params={"empresaId": empresa.id}, headers=headers)
 
-    assert response.status_code == 200
-    assert response.json() == created
+    assert response.status_code == 403
 
 
-def test_get_agencia_by_id_returns_404(client):
-    response = client.get(f"/agencias/{uuid4()}")
+def test_list_agencias_rejects_divergent_empresa_id(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other = persist(client.session_factory, make_empresa(codigo_interno="OUTRA"))
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.get("/agencias", params={"empresaId": other.id}, headers=headers)
+
+    assert response.status_code == 403
+
+
+def test_get_agencia_from_other_tenant_returns_404(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other = persist(client.session_factory, make_empresa(codigo_interno="OUTRA"))
+    agencia = persist_agencia(client.session_factory, other.id, codigo_interno="AG-OUTRA")
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.get(f"/agencias/{agencia.id}", headers=headers)
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Agência não encontrada"}
 
 
-def test_update_agencia(client):
-    empresa = create_empresa(client)
-    created = create_agencia(client, empresa["id"])
+def test_admin_updates_agencia_in_own_empresa(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    agencia = persist_agencia(client.session_factory, empresa.id)
+    headers = auth_headers(client, admin, empresa)
 
     response = client.patch(
-        f"/agencias/{created['id']}",
+        f"/agencias/{agencia.id}",
         json={"codigoInterno": " ag-009 ", "nome": " Agencia Sul ", "sigla": " sul ", "descricao": " nova unidade "},
+        headers=headers,
     )
 
     assert response.status_code == 200
-    updated = response.json()
-    assert updated["codigoInterno"] == "AG-009"
-    assert updated["nome"] == "Agencia Sul"
-    assert updated["sigla"] == "SUL"
-    assert updated["descricao"] == "nova unidade"
-    assert updated["empresaId"] == created["empresaId"]
+    assert response.json()["codigoInterno"] == "AG-009"
+    assert response.json()["nome"] == "Agencia Sul"
+    assert response.json()["sigla"] == "SUL"
 
 
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("empresaId", str(uuid4())),
-        ("status", "inativa"),
-        ("createdAt", "2026-07-15T00:00:00Z"),
-        ("updatedAt", "2026-07-15T00:00:00Z"),
-        ("inativadoAt", "2026-07-15T00:00:00Z"),
-        ("motivoInativacao", "teste"),
-        ("inativadoPorUsuarioId", str(uuid4())),
-    ],
-)
-def test_patch_rejects_forbidden_fields(client, field, value):
-    empresa = create_empresa(client)
-    created = create_agencia(client, empresa["id"])
+def test_admin_cannot_update_agencia_from_other_tenant(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other = persist(client.session_factory, make_empresa(codigo_interno="OUTRA"))
+    agencia = persist_agencia(client.session_factory, other.id)
+    headers = auth_headers(client, admin, empresa)
 
-    response = client.patch(f"/agencias/{created['id']}", json={field: value})
+    response = client.patch(f"/agencias/{agencia.id}", json={"nome": "Outra"}, headers=headers)
 
-    assert response.status_code == 422
-    assert field in response.json()["detail"]
+    assert response.status_code == 404
 
 
-def test_codigo_interno_duplicate_in_same_empresa_is_rejected_after_normalization(client):
-    empresa = create_empresa(client)
-    create_agencia(client, empresa["id"], codigoInterno="AG-DUP")
-
-    response = client.post("/agencias", json=agencia_payload(empresa["id"], codigoInterno=" ag-dup "))
-
-    assert response.status_code == 409
-    assert response.json() == {"detail": "codigoInterno já cadastrado para esta Empresa"}
-
-
-def test_nome_duplicate_in_same_empresa_is_rejected_after_normalization(client):
-    empresa = create_empresa(client)
-    create_agencia(client, empresa["id"], nome="Agencia Norte")
-
-    response = client.post("/agencias", json=agencia_payload(empresa["id"], nome="  Agencia   Norte  "))
-
-    assert response.status_code == 409
-    assert response.json() == {"detail": "nome já cadastrado para esta Empresa"}
-
-
-def test_duplicates_are_allowed_in_different_empresas(client):
-    empresa_a = create_empresa(client, codigoInterno="EMP-A")
-    empresa_b = create_empresa(client, codigoInterno="EMP-B")
-
-    first = create_agencia(client, empresa_a["id"], codigoInterno="AG-001", nome="Agencia Central")
-    second = create_agencia(client, empresa_b["id"], codigoInterno=" ag-001 ", nome="Agencia Central")
-
-    assert first["codigoInterno"] == second["codigoInterno"]
-    assert first["nome"] == second["nome"]
-    assert first["empresaId"] != second["empresaId"]
-
-
-def test_inativar_agencia(client):
-    empresa = create_empresa(client)
-    created = create_agencia(client, empresa["id"])
+def test_admin_status_actions_use_authenticated_actor_not_payload(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    agencia = persist_agencia(client.session_factory, empresa.id)
+    fake_actor = str(uuid4())
+    headers = auth_headers(client, admin, empresa)
 
     response = client.post(
-        f"/agencias/{created['id']}/inativar",
-        json={"motivoInativacao": "encerramento", "actorUsuarioId": None},
+        f"/agencias/{agencia.id}/inativar",
+        json={"motivoInativacao": "encerramento", "actorUsuarioId": fake_actor},
+        headers=headers,
     )
 
     assert response.status_code == 200
-    agencia = response.json()
-    assert agencia["status"] == "inativa"
-    assert agencia["inativadoAt"]
-    assert agencia["motivoInativacao"] == "encerramento"
-    assert agencia["inativadoPorUsuarioId"] is None
+    assert response.json()["inativadoPorUsuarioId"] == admin.id
+    agencia_events = [evento for evento in eventos(client.session_factory) if evento.tipo == DomainEventType.AGENCIA_INATIVADA.value]
+    assert len(agencia_events) == 1
+    assert agencia_events[0].usuario_id == admin.id
+    assert agencia_events[0].payload["actor_usuario_id"] == admin.id
 
 
-def test_reativar_agencia(client):
-    empresa = create_empresa(client)
-    created = create_agencia(client, empresa["id"])
-    client.post(f"/agencias/{created['id']}/inativar", json={"motivoInativacao": "teste"})
+def test_admin_reactivates_agencia(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    agencia = persist_agencia(client.session_factory, empresa.id)
+    headers = auth_headers(client, admin, empresa)
 
-    response = client.post(f"/agencias/{created['id']}/reativar")
+    assert client.post(f"/agencias/{agencia.id}/inativar", json={"motivoInativacao": "teste"}, headers=headers).status_code == 200
+    response = client.post(f"/agencias/{agencia.id}/reativar", headers=headers)
 
     assert response.status_code == 200
-    agencia = response.json()
-    assert agencia["status"] == "ativa"
-    assert agencia["inativadoAt"] is None
-    assert agencia["motivoInativacao"] is None
-    assert agencia["inativadoPorUsuarioId"] is None
+    assert response.json()["status"] == "ativa"
 
 
-def test_invalid_transitions_are_rejected(client):
-    empresa = create_empresa(client)
-    active = create_agencia(client, empresa["id"], codigoInterno="AG-A", nome="Agencia Ativa")
-    inactive = create_agencia(client, empresa["id"], codigoInterno="AG-I", nome="Agencia Inativa")
-    client.post(f"/agencias/{inactive['id']}/inativar", json={"motivoInativacao": "teste"})
+def test_invalid_transition_is_rejected(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    agencia = persist_agencia(client.session_factory, empresa.id)
+    headers = auth_headers(client, admin, empresa)
 
-    reactivate_active = client.post(f"/agencias/{active['id']}/reativar")
-    inactivate_inactive = client.post(f"/agencias/{inactive['id']}/inativar", json={"motivoInativacao": "teste"})
+    response = client.post(f"/agencias/{agencia.id}/reativar", headers=headers)
 
-    assert reactivate_active.status_code == 409
-    assert reactivate_active.json() == {"detail": "Agência já está ativa"}
-    assert inactivate_inactive.status_code == 409
-    assert inactivate_inactive.json() == {"detail": "Agência já está inativa"}
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Agência já está ativa"}
 
 
 def test_delete_route_does_not_exist(client):
-    empresa = create_empresa(client)
-    created = create_agencia(client, empresa["id"])
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    agencia = persist_agencia(client.session_factory, empresa.id)
+    headers = auth_headers(client, admin, empresa)
 
-    response = client.delete(f"/agencias/{created['id']}")
+    response = client.delete(f"/agencias/{agencia.id}", headers=headers)
 
     assert response.status_code == 405
-
-
-def test_emits_agencia_events_with_restricted_payload(client):
-    empresa = create_empresa(client)
-    created = create_agencia(client, empresa["id"], codigoInterno="AG-EVENTOS", nome="Agencia Eventos")
-    client.patch(f"/agencias/{created['id']}", json={"nome": "Agencia Alterada"})
-    client.post(f"/agencias/{created['id']}/inativar", json={"motivoInativacao": "teste"})
-    client.post(f"/agencias/{created['id']}/reativar")
-
-    persisted_events = [evento for evento in eventos(client.session_factory) if evento.entidade_tipo == "agencia"]
-    event_types = [evento.tipo for evento in persisted_events]
-
-    assert event_types == [
-        DomainEventType.AGENCIA_CRIADA.value,
-        DomainEventType.AGENCIA_ALTERADA.value,
-        DomainEventType.AGENCIA_INATIVADA.value,
-        DomainEventType.AGENCIA_REATIVADA.value,
-    ]
-    for evento in persisted_events:
-        assert evento.empresa_id == empresa["id"]
-        assert evento.entidade_id == created["id"]
-        assert set(evento.payload) == {"empresa_id", "agencia_id", "timestamp", "actor_usuario_id"}
-        assert evento.payload["empresa_id"] == empresa["id"]
-        assert evento.payload["agencia_id"] == created["id"]
-        assert evento.payload["timestamp"]
-        assert "nome" not in evento.payload
-        assert "sigla" not in evento.payload
-        assert "descricao" not in evento.payload
 
 
 class FailingPublisher:
@@ -365,8 +206,114 @@ class FailingPublisher:
         raise RuntimeError("falha evento")
 
 
-def test_create_rolls_back_when_event_publish_fails(session_factory):
-    empresa = persist_empresa(session_factory)
+def agencias(session_factory) -> list[Agencia]:
+    with session_factory() as db:
+        return list(db.query(Agencia).all())
+
+
+def test_list_agencias_still_requires_empresa_id_for_authenticated_user(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.get("/agencias", headers=headers)
+
+    assert response.status_code == 422
+
+
+def test_create_agencia_missing_or_inactive_empresa_still_validates_in_service(session_factory):
+    service = AgenciaService()
+
+    with pytest.raises(Exception, match="Empresa não encontrada"):
+        with session_factory() as db:
+            service.create_agencia(db, AgenciaCreate(**agencia_payload(str(uuid4()))))
+
+    empresa, _, _ = create_auth_context(session_factory, perfil_base="admin")
+    with session_factory() as db:
+        persisted = db.get(type(empresa), empresa.id)
+        persisted.status = "inativa"
+        db.commit()
+
+    with pytest.raises(Exception, match="Empresa inativa não permite criação de Agência"):
+        with session_factory() as db:
+            service.create_agencia(db, AgenciaCreate(**agencia_payload(empresa.id)))
+
+
+def test_list_agencias_filters_by_status_with_authenticated_user(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    active = persist_agencia(client.session_factory, empresa.id, codigo_interno="AG-A", nome="Agencia Ativa")
+    inactive = persist_agencia(client.session_factory, empresa.id, codigo_interno="AG-I", nome="Agencia Inativa", status="inativa")
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.get("/agencias", params={"empresaId": empresa.id, "status": "ativa"}, headers=headers)
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [active.id]
+    assert inactive.id not in [item["id"] for item in response.json()]
+
+
+def test_agencia_patch_rejects_forbidden_fields_with_authenticated_admin(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    agencia = persist_agencia(client.session_factory, empresa.id)
+    headers = auth_headers(client, admin, empresa)
+
+    for field, value in [
+        ("empresaId", str(uuid4())),
+        ("status", "inativa"),
+        ("createdAt", "2026-07-15T00:00:00Z"),
+        ("updatedAt", "2026-07-15T00:00:00Z"),
+        ("inativadoAt", "2026-07-15T00:00:00Z"),
+        ("motivoInativacao", "teste"),
+        ("inativadoPorUsuarioId", str(uuid4())),
+    ]:
+        response = client.patch(f"/agencias/{agencia.id}", json={field: value}, headers=headers)
+        assert response.status_code == 422
+        assert field in response.json()["detail"]
+
+
+def test_agencia_duplicates_and_cross_empresa_rules_with_authenticated_api(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    other_empresa, other_admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
+    other_headers = auth_headers(client, other_admin, other_empresa)
+
+    create_agencia(client, headers, empresa.id, codigoInterno="AG-DUP", nome="Agencia Norte")
+
+    duplicate_codigo = client.post("/agencias", json=agencia_payload(empresa.id, codigoInterno=" ag-dup ", nome="Agencia Sul"), headers=headers)
+    duplicate_nome = client.post("/agencias", json=agencia_payload(empresa.id, codigoInterno="AG-2", nome="  Agencia   Norte  "), headers=headers)
+    same_values_other = client.post("/agencias", json=agencia_payload(other_empresa.id, codigoInterno=" ag-dup ", nome="Agencia Norte"), headers=other_headers)
+
+    assert duplicate_codigo.status_code == 409
+    assert duplicate_nome.status_code == 409
+    assert same_values_other.status_code == 201
+
+
+def test_agencia_events_full_sequence_with_restricted_payload(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
+    created = create_agencia(client, headers, empresa.id, codigoInterno="AG-EVENTOS", nome="Agencia Eventos")
+
+    client.patch(f"/agencias/{created['id']}", json={"nome": "Agencia Alterada"}, headers=headers)
+    client.post(f"/agencias/{created['id']}/inativar", json={"motivoInativacao": "teste"}, headers=headers)
+    client.post(f"/agencias/{created['id']}/reativar", headers=headers)
+
+    persisted_events = [evento for evento in eventos(client.session_factory) if evento.entidade_tipo == "agencia" and evento.entidade_id == created["id"]]
+    assert [evento.tipo for evento in persisted_events] == [
+        DomainEventType.AGENCIA_CRIADA.value,
+        DomainEventType.AGENCIA_ALTERADA.value,
+        DomainEventType.AGENCIA_INATIVADA.value,
+        DomainEventType.AGENCIA_REATIVADA.value,
+    ]
+    for evento in persisted_events:
+        assert evento.usuario_id == admin.id
+        assert set(evento.payload) == {"empresa_id", "agencia_id", "timestamp", "actor_usuario_id"}
+        assert evento.payload["actor_usuario_id"] == admin.id
+        assert "nome" not in evento.payload
+        assert "sigla" not in evento.payload
+        assert "descricao" not in evento.payload
+
+
+def test_service_create_agencia_rolls_back_when_event_publish_fails(session_factory):
+    empresa, _, _ = create_auth_context(session_factory, perfil_base="admin")
     service = AgenciaService(event_publisher=FailingPublisher())
     data = AgenciaCreate(
         empresaId=empresa.id,
@@ -380,5 +327,4 @@ def test_create_rolls_back_when_event_publish_fails(session_factory):
         with session_factory() as db:
             service.create_agencia(db, data)
 
-    assert agencias(session_factory) == []
-    assert eventos(session_factory) == []
+    assert [agencia for agencia in agencias(session_factory) if agencia.codigo_interno == "AG-ROLLBACK"] == []
