@@ -2,6 +2,11 @@ from enum import StrEnum
 
 
 class DomainEventType(StrEnum):
+    EMPRESA_CRIADA = "empresa.criada"
+    EMPRESA_ALTERADA = "empresa.alterada"
+    EMPRESA_INATIVADA = "empresa.inativada"
+    EMPRESA_REATIVADA = "empresa.reativada"
+
     PROJETO_CRIADO = "projeto.criado"
     PROJETO_ATUALIZADO = "projeto.atualizado"
     PROJETO_STATUS_ALTERADO = "projeto.status_alterado"
