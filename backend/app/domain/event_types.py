@@ -19,6 +19,11 @@ class DomainEventType(StrEnum):
     USUARIO_BLOQUEADO = "usuario.bloqueado"
     USUARIO_DESBLOQUEADO = "usuario.desbloqueado"
 
+    AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
+    AUTH_LOGIN_FALHA = "auth.login_falha"
+    AUTH_SENHA_DEFINIDA = "auth.senha_definida"
+    AUTH_SENHA_ALTERADA = "auth.senha_alterada"
+
     PROJETO_CRIADO = "projeto.criado"
     PROJETO_ATUALIZADO = "projeto.atualizado"
     PROJETO_STATUS_ALTERADO = "projeto.status_alterado"

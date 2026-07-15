@@ -14,10 +14,16 @@ class Settings:
     auth_access_token_expire_minutes: int = field(
         default_factory=lambda: int(os.getenv("AUTH_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     )
+    auth_max_failed_attempts: int = field(default_factory=lambda: int(os.getenv("AUTH_MAX_FAILED_ATTEMPTS", "5")))
+    auth_lockout_minutes: int = field(default_factory=lambda: int(os.getenv("AUTH_LOCKOUT_MINUTES", "15")))
 
     def __post_init__(self) -> None:
         if self.auth_access_token_expire_minutes <= 0:
             raise ValueError("AUTH_ACCESS_TOKEN_EXPIRE_MINUTES deve ser positivo")
+        if self.auth_max_failed_attempts <= 0:
+            raise ValueError("AUTH_MAX_FAILED_ATTEMPTS deve ser positivo")
+        if self.auth_lockout_minutes <= 0:
+            raise ValueError("AUTH_LOCKOUT_MINUTES deve ser positivo")
 
 
 @lru_cache
