@@ -49,7 +49,11 @@ function resolveTitle(pathname: string) {
 }
 
 function shouldHideHeaderActions(pathname: string) {
-  return pathname === "/fornecedores" || pathname.startsWith("/configuracoes");
+  return (
+    pathname === "/fornecedores" ||
+    pathname === "/" ||
+    pathname.startsWith("/configuracoes")
+  );
 }
 
 // Descrições exibidas via tooltip ao lado do título — hoje só Clientes,
@@ -60,7 +64,13 @@ const titleTooltips: Record<string, string> = {
   "/configuracoes/clientes": "Cadastro e gestão de clientes.",
 };
 
-const routesWithoutBreadcrumb = new Set(Object.keys(titleTooltips));
+// "/" (Dashboard) também dispensa o breadcrumb — mesma razão de Clientes
+// (só "Dashboard" repetiria o próprio título), mas sem tooltip: o novo
+// DashboardHeader já traz a saudação como conteúdo da página.
+const routesWithoutBreadcrumb = new Set<string>([
+  ...Object.keys(titleTooltips),
+  "/",
+]);
 
 export function Header() {
   const pathname = usePathname();
