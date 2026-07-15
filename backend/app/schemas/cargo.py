@@ -32,6 +32,12 @@ class CargoUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+class CargoInativar(BaseModel):
+    motivo_inativacao: str | None = Field(default=None, alias="motivoInativacao", max_length=500)
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
 class CargoResponse(BaseModel):
     id: UUID
     empresa_id: UUID = Field(alias="empresaId")
