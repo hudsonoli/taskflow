@@ -2,6 +2,42 @@ from enum import StrEnum
 
 
 class DomainEventType(StrEnum):
+    EMPRESA_CRIADA = "empresa.criada"
+    EMPRESA_ALTERADA = "empresa.alterada"
+    EMPRESA_INATIVADA = "empresa.inativada"
+    EMPRESA_REATIVADA = "empresa.reativada"
+
+    AGENCIA_CRIADA = "agencia.criada"
+    AGENCIA_ALTERADA = "agencia.alterada"
+    AGENCIA_INATIVADA = "agencia.inativada"
+    AGENCIA_REATIVADA = "agencia.reativada"
+
+    CARGO_CRIADO = "cargo.criado"
+    CARGO_ALTERADO = "cargo.alterado"
+    CARGO_INATIVADO = "cargo.inativado"
+    CARGO_REATIVADO = "cargo.reativado"
+
+    DEPARTAMENTO_CRIADO = "departamento.criado"
+    DEPARTAMENTO_ALTERADO = "departamento.alterado"
+    DEPARTAMENTO_INATIVADO = "departamento.inativado"
+    DEPARTAMENTO_REATIVADO = "departamento.reativado"
+
+    USUARIO_CRIADO = "usuario.criado"
+    USUARIO_ALTERADO = "usuario.alterado"
+    USUARIO_INATIVADO = "usuario.inativado"
+    USUARIO_REATIVADO = "usuario.reativado"
+    USUARIO_BLOQUEADO = "usuario.bloqueado"
+    USUARIO_DESBLOQUEADO = "usuario.desbloqueado"
+
+    USUARIO_DEPARTAMENTO_VINCULADO = "usuario_departamento.vinculado"
+    USUARIO_DEPARTAMENTO_ALTERADO = "usuario_departamento.alterado"
+    USUARIO_DEPARTAMENTO_ENCERRADO = "usuario_departamento.encerrado"
+
+    AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
+    AUTH_LOGIN_FALHA = "auth.login_falha"
+    AUTH_SENHA_DEFINIDA = "auth.senha_definida"
+    AUTH_SENHA_ALTERADA = "auth.senha_alterada"
+
     PROJETO_CRIADO = "projeto.criado"
     PROJETO_ATUALIZADO = "projeto.atualizado"
     PROJETO_STATUS_ALTERADO = "projeto.status_alterado"
