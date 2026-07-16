@@ -33,6 +33,10 @@ class DomainEventType(StrEnum):
     USUARIO_DEPARTAMENTO_ALTERADO = "usuario_departamento.alterado"
     USUARIO_DEPARTAMENTO_ENCERRADO = "usuario_departamento.encerrado"
 
+    USUARIO_CARGO_VINCULADO = "usuario_cargo.vinculado"
+    USUARIO_CARGO_ALTERADO = "usuario_cargo.alterado"
+    USUARIO_CARGO_ENCERRADO = "usuario_cargo.encerrado"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

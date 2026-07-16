@@ -11,6 +11,7 @@ from app.api.routes import (
     root,
     sessoes_trabalho,
     status,
+    usuario_cargos,
     usuario_departamentos,
     usuarios,
 )
@@ -30,4 +31,5 @@ app.include_router(agencias.router)
 app.include_router(cargos.router)
 app.include_router(departamentos.router)
 app.include_router(usuario_departamentos.router)
+app.include_router(usuario_cargos.router)
 app.include_router(auth.router)
