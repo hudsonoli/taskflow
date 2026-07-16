@@ -1,6 +1,7 @@
 from app.models.agencia import Agencia
 from app.models.cargo import Cargo
 from app.models.departamento import Departamento
+from app.models.equipe import Equipe
 from app.models.empresa import Empresa
 from app.models.evento import Evento
 from app.models.sessao_trabalho import SessaoTrabalho
@@ -13,6 +14,7 @@ __all__ = [
     "Agencia",
     "Cargo",
     "Departamento",
+    "Equipe",
     "Empresa",
     "Evento",
     "SessaoTrabalho",

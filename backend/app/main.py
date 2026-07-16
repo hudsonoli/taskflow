@@ -5,6 +5,7 @@ from app.api.routes import (
     auth,
     cargos,
     departamentos,
+    equipes,
     empresas,
     eventos,
     health,
@@ -30,6 +31,7 @@ app.include_router(usuarios.router)
 app.include_router(agencias.router)
 app.include_router(cargos.router)
 app.include_router(departamentos.router)
+app.include_router(equipes.router)
 app.include_router(usuario_departamentos.router)
 app.include_router(usuario_cargos.router)
 app.include_router(auth.router)
