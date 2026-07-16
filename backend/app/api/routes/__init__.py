@@ -1,4 +1,17 @@
-from app.api.routes import agencias, auth, cargos, departamentos, empresas, eventos, health, root, sessoes_trabalho, status, usuarios
+from app.api.routes import (
+    agencias,
+    auth,
+    cargos,
+    departamentos,
+    empresas,
+    eventos,
+    health,
+    root,
+    sessoes_trabalho,
+    status,
+    usuario_departamentos,
+    usuarios,
+)
 
 __all__ = [
     "agencias",
@@ -11,5 +24,6 @@ __all__ = [
     "root",
     "sessoes_trabalho",
     "status",
+    "usuario_departamentos",
     "usuarios",
 ]
