@@ -9,6 +9,7 @@ from app.models.usuario import Usuario
 from app.models.usuario_cargo import UsuarioCargo
 from app.models.usuario_credencial import UsuarioCredencial
 from app.models.usuario_departamento import UsuarioDepartamento
+from app.models.usuario_equipe import UsuarioEquipe
 
 __all__ = [
     "Agencia",
@@ -22,4 +23,5 @@ __all__ = [
     "UsuarioCargo",
     "UsuarioCredencial",
     "UsuarioDepartamento",
+    "UsuarioEquipe",
 ]
