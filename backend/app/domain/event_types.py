@@ -29,6 +29,10 @@ class DomainEventType(StrEnum):
     USUARIO_BLOQUEADO = "usuario.bloqueado"
     USUARIO_DESBLOQUEADO = "usuario.desbloqueado"
 
+    USUARIO_DEPARTAMENTO_VINCULADO = "usuario_departamento.vinculado"
+    USUARIO_DEPARTAMENTO_ALTERADO = "usuario_departamento.alterado"
+    USUARIO_DEPARTAMENTO_ENCERRADO = "usuario_departamento.encerrado"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

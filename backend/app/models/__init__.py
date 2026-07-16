@@ -6,5 +6,16 @@ from app.models.evento import Evento
 from app.models.sessao_trabalho import SessaoTrabalho
 from app.models.usuario import Usuario
 from app.models.usuario_credencial import UsuarioCredencial
+from app.models.usuario_departamento import UsuarioDepartamento
 
-__all__ = ["Agencia", "Cargo", "Departamento", "Empresa", "Evento", "SessaoTrabalho", "Usuario", "UsuarioCredencial"]
+__all__ = [
+    "Agencia",
+    "Cargo",
+    "Departamento",
+    "Empresa",
+    "Evento",
+    "SessaoTrabalho",
+    "Usuario",
+    "UsuarioCredencial",
+    "UsuarioDepartamento",
+]
