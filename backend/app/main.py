@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.routes import agencias, auth, cargos, empresas, eventos, health, root, sessoes_trabalho, status, usuarios
+from app.api.routes import agencias, auth, cargos, departamentos, empresas, eventos, health, root, sessoes_trabalho, status, usuarios
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -15,4 +15,5 @@ app.include_router(empresas.router)
 app.include_router(usuarios.router)
 app.include_router(agencias.router)
 app.include_router(cargos.router)
+app.include_router(departamentos.router)
 app.include_router(auth.router)
