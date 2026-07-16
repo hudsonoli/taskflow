@@ -16,6 +16,12 @@ def ensure_timezone_aware(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
+def require_timezone_aware(value: datetime) -> datetime:
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        raise ValueError("datetime deve incluir timezone")
+    return value.astimezone(timezone.utc)
+
+
 class UsuarioDepartamentoCreate(BaseModel):
     empresa_id: UUID = Field(alias="empresaId")
     usuario_id: UUID = Field(alias="usuarioId")
@@ -37,6 +43,18 @@ class UsuarioDepartamentoUpdate(BaseModel):
     principal: bool | None = None
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class UsuarioDepartamentoEncerrar(BaseModel):
+    fim_em: datetime = Field(alias="fimEm")
+    motivo_encerramento: str | None = Field(default=None, alias="motivoEncerramento", max_length=500)
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("fim_em")
+    @classmethod
+    def validate_fim_em_timezone(cls, value: datetime) -> datetime:
+        return require_timezone_aware(value)
 
 
 class UsuarioDepartamentoResponse(BaseModel):
