@@ -12,6 +12,7 @@ from app.api.routes import (
     status,
     usuario_cargos,
     usuario_departamentos,
+    usuario_equipes,
     usuarios,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "status",
     "usuario_cargos",
     "usuario_departamentos",
+    "usuario_equipes",
     "usuarios",
 ]
