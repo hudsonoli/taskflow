@@ -14,6 +14,7 @@ from app.api.routes import (
     status,
     usuario_cargos,
     usuario_departamentos,
+    usuario_equipes,
     usuarios,
 )
 from app.core.config import get_settings
@@ -34,4 +35,5 @@ app.include_router(departamentos.router)
 app.include_router(equipes.router)
 app.include_router(usuario_departamentos.router)
 app.include_router(usuario_cargos.router)
+app.include_router(usuario_equipes.router)
 app.include_router(auth.router)
