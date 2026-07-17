@@ -27,6 +27,12 @@ class DomainEventType(StrEnum):
     EQUIPE_INATIVADA = "equipe.inativada"
     EQUIPE_REATIVADA = "equipe.reativada"
 
+    CLIENTE_CRIADO = "cliente.criado"
+    CLIENTE_ALTERADO = "cliente.alterado"
+    CLIENTE_SUSPENSO = "cliente.suspenso"
+    CLIENTE_REATIVADO = "cliente.reativado"
+    CLIENTE_INATIVADO = "cliente.inativado"
+
     USUARIO_CRIADO = "usuario.criado"
     USUARIO_ALTERADO = "usuario.alterado"
     USUARIO_INATIVADO = "usuario.inativado"

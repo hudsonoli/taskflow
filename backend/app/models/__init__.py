@@ -1,5 +1,6 @@
 from app.models.agencia import Agencia
 from app.models.cargo import Cargo
+from app.models.cliente import Cliente
 from app.models.departamento import Departamento
 from app.models.equipe import Equipe
 from app.models.empresa import Empresa
@@ -14,6 +15,7 @@ from app.models.usuario_equipe import UsuarioEquipe
 __all__ = [
     "Agencia",
     "Cargo",
+    "Cliente",
     "Departamento",
     "Equipe",
     "Empresa",
