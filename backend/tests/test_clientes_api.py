@@ -107,25 +107,52 @@ def test_listagem_filtros_e_paginacao(client):
     assert len(client.get("/clientes", params={"limit": 1, "offset": 1}, headers=headers).json()) == 1
 
 
-def test_gestor_le_e_nao_muta_operador_recebe_403(client):
+def test_gestor_tem_acesso_completo(client):
+    empresa, gestor, _ = create_auth_context(client.session_factory, perfil_base="gestor")
+    headers = auth_headers(client, gestor, empresa)
+
+    create_response = client.post("/clientes", json=payload(empresa.id), headers=headers)
+    assert create_response.status_code == 201
+    created = create_response.json()
+
+    assert client.get("/clientes", headers=headers).status_code == 200
+    assert client.get(f"/clientes/{created['id']}", headers=headers).status_code == 200
+    assert client.patch(f"/clientes/{created['id']}", json={"sigla": "CG"}, headers=headers).status_code == 200
+    assert client.post(f"/clientes/{created['id']}/suspender", json={"motivo": "pausa"}, headers=headers).status_code == 200
+    assert client.post(f"/clientes/{created['id']}/reativar", json={"motivo": "retorno"}, headers=headers).status_code == 200
+    assert client.post(f"/clientes/{created['id']}/inativar", json={"motivo": "fim"}, headers=headers).status_code == 200
+
+
+def test_operador_nao_acessa_endpoints_de_clientes(client):
     empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
-    _, gestor, _ = create_auth_context(client.session_factory, perfil_base="gestor")
-    gestor.empresa_id = empresa.id
     _, operador, _ = create_auth_context(client.session_factory, perfil_base="operador")
     operador.empresa_id = empresa.id
-    persist(client.session_factory, gestor, operador)
+    persist(client.session_factory, operador)
     admin_headers = auth_headers(client, admin, empresa)
-    gestor_headers = auth_headers(client, gestor, empresa)
     operador_headers = auth_headers(client, operador, empresa)
-
     created = client.post("/clientes", json=payload(empresa.id), headers=admin_headers).json()
 
-    assert client.get("/clientes", headers=gestor_headers).status_code == 200
-    assert client.get(f"/clientes/{created['id']}", headers=gestor_headers).status_code == 200
-    assert client.post("/clientes", json=payload(empresa.id, codigoInterno="CLI-2", documento="22345678000190"), headers=gestor_headers).status_code == 403
-    assert client.patch(f"/clientes/{created['id']}", json={"sigla": "X"}, headers=gestor_headers).status_code == 403
-    assert client.post(f"/clientes/{created['id']}/suspender", json={"motivo": "pausa"}, headers=gestor_headers).status_code == 403
     assert client.get("/clientes", headers=operador_headers).status_code == 403
+    assert client.get(f"/clientes/{created['id']}", headers=operador_headers).status_code == 403
+    assert client.post("/clientes", json=payload(empresa.id), headers=operador_headers).status_code == 403
+    assert client.patch(f"/clientes/{created['id']}", json={"sigla": "OP"}, headers=operador_headers).status_code == 403
+    assert client.post(f"/clientes/{created['id']}/suspender", json={"motivo": "pausa"}, headers=operador_headers).status_code == 403
+    assert client.post(f"/clientes/{created['id']}/reativar", json={"motivo": "retorno"}, headers=operador_headers).status_code == 403
+    assert client.post(f"/clientes/{created['id']}/inativar", json={"motivo": "fim"}, headers=operador_headers).status_code == 403
+
+
+def test_usuario_nao_autenticado_recebe_401_em_todos_endpoints(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    admin_headers = auth_headers(client, admin, empresa)
+    created = client.post("/clientes", json=payload(empresa.id), headers=admin_headers).json()
+
+    assert client.get("/clientes").status_code == 401
+    assert client.get(f"/clientes/{created['id']}").status_code == 401
+    assert client.post("/clientes", json=payload(empresa.id)).status_code == 401
+    assert client.patch(f"/clientes/{created['id']}", json={"sigla": "NA"}).status_code == 401
+    assert client.post(f"/clientes/{created['id']}/suspender", json={"motivo": "pausa"}).status_code == 401
+    assert client.post(f"/clientes/{created['id']}/reativar", json={"motivo": "retorno"}).status_code == 401
+    assert client.post(f"/clientes/{created['id']}/inativar", json={"motivo": "fim"}).status_code == 401
 
 
 def test_tenant_isolation_e_404(client):

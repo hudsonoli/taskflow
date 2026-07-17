@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.dependencies.authorization import require_admin, require_admin_or_gestor
+from app.dependencies.authorization import require_admin_or_gestor
 from app.models.usuario import Usuario
 from app.schemas.cliente import ClienteCreate, ClienteResponse, ClienteUpdate
 from app.services.cliente_service import (
@@ -118,7 +118,7 @@ def get_cliente(
 @router.post("", response_model=ClienteResponse, status_code=status.HTTP_201_CREATED)
 def create_cliente(
     cliente: ClienteCreate,
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_admin_or_gestor),
     db: Session = Depends(get_db),
 ):
     if str(cliente.empresa_id) != current_user.empresa_id:
@@ -139,7 +139,7 @@ def create_cliente(
 def update_cliente(
     cliente_id: UUID,
     payload: dict[str, Any] = Body(...),
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_admin_or_gestor),
     db: Session = Depends(get_db),
 ):
     unexpected_fields = set(payload) - PATCH_ALLOWED_FIELDS
@@ -168,7 +168,7 @@ def update_cliente(
 def suspender_cliente(
     cliente_id: UUID,
     payload: ClienteSuspenderRequest,
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_admin_or_gestor),
     db: Session = Depends(get_db),
 ):
     try:
@@ -188,7 +188,7 @@ def suspender_cliente(
 def reativar_cliente(
     cliente_id: UUID,
     payload: ClienteReativarRequest | None = None,
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_admin_or_gestor),
     db: Session = Depends(get_db),
 ):
     try:
@@ -209,7 +209,7 @@ def reativar_cliente(
 def inativar_cliente(
     cliente_id: UUID,
     payload: ClienteInativarRequest,
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_admin_or_gestor),
     db: Session = Depends(get_db),
 ):
     try:
