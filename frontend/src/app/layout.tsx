@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Roboto } from "next/font/google";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 import { Shell } from "@/components/layout/Shell";
 import "./globals.css";
 
@@ -31,7 +32,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${roboto.variable} ${geistMono.variable}`}>
       <body>
-        <Shell>{children}</Shell>
+        <AuthProvider>
+          <Shell>{children}</Shell>
+        </AuthProvider>
       </body>
     </html>
   );

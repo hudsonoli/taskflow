@@ -2,9 +2,7 @@ import "server-only";
 
 import type { NextRequest, NextResponse } from "next/server";
 import type { AuthBffConfig } from "./config";
-
-const DEVELOPMENT_COOKIE_NAME = "taskfloww_session";
-const PRODUCTION_COOKIE_NAME = "__Host-taskfloww_session";
+import { getSessionCookieName } from "./cookie";
 
 export type SessionCookiePolicy = {
   name: string;
@@ -19,9 +17,7 @@ export function getSessionCookiePolicy(
   config: AuthBffConfig,
 ): SessionCookiePolicy {
   return {
-    name: config.production
-      ? PRODUCTION_COOKIE_NAME
-      : DEVELOPMENT_COOKIE_NAME,
+    name: getSessionCookieName(config.production),
     httpOnly: true,
     sameSite: "lax",
     path: "/",

@@ -2,7 +2,7 @@
 
 ## Escopo
 
-Esta fundação implementa sessão autenticada no frontend por BFF same-origin. Ela não cria tela de login, não protege páginas, não substitui `conta-mock` e não implementa refresh token, login Google ou cadastro livre.
+Esta fundação implementa sessão autenticada no frontend por BFF same-origin e uma camada compartilhada de identidade no React. Ela não cria tela de login, não protege páginas, não redireciona usuários, não substitui integralmente `conta-mock` e não implementa refresh token, login Google ou cadastro livre.
 
 ## Fluxo
 
@@ -40,6 +40,22 @@ Os tipos em `frontend/src/types/auth.ts` refletem os aliases JSON reais:
 - `AuthErrorResponse`: envelope seguro `error.code` e `error.message`.
 
 Não existe tipo de refresh token.
+
+## Identidade compartilhada no navegador
+
+O `AuthProvider`, instalado no layout raiz, executa uma única busca inicial em `GET /api/auth/me`; chamadas concorrentes dessa carga inicial são deduplicadas. Operações posteriores recebem uma sequência lógica, e somente o resultado da operação mais recente pode atualizar o estado. O estado é uma união discriminada com `loading`, `authenticated`, `unauthenticated` e `error`; não existem booleanos independentes para representar a sessão.
+
+O hook `useAuth()` expõe somente `status`, `user`, `refresh()` e `logout()`. O Context contém `AuthCurrentUser`, nunca o JWT. Não há proteção de páginas, `RequireAuth`, redirecionamento ou tratamento de rotas nesta etapa.
+
+O cliente browser em `src/lib/auth/client.ts` usa exclusivamente `GET /api/auth/me` e `POST /api/auth/logout`, sempre com `credentials: "same-origin"` e `cache: "no-store"`. Ele não envia `Authorization`, não conhece a URL interna do FastAPI e não depende de Cloudflare, Nginx Proxy Manager ou headers encaminhados.
+
+O adaptador temporário converte `AuthCurrentUser` apenas em `id`, `nome`, `perfilBase` e `perfilLabel`. UserMenu e Dashboard usam a identidade real quando disponível e preservam o mock como fallback enquanto não existe login nem proteção. Avatar, departamento, e-mail, preferências, notificações, último acesso e IP continuam mockados até a etapa de migração de perfil.
+
+Na alteração de senha, um 401 dispara `refresh()` para que o Provider confirme o estado `unauthenticated`. Um 204 não recarrega a identidade.
+
+## Helper de cookie
+
+`src/lib/auth/cookie.ts` centraliza o nome esperado por ambiente e é consumido pela política server-side de sessão. Ele não lê o cookie no navegador e poderá ser reutilizado pela futura camada Proxy e seus testes.
 
 ## Cookie
 
@@ -97,12 +113,12 @@ A mesma fronteira BFF/cookie poderá receber um callback OAuth server-side. A ev
 
 ## Arquivos desta etapa
 
-Foram adicionados tipos, cinco helpers server-only, quatro Route Handlers, testes nativos em `frontend/tests/auth/` e este documento. Os Compose receberam somente as variáveis pertencentes a cada serviço.
+A fundação contém tipos e helpers server-only, quatro Route Handlers e testes nativos em `frontend/tests/auth/`. A etapa de identidade compartilhada acrescenta tipos de sessão, cliente browser, Context, Provider, hook, adaptador e helper de cookie, sem alterar backend ou infraestrutura.
 
 ## Próximos passos
 
 1. Criar a tela visual de login consumindo exclusivamente `/api/auth/login`.
-2. Adicionar `src/proxy.ts` e validação server-side para rotas protegidas.
-3. Migrar Shell, Header, Sidebar, Perfil e permissões visuais de `conta-mock` para `/api/auth/me`.
+2. Adicionar `src/proxy.ts` em etapa separada para a barreira rápida de páginas.
+3. Migrar Sidebar, Perfil e permissões visuais restantes de `conta-mock`.
 4. Avaliar revogação server-side e refresh token em etapa própria.
 5. Implementar vínculo Google pré-autorizado em etapa futura.

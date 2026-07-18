@@ -1,3 +1,5 @@
+"use client";
+
 import { PageShell } from "@/components/layout/PageShell";
 import { DashboardAgenda } from "./DashboardAgenda";
 import { DashboardHeader } from "./DashboardHeader";

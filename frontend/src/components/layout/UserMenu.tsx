@@ -4,13 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Bell, KeyRound, LogOut, User } from "lucide-react";
-import { currentUser, getCurrentUserInitials, logout } from "@/lib/conta-mock";
+import { useAuth } from "@/components/auth/useAuth";
+import { currentUser, getCurrentUserInitials } from "@/lib/conta-mock";
+import { adaptCurrentUser } from "@/lib/auth/current-user-adapter";
 
 type MenuItem = {
   label: string;
   href?: string;
   icon: typeof User;
-  onClick?: () => void;
+  action?: "logout";
   variant?: "default" | "danger";
 };
 
@@ -29,7 +31,7 @@ const menuSections: MenuSection[] = [
     ],
   },
   {
-    items: [{ label: "Sair", icon: LogOut, variant: "danger", onClick: logout }],
+    items: [{ label: "Sair", icon: LogOut, variant: "danger", action: "logout" }],
   },
 ];
 
@@ -48,8 +50,12 @@ type UserMenuProps = {
 export function UserMenu({ isCollapsed = false }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const { user, logout } = useAuth();
+  const authenticatedUser = user ? adaptCurrentUser(user) : null;
+  const displayName = authenticatedUser?.nome ?? currentUser.nome;
+  const profileLabel = authenticatedUser?.perfilLabel ?? currentUser.cargo;
   const avatarSrc = currentUser.avatarThumbnail ?? currentUser.avatarUrl;
-  const initials = getCurrentUserInitials(currentUser.nome);
+  const initials = getCurrentUserInitials(displayName);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -77,8 +83,10 @@ export function UserMenu({ isCollapsed = false }: UserMenuProps) {
     setOpen(false);
   }
 
-  function handleItemClick(item: MenuItem) {
-    item.onClick?.();
+  async function handleItemClick(item: MenuItem) {
+    if (item.action === "logout") {
+      await logout();
+    }
     closeMenu();
   }
 
@@ -89,8 +97,8 @@ export function UserMenu({ isCollapsed = false }: UserMenuProps) {
     >
       <button
         type="button"
-        title={currentUser.nome}
-        aria-label={currentUser.nome}
+        title={displayName}
+        aria-label={displayName}
         onClick={() => setOpen((value) => !value)}
         className={`group relative flex rounded-2xl text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
           isCollapsed
@@ -102,7 +110,7 @@ export function UserMenu({ isCollapsed = false }: UserMenuProps) {
           {avatarSrc ? (
             <Image
               src={avatarSrc}
-              alt={currentUser.nome}
+              alt={displayName}
               width={32}
               height={32}
               className="h-full w-full object-cover"
@@ -118,10 +126,10 @@ export function UserMenu({ isCollapsed = false }: UserMenuProps) {
         {!isCollapsed ? (
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-medium text-zinc-900">
-              {currentUser.nome}
+              {displayName}
             </span>
             <span className="block truncate text-[11px] text-zinc-500">
-              {currentUser.cargo}
+              {profileLabel}
             </span>
           </span>
         ) : null}
@@ -135,8 +143,8 @@ export function UserMenu({ isCollapsed = false }: UserMenuProps) {
         }`}
       >
         <div className="px-3 py-2">
-          <p className="text-sm font-semibold text-zinc-900">{currentUser.nome}</p>
-          <p className="text-xs text-zinc-500">{currentUser.cargo}</p>
+          <p className="text-sm font-semibold text-zinc-900">{displayName}</p>
+          <p className="text-xs text-zinc-500">{profileLabel}</p>
           <p className="text-xs text-zinc-500">{currentUser.departamento}</p>
           <p className="mt-1 text-xs text-zinc-500">{currentUser.email}</p>
         </div>
@@ -183,7 +191,7 @@ export function UserMenu({ isCollapsed = false }: UserMenuProps) {
                 <button
                   key={item.label}
                   type="button"
-                  onClick={() => handleItemClick(item)}
+                  onClick={() => void handleItemClick(item)}
                   className={`${baseClassName} ${variantClassName}`}
                 >
                   <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
