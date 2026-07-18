@@ -106,9 +106,15 @@ O BFF padroniza erros para 400, 401, 403, 415, 422, 429, 500, 502 e 504. Respost
 
 `backend.ts`, `config.ts`, `session.ts`, `origin.ts` e `errors.ts` importam o marcador oficial `server-only`. O build do Next impede que esses módulos sejam importados por Client Components. O JWT não é armazenado em React, `localStorage` ou `sessionStorage`.
 
-## Interceptação futura
+## Proteção inicial de rotas
 
-O projeto usa Next.js 16.2.10. Nessa versão, `middleware.ts` foi renomeado e depreciado; a convenção correta para a fase de proteção de páginas é `frontend/src/proxy.ts`. Esse arquivo não faz parte desta etapa e não deve ser a única camada de validação da sessão.
+O projeto usa Next.js 16.2.10 e a convenção `frontend/src/proxy.ts`, executada no runtime Node.js. `middleware.ts` está depreciado e não é utilizado.
+
+O Proxy permite livremente `/login`, `/login/`, `/api/auth/*`, recursos internos `/_next/*`, arquivos convencionais e os recursos reais conhecidos em `public/`. Recursos públicos são enumerados explicitamente: uma extensão no caminho não torna uma página ou API pública. Páginas e APIs não listadas permanecem privadas por padrão. Em uma rota privada sem o cookie esperado, ele redireciona para `/login` e define `returnTo` usando exclusivamente o `pathname` e a query string da própria requisição.
+
+Essa barreira verifica somente a presença de um valor não vazio no cookie HttpOnly calculado pelo helper compartilhado; valor vazio ou composto apenas por espaços é tratado como ausência. Ela não decodifica nem valida o JWT, não consulta BFF, FastAPI ou banco e não comprova que a sessão continua válida. O BFF e `/api/auth/me` permanecem como autoridade para validar token, usuário, empresa, perfil e status.
+
+Um cookie expirado, inválido ou adulterado ainda pode permitir a passagem inicial pelo Proxy até ser rejeitado pela validação autoritativa. Por esse motivo, `/login` permanece pública mesmo quando existe cookie, sem redirecionamento automático que possa causar loop.
 
 ## Google futuro
 
