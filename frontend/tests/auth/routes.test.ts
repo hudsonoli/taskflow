@@ -16,6 +16,11 @@ const changePasswordRoute = await import(
 
 const originalFetch = globalThis.fetch;
 
+function setValidLoginEnvironment() {
+  setValidAuthEnvironment();
+  process.env.AUTH_DEFAULT_EMPRESA_CODIGO = "EMPRESA_CONFIGURADA";
+}
+
 function mutationRequest(path: string, body?: Record<string, unknown>) {
   return new NextRequest(`http://localhost:3010${path}`, {
     method: "POST",
@@ -40,19 +45,21 @@ async function withFetchMock<T>(
 }
 
 test("login válido cria cookie HttpOnly e devolve identidade sem token", async () => {
-  setValidAuthEnvironment();
+  setValidLoginEnvironment();
   let call = 0;
-  const fetchMock: typeof fetch = async () => {
+  let sentLoginBody = "";
+  const fetchMock: typeof fetch = async (_input, init) => {
     call += 1;
-    return call === 1
-      ? Response.json({ accessToken: TEST_TOKEN, tokenType: "bearer" })
-      : Response.json(CURRENT_USER);
+    if (call === 1) {
+      sentLoginBody = String(init?.body);
+      return Response.json({ accessToken: TEST_TOKEN, tokenType: "bearer" });
+    }
+    return Response.json(CURRENT_USER);
   };
 
   const response = await withFetchMock(fetchMock, () =>
     loginRoute.POST(
       mutationRequest("/api/auth/login", {
-        empresaCodigo: "EMPRESA",
         email: "user@example.com",
         senha: "secret-password",
       }),
@@ -62,6 +69,11 @@ test("login válido cria cookie HttpOnly e devolve identidade sem token", async 
   const serializedBody = JSON.stringify(body);
 
   assert.equal(response.status, 200);
+  assert.deepEqual(JSON.parse(sentLoginBody), {
+    empresaCodigo: "EMPRESA_CONFIGURADA",
+    email: "user@example.com",
+    senha: "secret-password",
+  });
   assert.deepEqual(body, CURRENT_USER);
   assert.equal(serializedBody.includes("accessToken"), false);
   assert.equal(serializedBody.includes(TEST_TOKEN), false);
@@ -69,7 +81,7 @@ test("login válido cria cookie HttpOnly e devolve identidade sem token", async 
 });
 
 test("login parcial não cria cookie quando /auth/me falha", async () => {
-  setValidAuthEnvironment();
+  setValidLoginEnvironment();
   let call = 0;
   const fetchMock: typeof fetch = async () => {
     call += 1;
@@ -81,7 +93,6 @@ test("login parcial não cria cookie quando /auth/me falha", async () => {
   const response = await withFetchMock(fetchMock, () =>
     loginRoute.POST(
       mutationRequest("/api/auth/login", {
-        empresaCodigo: "EMPRESA",
         email: "user@example.com",
         senha: "secret-password",
       }),
@@ -94,7 +105,7 @@ test("login parcial não cria cookie quando /auth/me falha", async () => {
 });
 
 test("login inválido não cria cookie", async () => {
-  setValidAuthEnvironment();
+  setValidLoginEnvironment();
   const fetchMock: typeof fetch = async () =>
     new Response(JSON.stringify({ detail: "Credenciais inválidas" }), {
       status: 401,
@@ -103,7 +114,6 @@ test("login inválido não cria cookie", async () => {
   const response = await withFetchMock(fetchMock, () =>
     loginRoute.POST(
       mutationRequest("/api/auth/login", {
-        empresaCodigo: "EMPRESA",
         email: "user@example.com",
         senha: "wrong-password",
       }),
@@ -116,13 +126,13 @@ test("login inválido não cria cookie", async () => {
 });
 
 test("configuração ausente produz erro seguro", async () => {
+  delete process.env.AUTH_DEFAULT_EMPRESA_CODIGO;
   delete process.env.TASKFLOWW_API_INTERNAL_URL;
   delete process.env.TASKFLOWW_AUTH_ALLOWED_ORIGINS;
   delete process.env.TASKFLOWW_SESSION_MAX_AGE_SECONDS;
 
   const response = await loginRoute.POST(
     mutationRequest("/api/auth/login", {
-      empresaCodigo: "EMPRESA",
       email: "user@example.com",
       senha: "secret-password",
     }),
@@ -138,8 +148,37 @@ test("configuração ausente produz erro seguro", async () => {
   });
 });
 
+test("empresa padrão ausente não chama o FastAPI nem revela configuração", async () => {
+  setValidAuthEnvironment();
+  delete process.env.AUTH_DEFAULT_EMPRESA_CODIGO;
+  let backendCalled = false;
+  const fetchMock: typeof fetch = async () => {
+    backendCalled = true;
+    return Response.json({});
+  };
+
+  const response = await withFetchMock(fetchMock, () =>
+    loginRoute.POST(
+      mutationRequest("/api/auth/login", {
+        email: "user@example.com",
+        senha: "secret-password",
+      }),
+    ),
+  );
+
+  assert.equal(response.status, 500);
+  assert.equal(backendCalled, false);
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: "CONFIGURATION_ERROR",
+      message: "Não foi possível concluir a solicitação.",
+    },
+  });
+});
+
 test("/me sem cookie retorna 401", async () => {
   setValidAuthEnvironment();
+  delete process.env.AUTH_DEFAULT_EMPRESA_CODIGO;
   const response = await meRoute.GET(
     new NextRequest("http://localhost:3010/api/auth/me"),
   );
@@ -148,6 +187,7 @@ test("/me sem cookie retorna 401", async () => {
 
 test("/me envia Bearer e retorna identidade sem token", async () => {
   setValidAuthEnvironment();
+  delete process.env.AUTH_DEFAULT_EMPRESA_CODIGO;
   let authorization = "";
   const fetchMock: typeof fetch = async (_input, init) => {
     authorization = new Headers(init?.headers).get("authorization") ?? "";
@@ -167,6 +207,7 @@ test("/me envia Bearer e retorna identidade sem token", async () => {
 
 test("/me limpa cookie quando backend retorna 401", async () => {
   setValidAuthEnvironment();
+  delete process.env.AUTH_DEFAULT_EMPRESA_CODIGO;
   const fetchMock: typeof fetch = async () =>
     new Response(JSON.stringify({ detail: "Token inválido" }), { status: 401 });
   const request = new NextRequest("http://localhost:3010/api/auth/me", {
@@ -183,6 +224,7 @@ test("/me limpa cookie quando backend retorna 401", async () => {
 
 test("logout limpa o cookie sem chamar o backend", async () => {
   setValidAuthEnvironment();
+  delete process.env.AUTH_DEFAULT_EMPRESA_CODIGO;
   const response = await logoutRoute.POST(
     mutationRequest("/api/auth/logout"),
   );
@@ -194,6 +236,7 @@ test("logout limpa o cookie sem chamar o backend", async () => {
 
 test("alteração de senha envia Bearer e não expõe credenciais", async () => {
   setValidAuthEnvironment();
+  delete process.env.AUTH_DEFAULT_EMPRESA_CODIGO;
   let authorization = "";
   let sentBody = "";
   const fetchMock: typeof fetch = async (_input, init) => {

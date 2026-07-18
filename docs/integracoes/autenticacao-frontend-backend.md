@@ -8,7 +8,8 @@ Esta fundação implementa sessão autenticada no frontend por BFF same-origin e
 
 ```text
 Navegador
-  -> POST /api/auth/login (Next Route Handler)
+  -> POST /api/auth/login com e-mail e senha (Next Route Handler)
+  -> BFF acrescenta empresaCodigo da configuração server-side
   -> POST /auth/login (FastAPI pela rede Docker)
   <- accessToken somente no servidor Next
   -> GET /auth/me com Bearer server-side
@@ -22,7 +23,7 @@ As chamadas subsequentes usam o cookie apenas no Next. O BFF lê o JWT, adiciona
 
 | Método | Endpoint | Comportamento |
 | --- | --- | --- |
-| POST | `/api/auth/login` | Valida Origin e JSON, autentica, confirma identidade em `/auth/me` e cria o cookie. |
+| POST | `/api/auth/login` | Recebe somente e-mail e senha, acrescenta a empresa padrão server-side, valida Origin e JSON, autentica, confirma identidade em `/auth/me` e responde `200 application/json` com `AuthCurrentUser` antes de criar o cookie. |
 | GET | `/api/auth/me` | Retorna somente a identidade atual; limpa o cookie se o backend responder 401. |
 | POST | `/api/auth/logout` | Valida Origin e remove o cookie local. |
 | POST | `/api/auth/alterar-senha` | Valida Origin e JSON, encaminha somente o payload permitido com Bearer server-side. |
@@ -33,7 +34,8 @@ O cliente backend possui allowlist fechada para `/auth/login`, `/auth/me` e `/au
 
 Os tipos em `frontend/src/types/auth.ts` refletem os aliases JSON reais:
 
-- `AuthLoginRequest`: `empresaCodigo`, `email`, `senha`;
+- request browser de login: `email`, `senha`;
+- `AuthLoginRequest` BFF → FastAPI: `empresaCodigo`, `email`, `senha`;
 - `AuthLoginBackendResponse`: `accessToken`, `tokenType`;
 - `AuthCurrentUser`: `usuarioId`, `empresaId`, `nome`, `perfilBase`, `acessoSistema`, `status`;
 - `AuthChangePasswordRequest`: `senhaAtual`, `novaSenha`, `confirmacaoSenha`;
@@ -75,11 +77,12 @@ Criação e remoção usam a mesma política e o mesmo nome por ambiente. A remo
 
 ### Frontend somente
 
+- `AUTH_DEFAULT_EMPRESA_CODIGO`: código da empresa acrescentado pelo BFF ao login; obrigatório e nunca exposto ao navegador;
 - `TASKFLOWW_API_INTERNAL_URL`: URL do FastAPI na rede Docker, sem prefixo `NEXT_PUBLIC_`;
 - `TASKFLOWW_AUTH_ALLOWED_ORIGINS`: lista separada por vírgula de origins exatos;
 - `TASKFLOWW_SESSION_MAX_AGE_SECONDS`: duração do cookie em segundos.
 
-`AUTH_SECRET_KEY` nunca é entregue ao Next. O Next não assina, emite ou valida JWT. O `.env.example` contém apenas placeholders e referências de implantação.
+`AUTH_SECRET_KEY` nunca é entregue ao Next. O Next não assina, emite ou valida JWT. Nesta implantação, `empresaCodigo` é definido exclusivamente no BFF e validado somente pela configuração específica do login; `/api/auth/me`, logout e alteração de senha usam a configuração comum sem depender dessa variável. Seleção dinâmica de empresa por formulário, domínio ou subdomínio fica fora da TF-AUTH-001C. O `.env.example` contém apenas placeholders e referências de implantação.
 
 ## Origin e CSRF
 
@@ -117,8 +120,7 @@ A fundação contém tipos e helpers server-only, quatro Route Handlers e testes
 
 ## Próximos passos
 
-1. Criar a tela visual de login consumindo exclusivamente `/api/auth/login`.
-2. Adicionar `src/proxy.ts` em etapa separada para a barreira rápida de páginas.
-3. Migrar Sidebar, Perfil e permissões visuais restantes de `conta-mock`.
-4. Avaliar revogação server-side e refresh token em etapa própria.
-5. Implementar vínculo Google pré-autorizado em etapa futura.
+1. Adicionar `src/proxy.ts` em etapa separada para a barreira rápida de páginas.
+2. Migrar Sidebar, Perfil e permissões visuais restantes de `conta-mock`.
+3. Avaliar revogação server-side e refresh token em etapa própria.
+4. Implementar vínculo Google pré-autorizado em etapa futura.

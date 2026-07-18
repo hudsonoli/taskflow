@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthBackendClient } from "../../../../lib/auth/backend";
-import { getAuthBffConfig } from "../../../../lib/auth/config";
+import { getAuthLoginConfig } from "../../../../lib/auth/config";
 import {
   AuthBffError,
   authErrorResponse,
@@ -11,10 +11,11 @@ import { assertValidMutationOrigin } from "../../../../lib/auth/origin";
 import { setSessionCookie } from "../../../../lib/auth/session";
 import type { AuthLoginRequest } from "../../../../types/auth";
 
-function parseLoginRequest(body: Record<string, unknown>): AuthLoginRequest {
+function parseLoginRequest(
+  body: Record<string, unknown>,
+  empresaCodigo: string,
+): AuthLoginRequest {
   if (
-    typeof body.empresaCodigo !== "string" ||
-    !body.empresaCodigo.trim() ||
     typeof body.email !== "string" ||
     !body.email.trim() ||
     typeof body.senha !== "string" ||
@@ -23,12 +24,12 @@ function parseLoginRequest(body: Record<string, unknown>): AuthLoginRequest {
     throw new AuthBffError(
       400,
       "INVALID_REQUEST",
-      "Empresa, e-mail e senha são obrigatórios.",
+      "E-mail e senha são obrigatórios.",
     );
   }
 
   return {
-    empresaCodigo: body.empresaCodigo,
+    empresaCodigo,
     email: body.email,
     senha: body.senha,
   };
@@ -36,11 +37,14 @@ function parseLoginRequest(body: Record<string, unknown>): AuthLoginRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    const config = getAuthBffConfig();
+    const config = getAuthLoginConfig();
     assertValidMutationOrigin(request, config);
     requireJsonContentType(request);
 
-    const payload = parseLoginRequest(await readJsonObject(request));
+    const payload = parseLoginRequest(
+      await readJsonObject(request),
+      config.authDefaultEmpresaCodigo,
+    );
     const backend = new AuthBackendClient(config);
     const login = await backend.login(payload);
     const currentUser = await backend.me(login.accessToken);

@@ -12,9 +12,14 @@ export type AuthBffConfig = {
   production: boolean;
 };
 
+export type AuthLoginBffConfig = AuthBffConfig & {
+  authDefaultEmpresaCodigo: string;
+};
+
 type AuthEnvironment = Partial<Pick<
   NodeJS.ProcessEnv,
   | "NODE_ENV"
+  | "AUTH_DEFAULT_EMPRESA_CODIGO"
   | "TASKFLOWW_API_INTERNAL_URL"
   | "TASKFLOWW_AUTH_ALLOWED_ORIGINS"
   | "TASKFLOWW_SESSION_MAX_AGE_SECONDS"
@@ -26,6 +31,18 @@ function configurationError(variable: string): AuthBffError {
     "CONFIGURATION_ERROR",
     `Configuração obrigatória ausente ou inválida: ${variable}.`,
   );
+}
+
+function parseDefaultEmpresaCodigo(value: string | undefined): string {
+  const empresaCodigo = value?.trim();
+  if (!empresaCodigo) {
+    throw new AuthBffError(
+      500,
+      "CONFIGURATION_ERROR",
+      "Não foi possível concluir a solicitação.",
+    );
+  }
+  return empresaCodigo;
 }
 
 function parseInternalUrl(value: string | undefined): string {
@@ -111,5 +128,16 @@ export function getAuthBffConfig(
     ),
     backendTimeoutMs: DEFAULT_BACKEND_TIMEOUT_MS,
     production: environment.NODE_ENV === "production",
+  };
+}
+
+export function getAuthLoginConfig(
+  environment: AuthEnvironment = process.env,
+): AuthLoginBffConfig {
+  return {
+    ...getAuthBffConfig(environment),
+    authDefaultEmpresaCodigo: parseDefaultEmpresaCodigo(
+      environment.AUTH_DEFAULT_EMPRESA_CODIGO,
+    ),
   };
 }
