@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import vm from "node:vm";
+import ts from "typescript";
 import "./helpers.mjs";
 import { CURRENT_USER } from "./helpers.mjs";
 
@@ -46,12 +48,101 @@ async function assertLoginRejected(response: Response) {
   assert.equal(redirectCalled, false);
 }
 
-test("página /login usa o formulário sem alterar o layout principal", async () => {
+test("página /login apresenta relógio, formulário e rodapé interno", async () => {
   const page = await source("app", "login", "page.tsx");
 
   assert.match(page, /<LoginForm returnTo=\{returnTo\} \/>/);
+  assert.match(page, /<LoginClock \/>/);
+  assert.match(page, /taskflow - Uso interno BOX/);
   assert.match(page, /fixed inset-0/);
+  assert.doesNotMatch(page, />\s*T\s*</);
+  assert.doesNotMatch(page, /Entre no TaskFloww/);
+  assert.doesNotMatch(page, /Acesse sua operação com e-mail e senha\./);
   assert.doesNotMatch(page, /RequireAuth|ProtectedRoute|redirect\(/);
+});
+
+test("relógio formata pt-BR e controla atualização com timer determinístico", async () => {
+  const clockSource = await source("components", "auth", "LoginClock.tsx");
+  const compiled = ts.transpileModule(clockSource, {
+    compilerOptions: {
+      jsx: ts.JsxEmit.ReactJSX,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+
+  let effect: (() => void | (() => void)) | null = null;
+  let initialState: unknown;
+  let latestState: unknown;
+  let intervalCallback: (() => void) | null = null;
+  let intervalDelay: number | null = null;
+  let clearedInterval: number | null = null;
+  const exportsObject: Record<string, unknown> = {};
+
+  const context = {
+    Date,
+    Intl,
+    exports: exportsObject,
+    module: { exports: exportsObject },
+    require(specifier: string) {
+      if (specifier === "react") {
+        return {
+          useEffect(callback: () => void | (() => void)) {
+            effect = callback;
+          },
+          useState(value: unknown) {
+            initialState = value;
+            return [value, (next: unknown) => { latestState = next; }];
+          },
+        };
+      }
+      if (specifier === "react/jsx-runtime") {
+        return {
+          jsx: () => null,
+          jsxs: () => null,
+        };
+      }
+      throw new Error(`Unexpected import: ${specifier}`);
+    },
+    window: {
+      clearInterval(id: number) {
+        clearedInterval = id;
+      },
+      setInterval(callback: () => void, delay: number) {
+        intervalCallback = callback;
+        intervalDelay = delay;
+        return 17;
+      },
+    },
+  };
+
+  vm.runInNewContext(compiled, context);
+  const clockModule = context.module.exports as {
+    LoginClock: () => unknown;
+    formatLoginClock: (now: Date) => { date: string; time: string };
+  };
+
+  const fixedDate = new Date(2026, 6, 21, 17, 42, 7);
+  const formatted = clockModule.formatLoginClock(fixedDate);
+  assert.equal(formatted.date, "terça-feira, 21 de julho de 2026");
+  assert.equal(formatted.time, "17:42:07");
+
+  clockModule.LoginClock();
+  assert.equal(initialState, null);
+  const mountedEffect = effect as unknown as () => void | (() => void);
+  assert.equal(typeof mountedEffect, "function");
+
+  const cleanup = mountedEffect();
+  assert.equal(intervalDelay, 60_000);
+  assert.ok(latestState);
+  const tick = intervalCallback as unknown as () => void;
+  assert.equal(typeof tick, "function");
+  tick();
+  assert.equal(typeof cleanup, "function");
+  (cleanup as () => void)();
+  assert.equal(clearedInterval, 17);
+  assert.match(clockSource, /aria-live="off"/);
+  assert.match(clockSource, /display\?\.time \?\? "--:--:--"/);
 });
 
 test("payload de login contém somente e-mail normalizado e senha", () => {

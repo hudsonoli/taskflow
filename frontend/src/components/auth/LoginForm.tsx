@@ -83,7 +83,7 @@ export function LoginForm({ returnTo }: LoginFormProps) {
   }
 
   return (
-    <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
+    <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
       <Input
         label="E-mail"
         type="email"
@@ -93,6 +93,7 @@ export function LoginForm({ returnTo }: LoginFormProps) {
         inputMode="email"
         required
         disabled={submitting}
+        className="h-12 rounded-2xl border-[#E9E9E9] bg-white/95 px-4 shadow-[0_1px_2px_rgba(0,0,0,0.025)] ring-0 placeholder:text-zinc-300 focus:border-[#F58220] focus:ring-4 focus:ring-[#F58220]/10 disabled:bg-zinc-50/70"
         onChange={(event) => setEmail(event.target.value)}
       />
 
@@ -104,13 +105,14 @@ export function LoginForm({ returnTo }: LoginFormProps) {
         autoComplete="current-password"
         required
         disabled={submitting}
+        className="h-12 rounded-2xl border-[#E9E9E9] bg-white/95 px-4 shadow-[0_1px_2px_rgba(0,0,0,0.025)] ring-0 placeholder:text-zinc-300 focus:border-[#F58220] focus:ring-4 focus:ring-[#F58220]/10 disabled:bg-zinc-50/70"
         onChange={(event) => setSenha(event.target.value)}
       />
 
       {errorMessage ? (
         <p
           role="alert"
-          className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700"
+          className="rounded-2xl border border-red-200/80 bg-red-50/90 px-4 py-2.5 text-sm text-red-700 shadow-[0_1px_2px_rgba(0,0,0,0.025)]"
         >
           {errorMessage}
         </p>
@@ -119,7 +121,7 @@ export function LoginForm({ returnTo }: LoginFormProps) {
       <Button
         type="submit"
         colorScheme="brand"
-        className="w-full"
+        className="h-12 w-full rounded-2xl bg-[#F58220] text-sm text-white shadow-[0_5px_12px_rgba(245,130,32,0.11)] transition-colors duration-200 hover:bg-[#E56F10] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F58220]"
         disabled={submitting}
       >
         {submitting ? "Entrando..." : "Entrar"}
