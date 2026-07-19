@@ -14,6 +14,7 @@ services:
       TASKFLOWW_API_INTERNAL_URL: ${TASKFLOWW_API_INTERNAL_URL:-http://taskfloww_api:8000}
       TASKFLOWW_AUTH_ALLOWED_ORIGINS: ${TASKFLOWW_AUTH_ALLOWED_ORIGINS:?TASKFLOWW_AUTH_ALLOWED_ORIGINS must be configured}
       TASKFLOWW_SESSION_MAX_AGE_SECONDS: ${TASKFLOWW_SESSION_MAX_AGE_SECONDS:-1800}
+      AUTH_DEFAULT_EMPRESA_CODIGO: ${AUTH_DEFAULT_EMPRESA_CODIGO:?AUTH_DEFAULT_EMPRESA_CODIGO must be configured}
 
   taskfloww_api:
     build:
@@ -22,10 +23,13 @@ services:
     container_name: taskfloww_api_prod
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://taskfloww:taskfloww_senha_segura@taskfloww_db:5432/taskfloww
-      REDIS_URL: redis://taskfloww_redis:6379/0
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be configured}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL must be configured}
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:?AUTH_SECRET_KEY must be configured}
+      AUTH_ALGORITHM: ${AUTH_ALGORITHM:-HS256}
       AUTH_ACCESS_TOKEN_EXPIRE_MINUTES: ${AUTH_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      AUTH_MAX_FAILED_ATTEMPTS: ${AUTH_MAX_FAILED_ATTEMPTS:-5}
+      AUTH_LOCKOUT_MINUTES: ${AUTH_LOCKOUT_MINUTES:-15}
     depends_on:
       - taskfloww_db
       - taskfloww_redis
