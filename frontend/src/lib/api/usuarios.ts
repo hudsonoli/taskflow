@@ -3,6 +3,7 @@ import "server-only";
 import type {
   UsuarioCreatePayload,
   UsuarioListFilters,
+  UsuarioUpdatePayload,
 } from "../../types/usuario-api";
 import type {
   Usuario,
@@ -93,6 +94,58 @@ export function parseUsuarioCreatePayload(
       ? {}
       : { acessoSistema: body.acessoSistema }),
   };
+}
+
+export function parseUsuarioUpdatePayload(
+  body: Record<string, unknown>,
+): UsuarioUpdatePayload {
+  for (const key of Object.keys(body)) {
+    if (!CREATE_KEYS.has(key)) {
+      throw new ApiBffError(
+        400,
+        "INVALID_REQUEST",
+        `Campo não permitido: ${key}.`,
+      );
+    }
+  }
+
+  const payload: UsuarioUpdatePayload = {};
+
+  if (Object.hasOwn(body, "codigoInterno")) {
+    payload.codigoInterno = requiredString(
+      body.codigoInterno,
+      "codigoInterno",
+      64,
+    );
+  }
+  if (Object.hasOwn(body, "nome")) {
+    payload.nome = requiredString(body.nome, "nome", 255);
+  }
+  if (Object.hasOwn(body, "email")) {
+    payload.email = requiredString(
+      typeof body.email === "string" ? body.email.trim() : body.email,
+      "email",
+      255,
+    );
+  }
+  if (Object.hasOwn(body, "perfilBase")) {
+    if (!isPerfilBase(body.perfilBase)) {
+      throw new ApiBffError(400, "INVALID_REQUEST", "Perfil inválido.");
+    }
+    payload.perfilBase = body.perfilBase;
+  }
+  if (Object.hasOwn(body, "acessoSistema")) {
+    if (typeof body.acessoSistema !== "boolean") {
+      throw new ApiBffError(
+        400,
+        "INVALID_REQUEST",
+        "Campo inválido: acessoSistema.",
+      );
+    }
+    payload.acessoSistema = body.acessoSistema;
+  }
+
+  return payload;
 }
 
 function singleValue(
@@ -261,6 +314,29 @@ export class UsuariosApi {
     );
     try {
       return mapUsuarioApiResponseToDomain(payload, empresaId);
+    } catch (error) {
+      throw new ApiBffError(
+        502,
+        "INVALID_BACKEND_RESPONSE",
+        "Resposta inválida do serviço de usuários.",
+        { cause: error },
+      );
+    }
+  }
+
+  async atualizar(
+    accessToken: string,
+    empresaId: string,
+    usuarioId: string,
+    payload: UsuarioUpdatePayload,
+  ): Promise<Usuario> {
+    const response = await this.backend.patchJson(
+      `/usuarios/${encodeURIComponent(usuarioId)}`,
+      accessToken,
+      payload,
+    );
+    try {
+      return mapUsuarioApiResponseToDomain(response, empresaId);
     } catch (error) {
       throw new ApiBffError(
         502,

@@ -26,6 +26,7 @@ import {
   UsuarioCreateForm,
   type UsuarioCreateFormValue,
 } from "./UsuarioCreateForm";
+import { UsuarioEditDrawer } from "./UsuarioEditDrawer";
 import { useUsuarioCreate } from "./useUsuarioCreate";
 import { useUsuarioDetail } from "./useUsuarioDetail";
 import { useUsuariosList } from "./useUsuariosList";
@@ -65,7 +66,8 @@ function createInitialUsuarioFormValue(): UsuarioCreateFormValue {
 type UsuarioDrawerState =
   | { mode: "closed" }
   | { mode: "peek"; usuarioId: string }
-  | { mode: "create" };
+  | { mode: "create" }
+  | { mode: "edit"; usuarioId: string };
 
 type UsuarioCreateDrawerProps = {
   onClose: () => void;
@@ -172,11 +174,13 @@ function UsuarioCreateDrawer({
 type UsuarioPeekDrawerProps = {
   usuarioId: string;
   onClose: () => void;
+  onEdit: () => void;
 };
 
 function UsuarioPeekDrawer({
   usuarioId,
   onClose,
+  onEdit,
 }: UsuarioPeekDrawerProps) {
   const { status, usuario, error, retry } = useUsuarioDetail(usuarioId);
 
@@ -266,8 +270,7 @@ function UsuarioPeekDrawer({
           colorScheme="brand"
           primaryAction={{
             label: "Editar",
-            onClick: () => undefined,
-            disabled: true,
+            onClick: onEdit,
           }}
           secondaryActions={[{ label: "Fechar", onClick: onClose }]}
         />
@@ -300,6 +303,22 @@ export function UsuariosView() {
     refreshUsuarios();
     setDrawerState({ mode: "closed" });
   }, [refreshUsuarios]);
+
+  const openUsuarioPeek = useCallback((usuarioId: string) => {
+    setDrawerState({ mode: "peek", usuarioId });
+  }, []);
+
+  const openUsuarioEdit = useCallback((usuarioId: string) => {
+    setDrawerState({ mode: "edit", usuarioId });
+  }, []);
+
+  const handleUsuarioUpdated = useCallback(
+    (usuarioId: string) => {
+      refreshUsuarios();
+      setDrawerState({ mode: "peek", usuarioId });
+    },
+    [refreshUsuarios],
+  );
 
   const usuariosAtivos = usuarios.filter(
     (usuario) => usuario.status === "ativo",
@@ -408,12 +427,7 @@ export function UsuariosView() {
                     <div className="inline-flex items-center justify-end gap-1">
                       <button
                         type="button"
-                        onClick={() =>
-                          setDrawerState({
-                            mode: "peek",
-                            usuarioId: usuario.id,
-                          })
-                        }
+                        onClick={() => openUsuarioPeek(usuario.id)}
                         aria-label={`Visualizar usuário ${usuario.nome}`}
                         className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11px] font-normal text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                       >
@@ -427,10 +441,10 @@ export function UsuariosView() {
 
                       <button
                         type="button"
-                        disabled
+                        onClick={() => openUsuarioEdit(usuario.id)}
                         aria-label={`Editar usuário ${usuario.nome}`}
-                        title="Edição indisponível"
-                        className="inline-flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-zinc-300"
+                        title="Editar usuário"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                       >
                         <Pencil
                           className="h-3.5 w-3.5"
@@ -488,6 +502,7 @@ export function UsuariosView() {
           key={drawerState.usuarioId}
           usuarioId={drawerState.usuarioId}
           onClose={closeDrawer}
+          onEdit={() => openUsuarioEdit(drawerState.usuarioId)}
         />
       ) : null}
 
@@ -495,6 +510,15 @@ export function UsuariosView() {
         <UsuarioCreateDrawer
           onClose={closeDrawer}
           onCreated={handleUsuarioCreated}
+        />
+      ) : null}
+
+      {drawerState.mode === "edit" ? (
+        <UsuarioEditDrawer
+          key={drawerState.usuarioId}
+          usuarioId={drawerState.usuarioId}
+          onCancel={() => openUsuarioPeek(drawerState.usuarioId)}
+          onUpdated={() => handleUsuarioUpdated(drawerState.usuarioId)}
         />
       ) : null}
     </PageShell>

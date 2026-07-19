@@ -30,13 +30,22 @@ export type UsuarioListFilters = {
   offset?: number;
 };
 
-export type UsuarioCreatePayload = {
+export type UsuarioEditableValues = {
   codigoInterno: string;
   nome: string;
   email: string;
   perfilBase: PerfilBase;
+  acessoSistema: boolean;
+};
+
+export type UsuarioCreatePayload = Omit<
+  UsuarioEditableValues,
+  "acessoSistema"
+> & {
   acessoSistema?: boolean;
 };
+
+export type UsuarioUpdatePayload = Partial<UsuarioEditableValues>;
 
 export type UsuarioErrorCode =
   | "INVALID_REQUEST"

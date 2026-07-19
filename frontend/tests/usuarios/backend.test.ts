@@ -8,6 +8,7 @@ const {
   UsuariosApi,
   parseUsuarioCreatePayload,
   parseUsuarioListFilters,
+  parseUsuarioUpdatePayload,
 } = await import("../../src/lib/api/usuarios");
 
 const EMPRESA_ID = "22222222-2222-2222-2222-222222222222";
@@ -85,6 +86,39 @@ test("cliente server-only envia POST com JSON, Bearer e no-store", async () => {
   assert.deepEqual(JSON.parse(String(capturedInit?.body)), payload);
 });
 
+test("cliente server-only envia PATCH com JSON, Bearer e no-store", async () => {
+  let capturedUrl = "";
+  let capturedInit: RequestInit | undefined;
+  const fetchMock: typeof fetch = async (input, init) => {
+    capturedUrl = String(input);
+    capturedInit = init;
+    return Response.json(usuarioApi());
+  };
+  const payload = { nome: "Nome atualizado" };
+
+  await new BackendApiClient(makeConfig(), fetchMock).patchJson(
+    "/usuarios/usuario-id",
+    TEST_TOKEN,
+    payload,
+  );
+
+  assert.equal(
+    capturedUrl,
+    "http://taskfloww_api:8000/usuarios/usuario-id",
+  );
+  assert.equal(capturedInit?.method, "PATCH");
+  assert.equal(capturedInit?.cache, "no-store");
+  assert.equal(
+    new Headers(capturedInit?.headers).get("content-type"),
+    "application/json",
+  );
+  assert.equal(
+    new Headers(capturedInit?.headers).get("authorization"),
+    `Bearer ${TEST_TOKEN}`,
+  );
+  assert.deepEqual(JSON.parse(String(capturedInit?.body)), payload);
+});
+
 test("UsuariosApi cria com empresaId da sessão e mapeia a resposta", async () => {
   let capturedInit: RequestInit | undefined;
   const fetchMock: typeof fetch = async (_input, init) => {
@@ -105,6 +139,38 @@ test("UsuariosApi cria com empresaId da sessão e mapeia a resposta", async () =
   assert.equal(body.empresaId, EMPRESA_ID);
   assert.equal(body.codigoInterno, "USR-001");
   assert.equal(result.id, usuarioApi().id);
+  assert.equal("empresaId" in result, false);
+});
+
+test("UsuariosApi atualiza por ID e valida a empresa da resposta", async () => {
+  let capturedUrl = "";
+  let capturedInit: RequestInit | undefined;
+  const fetchMock: typeof fetch = async (input, init) => {
+    capturedUrl = String(input);
+    capturedInit = init;
+    return Response.json({
+      ...usuarioApi(),
+      nome: "Nome atualizado",
+    });
+  };
+  const api = new UsuariosApi(new BackendApiClient(makeConfig(), fetchMock));
+
+  const result = await api.atualizar(
+    TEST_TOKEN,
+    EMPRESA_ID,
+    "usuario com espaço",
+    { nome: "Nome atualizado" },
+  );
+
+  assert.equal(
+    capturedUrl,
+    "http://taskfloww_api:8000/usuarios/usuario%20com%20espa%C3%A7o",
+  );
+  assert.equal(capturedInit?.method, "PATCH");
+  assert.deepEqual(JSON.parse(String(capturedInit?.body)), {
+    nome: "Nome atualizado",
+  });
+  assert.equal(result.nome, "Nome atualizado");
   assert.equal("empresaId" in result, false);
 });
 
@@ -187,6 +253,38 @@ test("parser de criação aceita somente o contrato público", () => {
   ]) {
     assert.throws(
       () => parseUsuarioCreatePayload(body),
+      (error: unknown) =>
+        error instanceof ApiBffError &&
+        error.status === 400 &&
+        error.code === "INVALID_REQUEST",
+    );
+  }
+});
+
+test("parser de atualização aceita campos parciais e recusa campos externos", () => {
+  assert.deepEqual(parseUsuarioUpdatePayload({}), {});
+  assert.deepEqual(
+    parseUsuarioUpdatePayload({
+      nome: "Nome atualizado",
+      email: "  atualizado@example.com  ",
+      acessoSistema: false,
+    }),
+    {
+      nome: "Nome atualizado",
+      email: "atualizado@example.com",
+      acessoSistema: false,
+    },
+  );
+
+  for (const body of [
+    { empresaId: EMPRESA_ID },
+    { status: "inativo" },
+    { perfilBase: "owner" },
+    { acessoSistema: "não" },
+    { email: "   " },
+  ]) {
+    assert.throws(
+      () => parseUsuarioUpdatePayload(body),
       (error: unknown) =>
         error instanceof ApiBffError &&
         error.status === 400 &&

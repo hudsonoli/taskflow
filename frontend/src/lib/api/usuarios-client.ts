@@ -5,6 +5,7 @@ import type {
   UsuarioErrorCode,
   UsuarioErrorResponse,
   UsuarioListFilters,
+  UsuarioUpdatePayload,
 } from "../../types/usuario-api";
 import type {
   UsuarioClientResult,
@@ -142,6 +143,22 @@ export function createUsuariosBrowserClient(
         "/api/usuarios",
         {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        parseUsuarioDetailResult,
+      );
+    },
+
+    atualizarUsuario(
+      usuarioId: string,
+      payload: UsuarioUpdatePayload,
+    ): Promise<UsuarioClientResult<UsuarioDetailResult>> {
+      return request(
+        fetchImplementation,
+        `/api/usuarios/${encodeURIComponent(usuarioId)}`,
+        {
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         },

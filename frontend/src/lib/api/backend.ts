@@ -67,6 +67,18 @@ export class BackendApiClient {
     });
   }
 
+  async patchJson(
+    path: string,
+    accessToken: string,
+    body: unknown,
+  ): Promise<unknown> {
+    return this.requestJson(path, accessToken, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
   private async requestJson(
     path: string,
     accessToken: string,

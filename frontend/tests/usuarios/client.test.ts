@@ -123,6 +123,44 @@ test("criarUsuario preserva conflito seguro do BFF", async () => {
   }
 });
 
+test("atualizarUsuario envia PATCH parcial somente ao BFF", async () => {
+  let capturedUrl = "";
+  let capturedInit: RequestInit | undefined;
+  const client = createUsuariosBrowserClient(async (input, init) => {
+    capturedUrl = String(input);
+    capturedInit = init;
+    return Response.json({
+      data: { ...usuarioDomain(), nome: "Nome atualizado" },
+    });
+  });
+  const payload = {
+    nome: "Nome atualizado",
+    acessoSistema: false,
+  };
+
+  const result = await client.atualizarUsuario(
+    "usuario com espaço",
+    payload,
+  );
+  const body = JSON.parse(String(capturedInit?.body));
+
+  assert.equal(
+    capturedUrl,
+    "/api/usuarios/usuario%20com%20espa%C3%A7o",
+  );
+  assert.equal(capturedInit?.method, "PATCH");
+  assert.equal(capturedInit?.credentials, "same-origin");
+  assert.equal(capturedInit?.cache, "no-store");
+  assert.equal(
+    new Headers(capturedInit?.headers).get("content-type"),
+    "application/json",
+  );
+  assert.equal(new Headers(capturedInit?.headers).has("authorization"), false);
+  assert.deepEqual(body, payload);
+  assert.equal("empresaId" in body, false);
+  assert.equal(result.ok, true);
+});
+
 test("aceita lista vazia e normaliza 401, 403 e 404", async () => {
   const empty = createUsuariosBrowserClient(async () =>
     Response.json({ items: [] }),

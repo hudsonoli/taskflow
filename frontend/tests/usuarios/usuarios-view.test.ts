@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import "../auth/helpers.mjs";
+
+const { buildUsuarioUpdatePayload } = await import(
+  "../../src/components/usuarios/usuario-update"
+);
 
 const usuariosRoot = path.join(
   process.cwd(),
@@ -54,6 +59,53 @@ test("hook de criação controla somente a mutação remota", async () => {
   );
 });
 
+test("helper de atualização retorna somente campos modificados", () => {
+  const original = {
+    codigoInterno: "USR-001",
+    nome: "Usuário Teste",
+    email: "usuario@example.com",
+    perfilBase: "operador" as const,
+    acessoSistema: true,
+  };
+
+  assert.deepEqual(buildUsuarioUpdatePayload(original, original), {});
+  assert.deepEqual(
+    buildUsuarioUpdatePayload(original, {
+      ...original,
+      nome: "Nome atualizado",
+    }),
+    { nome: "Nome atualizado" },
+  );
+  assert.deepEqual(
+    buildUsuarioUpdatePayload(original, {
+      ...original,
+      email: "novo@example.com",
+      perfilBase: "gestor",
+      acessoSistema: false,
+    }),
+    {
+      email: "novo@example.com",
+      perfilBase: "gestor",
+      acessoSistema: false,
+    },
+  );
+});
+
+test("hook de atualização controla somente o PATCH remoto", async () => {
+  const hook = await usuarioSource("useUsuarioUpdate.ts");
+
+  assert.match(
+    hook,
+    /usuariosBrowserClient\.atualizarUsuario\([\s\S]*usuarioId,[\s\S]*payload/,
+  );
+  assert.match(hook, /if \(submittingRef\.current\) return false/);
+  assert.match(hook, /if \(!mountedRef\.current\) return false/);
+  assert.doesNotMatch(
+    hook,
+    /EntityDrawer|refreshUsuarios|useUsuariosList|onClose|setDrawerState/,
+  );
+});
+
 test("UsuariosView mantém criação e Peek exclusivos e refaz a lista", async () => {
   const view = await usuarioSource("UsuariosView.tsx");
 
@@ -61,6 +113,7 @@ test("UsuariosView mantém criação e Peek exclusivos e refaz a lista", async (
   assert.match(view, /\{ mode: "closed" \}/);
   assert.match(view, /\{ mode: "peek"; usuarioId: string \}/);
   assert.match(view, /\{ mode: "create" \}/);
+  assert.match(view, /\{ mode: "edit"; usuarioId: string \}/);
   assert.match(view, /const refreshUsuarios = retry/);
   assert.match(view, /refreshUsuarios\(\)/);
   assert.match(view, /formRef\.current\?\.reportValidity\(\)/);
@@ -71,8 +124,10 @@ test("UsuariosView mantém criação e Peek exclusivos e refaz a lista", async (
   assert.match(view, /mode="edit"/);
   assert.match(view, /title="Novo Usuário"/);
   assert.match(view, /onClick=\{\(\) => setDrawerState\(\{ mode: "create" \}\)\}/);
-  assert.match(view, /label: "Editar"[\s\S]*?disabled: true/);
+  assert.match(view, /onClick: onEdit/);
+  assert.match(view, /onClick=\{\(\) => openUsuarioEdit\(usuario\.id\)\}/);
   assert.match(view, /<UsuarioPeekDrawer/);
   assert.match(view, /<UsuarioCreateDrawer/);
+  assert.match(view, /<UsuarioEditDrawer/);
   assert.doesNotMatch(view, /usuario-mock|UsuarioDraft|useUsuarioDraft/);
 });
