@@ -38,6 +38,22 @@ function authenticatedRequest(path: string) {
   });
 }
 
+function authenticatedPost(
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
+  return new NextRequest("http://localhost:3010/api/usuarios", {
+    method: "POST",
+    headers: {
+      cookie: `taskfloww_session=${TEST_TOKEN}`,
+      origin: "http://localhost:3010",
+      "content-type": "application/json",
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 async function withFetchMock<T>(
   fetchMock: typeof fetch,
   callback: () => Promise<T>,
@@ -105,6 +121,113 @@ test("empresaId enviado pelo browser é recusado e não chega à listagem", asyn
   assert.equal(response.status, 400);
   assert.equal(calls, 1);
   assert.equal(JSON.stringify(body).includes("empresa-injetada"), false);
+});
+
+test("criação usa empresa da sessão e devolve o usuário sem empresaId", async () => {
+  setValidAuthEnvironment();
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetchMock: typeof fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+    return calls.length === 1
+      ? Response.json(CURRENT_USER)
+      : Response.json(usuarioApi(), { status: 201 });
+  };
+  const payload = {
+    codigoInterno: "USR-001",
+    nome: "Usuário Teste",
+    email: "usuario@example.com",
+    perfilBase: "operador",
+    acessoSistema: true,
+  };
+
+  const response = await withFetchMock(fetchMock, () =>
+    listRoute.POST(authenticatedPost(payload)),
+  );
+  const body = await response.json();
+  const backendBody = JSON.parse(String(calls[1].init?.body));
+
+  assert.equal(response.status, 201);
+  assert.equal(calls.length, 2);
+  assert.equal(new URL(calls[1].url).pathname, "/usuarios");
+  assert.equal(calls[1].init?.method, "POST");
+  assert.equal(backendBody.empresaId, CURRENT_USER.empresaId);
+  assert.equal(backendBody.codigoInterno, payload.codigoInterno);
+  assert.equal("empresaId" in body.data, false);
+  assert.equal(JSON.stringify(body).includes(TEST_TOKEN), false);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("criação recusa origem, mídia e campos não permitidos antes da mutação", async () => {
+  setValidAuthEnvironment();
+
+  for (const request of [
+    authenticatedPost(
+      {
+        codigoInterno: "USR-001",
+        nome: "Usuário Teste",
+        email: "usuario@example.com",
+        perfilBase: "operador",
+      },
+      { origin: "http://evil.example" },
+    ),
+    authenticatedPost(
+      {
+        codigoInterno: "USR-001",
+        nome: "Usuário Teste",
+        email: "usuario@example.com",
+        perfilBase: "operador",
+      },
+      { "content-type": "text/plain" },
+    ),
+    authenticatedPost({
+      empresaId: "empresa-injetada",
+      codigoInterno: "USR-001",
+      nome: "Usuário Teste",
+      email: "usuario@example.com",
+      perfilBase: "operador",
+    }),
+  ]) {
+    let called = false;
+    const response = await withFetchMock(
+      async () => {
+        called = true;
+        return Response.json({});
+      },
+      () => listRoute.POST(request),
+    );
+    const body = await response.json();
+
+    assert.equal(response.ok, false);
+    assert.equal(called, false);
+    assert.equal(JSON.stringify(body).includes("empresa-injetada"), false);
+  }
+});
+
+test("criação normaliza conflito do FastAPI sem propagar detail", async () => {
+  setValidAuthEnvironment();
+  let call = 0;
+  const response = await withFetchMock(
+    async () => {
+      call += 1;
+      return call === 1
+        ? Response.json(CURRENT_USER)
+        : Response.json({ detail: "e-mail duplicado interno" }, { status: 409 });
+    },
+    () =>
+      listRoute.POST(
+        authenticatedPost({
+          codigoInterno: "USR-001",
+          nome: "Usuário Teste",
+          email: "usuario@example.com",
+          perfilBase: "operador",
+        }),
+      ),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(body.error.code, "CONFLICT");
+  assert.equal(JSON.stringify(body).includes("duplicado interno"), false);
 });
 
 test("sem sessão retorna 401 sem acessar o FastAPI", async () => {

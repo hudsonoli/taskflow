@@ -4,9 +4,11 @@ import { makeConfig, TEST_TOKEN } from "../auth/helpers.mjs";
 
 const { BackendApiClient } = await import("../../src/lib/api/backend");
 const { ApiBffError } = await import("../../src/lib/api/errors");
-const { UsuariosApi, parseUsuarioListFilters } = await import(
-  "../../src/lib/api/usuarios"
-);
+const {
+  UsuariosApi,
+  parseUsuarioCreatePayload,
+  parseUsuarioListFilters,
+} = await import("../../src/lib/api/usuarios");
 
 const EMPRESA_ID = "22222222-2222-2222-2222-222222222222";
 
@@ -53,6 +55,59 @@ test("cliente server-only encaminha Bearer e usa no-store", async () => {
   );
 });
 
+test("cliente server-only envia POST com JSON, Bearer e no-store", async () => {
+  let capturedUrl = "";
+  let capturedInit: RequestInit | undefined;
+  const fetchMock: typeof fetch = async (input, init) => {
+    capturedUrl = String(input);
+    capturedInit = init;
+    return Response.json(usuarioApi(), { status: 201 });
+  };
+  const payload = { nome: "Usuário Teste" };
+
+  await new BackendApiClient(makeConfig(), fetchMock).postJson(
+    "/usuarios",
+    TEST_TOKEN,
+    payload,
+  );
+
+  assert.equal(capturedUrl, "http://taskfloww_api:8000/usuarios");
+  assert.equal(capturedInit?.method, "POST");
+  assert.equal(capturedInit?.cache, "no-store");
+  assert.equal(
+    new Headers(capturedInit?.headers).get("content-type"),
+    "application/json",
+  );
+  assert.equal(
+    new Headers(capturedInit?.headers).get("authorization"),
+    `Bearer ${TEST_TOKEN}`,
+  );
+  assert.deepEqual(JSON.parse(String(capturedInit?.body)), payload);
+});
+
+test("UsuariosApi cria com empresaId da sessão e mapeia a resposta", async () => {
+  let capturedInit: RequestInit | undefined;
+  const fetchMock: typeof fetch = async (_input, init) => {
+    capturedInit = init;
+    return Response.json(usuarioApi(), { status: 201 });
+  };
+  const api = new UsuariosApi(new BackendApiClient(makeConfig(), fetchMock));
+
+  const result = await api.criar(TEST_TOKEN, EMPRESA_ID, {
+    codigoInterno: "USR-001",
+    nome: "Usuário Teste",
+    email: "usuario@example.com",
+    perfilBase: "gestor",
+    acessoSistema: true,
+  });
+  const body = JSON.parse(String(capturedInit?.body));
+
+  assert.equal(body.empresaId, EMPRESA_ID);
+  assert.equal(body.codigoInterno, "USR-001");
+  assert.equal(result.id, usuarioApi().id);
+  assert.equal("empresaId" in result, false);
+});
+
 test("UsuariosApi injeta empresaId da sessão e preserva filtros reais", async () => {
   let capturedUrl = "";
   const fetchMock: typeof fetch = async (input) => {
@@ -80,6 +135,66 @@ test("UsuariosApi injeta empresaId da sessão e preserva filtros reais", async (
   assert.equal("empresaId" in result.items[0], false);
 });
 
+test("parser de criação aceita somente o contrato público", () => {
+  assert.deepEqual(
+    parseUsuarioCreatePayload({
+      codigoInterno: "USR-001",
+      nome: "Usuário Teste",
+      email: "  usuario@example.com  ",
+      perfilBase: "operador",
+    }),
+    {
+      codigoInterno: "USR-001",
+      nome: "Usuário Teste",
+      email: "usuario@example.com",
+      perfilBase: "operador",
+    },
+  );
+
+  for (const body of [
+    {
+      codigoInterno: "USR-001",
+      nome: "Usuário Teste",
+      email: "   ",
+      perfilBase: "operador",
+    },
+    {
+      empresaId: EMPRESA_ID,
+      codigoInterno: "USR-001",
+      nome: "Usuário Teste",
+      email: "usuario@example.com",
+      perfilBase: "operador",
+    },
+    {
+      codigoInterno: "",
+      nome: "Usuário Teste",
+      email: "usuario@example.com",
+      perfilBase: "operador",
+    },
+    {
+      codigoInterno: "USR-001",
+      nome: "Usuário Teste",
+      email: "usuario@example.com",
+      perfilBase: "owner",
+    },
+    {
+      codigoInterno: "USR-001",
+      nome: "Usuário Teste",
+      email: "usuario@example.com",
+      perfilBase: "operador",
+      acessoSistema: "sim",
+    },
+  ]) {
+    assert.throws(
+      () => parseUsuarioCreatePayload(body),
+      (error: unknown) =>
+        error instanceof ApiBffError &&
+        error.status === 400 &&
+        error.code === "INVALID_REQUEST",
+    );
+  }
+});
+
 test("parser do BFF recusa empresaId e parâmetros inválidos do browser", () => {
   assert.throws(
     () => parseUsuarioListFilters(new URLSearchParams({ empresaId: "x" })),
@@ -96,11 +211,12 @@ test("parser do BFF recusa empresaId e parâmetros inválidos do browser", () =>
   );
 });
 
-test("mapeia 401, 403, 404, 422 e resposta inválida sem expor detalhes", async () => {
+test("mapeia erros do backend e resposta inválida sem expor detalhes", async () => {
   for (const [status, code] of [
     [401, "UNAUTHENTICATED"],
     [403, "FORBIDDEN"],
     [404, "NOT_FOUND"],
+    [409, "CONFLICT"],
     [422, "VALIDATION_ERROR"],
   ] as const) {
     const client = new BackendApiClient(makeConfig(), async () =>

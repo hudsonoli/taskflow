@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  UsuarioCreatePayload,
   UsuarioErrorCode,
   UsuarioErrorResponse,
   UsuarioListFilters,
@@ -68,14 +69,18 @@ function buildListUrl(filters: UsuarioListFilters): string {
 async function request<T>(
   fetchImplementation: FetchImplementation,
   endpoint: string,
+  init: RequestInit,
   parse: (value: unknown) => T,
 ): Promise<UsuarioClientResult<T>> {
   try {
     const response = await fetchImplementation(endpoint, {
-      method: "GET",
+      ...init,
       credentials: "same-origin",
       cache: "no-store",
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        ...init.headers,
+      },
     });
     if (!response.ok) {
       return { ok: false, error: await readError(response) };
@@ -113,6 +118,7 @@ export function createUsuariosBrowserClient(
       return request(
         fetchImplementation,
         buildListUrl(filters),
+        { method: "GET" },
         parseUsuarioListResult,
       );
     },
@@ -123,6 +129,22 @@ export function createUsuariosBrowserClient(
       return request(
         fetchImplementation,
         `/api/usuarios/${encodeURIComponent(usuarioId)}`,
+        { method: "GET" },
+        parseUsuarioDetailResult,
+      );
+    },
+
+    criarUsuario(
+      payload: UsuarioCreatePayload,
+    ): Promise<UsuarioClientResult<UsuarioDetailResult>> {
+      return request(
+        fetchImplementation,
+        "/api/usuarios",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
         parseUsuarioDetailResult,
       );
     },

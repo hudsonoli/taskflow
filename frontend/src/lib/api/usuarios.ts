@@ -1,6 +1,7 @@
 import "server-only";
 
 import type {
+  UsuarioCreatePayload,
   UsuarioListFilters,
 } from "../../types/usuario-api";
 import type {
@@ -23,6 +24,76 @@ const FILTER_KEYS = new Set([
   "limit",
   "offset",
 ]);
+
+const CREATE_KEYS = new Set([
+  "codigoInterno",
+  "nome",
+  "email",
+  "perfilBase",
+  "acessoSistema",
+]);
+
+function requiredString(
+  value: unknown,
+  key: "codigoInterno" | "nome" | "email",
+  maxLength: number,
+): string {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > maxLength
+  ) {
+    throw new ApiBffError(
+      400,
+      "INVALID_REQUEST",
+      `Campo inválido: ${key}.`,
+    );
+  }
+  return value;
+}
+
+export function parseUsuarioCreatePayload(
+  body: Record<string, unknown>,
+): UsuarioCreatePayload {
+  for (const key of Object.keys(body)) {
+    if (!CREATE_KEYS.has(key)) {
+      throw new ApiBffError(
+        400,
+        "INVALID_REQUEST",
+        `Campo não permitido: ${key}.`,
+      );
+    }
+  }
+
+  const perfilBase = body.perfilBase;
+  if (!isPerfilBase(perfilBase)) {
+    throw new ApiBffError(400, "INVALID_REQUEST", "Perfil inválido.");
+  }
+  if (
+    body.acessoSistema !== undefined &&
+    typeof body.acessoSistema !== "boolean"
+  ) {
+    throw new ApiBffError(
+      400,
+      "INVALID_REQUEST",
+      "Campo inválido: acessoSistema.",
+    );
+  }
+
+  return {
+    codigoInterno: requiredString(body.codigoInterno, "codigoInterno", 64),
+    nome: requiredString(body.nome, "nome", 255),
+    email: requiredString(
+      typeof body.email === "string" ? body.email.trim() : body.email,
+      "email",
+      255,
+    ),
+    perfilBase,
+    ...(body.acessoSistema === undefined
+      ? {}
+      : { acessoSistema: body.acessoSistema }),
+  };
+}
 
 function singleValue(
   searchParams: URLSearchParams,
@@ -128,6 +199,31 @@ export class UsuariosApi {
 
   constructor(backend: BackendApiClient) {
     this.backend = backend;
+  }
+
+  async criar(
+    accessToken: string,
+    empresaId: string,
+    payload: UsuarioCreatePayload,
+  ): Promise<Usuario> {
+    const response = await this.backend.postJson(
+      "/usuarios",
+      accessToken,
+      {
+        ...payload,
+        empresaId,
+      },
+    );
+    try {
+      return mapUsuarioApiResponseToDomain(response, empresaId);
+    } catch (error) {
+      throw new ApiBffError(
+        502,
+        "INVALID_BACKEND_RESPONSE",
+        "Resposta inválida do serviço de usuários.",
+        { cause: error },
+      );
+    }
   }
 
   async listar(

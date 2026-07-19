@@ -55,6 +55,18 @@ export class BackendApiClient {
     });
   }
 
+  async postJson(
+    path: string,
+    accessToken: string,
+    body: unknown,
+  ): Promise<unknown> {
+    return this.requestJson(path, accessToken, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
   private async requestJson(
     path: string,
     accessToken: string,

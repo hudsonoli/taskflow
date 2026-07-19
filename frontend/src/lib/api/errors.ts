@@ -72,11 +72,18 @@ export function mapBackendApiStatus(status: number): ApiBffError {
   if (status === 404) {
     return new ApiBffError(404, "NOT_FOUND", "Usuário não encontrado.");
   }
+  if (status === 409) {
+    return new ApiBffError(
+      409,
+      "CONFLICT",
+      "Já existe um usuário com os dados informados.",
+    );
+  }
   if (status === 422) {
     return new ApiBffError(
       422,
       "VALIDATION_ERROR",
-      "Parâmetros de consulta inválidos.",
+      "Dados da solicitação inválidos.",
     );
   }
   return new ApiBffError(

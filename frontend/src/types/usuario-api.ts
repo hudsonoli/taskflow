@@ -30,11 +30,22 @@ export type UsuarioListFilters = {
   offset?: number;
 };
 
+export type UsuarioCreatePayload = {
+  codigoInterno: string;
+  nome: string;
+  email: string;
+  perfilBase: PerfilBase;
+  acessoSistema?: boolean;
+};
+
 export type UsuarioErrorCode =
   | "INVALID_REQUEST"
+  | "INVALID_ORIGIN"
+  | "UNSUPPORTED_MEDIA_TYPE"
   | "UNAUTHENTICATED"
   | "FORBIDDEN"
   | "NOT_FOUND"
+  | "CONFLICT"
   | "VALIDATION_ERROR"
   | "RATE_LIMITED"
   | "CONFIGURATION_ERROR"

@@ -64,6 +64,65 @@ test("obterUsuario codifica o ID e valida o envelope de detalhe", async () => {
   assert.equal(result.ok, true);
 });
 
+test("criarUsuario envia somente o payload público ao BFF", async () => {
+  let capturedUrl = "";
+  let capturedInit: RequestInit | undefined;
+  const client = createUsuariosBrowserClient(async (input, init) => {
+    capturedUrl = String(input);
+    capturedInit = init;
+    return Response.json({ data: usuarioDomain() }, { status: 201 });
+  });
+  const payload = {
+    codigoInterno: "USR-001",
+    nome: "Usuário Teste",
+    email: "usuario@example.com",
+    perfilBase: "admin" as const,
+    acessoSistema: true,
+  };
+
+  const result = await client.criarUsuario(payload);
+  const body = JSON.parse(String(capturedInit?.body));
+
+  assert.equal(capturedUrl, "/api/usuarios");
+  assert.equal(capturedInit?.method, "POST");
+  assert.equal(capturedInit?.credentials, "same-origin");
+  assert.equal(capturedInit?.cache, "no-store");
+  assert.equal(
+    new Headers(capturedInit?.headers).get("content-type"),
+    "application/json",
+  );
+  assert.equal(new Headers(capturedInit?.headers).has("authorization"), false);
+  assert.deepEqual(body, payload);
+  assert.equal("empresaId" in body, false);
+  assert.equal(result.ok, true);
+});
+
+test("criarUsuario preserva conflito seguro do BFF", async () => {
+  const client = createUsuariosBrowserClient(async () =>
+    Response.json(
+      {
+        error: {
+          code: "CONFLICT",
+          message: "Já existe um usuário com os dados informados.",
+        },
+      },
+      { status: 409 },
+    ),
+  );
+
+  const result = await client.criarUsuario({
+    codigoInterno: "USR-001",
+    nome: "Usuário Teste",
+    email: "usuario@example.com",
+    perfilBase: "admin",
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.error.code, "CONFLICT");
+  }
+});
+
 test("aceita lista vazia e normaliza 401, 403 e 404", async () => {
   const empty = createUsuariosBrowserClient(async () =>
     Response.json({ items: [] }),
