@@ -14,7 +14,7 @@ registerHooks({
     }
     if (
       (context.parentURL?.includes("/src/") ||
-        context.parentURL?.includes("/tests/auth/")) &&
+        context.parentURL?.includes("/tests/")) &&
       specifier.startsWith(".") &&
       !/\.[a-z]+$/i.test(specifier)
     ) {
