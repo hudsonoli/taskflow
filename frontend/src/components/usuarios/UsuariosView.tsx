@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import {
@@ -12,11 +12,31 @@ import {
   cadastroTableHeaderClassName,
   getCadastroTableCellClassNames,
 } from "@/components/cadastros";
+import {
+  EntityActions,
+  EntityDrawer,
+  EntityHeader,
+  EntityPeek,
+} from "@/components/entity";
 import { EmptyStateIllustration } from "@/components/ui/EmptyStateIllustration";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusPill } from "@/components/ui/StatusPill";
 import type { Usuario } from "@/types/usuario-domain";
+import { useUsuarioDetail } from "./useUsuarioDetail";
 import { useUsuariosList } from "./useUsuariosList";
+
+const usuarioDateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeStyle: "short",
+  timeZone: "America/Sao_Paulo",
+});
+
+function formatUsuarioDateTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : usuarioDateTimeFormatter.format(date);
+}
 
 function usuarioStatusTone(
   status: Usuario["status"],
@@ -27,8 +47,120 @@ function usuarioStatusTone(
   return "neutral";
 }
 
+type UsuarioPeekDrawerProps = {
+  usuarioId: string;
+  onClose: () => void;
+};
+
+function UsuarioPeekDrawer({
+  usuarioId,
+  onClose,
+}: UsuarioPeekDrawerProps) {
+  const { status, usuario, error, retry } = useUsuarioDetail(usuarioId);
+
+  function renderContent() {
+    switch (status) {
+      case "loading":
+        return (
+          <div
+            role="status"
+            aria-live="polite"
+            className="px-3 py-8 text-center text-sm text-zinc-500"
+          >
+            Carregando usuário...
+          </div>
+        );
+
+      case "error":
+        return (
+          <div className="p-3">
+            <EmptyStateIllustration
+              size="compact"
+              title="Não foi possível carregar o usuário"
+              description={error}
+              action={
+                <Button size="sm" colorScheme="brand" onClick={retry}>
+                  Tentar novamente
+                </Button>
+              }
+            />
+          </div>
+        );
+
+      case "success":
+        return (
+          <EntityPeek
+            summary={[
+              { label: "Código interno", value: usuario.codigoInterno },
+              { label: "Nome", value: usuario.nome },
+              { label: "E-mail", value: usuario.email },
+              { label: "Perfil", value: usuario.perfilLabel },
+              {
+                label: "Status",
+                value: usuario.statusLabel,
+              },
+              {
+                label: "Data de criação",
+                value: formatUsuarioDateTime(usuario.createdAt),
+              },
+              {
+                label: "Data de atualização",
+                value: formatUsuarioDateTime(usuario.updatedAt),
+              },
+            ]}
+          />
+        );
+    }
+  }
+
+  return (
+    <EntityDrawer
+      open
+      mode="peek"
+      loading={status === "loading"}
+      onClose={onClose}
+      header={
+        <EntityHeader
+          title={status === "success" ? usuario.nome : "Usuário"}
+          description={
+            status === "success" ? usuario.codigoInterno : undefined
+          }
+          statusBadge={
+            status === "success" ? (
+              <StatusPill
+                tone={usuarioStatusTone(usuario.status)}
+                density="compact"
+              >
+                {usuario.statusLabel}
+              </StatusPill>
+            ) : undefined
+          }
+          onClose={onClose}
+        />
+      }
+      footer={
+        <EntityActions
+          variant="peek"
+          colorScheme="brand"
+          primaryAction={{
+            label: "Editar",
+            onClick: () => undefined,
+            disabled: true,
+          }}
+          secondaryActions={[{ label: "Fechar", onClick: onClose }]}
+        />
+      }
+    >
+      {renderContent()}
+    </EntityDrawer>
+  );
+}
+
 export function UsuariosView() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedUsuarioId, setSelectedUsuarioId] = useState<string | null>(
+    null,
+  );
   const { usuarios, status, error, retry } =
     useUsuariosList(searchQuery);
 
@@ -136,19 +268,35 @@ export function UsuariosView() {
                   </td>
 
                   <td className={`${cell} text-right`}>
-                    <button
-                      type="button"
-                      disabled
-                      aria-label={`Editar usuário ${usuario.nome}`}
-                      title="Edição indisponível"
-                      className="inline-flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-zinc-300"
-                    >
-                      <Pencil
-                        className="h-3.5 w-3.5"
-                        strokeWidth={2}
-                        aria-hidden="true"
-                      />
-                    </button>
+                    <div className="inline-flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUsuarioId(usuario.id)}
+                        aria-label={`Visualizar usuário ${usuario.nome}`}
+                        className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11px] font-normal text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
+                      >
+                        <Eye
+                          className="h-3.5 w-3.5"
+                          strokeWidth={2}
+                          aria-hidden="true"
+                        />
+                        Visualizar
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled
+                        aria-label={`Editar usuário ${usuario.nome}`}
+                        title="Edição indisponível"
+                        className="inline-flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-full text-zinc-300"
+                      >
+                        <Pencil
+                          className="h-3.5 w-3.5"
+                          strokeWidth={2}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -188,6 +336,14 @@ export function UsuariosView() {
       />
 
       {renderUsuariosContent()}
+
+      {selectedUsuarioId ? (
+        <UsuarioPeekDrawer
+          key={selectedUsuarioId}
+          usuarioId={selectedUsuarioId}
+          onClose={() => setSelectedUsuarioId(null)}
+        />
+      ) : null}
     </PageShell>
   );
 }
