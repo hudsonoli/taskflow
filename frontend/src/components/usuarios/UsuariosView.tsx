@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Eye, Pencil } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
@@ -22,6 +22,11 @@ import { EmptyStateIllustration } from "@/components/ui/EmptyStateIllustration";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusPill } from "@/components/ui/StatusPill";
 import type { Usuario } from "@/types/usuario-domain";
+import {
+  UsuarioCreateForm,
+  type UsuarioCreateFormValue,
+} from "./UsuarioCreateForm";
+import { useUsuarioCreate } from "./useUsuarioCreate";
 import { useUsuarioDetail } from "./useUsuarioDetail";
 import { useUsuariosList } from "./useUsuariosList";
 
@@ -45,6 +50,123 @@ function usuarioStatusTone(
   if (status === "bloqueado") return "amber";
   if (status === "inativo") return "red";
   return "neutral";
+}
+
+function createInitialUsuarioFormValue(): UsuarioCreateFormValue {
+  return {
+    codigoInterno: "",
+    nome: "",
+    email: "",
+    perfilBase: "operador",
+    acessoSistema: true,
+  };
+}
+
+type UsuarioDrawerState =
+  | { mode: "closed" }
+  | { mode: "peek"; usuarioId: string }
+  | { mode: "create" };
+
+type UsuarioCreateDrawerProps = {
+  onClose: () => void;
+  onCreated: () => void;
+};
+
+function UsuarioCreateDrawer({
+  onClose,
+  onCreated,
+}: UsuarioCreateDrawerProps) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [value, setValue] = useState<UsuarioCreateFormValue>(
+    createInitialUsuarioFormValue,
+  );
+  const [validationError, setValidationError] = useState<string | null>(
+    null,
+  );
+  const { submit, status, error, reset } = useUsuarioCreate();
+  const submitting = status === "submitting";
+  const canSubmit =
+    value.codigoInterno.trim().length > 0 &&
+    value.nome.trim().length > 0 &&
+    value.email.trim().length > 0;
+
+  const handleCloseIntent = useCallback(() => {
+    if (submitting) return;
+
+    setValue(createInitialUsuarioFormValue());
+    setValidationError(null);
+    reset();
+    onClose();
+  }, [onClose, reset, submitting]);
+
+  function handleValueChange(nextValue: UsuarioCreateFormValue) {
+    setValue(nextValue);
+    setValidationError(null);
+    if (status === "error") reset();
+  }
+
+  async function handleSubmit() {
+    if (!formRef.current?.reportValidity()) return;
+
+    if (!canSubmit) {
+      setValidationError(
+        "Preencha o código interno, o nome e o e-mail.",
+      );
+      return;
+    }
+
+    setValidationError(null);
+    const succeeded = await submit(value);
+    if (!succeeded) return;
+
+    setValue(createInitialUsuarioFormValue());
+    reset();
+    onCreated();
+  }
+
+  return (
+    <EntityDrawer
+      open
+      mode="edit"
+      loading={submitting}
+      onClose={handleCloseIntent}
+      header={
+        <EntityHeader
+          title="Novo Usuário"
+          description="Preencha os dados básicos para criar o usuário."
+          onClose={handleCloseIntent}
+        />
+      }
+      footer={
+        <EntityActions
+          variant="edit"
+          colorScheme="brand"
+          primaryAction={{
+            label: "Salvar Usuário",
+            onClick: () => void handleSubmit(),
+            disabled: !canSubmit,
+            loading: submitting,
+          }}
+          secondaryActions={[
+            {
+              label: "Cancelar",
+              onClick: handleCloseIntent,
+              disabled: submitting,
+            },
+          ]}
+        />
+      }
+    >
+      <UsuarioCreateForm
+        formRef={formRef}
+        value={value}
+        disabled={submitting}
+        error={validationError ?? error}
+        onChange={handleValueChange}
+        onSubmit={() => void handleSubmit()}
+      />
+    </EntityDrawer>
+  );
 }
 
 type UsuarioPeekDrawerProps = {
@@ -158,11 +280,26 @@ function UsuarioPeekDrawer({
 
 export function UsuariosView() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedUsuarioId, setSelectedUsuarioId] = useState<string | null>(
-    null,
-  );
-  const { usuarios, status, error, retry } =
+  const [drawerState, setDrawerState] = useState<UsuarioDrawerState>({
+    mode: "closed",
+  });
+  const {
+    usuarios,
+    status,
+    error,
+    retry,
+  } =
     useUsuariosList(searchQuery);
+  const refreshUsuarios = retry;
+
+  const closeDrawer = useCallback(() => {
+    setDrawerState({ mode: "closed" });
+  }, []);
+
+  const handleUsuarioCreated = useCallback(() => {
+    refreshUsuarios();
+    setDrawerState({ mode: "closed" });
+  }, [refreshUsuarios]);
 
   const usuariosAtivos = usuarios.filter(
     (usuario) => usuario.status === "ativo",
@@ -271,7 +408,12 @@ export function UsuariosView() {
                     <div className="inline-flex items-center justify-end gap-1">
                       <button
                         type="button"
-                        onClick={() => setSelectedUsuarioId(usuario.id)}
+                        onClick={() =>
+                          setDrawerState({
+                            mode: "peek",
+                            usuarioId: usuario.id,
+                          })
+                        }
                         aria-label={`Visualizar usuário ${usuario.nome}`}
                         className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11px] font-normal text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                       >
@@ -313,7 +455,11 @@ export function UsuariosView() {
         description="Gestão de usuários, cargos e permissões."
         size="section"
         actions={
-          <Button size="sm" colorScheme="brand" disabled>
+          <Button
+            size="sm"
+            colorScheme="brand"
+            onClick={() => setDrawerState({ mode: "create" })}
+          >
             Novo Usuário
           </Button>
         }
@@ -337,11 +483,18 @@ export function UsuariosView() {
 
       {renderUsuariosContent()}
 
-      {selectedUsuarioId ? (
+      {drawerState.mode === "peek" ? (
         <UsuarioPeekDrawer
-          key={selectedUsuarioId}
-          usuarioId={selectedUsuarioId}
-          onClose={() => setSelectedUsuarioId(null)}
+          key={drawerState.usuarioId}
+          usuarioId={drawerState.usuarioId}
+          onClose={closeDrawer}
+        />
+      ) : null}
+
+      {drawerState.mode === "create" ? (
+        <UsuarioCreateDrawer
+          onClose={closeDrawer}
+          onCreated={handleUsuarioCreated}
         />
       ) : null}
     </PageShell>
