@@ -26,7 +26,7 @@ import {
   responsaveisDisponiveis,
 } from "@/lib/cliente-mock";
 import { normalizeSearchText, normalizeSearchToken } from "@/lib/search-normalize";
-import type { ClienteDraft, ClienteStatus } from "@/types/cliente";
+import { clienteStatusTone, type ClienteDraft } from "@/types/cliente";
 import { ClienteAvatar } from "./ClienteAvatar";
 import { ClienteEditFormBody } from "./ClienteEditFormBody";
 import { useClienteDraft } from "./useClienteDraft";
@@ -81,17 +81,6 @@ function matchesCliente(cliente: ClienteDraft, query: string): boolean {
   );
 
   return tokenHaystack.includes(tokenQuery);
-}
-
-// Mapeamento de cor por estado — específico de Clientes, não vive no
-// CadastroStatusBadge compartilhado (que é usado por outras 6 telas com uma
-// heurística de texto diferente, sem "Suspenso" e com Inativo em cinza).
-// StatusPill já tem os três tons semânticos prontos (green/amber/red),
-// dirigidos aqui por um valor explícito, não por heurística.
-function clienteStatusTone(status: ClienteStatus): "green" | "amber" | "red" {
-  if (status === "Ativo") return "green";
-  if (status === "Suspenso") return "amber";
-  return "red";
 }
 
 const initialClientes: ClienteDraft[] = [

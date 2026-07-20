@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { Phone, Mail, MessageCircle, Copy, CopyPlus } from "lucide-react";
 import type { AgendaContato } from "@/types/agenda";
 
@@ -40,18 +41,16 @@ function ActionIconButton({
   icon: typeof Phone;
 }) {
   return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      className="group relative inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-200 bg-white text-zinc-600 transition hover:bg-zinc-100"
-      onClick={() => console.log(label)}
-    >
-      <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-      <span className="pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white opacity-0 translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0 shadow-lg">
-        {label}
-      </span>
-    </button>
+    <Tooltip content={label} placement="right">
+      <button
+        type="button"
+        aria-label={label}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-200 bg-white text-zinc-600 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
+        onClick={() => console.log(label)}
+      >
+        <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -68,7 +67,7 @@ export function AgendaList({ contacts }: AgendaListProps) {
   if (contacts.length === 0) {
     return (
       <EmptyState
-        title="📇 Nenhum contato encontrado."
+        title="Nenhum contato encontrado."
         description="Tente alterar os filtros ou a pesquisa."
       />
     );

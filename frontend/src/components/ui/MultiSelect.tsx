@@ -65,7 +65,7 @@ export function MultiSelect({
                 checked={values.includes(option.value)}
                 disabled={disabled}
                 onChange={() => toggleValue(option.value)}
-                className="h-4 w-4 rounded border-zinc-300 text-zinc-900"
+                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
               />
               <span>{option.label}</span>
             </label>

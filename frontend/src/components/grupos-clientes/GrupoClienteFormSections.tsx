@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { clienteStatusTone } from "@/types/cliente";
 import {
   clientesGrupoDisponiveis,
   type ClienteGrupoItem,
@@ -218,7 +220,9 @@ export function DadosSection({ draft, onChange }: SectionProps) {
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Badge>{cliente.sigla}</Badge>
-                  <Badge>{cliente.status}</Badge>
+                  <StatusPill tone={clienteStatusTone(cliente.status)}>
+                    {cliente.status}
+                  </StatusPill>
                 </div>
               </div>
             ))}

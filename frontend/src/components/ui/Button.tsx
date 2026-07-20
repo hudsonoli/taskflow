@@ -11,10 +11,12 @@ const sizeClassNames: Record<NonNullable<ButtonProps["size"]>, string> = {
   md: "px-4 py-2",
 };
 
-// neutral é o default e permanece byte-a-byte igual ao original (preto/
-// branco) — os ~25 consumidores atuais de Button não mudam de aparência.
-// brand é opt-in, usado hoje só por Clientes (identidade BOX: laranja),
-// via os mesmos tokens semânticos já usados em foco/EntityFormNav.
+// neutral continua sendo o default (preto/branco) — decisão revertida
+// nesta fase (a generalização do laranja como default de toda ação
+// primária foi congelada até uma revisão própria da hierarquia de
+// botões). brand (laranja, identidade BOX) é usado explicitamente pelos
+// consumidores que já adotaram a ação principal em laranja (ex.: Clientes,
+// Usuários, via EntityActions) e continua disponível para os próximos.
 const variantClassNamesByColorScheme: Record<
   ButtonColorScheme,
   Record<NonNullable<ButtonProps["variant"]>, string>

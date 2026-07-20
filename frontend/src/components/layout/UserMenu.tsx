@@ -136,7 +136,7 @@ export function UserMenu({ isCollapsed = false }: UserMenuProps) {
       </button>
 
       <div
-        className={`absolute bottom-0 left-full z-50 ml-3 w-64 origin-bottom-left rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl transition-[opacity,transform] duration-200 ${
+        className={`absolute bottom-0 left-full z-50 ml-3 w-64 origin-bottom-left rounded-3xl border border-zinc-200 bg-white p-2 shadow-xl transition-[opacity,transform] duration-200 ${
           open
             ? "pointer-events-auto translate-x-0 scale-100 opacity-100"
             : "pointer-events-none translate-x-2 scale-95 opacity-0"

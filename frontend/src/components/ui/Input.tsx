@@ -42,7 +42,7 @@ export function Input({
       <span className={labelClassNames[density]}>{label}</span>
 
       <input
-        className={`w-full rounded-xl border border-zinc-200 bg-white ${fieldPaddingClassNames[density]} ${fieldTextClassNames[density]} ${placeholderClassNames[density]} text-zinc-900 outline-none transition focus:border-zinc-400 ${className ?? ""}`}
+        className={`w-full rounded-xl border border-zinc-200 bg-white ${fieldPaddingClassNames[density]} ${fieldTextClassNames[density]} ${placeholderClassNames[density]} text-zinc-900 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400 ${className ?? ""}`}
         {...rest}
       />
     </label>

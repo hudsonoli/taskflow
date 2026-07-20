@@ -15,10 +15,11 @@ export type EntityActionsProps = {
   variant: EntityActionVariant;
   primaryAction: EntityActionButton;
   secondaryActions?: EntityActionButton[];
-  // neutral por padrão (preto/branco) — quem quiser a identidade BOX
-  // (laranja) passa colorScheme="brand" explicitamente. Hoje só Clientes o
-  // faz; um futuro segundo consumidor de EntityActions não muda de
-  // aparência sem pedir.
+  // neutral continua sendo o default, alinhado ao default de
+  // ui/Button.tsx — decisão revertida nesta fase (a hierarquia completa de
+  // botões/ações será definida em fase própria). colorScheme="brand" é
+  // usado explicitamente pelos consumidores que já adotaram a ação
+  // principal em laranja (ex.: Clientes, Usuários).
   colorScheme?: "neutral" | "brand";
 };
 

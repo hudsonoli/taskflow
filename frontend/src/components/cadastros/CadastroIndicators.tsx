@@ -58,7 +58,7 @@ export function CadastroIndicators({
       {items.map((item) => (
         <div
           key={item.label}
-          className={`flex items-center justify-between rounded-2xl border border-zinc-100 bg-white shadow-sm ${densityClassNames[density]}`}
+          className={`flex items-center justify-between rounded-3xl border border-zinc-100 bg-white shadow-sm ${densityClassNames[density]}`}
         >
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 truncate text-xs font-medium text-zinc-500">

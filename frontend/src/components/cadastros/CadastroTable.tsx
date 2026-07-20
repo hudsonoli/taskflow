@@ -7,7 +7,7 @@ type CadastroTableProps = {
 
 export function CadastroTable({ children, minWidth = "760px" }: CadastroTableProps) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-zinc-100 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-3xl border border-zinc-100 bg-white shadow-sm">
       <table
         className="w-full text-left text-sm"
         style={{ minWidth }}

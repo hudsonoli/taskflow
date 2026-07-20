@@ -2,6 +2,18 @@ export type DocumentoTipo = "cnpj" | "cpf";
 
 export type ClienteStatus = "Ativo" | "Suspenso" | "Inativo";
 
+// Mapeamento de cor por estado — específico do domínio Cliente, não vive
+// no CadastroStatusBadge compartilhado (heurística de texto diferente,
+// sem "Suspenso") nem em um utilitário genérico de status (decisão de
+// arquitetura registrada em docs/design-system/14-component-hierarchy.md:
+// cada domínio é responsável pelo próprio mapeamento de estado). Único
+// consumido por ClientesView e GrupoClienteFormSections.
+export function clienteStatusTone(status: ClienteStatus): "green" | "amber" | "red" {
+  if (status === "Ativo") return "green";
+  if (status === "Suspenso") return "amber";
+  return "red";
+}
+
 export type ClienteContato = {
   id: string;
   nome: string;

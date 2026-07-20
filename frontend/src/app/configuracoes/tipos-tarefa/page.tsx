@@ -1,7 +1,13 @@
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { StatusPill } from "@/components/ui/StatusPill";
+
+// Sem enum próprio nesta tela (dados hardcoded) — comparação explícita por
+// valor, não heurística de texto (docs/design-system/14-component-hierarchy.md).
+function statusTone(status: string): "green" | "neutral" {
+  return status === "Ativo" ? "green" : "neutral";
+}
 
 const taskTypes = [
   {
@@ -105,7 +111,7 @@ export default function TiposTarefaPage() {
                 </td>
 
                 <td className="px-6 py-4">
-                  <Badge>{type.status}</Badge>
+                  <StatusPill tone={statusTone(type.status)}>{type.status}</StatusPill>
                 </td>
               </tr>
             ))}

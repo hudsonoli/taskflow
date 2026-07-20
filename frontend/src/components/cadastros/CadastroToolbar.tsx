@@ -32,7 +32,7 @@ export function CadastroToolbar({
 }: CadastroToolbarProps) {
   return (
     <div
-      className={`flex flex-col gap-2 rounded-2xl border border-zinc-100 bg-white shadow-sm lg:flex-row lg:items-center lg:justify-between ${containerDensityClassNames[density]}`}
+      className={`flex flex-col gap-2 rounded-3xl border border-zinc-100 bg-white shadow-sm lg:flex-row lg:items-center lg:justify-between ${containerDensityClassNames[density]}`}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
         <label

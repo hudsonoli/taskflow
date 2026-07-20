@@ -184,7 +184,7 @@ export function FornecedoresView({
                 {fornecedor.documento}
               </td>
               <td className={cadastroTableCellClassName}>
-                <CadastroStatusBadge>{fornecedor.categoria}</CadastroStatusBadge>
+                <Badge>{fornecedor.categoria}</Badge>
               </td>
               <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                 {fornecedor.email || fornecedor.telefone || fornecedor.celular || "-"}

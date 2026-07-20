@@ -36,7 +36,7 @@ export function Tabs({ tabs, activeTab, onChange, density = "default" }: TabsPro
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className={`shrink-0 border-b-2 ${tabPaddingClassNames[density]} ${tabTextClassNames[density]} transition ${
+            className={`shrink-0 rounded-t-sm border-b-2 ${tabPaddingClassNames[density]} ${tabTextClassNames[density]} transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
               active
                 ? "border-zinc-900 text-zinc-900"
                 : "border-transparent text-zinc-500 hover:text-zinc-700"

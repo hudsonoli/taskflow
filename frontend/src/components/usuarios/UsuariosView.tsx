@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Eye, Pencil } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
   CadastroAvatar,
@@ -409,9 +410,7 @@ export function UsuariosView() {
                   </td>
 
                   <td className={cell}>
-                    <StatusPill tone="neutral" density="compact">
-                      {usuario.perfilLabel}
-                    </StatusPill>
+                    <Badge>{usuario.perfilLabel}</Badge>
                   </td>
 
                   <td className={cell}>

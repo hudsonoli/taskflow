@@ -78,7 +78,7 @@ export function QuickCreateMenu({ variant = "expanded" }: QuickCreateMenuProps) 
       </button>
 
       {open ? (
-        <div className="absolute left-full top-0 z-50 ml-3 w-52 origin-top-left rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-xl">
+        <div className="absolute left-full top-0 z-50 ml-3 w-52 origin-top-left rounded-3xl border border-zinc-200 bg-white p-1.5 shadow-xl">
           <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
             Criação rápida
           </p>
