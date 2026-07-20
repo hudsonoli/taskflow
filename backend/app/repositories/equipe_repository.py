@@ -33,6 +33,7 @@ class EquipeRepository:
         *,
         empresa_id: str,
         status: str | None = None,
+        departamento_id: str | None = None,
         busca: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -41,6 +42,9 @@ class EquipeRepository:
 
         if status:
             statement = statement.where(Equipe.status == status)
+
+        if departamento_id:
+            statement = statement.where(Equipe.departamento_id == departamento_id)
 
         if busca:
             termo = f"%{busca}%"

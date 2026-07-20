@@ -5,9 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.domain.event_types import DomainEventType
 from app.models.equipe import Equipe
+from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.equipe_repository import EquipeRepository
 from app.repositories.empresa_repository import EmpresaRepository
 from app.schemas.equipe import EquipeCreate, EquipeResponse, EquipeUpdate
+from app.services.departamento_service import STATUS_ATIVA as DEPARTAMENTO_STATUS_ATIVA
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.empresa_service import STATUS_ARQUIVADA as EMPRESA_STATUS_ARQUIVADA
 from app.services.empresa_service import STATUS_INATIVA as EMPRESA_STATUS_INATIVA
@@ -42,10 +44,12 @@ class EquipeService:
         self,
         repository: EquipeRepository | None = None,
         empresa_repository: EmpresaRepository | None = None,
+        departamento_repository: DepartamentoRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
     ) -> None:
         self.repository = repository or EquipeRepository()
         self.empresa_repository = empresa_repository or EmpresaRepository()
+        self.departamento_repository = departamento_repository or DepartamentoRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
 
     def create_equipe(
@@ -56,6 +60,7 @@ class EquipeService:
         actor_usuario_id: str | None = None,
     ) -> Equipe:
         empresa_id = str(data.empresa_id)
+        departamento_id = str(data.departamento_id)
         codigo_interno = self._normalize_codigo_interno(data.codigo_interno)
         nome = self._normalize_nome(data.nome)
         descricao = self._normalize_descricao(data.descricao)
@@ -65,6 +70,7 @@ class EquipeService:
         equipe = Equipe(
             id=str(uuid4()),
             empresa_id=empresa_id,
+            departamento_id=departamento_id,
             codigo_interno=codigo_interno,
             nome=nome,
             descricao=descricao,
@@ -78,6 +84,7 @@ class EquipeService:
 
         try:
             self._ensure_empresa_accepts_equipe(db, empresa_id)
+            self._ensure_departamento_valido(db, empresa_id, departamento_id)
             self._ensure_codigo_interno_available(db, empresa_id, equipe.codigo_interno)
             self._ensure_nome_available(db, empresa_id, equipe.nome)
             self.repository.create(db, equipe)
@@ -95,11 +102,20 @@ class EquipeService:
         *,
         empresa_id: str,
         status: str | None = None,
+        departamento_id: str | None = None,
         busca: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Equipe]:
-        return self.repository.list(db, empresa_id=empresa_id, status=status, busca=busca, limit=limit, offset=offset)
+        return self.repository.list(
+            db,
+            empresa_id=empresa_id,
+            status=status,
+            departamento_id=departamento_id,
+            busca=busca,
+            limit=limit,
+            offset=offset,
+        )
 
     def get_equipe(self, db: Session, equipe_id: str) -> Equipe:
         equipe = self.repository.get_by_id(db, equipe_id)
@@ -211,6 +227,7 @@ class EquipeService:
             if equipe.status == STATUS_ARQUIVADA:
                 raise EquipeInvalidTransitionError("Equipe arquivada não pode ser reativada")
 
+            self._ensure_departamento_valido(db, equipe.empresa_id, equipe.departamento_id)
             now = datetime.now(timezone.utc)
             equipe.status = STATUS_ATIVA
             equipe.updated_at = now
@@ -230,6 +247,7 @@ class EquipeService:
         return EquipeResponse(
             id=equipe.id,
             empresaId=equipe.empresa_id,
+            departamentoId=equipe.departamento_id,
             codigoInterno=equipe.codigo_interno,
             nome=equipe.nome,
             descricao=equipe.descricao,
@@ -249,6 +267,20 @@ class EquipeService:
             raise EquipeInvalidEmpresaError("Empresa inativa não permite criação de Equipe")
         if empresa.status == EMPRESA_STATUS_ARQUIVADA:
             raise EquipeInvalidEmpresaError("Empresa arquivada não permite criação de Equipe")
+
+    def _ensure_departamento_valido(
+        self,
+        db: Session,
+        empresa_id: str,
+        departamento_id: str,
+    ) -> None:
+        departamento = self.departamento_repository.get_by_id(db, departamento_id)
+        if (
+            departamento is None
+            or departamento.empresa_id != empresa_id
+            or departamento.status != DEPARTAMENTO_STATUS_ATIVA
+        ):
+            raise EquipeInvalidDataError("Departamento não encontrado ou inativo")
 
     def _ensure_codigo_interno_available(
         self,

@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
+from app.models.departamento import Departamento
 from app.models.equipe import Equipe
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
@@ -78,6 +79,25 @@ def usuario(empresa_id: str, **overrides) -> Usuario:
     return Usuario(**data)
 
 
+def departamento(empresa_id: str, **overrides) -> Departamento:
+    current_time = now()
+    data = {
+        "id": str(uuid4()),
+        "empresa_id": empresa_id,
+        "codigo_interno": f"DEP-{uuid4().hex[:8]}",
+        "nome": f"Departamento {uuid4().hex[:8]}",
+        "descricao": "Departamento de teste",
+        "status": "ativa",
+        "created_at": current_time,
+        "updated_at": current_time,
+        "inativado_at": None,
+        "motivo_inativacao": None,
+        "inativado_por_usuario_id": None,
+    }
+    data.update(overrides)
+    return Departamento(**data)
+
+
 def equipe(empresa_id: str, **overrides) -> Equipe:
     current_time = now()
     data = {
@@ -97,6 +117,16 @@ def equipe(empresa_id: str, **overrides) -> Equipe:
     return Equipe(**data)
 
 
+def persist_equipe(session_factory, empresa_id: str, **overrides) -> Equipe:
+    dep = departamento(empresa_id)
+    created = equipe(empresa_id, departamento_id=dep.id, **overrides)
+    with session_factory() as db:
+        db.add_all([dep, created])
+        db.commit()
+        db.refresh(created)
+        return created
+
+
 def persist(session_factory, *objects):
     with session_factory() as db:
         db.add_all(objects)
@@ -108,10 +138,16 @@ def persist(session_factory, *objects):
 
 def test_equipe_persists_required_fields(session_factory):
     emp = persist(session_factory, empresa())
-    created = persist(session_factory, equipe(emp.id, codigo_interno="EQ-001", nome="Equipe Criacao"))
+    created = persist_equipe(
+        session_factory,
+        emp.id,
+        codigo_interno="EQ-001",
+        nome="Equipe Criacao",
+    )
 
     assert created.id
     assert created.empresa_id == emp.id
+    assert created.departamento_id
     assert created.codigo_interno == "EQ-001"
     assert created.nome == "Equipe Criacao"
     assert created.status == "ativa"
@@ -129,6 +165,7 @@ def test_expected_columns_exist_and_no_out_of_scope_relationship_fields():
     assert columns == {
         "id",
         "empresa_id",
+        "departamento_id",
         "codigo_interno",
         "nome",
         "descricao",
@@ -141,7 +178,6 @@ def test_expected_columns_exist_and_no_out_of_scope_relationship_fields():
     }
     assert "usuario_id" not in columns
     assert "cargo_id" not in columns
-    assert "departamento_id" not in columns
     assert "squad_id" not in columns
 
 
@@ -150,6 +186,7 @@ def test_expected_indexes_exist():
 
     assert index_names == {
         "ix_equipes_empresa_id",
+        "ix_equipes_departamento_id",
         "ix_equipes_status",
         "ix_equipes_created_at",
     }
@@ -163,37 +200,67 @@ def test_expected_constraints_exist():
     assert "ck_equipes_codigo_interno_nao_vazio" in constraint_names
     assert "uq_equipes_empresa_codigo_interno" in constraint_names
     assert "uq_equipes_empresa_nome" in constraint_names
+    assert "fk_equipes_departamento_id_departamentos" in constraint_names
+
+
+def test_departamento_id_accepts_uuid_string_and_resolves_relationship(session_factory):
+    emp = empresa()
+    dep = departamento(emp.id)
+    created = equipe(emp.id, departamento_id=dep.id)
+
+    with session_factory() as db:
+        db.add_all([emp, dep, created])
+        db.commit()
+        db.refresh(created)
+
+        assert created.departamento_id == dep.id
+        assert created.departamento.id == dep.id
+
+
+def test_departamento_id_is_required(session_factory):
+    emp = persist(session_factory, empresa())
+
+    with pytest.raises(IntegrityError):
+        persist(session_factory, equipe(emp.id, departamento_id=None))
 
 
 def test_empresa_id_is_required(session_factory):
     with pytest.raises(IntegrityError):
-        persist(session_factory, equipe(None))
+        persist(
+            session_factory,
+            equipe(None, departamento_id=str(uuid4())),
+        )
 
 
 def test_empresa_id_must_reference_existing_empresa(session_factory):
     with pytest.raises(IntegrityError):
-        persist(session_factory, equipe(str(uuid4())))
+        persist(
+            session_factory,
+            equipe(str(uuid4()), departamento_id=str(uuid4())),
+        )
 
 
 def test_inativado_por_usuario_id_must_reference_existing_usuario(session_factory):
     emp = persist(session_factory, empresa())
 
     with pytest.raises(IntegrityError):
-        persist(session_factory, equipe(emp.id, inativado_por_usuario_id=str(uuid4())))
+        persist_equipe(
+            session_factory,
+            emp.id,
+            inativado_por_usuario_id=str(uuid4()),
+        )
 
 
 def test_inativado_por_usuario_id_can_reference_usuario(session_factory):
     emp = persist(session_factory, empresa())
     actor = persist(session_factory, usuario(emp.id))
-    created = persist(
+    created = persist_equipe(
         session_factory,
-        equipe(
-            emp.id,
-            status="inativa",
-            inativado_at=now(),
-            motivo_inativacao="encerramento",
-            inativado_por_usuario_id=actor.id,
-        ),
+        emp.id,
+        status="inativa",
+        inativado_at=now(),
+        motivo_inativacao="encerramento",
+        inativado_por_usuario_id=actor.id,
     )
 
     assert created.inativado_por_usuario_id == actor.id
@@ -201,17 +268,17 @@ def test_inativado_por_usuario_id_can_reference_usuario(session_factory):
 
 def test_codigo_interno_unique_per_empresa(session_factory):
     emp = persist(session_factory, empresa())
-    persist(session_factory, equipe(emp.id, codigo_interno="EQ-DUP"))
+    persist_equipe(session_factory, emp.id, codigo_interno="EQ-DUP")
 
     with pytest.raises(IntegrityError):
-        persist(session_factory, equipe(emp.id, codigo_interno="EQ-DUP"))
+        persist_equipe(session_factory, emp.id, codigo_interno="EQ-DUP")
 
 
 def test_codigo_interno_can_repeat_in_different_empresas(session_factory):
     emp_a, emp_b = persist(session_factory, empresa(), empresa(documento=uuid4().hex))
 
-    first = persist(session_factory, equipe(emp_a.id, codigo_interno="EQ-001"))
-    second = persist(session_factory, equipe(emp_b.id, codigo_interno="EQ-001"))
+    first = persist_equipe(session_factory, emp_a.id, codigo_interno="EQ-001")
+    second = persist_equipe(session_factory, emp_b.id, codigo_interno="EQ-001")
 
     assert first.codigo_interno == second.codigo_interno
     assert first.empresa_id != second.empresa_id
@@ -219,17 +286,17 @@ def test_codigo_interno_can_repeat_in_different_empresas(session_factory):
 
 def test_nome_unique_per_empresa(session_factory):
     emp = persist(session_factory, empresa())
-    persist(session_factory, equipe(emp.id, nome="Criacao"))
+    persist_equipe(session_factory, emp.id, nome="Criacao")
 
     with pytest.raises(IntegrityError):
-        persist(session_factory, equipe(emp.id, nome="Criacao"))
+        persist_equipe(session_factory, emp.id, nome="Criacao")
 
 
 def test_nome_can_repeat_in_different_empresas(session_factory):
     emp_a, emp_b = persist(session_factory, empresa(), empresa(documento=uuid4().hex))
 
-    first = persist(session_factory, equipe(emp_a.id, nome="Atendimento"))
-    second = persist(session_factory, equipe(emp_b.id, nome="Atendimento"))
+    first = persist_equipe(session_factory, emp_a.id, nome="Atendimento")
+    second = persist_equipe(session_factory, emp_b.id, nome="Atendimento")
 
     assert first.nome == second.nome
     assert first.empresa_id != second.empresa_id
@@ -239,20 +306,20 @@ def test_nome_empty_is_rejected(session_factory):
     emp = persist(session_factory, empresa())
 
     with pytest.raises(IntegrityError):
-        persist(session_factory, equipe(emp.id, nome="   "))
+        persist_equipe(session_factory, emp.id, nome="   ")
 
 
 def test_codigo_interno_empty_is_rejected(session_factory):
     emp = persist(session_factory, empresa())
 
     with pytest.raises(IntegrityError):
-        persist(session_factory, equipe(emp.id, codigo_interno="   "))
+        persist_equipe(session_factory, emp.id, codigo_interno="   ")
 
 
 @pytest.mark.parametrize("status", ["ativa", "inativa", "arquivada"])
 def test_allowed_status_values(session_factory, status):
     emp = persist(session_factory, empresa())
-    created = persist(session_factory, equipe(emp.id, status=status))
+    created = persist_equipe(session_factory, emp.id, status=status)
 
     assert created.status == status
 
@@ -261,26 +328,24 @@ def test_invalid_status_is_rejected(session_factory):
     emp = persist(session_factory, empresa())
 
     with pytest.raises(IntegrityError):
-        persist(session_factory, equipe(emp.id, status="bloqueada"))
+        persist_equipe(session_factory, emp.id, status="bloqueada")
 
 
 def test_descricao_can_be_null(session_factory):
     emp = persist(session_factory, empresa())
-    created = persist(session_factory, equipe(emp.id, descricao=None))
+    created = persist_equipe(session_factory, emp.id, descricao=None)
 
     assert created.descricao is None
 
 
 def test_inativacao_fields_can_be_null(session_factory):
     emp = persist(session_factory, empresa())
-    created = persist(
+    created = persist_equipe(
         session_factory,
-        equipe(
-            emp.id,
-            inativado_at=None,
-            motivo_inativacao=None,
-            inativado_por_usuario_id=None,
-        ),
+        emp.id,
+        inativado_at=None,
+        motivo_inativacao=None,
+        inativado_por_usuario_id=None,
     )
 
     assert created.inativado_at is None
@@ -291,6 +356,7 @@ def test_inativacao_fields_can_be_null(session_factory):
 def test_equipe_create_uses_aliases_and_rejects_forbidden_fields():
     payload = {
         "empresaId": str(uuid4()),
+        "departamentoId": str(uuid4()),
         "codigoInterno": "EQ-001",
         "nome": "Equipe Criacao",
         "descricao": "Equipe interna",
@@ -317,6 +383,8 @@ def test_equipe_update_rejects_forbidden_fields():
     forbidden = [
         "empresaId",
         "empresa_id",
+        "departamentoId",
+        "departamento_id",
         "status",
         "createdAt",
         "created_at",
@@ -353,6 +421,7 @@ def test_equipe_response_serializes_with_aliases_and_timezone():
     response = EquipeResponse(
         id=str(uuid4()),
         empresaId=str(uuid4()),
+        departamentoId=str(uuid4()),
         codigoInterno="EQ-001",
         nome="Equipe Criacao",
         descricao="Equipe interna",
@@ -367,6 +436,7 @@ def test_equipe_response_serializes_with_aliases_and_timezone():
     dumped = response.model_dump(by_alias=True)
 
     assert dumped["empresaId"] == response.empresa_id
+    assert dumped["departamentoId"] == response.departamento_id
     assert dumped["codigoInterno"] == "EQ-001"
     assert dumped["createdAt"].tzinfo is not None
     assert dumped["updatedAt"].tzinfo is not None

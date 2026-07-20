@@ -17,6 +17,7 @@ def ensure_timezone_aware(value: datetime | None) -> datetime | None:
 
 class EquipeCreate(BaseModel):
     empresa_id: UUID = Field(alias="empresaId")
+    departamento_id: UUID = Field(alias="departamentoId")
     codigo_interno: str = Field(alias="codigoInterno", min_length=1, max_length=64)
     nome: str = Field(min_length=1, max_length=255)
     descricao: str | None = Field(default=None, max_length=500)
@@ -41,6 +42,7 @@ class EquipeInativar(BaseModel):
 class EquipeResponse(BaseModel):
     id: UUID
     empresa_id: UUID = Field(alias="empresaId")
+    departamento_id: UUID = Field(alias="departamentoId")
     codigo_interno: str = Field(alias="codigoInterno")
     nome: str
     descricao: str | None = None

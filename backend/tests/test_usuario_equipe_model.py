@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
+from app.models.departamento import Departamento
 from app.models.empresa import Empresa
 from app.models.equipe import Equipe
 from app.models.usuario import Usuario
@@ -103,6 +104,23 @@ def equipe(empresa_id: str, **overrides) -> Equipe:
     return Equipe(**data)
 
 
+def departamento(empresa_id: str) -> Departamento:
+    current_time = now()
+    return Departamento(
+        id=str(uuid4()),
+        empresa_id=empresa_id,
+        codigo_interno=f"DEP-{uuid4().hex[:8]}",
+        nome=f"Departamento {uuid4().hex[:8]}",
+        descricao="Departamento de teste",
+        status="ativa",
+        created_at=current_time,
+        updated_at=current_time,
+        inativado_at=None,
+        motivo_inativacao=None,
+        inativado_por_usuario_id=None,
+    )
+
+
 def usuario_equipe(empresa_id: str, usuario_id: str, equipe_id: str, **overrides) -> UsuarioEquipe:
     current_time = now()
     data = {
@@ -134,10 +152,16 @@ def persist(session_factory, *objects):
         return objects[0] if len(objects) == 1 else objects
 
 
+def persist_equipe(session_factory, empresa_id: str, **overrides) -> Equipe:
+    dep = departamento(empresa_id)
+    team = equipe(empresa_id, departamento_id=dep.id, **overrides)
+    return persist(session_factory, dep, team)[1]
+
+
 def base_context(session_factory):
     emp = persist(session_factory, empresa())
     user = persist(session_factory, usuario(emp.id))
-    team = persist(session_factory, equipe(emp.id))
+    team = persist_equipe(session_factory, emp.id)
     return emp, user, team
 
 
@@ -396,8 +420,8 @@ def test_return_to_same_team_allowed_when_previous_link_is_closed(session_factor
 def test_only_one_active_principal_team_per_usuario(session_factory):
     emp = persist(session_factory, empresa())
     user = persist(session_factory, usuario(emp.id))
-    first_team = persist(session_factory, equipe(emp.id))
-    second_team = persist(session_factory, equipe(emp.id))
+    first_team = persist_equipe(session_factory, emp.id)
+    second_team = persist_equipe(session_factory, emp.id)
     persist(session_factory, usuario_equipe(emp.id, user.id, first_team.id, principal=True))
 
     with pytest.raises(IntegrityError):
@@ -407,8 +431,8 @@ def test_only_one_active_principal_team_per_usuario(session_factory):
 def test_multiple_active_secondary_teams_per_usuario(session_factory):
     emp = persist(session_factory, empresa())
     user = persist(session_factory, usuario(emp.id))
-    first_team = persist(session_factory, equipe(emp.id))
-    second_team = persist(session_factory, equipe(emp.id))
+    first_team = persist_equipe(session_factory, emp.id)
+    second_team = persist_equipe(session_factory, emp.id)
     first = persist(session_factory, usuario_equipe(emp.id, user.id, first_team.id, principal=False))
     second = persist(session_factory, usuario_equipe(emp.id, user.id, second_team.id, principal=False))
 
@@ -421,8 +445,8 @@ def test_multiple_active_secondary_teams_per_usuario(session_factory):
 def test_multiple_active_teams_per_usuario_are_allowed(session_factory):
     emp = persist(session_factory, empresa())
     user = persist(session_factory, usuario(emp.id))
-    first_team = persist(session_factory, equipe(emp.id))
-    second_team = persist(session_factory, equipe(emp.id))
+    first_team = persist_equipe(session_factory, emp.id)
+    second_team = persist_equipe(session_factory, emp.id)
 
     first = persist(session_factory, usuario_equipe(emp.id, user.id, first_team.id))
     second = persist(session_factory, usuario_equipe(emp.id, user.id, second_team.id))
@@ -435,7 +459,7 @@ def test_only_one_active_leader_per_team(session_factory):
     emp = persist(session_factory, empresa())
     first_user = persist(session_factory, usuario(emp.id))
     second_user = persist(session_factory, usuario(emp.id))
-    team = persist(session_factory, equipe(emp.id))
+    team = persist_equipe(session_factory, emp.id)
     persist(session_factory, usuario_equipe(emp.id, first_user.id, team.id, papel="lider"))
 
     with pytest.raises(IntegrityError):
@@ -447,7 +471,7 @@ def test_multiple_active_non_leaders_per_team_are_allowed(session_factory):
     first_user = persist(session_factory, usuario(emp.id))
     second_user = persist(session_factory, usuario(emp.id))
     third_user = persist(session_factory, usuario(emp.id))
-    team = persist(session_factory, equipe(emp.id))
+    team = persist_equipe(session_factory, emp.id)
 
     member = persist(session_factory, usuario_equipe(emp.id, first_user.id, team.id, papel="membro"))
     coordinator = persist(session_factory, usuario_equipe(emp.id, second_user.id, team.id, papel="coordenador"))
@@ -460,7 +484,7 @@ def test_closed_leader_does_not_block_new_active_leader(session_factory):
     emp = persist(session_factory, empresa())
     first_user = persist(session_factory, usuario(emp.id))
     second_user = persist(session_factory, usuario(emp.id))
-    team = persist(session_factory, equipe(emp.id))
+    team = persist_equipe(session_factory, emp.id)
     inicio_em = now()
     persist(
         session_factory,

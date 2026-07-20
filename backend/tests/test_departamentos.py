@@ -6,6 +6,7 @@ import pytest
 from conftest import auth_headers, create_auth_context, eventos, make_empresa, persist
 from app.domain.event_types import DomainEventType
 from app.models.departamento import Departamento
+from app.models.equipe import Equipe
 from app.models.sessao_trabalho import SessaoTrabalho
 from app.models.usuario_departamento import UsuarioDepartamento
 from app.schemas.departamento import DepartamentoCreate, DepartamentoUpdate
@@ -90,6 +91,26 @@ def make_sessao_trabalho(empresa_id: str, departamento_id: str, **overrides) -> 
     }
     data.update(overrides)
     return SessaoTrabalho(**data)
+
+
+def make_equipe(empresa_id: str, departamento_id: str, **overrides) -> Equipe:
+    now = datetime.now(timezone.utc)
+    data = {
+        "id": str(uuid4()),
+        "empresa_id": empresa_id,
+        "departamento_id": departamento_id,
+        "codigo_interno": f"EQ-{uuid4().hex[:8]}",
+        "nome": f"Equipe {uuid4().hex[:8]}",
+        "descricao": "Equipe operacional",
+        "status": "ativa",
+        "created_at": now,
+        "updated_at": now,
+        "inativado_at": None,
+        "motivo_inativacao": None,
+        "inativado_por_usuario_id": None,
+    }
+    data.update(overrides)
+    return Equipe(**data)
 
 
 def create_departamento(client, headers, empresa_id: str, **overrides):
@@ -392,6 +413,60 @@ def test_inativar_departamento_com_vinculo_ativo_retorna_409_sem_alterar_estado(
         for evento in eventos(client.session_factory)
         if evento.entidade_id == departamento.id and evento.tipo == DomainEventType.DEPARTAMENTO_INATIVADO.value
     ]
+
+
+def test_inativar_departamento_com_equipe_ativa_retorna_409_sem_alterar_estado(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    departamento = persist_departamento(client.session_factory, empresa.id)
+    persist(
+        client.session_factory,
+        make_equipe(empresa.id, departamento.id),
+    )
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.post(
+        f"/departamentos/{departamento.id}/inativar",
+        json={"motivoInativacao": "teste"},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Departamento possui Equipes ativas vinculadas"}
+    with client.session_factory() as db:
+        persisted = db.get(Departamento, departamento.id)
+        assert persisted.status == "ativa"
+        assert persisted.inativado_at is None
+        assert persisted.motivo_inativacao is None
+        assert persisted.inativado_por_usuario_id is None
+    assert not [
+        evento
+        for evento in eventos(client.session_factory)
+        if evento.entidade_id == departamento.id
+        and evento.tipo == DomainEventType.DEPARTAMENTO_INATIVADO.value
+    ]
+
+
+@pytest.mark.parametrize("status_equipe", ["inativa", "arquivada"])
+def test_inativar_departamento_com_equipe_nao_ativa_e_permitido(client, status_equipe):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    departamento = persist_departamento(client.session_factory, empresa.id)
+    persist(
+        client.session_factory,
+        make_equipe(
+            empresa.id,
+            departamento.id,
+            status=status_equipe,
+        ),
+    )
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.post(
+        f"/departamentos/{departamento.id}/inativar",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "inativa"
 
 
 def test_inativar_departamento_com_vinculo_inativo_e_permitido(client):

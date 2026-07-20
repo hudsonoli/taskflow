@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.domain.event_types import DomainEventType
 from app.models.departamento import Departamento
 from app.repositories.departamento_repository import DepartamentoRepository
+from app.repositories.equipe_repository import EquipeRepository
 from app.repositories.empresa_repository import EmpresaRepository
 from app.repositories.sessao_trabalho_repository import SessaoTrabalhoRepository
 from app.repositories.usuario_departamento_repository import UsuarioDepartamentoRepository
@@ -47,11 +48,13 @@ class DepartamentoService:
         event_publisher: DomainEventPublisher | None = None,
         usuario_departamento_repository: UsuarioDepartamentoRepository | None = None,
         sessao_trabalho_repository: SessaoTrabalhoRepository | None = None,
+        equipe_repository: EquipeRepository | None = None,
     ) -> None:
         self.repository = repository or DepartamentoRepository()
         self.empresa_repository = empresa_repository or EmpresaRepository()
         self.usuario_departamento_repository = usuario_departamento_repository or UsuarioDepartamentoRepository()
         self.sessao_trabalho_repository = sessao_trabalho_repository or SessaoTrabalhoRepository()
+        self.equipe_repository = equipe_repository or EquipeRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
 
     def create_departamento(
@@ -188,7 +191,16 @@ class DepartamentoService:
             if departamento.status == STATUS_ARQUIVADA:
                 raise DepartamentoInvalidTransitionError("Departamento arquivado não pode ser inativado")
 
-            # Equipe ainda não possui departamento_id; a validação de Equipes ativas pertence à TF-ORG-002.3.
+            equipes_ativas = self.equipe_repository.list(
+                db,
+                empresa_id=departamento.empresa_id,
+                departamento_id=departamento.id,
+                status="ativa",
+                limit=1,
+            )
+            if equipes_ativas:
+                raise DepartamentoConflictError("Departamento possui Equipes ativas vinculadas")
+
             vinculos_ativos = self.usuario_departamento_repository.list_by_departamento(
                 db,
                 empresa_id=departamento.empresa_id,

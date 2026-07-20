@@ -56,6 +56,7 @@ def create_equipe(
 def list_equipes(
     empresa_id: UUID = Query(alias="empresaId"),
     status_equipe: str | None = Query(default=None, alias="status"),
+    departamento_id: UUID | None = Query(default=None, alias="departamentoId"),
     busca: str | None = Query(default=None, min_length=1, max_length=100),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -67,6 +68,7 @@ def list_equipes(
         db,
         empresa_id=str(empresa_id),
         status=status_equipe,
+        departamento_id=str(departamento_id) if departamento_id is not None else None,
         busca=busca,
         limit=limit,
         offset=offset,

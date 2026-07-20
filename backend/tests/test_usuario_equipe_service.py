@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app.domain.event_types import DomainEventType
+from app.models.departamento import Departamento
 from app.models.equipe import Equipe
 from app.models.usuario_equipe import UsuarioEquipe
 from app.repositories.usuario_equipe_repository import UsuarioEquipeRepository
@@ -41,8 +42,29 @@ def equipe(empresa_id: str, **overrides) -> Equipe:
     return Equipe(**data)
 
 
+def departamento(empresa_id: str) -> Departamento:
+    current_time = now()
+    return Departamento(
+        id=str(uuid4()),
+        empresa_id=empresa_id,
+        codigo_interno=f"DEP-{uuid4().hex[:8]}",
+        nome=f"Departamento {uuid4().hex[:8]}",
+        descricao="Departamento de teste",
+        status="ativa",
+        created_at=current_time,
+        updated_at=current_time,
+        inativado_at=None,
+        motivo_inativacao=None,
+        inativado_por_usuario_id=None,
+    )
+
+
 def persist_equipe(session_factory, empresa_id: str, **overrides) -> Equipe:
-    return persist(session_factory, equipe(empresa_id, **overrides))
+    dep = persist(session_factory, departamento(empresa_id))
+    return persist(
+        session_factory,
+        equipe(empresa_id, departamento_id=dep.id, **overrides),
+    )
 
 
 def usuario_equipe(empresa_id: str, usuario_id: str, equipe_id: str, **overrides) -> UsuarioEquipe:
