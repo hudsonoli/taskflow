@@ -173,16 +173,16 @@ export function ProjetosTable({
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="secondary"
+                        size="xs"
                         onClick={() => onOpenDetails(projeto.id)}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 text-xs"
                       >
                         <Eye className="h-3.5 w-3.5" />
                         Abrir detalhes
                       </Button>
                       <Button
                         variant="secondary"
+                        size="xs"
                         onClick={() => onEdit(projeto.id)}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 text-xs"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                         Editar mock

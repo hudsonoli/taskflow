@@ -77,7 +77,7 @@ export function EntitySidePanel({
           <div className="min-w-0">
             <h2
               id={titleId}
-              className="truncate text-xl font-semibold text-zinc-900"
+              className="truncate text-lg font-semibold text-zinc-900"
             >
               {title}
             </h2>
@@ -89,16 +89,16 @@ export function EntitySidePanel({
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             {onEdit && (
               <button
                 type="button"
                 onClick={onEdit}
                 aria-label={editLabel}
                 title={editLabel}
-                className="rounded-full border border-zinc-200 p-2 text-zinc-500 transition hover:bg-zinc-50 hover:text-zinc-900"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
               >
-                <Pencil size={18} aria-hidden="true" />
+                <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               </button>
             )}
 
@@ -107,9 +107,9 @@ export function EntitySidePanel({
               type="button"
               onClick={onClose}
               aria-label="Fechar painel"
-              className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
             >
-              <X size={20} aria-hidden="true" />
+              <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
         </header>

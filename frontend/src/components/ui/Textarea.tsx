@@ -25,7 +25,7 @@ export function Textarea({ label, className, density = "default", ...rest }: Tex
 
       <textarea
         rows={3}
-        className={`w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 ${fieldTextClassNames[density]} text-zinc-900 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400 ${className ?? ""}`}
+        className={`w-full rounded-2xl border border-zinc-200 bg-white px-3 py-2 ${fieldTextClassNames[density]} text-zinc-900 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400 ${className ?? ""}`}
         {...rest}
       />
     </label>

@@ -40,12 +40,12 @@ Primary laranja).
 
 | Variante | Classe base | Estado |
 |---|---|---|
-| Primary | `bg-primary text-white` | **[existente]** já é `colorScheme="brand" variant="primary"` em `ui/Button.tsx` |
-| Secondary | `border border-zinc-200 bg-white text-zinc-700` | **[existente]** já é `colorScheme="neutral" variant="secondary"` |
-| Outline | `border border-zinc-200 bg-white text-zinc-900` (hover tinge de marca) | **[existente]**, hoje é `colorScheme="brand" variant="secondary"` — nesta hierarquia passa a ter nome próprio (`variant="outline"`) em vez de derivar de `colorScheme` |
-| Ghost | `bg-transparent text-zinc-600` | **[novo — Fase 4]**. Generaliza o padrão já usado ad hoc em `Header.tsx` (botão do tooltip) e itens de menu (`UserMenu`/`QuickCreateMenu`) |
-| Danger | `border border-red-200 bg-white text-red-600` (inline) **ou** `bg-red-600 text-white` (standalone) | **[parcialmente existente]** — hoje só existe como *override* de className em `EntityActions` (`tone="danger"`); passa a variante própria de `Button` |
-| Success | `bg-emerald-600 text-white` | **[novo — Fase 4]**. Não existe hoje em nenhum lugar do código |
+| Primary | `bg-primary text-white` (`colorScheme="brand"`) / `bg-zinc-900 text-white` (`colorScheme="neutral"`, default) | **[existente]** — único ramo que consulta `colorScheme` (regra arquitetural registrada em `ui/Button.tsx`) |
+| Secondary | `border border-zinc-200 bg-white text-zinc-700` | **[existente]** — aparência fixa, não lê `colorScheme` |
+| Outline | `border border-zinc-200 bg-white text-zinc-900` (hover tinge de marca) | **[implementado — Fase 4B.1, sem consumidor ainda]**. Reaproveita a combinação visual que antes só existia como `colorScheme="brand"` + `variant="secondary"` (nunca usada por nenhum consumidor real) — agora `variant="outline"` própria e fixa |
+| Ghost | `bg-transparent text-zinc-600` | **[implementado — Fase 4B.1, sem consumidor ainda]**. Generaliza o padrão já usado ad hoc em `Header.tsx` (botão do tooltip) e itens de menu (`UserMenu`/`QuickCreateMenu`) |
+| Danger | `border border-red-200 bg-white text-red-600` (inline) | **[implementado — Fase 4B.1, sem consumidor ainda]** — só a intensidade bordada por ora (a única já validada em produção, como *override* de className em `EntityActions`, `tone="danger"`); a intensidade preenchida (`bg-red-600 text-white`, standalone) fica para quando existir um consumidor real (ex. `ConfirmDialog`) |
+| Success | `bg-emerald-600 text-white` | **[implementado — Fase 4B.1, sem consumidor ainda]**. Cor formalizada em `docs/design-system/13-tokens-visuais.md`, seção "Vocabulário semântico de ação (Button)" — mesma família de cor do tom `green` de `StatusPill` (emerald), não uma escolha independente |
 
 Danger tem duas intensidades porque já existe um precedente real com duas
 necessidades distintas: a ação "Excluir" hoje vive ao lado de uma ação

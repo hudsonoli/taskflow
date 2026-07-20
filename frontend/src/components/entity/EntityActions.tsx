@@ -1,4 +1,3 @@
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 export type EntityActionVariant = "peek" | "edit";
@@ -37,17 +36,14 @@ function ActionButton({
   return (
     <Button
       type="button"
-      variant={isPrimary ? "primary" : "secondary"}
+      variant={isDanger ? "danger" : isPrimary ? "primary" : "secondary"}
       size="sm"
       colorScheme={colorScheme}
+      loading={action.loading}
       onClick={action.onClick}
-      disabled={action.disabled || action.loading}
-      className={isDanger ? "!border-red-200 !text-red-600 hover:!bg-red-50" : undefined}
+      disabled={action.disabled}
     >
-      <span className="inline-flex items-center gap-1.5">
-        {action.loading && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
-        {action.label}
-      </span>
+      {action.label}
     </Button>
   );
 }

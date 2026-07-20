@@ -98,9 +98,9 @@ export function EntityFormNav({
               tabIndex={active ? 0 : -1}
               onClick={() => onSectionChange(section.id)}
               onKeyDown={(event) => handleKeyDown(event, index)}
-              className={`group relative flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
+              className={`group relative flex items-center gap-2 rounded-2xl px-2.5 py-1.5 text-left text-[11px] font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
                 active
-                  ? "bg-primary-soft text-text"
+                  ? "bg-primary-soft text-primary"
                   : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
               }`}
             >

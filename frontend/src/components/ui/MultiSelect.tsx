@@ -42,7 +42,7 @@ export function MultiSelect({
       )}
 
       <div
-        className={`rounded-xl border border-zinc-200 bg-white p-3 ${
+        className={`rounded-2xl border border-zinc-200 bg-white p-3 ${
           disabled ? "opacity-60" : ""
         }`}
       >

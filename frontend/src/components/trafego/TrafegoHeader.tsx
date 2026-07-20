@@ -46,11 +46,8 @@ export function TrafegoHeader() {
               </p>
             </div>
 
-            <Button variant="secondary" disabled>
-              <span className="inline-flex items-center gap-2">
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Atualizar
-              </span>
+            <Button variant="secondary" disabled leftIcon={<RefreshCw className="h-4 w-4" />}>
+              Atualizar
             </Button>
           </div>
         </div>

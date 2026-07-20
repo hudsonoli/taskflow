@@ -44,8 +44,8 @@ export function Modal({
 
   const cardClassName =
     layout === "panel"
-      ? `relative flex ${maxHeightClassName} w-full flex-col ${maxWidthClassName} overflow-hidden rounded-3xl bg-white shadow-lg`
-      : `relative ${maxHeightClassName} w-full ${maxWidthClassName} overflow-y-auto rounded-3xl bg-white p-6 shadow-lg`;
+      ? `relative flex ${maxHeightClassName} w-full flex-col ${maxWidthClassName} overflow-hidden rounded-3xl bg-white shadow-2xl`
+      : `relative ${maxHeightClassName} w-full ${maxWidthClassName} overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

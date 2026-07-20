@@ -67,7 +67,7 @@ export function EntityHeader({
           </div>
 
           {description && (
-            <p id={ctx?.descriptionId} className="mt-0.5 text-[11px] text-zinc-500">
+            <p id={ctx?.descriptionId} className="mt-0.5 text-sm text-zinc-500">
               {description}
             </p>
           )}

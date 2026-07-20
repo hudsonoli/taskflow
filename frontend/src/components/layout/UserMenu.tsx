@@ -154,7 +154,7 @@ export function UserMenu({ isCollapsed = false }: UserMenuProps) {
         {menuSections.map((section, sectionIndex) => (
           <div key={section.title ?? `section-${sectionIndex}`} className="space-y-1">
             {section.title ? (
-              <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
+              <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                 {section.title}
               </p>
             ) : null}

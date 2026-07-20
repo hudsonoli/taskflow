@@ -90,7 +90,7 @@ function SidebarLink({
       href={item.href}
       title={isCollapsed ? item.label : undefined}
       aria-label={item.label}
-      className={`group relative flex items-center rounded-lg text-[13px] font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
+      className={`group relative flex items-center rounded-2xl text-[13px] font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
         isCollapsed
           ? "h-8 w-8 justify-center"
           : `h-8 w-full gap-2 px-2.5 ${nested ? "pl-7" : ""}`
@@ -123,7 +123,7 @@ function SidebarLink({
 
 function SectionTitle({ title }: { title: string }) {
   return (
-    <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+    <p className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
       {title}
     </p>
   );
@@ -186,7 +186,7 @@ export function Sidebar() {
           }`}
         >
           <div
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-sm font-bold text-white shadow-sm"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 text-sm font-bold text-white shadow-sm"
             title="TaskFloww"
             aria-label="TaskFloww"
           >
@@ -249,7 +249,7 @@ export function Sidebar() {
               title="Cadastros"
               aria-label="Cadastros"
               onClick={handleCadastrosClick}
-              className={`group relative flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
+              className={`group relative flex h-8 w-8 items-center justify-center rounded-2xl text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
                 cadastrosActive ? "bg-primary-soft text-primary" : ""
               }`}
             >
@@ -309,7 +309,7 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={handleCadastrosClick}
-                className={`mb-1 flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
+                className={`mb-1 flex h-8 w-full items-center gap-2 rounded-2xl px-2.5 text-[13px] font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
                   cadastrosActive
                     ? "bg-primary-soft text-primary"
                     : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"

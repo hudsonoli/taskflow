@@ -37,6 +37,28 @@ badge de status — status usa exclusivamente o vocabulário semântico abaixo.
 Este vocabulário é a única fonte de cor de estado do sistema. Laranja de
 marca e cor de estado nunca se sobrepõem.
 
+### Vocabulário semântico de ação (`Button`)
+
+Botões de ação semântica (`variant="success"`/`variant="danger"`, ver
+`14-component-hierarchy.md`, seção 1) usam a **mesma família de cor** do
+vocabulário de estado acima — verde/emerald para sucesso, vermelho para
+perigo — não uma escolha de cor independente. A diferença é só de
+intensidade: badge (`StatusPill`) usa fundo claro (`-50`) por ser texto
+sobre superfície; botão preenchido/bordado precisa de contraste maior
+contra o próprio fundo do botão:
+
+| Papel | Badge (`StatusPill`, fundo claro) | Botão (`Button`, preenchido/bordado) |
+|---|---|---|
+| Sucesso | `bg-emerald-50 text-emerald-700 ring-emerald-100` | `bg-emerald-600 text-white hover:bg-emerald-700` |
+| Perigo | `bg-red-50 text-red-700 ring-red-100` | `border-red-200 text-red-600 hover:bg-red-50` |
+
+Não são valores soltos escolhidos ad hoc em `ui/Button.tsx` — são a mesma
+decisão de "verde = sucesso" / "vermelho = perigo" já registrada acima,
+aplicada à superfície de um botão em vez de um badge. Qualquer novo
+componente que precisar expressar sucesso/perigo (fora de badge ou botão)
+deve reaproveitar esta mesma família de cor, não introduzir um terceiro
+tom de verde/vermelho.
+
 ## 2. Radius
 
 | Camada | Classe | Aplicação |

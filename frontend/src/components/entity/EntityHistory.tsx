@@ -73,7 +73,7 @@ export function EntityHistory({ events, variant }: EntityHistoryProps) {
         ].filter((part): part is string => Boolean(part));
 
         return (
-          <div key={event.id} className="rounded-2xl border border-zinc-200 p-2.5">
+          <div key={event.id} className="rounded-2xl border border-zinc-100 p-2.5">
             <p className="text-[11px] font-normal text-zinc-900">{event.acao}</p>
             <p className="mt-0.5 text-[10px] font-normal text-zinc-500">{event.usuario}</p>
             {metaParts.length > 0 && (

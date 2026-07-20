@@ -69,7 +69,7 @@ export function QuickCreateMenu({ variant = "expanded" }: QuickCreateMenuProps) 
         title="Criar novo"
         aria-label="Criar novo"
         onClick={() => setOpen((value) => !value)}
-        className={`flex h-8 items-center rounded-lg border border-zinc-200 bg-white text-[12px] font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
+        className={`flex h-8 items-center rounded-2xl border border-zinc-200 bg-white text-[12px] font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 ${
           isCollapsed ? "mx-auto w-8 min-w-8 max-w-8 justify-center p-0" : "w-full justify-center gap-2 px-2.5"
         }`}
       >
@@ -79,7 +79,7 @@ export function QuickCreateMenu({ variant = "expanded" }: QuickCreateMenuProps) 
 
       {open ? (
         <div className="absolute left-full top-0 z-50 ml-3 w-52 origin-top-left rounded-3xl border border-zinc-200 bg-white p-1.5 shadow-xl">
-          <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <p className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
             Criação rápida
           </p>
 
