@@ -327,6 +327,26 @@ Commit:
 
 ---
 
+### TF-ORG-002.2 — Departamentos
+
+Concluída.
+
+Entregas:
+
+* Bloqueio da inativação de Departamento com vínculos ativos de Usuários
+* Bloqueio da inativação de Departamento com SessaoTrabalho ativa vinculada
+* HTTP 409 confirmado para os cenários de conflito
+* Testes específicos adicionados e aprovados
+* Suíte completa aprovada com 611 testes
+* 20 warnings de depreciação preexistentes
+* Nenhuma regressão encontrada
+
+Pendência exclusiva da TF-ORG-002.3:
+
+* Validação de Equipes ativas após a criação de departamento_id em Equipe
+
+---
+
 ## Próxima Fase
 
 ### Fase 3.14 — Departamentos V2

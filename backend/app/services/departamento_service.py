@@ -7,6 +7,8 @@ from app.domain.event_types import DomainEventType
 from app.models.departamento import Departamento
 from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.empresa_repository import EmpresaRepository
+from app.repositories.sessao_trabalho_repository import SessaoTrabalhoRepository
+from app.repositories.usuario_departamento_repository import UsuarioDepartamentoRepository
 from app.schemas.departamento import DepartamentoCreate, DepartamentoResponse, DepartamentoUpdate
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.empresa_service import STATUS_ARQUIVADA as EMPRESA_STATUS_ARQUIVADA
@@ -43,9 +45,13 @@ class DepartamentoService:
         repository: DepartamentoRepository | None = None,
         empresa_repository: EmpresaRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
+        usuario_departamento_repository: UsuarioDepartamentoRepository | None = None,
+        sessao_trabalho_repository: SessaoTrabalhoRepository | None = None,
     ) -> None:
         self.repository = repository or DepartamentoRepository()
         self.empresa_repository = empresa_repository or EmpresaRepository()
+        self.usuario_departamento_repository = usuario_departamento_repository or UsuarioDepartamentoRepository()
+        self.sessao_trabalho_repository = sessao_trabalho_repository or SessaoTrabalhoRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
 
     def create_departamento(
@@ -181,6 +187,26 @@ class DepartamentoService:
                 raise DepartamentoInvalidTransitionError("Departamento já está inativo")
             if departamento.status == STATUS_ARQUIVADA:
                 raise DepartamentoInvalidTransitionError("Departamento arquivado não pode ser inativado")
+
+            # Equipe ainda não possui departamento_id; a validação de Equipes ativas pertence à TF-ORG-002.3.
+            vinculos_ativos = self.usuario_departamento_repository.list_by_departamento(
+                db,
+                empresa_id=departamento.empresa_id,
+                departamento_id=departamento.id,
+                status="ativo",
+            )
+            if vinculos_ativos:
+                raise DepartamentoConflictError("Departamento possui vínculos ativos de Usuários")
+
+            sessoes_ativas = self.sessao_trabalho_repository.list(
+                db,
+                empresa_id=departamento.empresa_id,
+                departamento_id=departamento.id,
+                status="ativa",
+                limit=1,
+            )
+            if sessoes_ativas:
+                raise DepartamentoConflictError("Departamento possui sessões de trabalho ativas")
 
             now = datetime.now(timezone.utc)
             departamento.status = STATUS_INATIVA

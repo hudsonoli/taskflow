@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -6,6 +6,8 @@ import pytest
 from conftest import auth_headers, create_auth_context, eventos, make_empresa, persist
 from app.domain.event_types import DomainEventType
 from app.models.departamento import Departamento
+from app.models.sessao_trabalho import SessaoTrabalho
+from app.models.usuario_departamento import UsuarioDepartamento
 from app.schemas.departamento import DepartamentoCreate, DepartamentoUpdate
 from app.services.departamento_service import DepartamentoService
 
@@ -42,6 +44,52 @@ def make_departamento(empresa_id: str, **overrides) -> Departamento:
 
 def persist_departamento(session_factory, empresa_id: str, **overrides) -> Departamento:
     return persist(session_factory, make_departamento(empresa_id, **overrides))
+
+
+def make_usuario_departamento(empresa_id: str, usuario_id: str, departamento_id: str, **overrides) -> UsuarioDepartamento:
+    now = datetime.now(timezone.utc)
+    data = {
+        "id": str(uuid4()),
+        "empresa_id": empresa_id,
+        "usuario_id": usuario_id,
+        "departamento_id": departamento_id,
+        "papel": "membro",
+        "principal": False,
+        "status": "ativo",
+        "inicio_em": now,
+        "fim_em": None,
+        "motivo_encerramento": None,
+        "criado_por_usuario_id": None,
+        "encerrado_por_usuario_id": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    data.update(overrides)
+    return UsuarioDepartamento(**data)
+
+
+def make_sessao_trabalho(empresa_id: str, departamento_id: str, **overrides) -> SessaoTrabalho:
+    now = datetime.now(timezone.utc)
+    data = {
+        "id": str(uuid4()),
+        "empresa_id": empresa_id,
+        "agencia_id": None,
+        "demanda_id": str(uuid4()),
+        "workflow_etapa_id": None,
+        "usuario_id": None,
+        "departamento_id": departamento_id,
+        "evento_inicio_id": str(uuid4()),
+        "evento_fim_id": None,
+        "status": "ativa",
+        "inicio_em": now,
+        "fim_em": None,
+        "duracao_segundos": None,
+        "motivo_encerramento": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    data.update(overrides)
+    return SessaoTrabalho(**data)
 
 
 def create_departamento(client, headers, empresa_id: str, **overrides):
@@ -313,6 +361,123 @@ def test_admin_status_actions_use_authenticated_actor_and_gestor_cannot_mutate(c
     for evento in departamento_events:
         assert evento.usuario_id == admin.id
         assert evento.payload["actor_usuario_id"] == admin.id
+
+
+@pytest.mark.parametrize("papel", ["membro", "head", "gestor"])
+def test_inativar_departamento_com_vinculo_ativo_retorna_409_sem_alterar_estado(client, papel):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    departamento = persist_departamento(client.session_factory, empresa.id)
+    persist(
+        client.session_factory,
+        make_usuario_departamento(empresa.id, admin.id, departamento.id, papel=papel),
+    )
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.post(
+        f"/departamentos/{departamento.id}/inativar",
+        json={"motivoInativacao": "teste"},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Departamento possui vínculos ativos de Usuários"}
+    with client.session_factory() as db:
+        persisted = db.get(Departamento, departamento.id)
+        assert persisted.status == "ativa"
+        assert persisted.inativado_at is None
+        assert persisted.motivo_inativacao is None
+        assert persisted.inativado_por_usuario_id is None
+    assert not [
+        evento
+        for evento in eventos(client.session_factory)
+        if evento.entidade_id == departamento.id and evento.tipo == DomainEventType.DEPARTAMENTO_INATIVADO.value
+    ]
+
+
+def test_inativar_departamento_com_vinculo_inativo_e_permitido(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    departamento = persist_departamento(client.session_factory, empresa.id)
+    now = datetime.now(timezone.utc)
+    persist(
+        client.session_factory,
+        make_usuario_departamento(
+            empresa.id,
+            admin.id,
+            departamento.id,
+            status="inativo",
+            fim_em=now + timedelta(seconds=1),
+            motivo_encerramento="encerrado",
+        ),
+    )
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.post(f"/departamentos/{departamento.id}/inativar", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "inativa"
+
+
+def test_inativar_departamento_com_sessao_ativa_retorna_409_sem_alterar_estado(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    departamento = persist_departamento(client.session_factory, empresa.id)
+    persist(client.session_factory, make_sessao_trabalho(empresa.id, departamento.id))
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.post(
+        f"/departamentos/{departamento.id}/inativar",
+        json={"motivoInativacao": "teste"},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Departamento possui sessões de trabalho ativas"}
+    with client.session_factory() as db:
+        persisted = db.get(Departamento, departamento.id)
+        assert persisted.status == "ativa"
+        assert persisted.inativado_at is None
+        assert persisted.motivo_inativacao is None
+        assert persisted.inativado_por_usuario_id is None
+    assert not [
+        evento
+        for evento in eventos(client.session_factory)
+        if evento.entidade_id == departamento.id and evento.tipo == DomainEventType.DEPARTAMENTO_INATIVADO.value
+    ]
+
+
+@pytest.mark.parametrize("status_sessao", ["encerrada", "cancelada"])
+def test_inativar_departamento_com_sessao_nao_ativa_e_permitido(client, status_sessao):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    departamento = persist_departamento(client.session_factory, empresa.id)
+    now = datetime.now(timezone.utc)
+    persist(
+        client.session_factory,
+        make_sessao_trabalho(
+            empresa.id,
+            departamento.id,
+            status=status_sessao,
+            evento_fim_id=str(uuid4()),
+            fim_em=now + timedelta(seconds=1),
+            duracao_segundos=0,
+            motivo_encerramento="conclusao",
+        ),
+    )
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.post(f"/departamentos/{departamento.id}/inativar", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "inativa"
+
+
+def test_inativar_departamento_sem_dependencias_ativas_e_permitido(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    departamento = persist_departamento(client.session_factory, empresa.id)
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.post(f"/departamentos/{departamento.id}/inativar", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "inativa"
 
 
 def test_invalid_status_transitions_are_rejected(client):
