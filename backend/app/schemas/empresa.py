@@ -17,6 +17,11 @@ def ensure_timezone_aware(value: datetime | None) -> datetime | None:
 
 class EmpresaCreate(BaseModel):
     nome: str = Field(min_length=1, max_length=255)
+    # Opcional no schema: nem toda Empresa precisa ter razão social
+    # preenchida no momento da criação (ex.: EMP-TESTCLIENT, já existente,
+    # não tem). A exigência de "não vazia" é regra do bootstrap da empresa
+    # piloto, não do contrato geral de criação.
+    razao_social: str | None = Field(default=None, alias="razaoSocial", max_length=255)
     documento: str | None = Field(default=None, max_length=32)
     codigo_interno: str = Field(alias="codigoInterno", min_length=1, max_length=64)
 
@@ -25,6 +30,7 @@ class EmpresaCreate(BaseModel):
 
 class EmpresaUpdate(BaseModel):
     nome: str | None = Field(default=None, min_length=1, max_length=255)
+    razao_social: str | None = Field(default=None, alias="razaoSocial", max_length=255)
     documento: str | None = Field(default=None, max_length=32)
     codigo_interno: str | None = Field(default=None, alias="codigoInterno", min_length=1, max_length=64)
 
@@ -41,6 +47,7 @@ class EmpresaInativar(BaseModel):
 class EmpresaRead(BaseModel):
     id: UUID
     nome: str
+    razao_social: str | None = Field(default=None, alias="razaoSocial")
     documento: str | None = None
     codigo_interno: str = Field(alias="codigoInterno")
     status: EmpresaStatus

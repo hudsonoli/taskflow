@@ -18,7 +18,7 @@ from app.services.empresa_service import (
 router = APIRouter(prefix="/empresas", tags=["empresas"])
 empresa_service = EmpresaService()
 
-PATCH_ALLOWED_FIELDS = {"nome", "documento", "codigoInterno"}
+PATCH_ALLOWED_FIELDS = {"nome", "razaoSocial", "documento", "codigoInterno"}
 
 
 def handle_empresa_error(exc: Exception) -> None:

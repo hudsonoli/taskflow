@@ -206,6 +206,61 @@ def test_service_create_empresa_preserves_duplicate_and_null_document_rules(sess
             service.create_empresa(db, EmpresaCreate(nome="Doc Duplicado 2", documento="00000000000400", codigoInterno="EMP-5"))
 
 
+def test_service_create_empresa_persists_razao_social(session_factory):
+    service = EmpresaService()
+
+    with session_factory() as db:
+        created = service.create_empresa(
+            db,
+            EmpresaCreate(
+                nome="BOX COMUNICAÇÃO",
+                razaoSocial="Box Comunicação LTDA",
+                documento="15519472000122",
+                codigoInterno="BOX",
+            ),
+        )
+        razao_social = created.razao_social
+
+    assert razao_social == "Box Comunicação LTDA"
+
+
+def test_service_create_empresa_allows_missing_razao_social(session_factory):
+    service = EmpresaService()
+
+    with session_factory() as db:
+        created = service.create_empresa(
+            db, EmpresaCreate(nome="Empresa Sem Razão", documento=None, codigoInterno="SEM-RAZAO")
+        )
+        razao_social = created.razao_social
+
+    assert razao_social is None
+
+
+def test_service_create_empresa_normalizes_documento_to_digits_only(session_factory):
+    service = EmpresaService()
+
+    with session_factory() as db:
+        created = service.create_empresa(
+            db,
+            EmpresaCreate(nome="BOX COMUNICAÇÃO", documento="15.519.472/0001-22", codigoInterno="BOX"),
+        )
+        documento = created.documento
+
+    assert documento == "15519472000122"
+
+
+def test_admin_can_patch_razao_social(client):
+    empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
+    headers = auth_headers(client, admin, empresa)
+
+    response = client.patch(
+        f"/empresas/{empresa.id}", json={"razaoSocial": "Nova Razão Social LTDA"}, headers=headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["razaoSocial"] == "Nova Razão Social LTDA"
+
+
 def test_empresa_documento_is_not_in_event_payload_on_authenticated_update(client):
     empresa, admin, _ = create_auth_context(client.session_factory, perfil_base="admin")
     headers = auth_headers(client, admin, empresa)

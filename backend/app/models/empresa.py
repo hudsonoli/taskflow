@@ -21,6 +21,7 @@ class Empresa(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    razao_social: Mapped[str | None] = mapped_column(String(255), nullable=True)
     documento: Mapped[str | None] = mapped_column(String(32), nullable=True)
     codigo_interno: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)

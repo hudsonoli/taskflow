@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -46,6 +47,7 @@ class EmpresaService:
         empresa = Empresa(
             id=str(uuid4()),
             nome=data.nome,
+            razao_social=self._normalize_razao_social(data.razao_social),
             documento=self._normalize_documento(data.documento),
             codigo_interno=data.codigo_interno,
             status=STATUS_ATIVA,
@@ -100,6 +102,12 @@ class EmpresaService:
             if "nome" in updates and updates["nome"] != empresa.nome:
                 empresa.nome = updates["nome"]
                 changed_fields.append("nome")
+
+            if "razao_social" in updates:
+                razao_social = self._normalize_razao_social(updates["razao_social"])
+                if razao_social != empresa.razao_social:
+                    empresa.razao_social = razao_social
+                    changed_fields.append("razaoSocial")
 
             if "documento" in updates:
                 documento = self._normalize_documento(updates["documento"])
@@ -193,6 +201,7 @@ class EmpresaService:
         return EmpresaRead(
             id=empresa.id,
             nome=empresa.nome,
+            razaoSocial=empresa.razao_social,
             documento=empresa.documento,
             codigoInterno=empresa.codigo_interno,
             status=empresa.status,
@@ -257,7 +266,21 @@ class EmpresaService:
 
     @staticmethod
     def _normalize_documento(documento: str | None) -> str | None:
+        # Alinhado ao padrão já estabelecido em Cliente.documento (ver
+        # app/schemas/cliente.py validate_documento_for_tipo e a
+        # CheckConstraint ck_clientes_documento_apenas_digitos): CPF/CNPJ é
+        # persistido só com dígitos, formatação é responsabilidade da
+        # apresentação. Empresa.documento não tinha essa normalização antes
+        # (só .strip()) — corrigido aqui para seguir o mesmo padrão do
+        # restante do domínio, não uma convenção nova.
         if documento is None:
             return None
-        normalized = documento.strip()
+        normalized = re.sub(r"\D", "", documento)
+        return normalized or None
+
+    @staticmethod
+    def _normalize_razao_social(razao_social: str | None) -> str | None:
+        if razao_social is None:
+            return None
+        normalized = razao_social.strip()
         return normalized or None

@@ -73,6 +73,7 @@ def test_empresa_table_has_expected_columns(session_factory):
     assert {
         "id",
         "nome",
+        "razao_social",
         "documento",
         "codigo_interno",
         "status",
@@ -82,6 +83,20 @@ def test_empresa_table_has_expected_columns(session_factory):
         "inativado_por_usuario_id",
         "motivo_inativacao",
     }.issubset(columns)
+
+
+def test_razao_social_is_optional_and_compatible_with_existing_rows(session_factory):
+    # Compatibilidade com registros existentes (ex.: EMP-TESTCLIENT), que
+    # nasceram antes da coluna razao_social existir e não têm valor algum.
+    sem_razao_social = persist(session_factory, empresa(codigo_interno="EMP-1", documento="00000000000100"))
+    com_razao_social = persist(
+        session_factory,
+        empresa(codigo_interno="EMP-2", documento="00000000000200", razao_social="Box Comunicação LTDA"),
+    )
+
+    with session_factory() as db:
+        assert db.get(Empresa, sem_razao_social.id).razao_social is None
+        assert db.get(Empresa, com_razao_social.id).razao_social == "Box Comunicação LTDA"
 
 
 def test_codigo_interno_is_unique(session_factory):
