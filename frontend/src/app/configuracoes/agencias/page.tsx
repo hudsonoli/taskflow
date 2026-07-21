@@ -41,7 +41,7 @@ export default function AgenciasPage() {
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Pesquisar agências..."
-          actions={<Button className="h-10 px-3">Nova Agência</Button>}
+          actions={<Button>Nova Agência</Button>}
         />
       }
       indicators={

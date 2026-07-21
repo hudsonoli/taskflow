@@ -54,7 +54,7 @@ export default function WorkflowsPage() {
       toolbar={
         <CadastroToolbar
           searchPlaceholder="Pesquisar workflows..."
-          actions={<Button className="h-10 px-3">Novo Workflow</Button>}
+          actions={<Button>Novo Workflow</Button>}
         />
       }
       indicators={

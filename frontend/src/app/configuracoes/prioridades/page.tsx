@@ -1,3 +1,10 @@
+import {
+  CadastroTable,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros/CadastroTable";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -69,47 +76,44 @@ export default function PrioridadesPage() {
         </Card>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
+      <div className="mt-8">
+        <CadastroTable>
+          <thead className={cadastroTableHeaderClassName}>
             <tr>
-              <th className="px-6 py-4 font-medium">Prioridade</th>
-              <th className="px-6 py-4 font-medium">Cor</th>
-              <th className="px-6 py-4 font-medium">SLA Padrão</th>
-              <th className="px-6 py-4 font-medium">Uso</th>
-              <th className="px-6 py-4 font-medium">Status</th>
+              <th className={cadastroTableHeaderCellClassName}>Prioridade</th>
+              <th className={cadastroTableHeaderCellClassName}>Cor</th>
+              <th className={cadastroTableHeaderCellClassName}>SLA Padrão</th>
+              <th className={cadastroTableHeaderCellClassName}>Uso</th>
+              <th className={cadastroTableHeaderCellClassName}>Status</th>
             </tr>
           </thead>
 
           <tbody>
             {priorities.map((priority) => (
-              <tr
-                key={priority.name}
-                className="border-b border-zinc-100 last:border-0"
-              >
-                <td className="px-6 py-4 font-medium text-zinc-900">
+              <tr key={priority.name} className={cadastroTableRowClassName}>
+                <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
                   {priority.name}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {priority.color}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {priority.sla}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {priority.usage}
                 </td>
 
-                <td className="px-6 py-4">
+                <td className={cadastroTableCellClassName}>
                   <StatusPill tone={statusTone(priority.status)}>{priority.status}</StatusPill>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </CadastroTable>
       </div>
     </div>
   );

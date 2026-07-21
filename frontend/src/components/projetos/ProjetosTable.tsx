@@ -1,5 +1,6 @@
 import { CalendarDays, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CompactList, splitResolvedNames } from "@/components/ui/CompactList";
 import { EmptyStateIllustration } from "@/components/ui/EmptyStateIllustration";
 import { StatusPill } from "@/components/ui/StatusPill";
 import {
@@ -31,37 +32,6 @@ const prioridadeClassName: Record<ProjetoPrioridade, string> = {
   baixa: "border-blue-100 bg-blue-50 text-blue-500",
 };
 
-function splitResolvedNames(value: string) {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function CompactList({ items }: { items: string[] }) {
-  const visibleItems = items.slice(0, 2);
-  const extraItems = items.length - visibleItems.length;
-
-  return (
-    <div className="flex max-w-[220px] flex-wrap gap-1.5">
-      {visibleItems.map((item) => (
-        <span
-          key={item}
-          className="inline-flex max-w-[140px] items-center rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600"
-          title={item}
-        >
-          <span className="truncate">{item}</span>
-        </span>
-      ))}
-      {extraItems > 0 && (
-        <span className="inline-flex items-center rounded-full bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">
-          +{extraItems}
-        </span>
-      )}
-    </div>
-  );
-}
-
 export function ProjetosTable({
   projetos,
   onOpenDetails,
@@ -90,7 +60,7 @@ export function ProjetosTable({
 
       <div className="overflow-x-auto">
         <table className="min-w-[1180px] w-full text-left text-sm">
-          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-[11px] font-semibold uppercase tracking-[0.04em] text-zinc-500">
             <tr>
               {[
                 "Código",
@@ -124,7 +94,7 @@ export function ProjetosTable({
               return (
                 <tr
                   key={projeto.id}
-                  className="group transition hover:bg-blue-50/30"
+                  className="group transition hover:bg-zinc-50"
                 >
                   <td className="px-4 py-3 font-semibold text-zinc-900">
                     {projeto.codigoInterno}

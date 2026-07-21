@@ -1,4 +1,11 @@
 import { Activity, Inbox } from "lucide-react";
+import {
+  CadastroTable,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros/CadastroTable";
 import { EmptyStateIllustration } from "@/components/ui/EmptyStateIllustration";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -51,63 +58,56 @@ export function TrafegoAgoraTable({ sessions }: TrafegoAgoraTableProps) {
             description="Ajuste os filtros ou aguarde novas movimentações de demandas."
           />
         ) : (
-          <div className="overflow-hidden rounded-3xl border border-zinc-100">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-zinc-100 bg-[#faf8f4] text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                  <tr>
-                    <th className="px-4 py-2.5">Colaborador</th>
-                    <th className="px-4 py-2.5">Demanda</th>
-                    <th className="px-4 py-2.5">Etapa</th>
-                    <th className="px-4 py-2.5">Início</th>
-                    <th className="px-4 py-2.5 text-right">Tempo estimado</th>
-                    <th className="px-4 py-2.5">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessions.map((session) => (
-                    <tr
-                      key={session.sessaoId}
-                      className="border-b border-zinc-100 transition last:border-0 hover:bg-zinc-50"
-                    >
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-zinc-950 text-white">
-                            <Activity className="h-4 w-4" aria-hidden="true" />
-                          </span>
-                          <div>
-                            <p className="font-semibold text-zinc-950">
-                              {resolveTrafegoUsuarioNome(session.usuarioId)}
-                            </p>
-                            <p className="text-xs text-zinc-500">
-                              {resolveTrafegoDepartamentoNome(session.departamentoId)}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-zinc-900">
-                        {resolveTrafegoDemandaNome(session.demandaId)}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-500">
-                        {resolveTrafegoEtapaNome(session.workflowEtapaId)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-zinc-500">
-                        {formatInicio(session.inicioEm)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono font-bold tabular-nums text-zinc-950">
-                        {formatTempoOperacional(session.tempoDecorridoSegundos)}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <StatusPill tone={statusTone[session.status]}>
-                          {statusTrafegoLabels[session.status]}
-                        </StatusPill>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <CadastroTable minWidth="760px">
+            <thead className={cadastroTableHeaderClassName}>
+              <tr>
+                <th className={cadastroTableHeaderCellClassName}>Colaborador</th>
+                <th className={cadastroTableHeaderCellClassName}>Demanda</th>
+                <th className={cadastroTableHeaderCellClassName}>Etapa</th>
+                <th className={cadastroTableHeaderCellClassName}>Início</th>
+                <th className={`${cadastroTableHeaderCellClassName} text-right`}>Tempo estimado</th>
+                <th className={cadastroTableHeaderCellClassName}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((session) => (
+                <tr key={session.sessaoId} className={cadastroTableRowClassName}>
+                  <td className={cadastroTableCellClassName}>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-zinc-950 text-white">
+                        <Activity className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                      <div>
+                        <p className="font-semibold text-zinc-950">
+                          {resolveTrafegoUsuarioNome(session.usuarioId)}
+                        </p>
+                        <p className="text-xs text-zinc-500">
+                          {resolveTrafegoDepartamentoNome(session.departamentoId)}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
+                    {resolveTrafegoDemandaNome(session.demandaId)}
+                  </td>
+                  <td className={`${cadastroTableCellClassName} text-zinc-500`}>
+                    {resolveTrafegoEtapaNome(session.workflowEtapaId)}
+                  </td>
+                  <td className={`${cadastroTableCellClassName} font-mono text-xs text-zinc-500`}>
+                    {formatInicio(session.inicioEm)}
+                  </td>
+                  <td className={`${cadastroTableCellClassName} text-right font-mono font-bold tabular-nums text-zinc-950`}>
+                    {formatTempoOperacional(session.tempoDecorridoSegundos)}
+                  </td>
+                  <td className={cadastroTableCellClassName}>
+                    <StatusPill tone={statusTone[session.status]}>
+                      {statusTrafegoLabels[session.status]}
+                    </StatusPill>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </CadastroTable>
         )}
       </div>
     </section>

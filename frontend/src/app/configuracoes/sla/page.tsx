@@ -1,3 +1,10 @@
+import {
+  CadastroTable,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros/CadastroTable";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -74,47 +81,44 @@ export default function SlaPage() {
         </Card>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
+      <div className="mt-8">
+        <CadastroTable>
+          <thead className={cadastroTableHeaderClassName}>
             <tr>
-              <th className="px-6 py-4 font-medium">SLA</th>
-              <th className="px-6 py-4 font-medium">Resposta</th>
-              <th className="px-6 py-4 font-medium">Resolução</th>
-              <th className="px-6 py-4 font-medium">Prioridade</th>
-              <th className="px-6 py-4 font-medium">Status</th>
+              <th className={cadastroTableHeaderCellClassName}>SLA</th>
+              <th className={cadastroTableHeaderCellClassName}>Resposta</th>
+              <th className={cadastroTableHeaderCellClassName}>Resolução</th>
+              <th className={cadastroTableHeaderCellClassName}>Prioridade</th>
+              <th className={cadastroTableHeaderCellClassName}>Status</th>
             </tr>
           </thead>
 
           <tbody>
             {slaRules.map((rule) => (
-              <tr
-                key={rule.name}
-                className="border-b border-zinc-100 last:border-0"
-              >
-                <td className="px-6 py-4 font-medium text-zinc-900">
+              <tr key={rule.name} className={cadastroTableRowClassName}>
+                <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
                   {rule.name}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {rule.responseTime}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {rule.resolutionTime}
                 </td>
 
-                <td className="px-6 py-4">
+                <td className={cadastroTableCellClassName}>
                   <Badge>{rule.priority}</Badge>
                 </td>
 
-                <td className="px-6 py-4">
+                <td className={cadastroTableCellClassName}>
                   <StatusPill tone={statusTone(rule.status)}>{rule.status}</StatusPill>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </CadastroTable>
       </div>
     </div>
   );

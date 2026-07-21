@@ -147,7 +147,7 @@ export function GruposClientesView({
           onSearchChange={setSearchQuery}
           searchPlaceholder="Buscar por nome, código ou sigla"
           actions={
-            <Button onClick={openCreate} disabled={!canCreate} className="h-10 px-3">
+            <Button onClick={openCreate} disabled={!canCreate}>
               Novo Grupo
             </Button>
           }

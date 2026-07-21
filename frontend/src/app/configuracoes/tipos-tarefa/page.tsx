@@ -1,3 +1,10 @@
+import {
+  CadastroTable,
+  cadastroTableCellClassName,
+  cadastroTableHeaderCellClassName,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+} from "@/components/cadastros/CadastroTable";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -76,47 +83,44 @@ export default function TiposTarefaPage() {
         </Card>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-[#faf8f4] text-zinc-500">
+      <div className="mt-8">
+        <CadastroTable>
+          <thead className={cadastroTableHeaderClassName}>
             <tr>
-              <th className="px-6 py-4 font-medium">Tipo</th>
-              <th className="px-6 py-4 font-medium">Departamento</th>
-              <th className="px-6 py-4 font-medium">SLA</th>
-              <th className="px-6 py-4 font-medium">Workflow</th>
-              <th className="px-6 py-4 font-medium">Status</th>
+              <th className={cadastroTableHeaderCellClassName}>Tipo</th>
+              <th className={cadastroTableHeaderCellClassName}>Departamento</th>
+              <th className={cadastroTableHeaderCellClassName}>SLA</th>
+              <th className={cadastroTableHeaderCellClassName}>Workflow</th>
+              <th className={cadastroTableHeaderCellClassName}>Status</th>
             </tr>
           </thead>
 
           <tbody>
             {taskTypes.map((type) => (
-              <tr
-                key={type.name}
-                className="border-b border-zinc-100 last:border-0"
-              >
-                <td className="px-6 py-4 font-medium text-zinc-900">
+              <tr key={type.name} className={cadastroTableRowClassName}>
+                <td className={`${cadastroTableCellClassName} font-medium text-zinc-900`}>
                   {type.name}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {type.department}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {type.defaultSla}
                 </td>
 
-                <td className="px-6 py-4 text-zinc-500">
+                <td className={`${cadastroTableCellClassName} text-zinc-500`}>
                   {type.workflow}
                 </td>
 
-                <td className="px-6 py-4">
+                <td className={cadastroTableCellClassName}>
                   <StatusPill tone={statusTone(type.status)}>{type.status}</StatusPill>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </CadastroTable>
       </div>
     </div>
   );

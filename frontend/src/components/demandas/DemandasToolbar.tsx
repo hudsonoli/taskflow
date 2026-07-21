@@ -42,7 +42,7 @@ export function DemandasToolbar({
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
                 placeholder="Buscar por nome, código, projeto, cliente ou responsáveis"
-                className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/70 py-2.5 pl-10 pr-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:shadow-sm"
+                className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/70 py-2.5 pl-10 pr-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:shadow-sm focus:ring-2 focus:ring-zinc-900/10"
               />
             </span>
           </label>
@@ -95,11 +95,7 @@ export function DemandasToolbar({
             })}
           </div>
 
-          <Button
-            onClick={onNewDemand}
-            className="inline-flex items-center justify-center gap-2 whitespace-nowrap"
-          >
-            <Plus className="h-4 w-4" />
+          <Button onClick={onNewDemand} leftIcon={<Plus className="h-4 w-4" />}>
             Nova Demanda
           </Button>
         </div>

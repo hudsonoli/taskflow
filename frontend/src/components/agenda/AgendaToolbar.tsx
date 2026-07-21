@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ToolbarCard } from "@/components/ui/ToolbarCard";
 import type { AgendaTipo } from "@/types/agenda";
 
 const filters: Array<{ label: string; value: AgendaTipo | "todos" }> = [
@@ -24,7 +25,7 @@ export function AgendaToolbar({
   onTypeFilterChange,
 }: AgendaToolbarProps) {
   return (
-    <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <ToolbarCard>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="relative w-full max-w-2xl">
           <Search className="pointer-events-none absolute left-3 top-9 h-4 w-4 text-zinc-400" strokeWidth={2} />
@@ -54,6 +55,6 @@ export function AgendaToolbar({
           })}
         </div>
       </div>
-    </div>
+    </ToolbarCard>
   );
 }

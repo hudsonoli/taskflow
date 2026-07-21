@@ -36,7 +36,7 @@ export function CadastroToolbar({
     >
       <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
         <label
-          className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-500 lg:max-w-md ${searchFieldDensityClassNames[density]}`}
+          className={`flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-sm text-zinc-500 transition focus-within:border-zinc-400 focus-within:ring-2 focus-within:ring-zinc-900/10 lg:max-w-md ${searchFieldDensityClassNames[density]}`}
         >
           <Search className="h-4 w-4 shrink-0 text-zinc-400" strokeWidth={2} />
           <input

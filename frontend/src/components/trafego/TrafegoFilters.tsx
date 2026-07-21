@@ -50,13 +50,13 @@ export function TrafegoFilters({ filters, onChange }: TrafegoFiltersProps) {
               key={periodo.value}
               type="button"
               variant={filters.periodo === periodo.value ? "primary" : "secondary"}
+              size="xs"
               onClick={() =>
                 updateFilter(
                   "periodo",
                   periodo.value as TrafegoFiltersState["periodo"]
                 )
               }
-              className="px-3 py-1.5 text-xs"
             >
               {periodo.label}
             </Button>
