@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ClipboardList } from "lucide-react";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { WorkspaceEmptyState } from "@/components/workspace/WorkspaceEmptyState";
+import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
 import { WorkspacePage } from "@/components/workspace/WorkspacePage";
 import {
   AGENCIA_PADRAO_ID,
@@ -220,28 +221,17 @@ export function DemandasView() {
 
   return (
     <WorkspacePage>
-      <div className="rounded-3xl border border-zinc-100 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-3xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-              <ClipboardList className="h-6 w-6" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">
-                Demandas
-              </h1>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-500">
-                Lista operacional de demandas. O Kanban existente permanece disponível na base para uma próxima alternância por abas.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
+      <WorkspaceHeader
+        icon={<ClipboardList className="h-6 w-6" />}
+        title="Demandas"
+        description="Lista operacional de demandas. O Kanban existente permanece disponível na base para uma próxima alternância por abas."
+        badges={
+          <>
             <StatusPill tone="blue">Workspace operacional</StatusPill>
             <StatusPill tone="green">Mock local</StatusPill>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <DemandasStats demandas={demandas} />
 

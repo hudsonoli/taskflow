@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { DashboardGrid } from "@/components/ui/DashboardGrid";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { WorkspacePage } from "@/components/workspace/WorkspacePage";
 import {
   EMPRESA_TRAFEGO_PADRAO_ID,
@@ -46,11 +45,6 @@ export function TrafegoView() {
 
   return (
     <WorkspacePage>
-      <PageHeader
-        title="Central de Tráfego"
-        description="Tempo Operacional Estimado"
-      />
-
       <TrafegoHeader />
       <TrafegoFilters filters={filters} onChange={setFilters} />
 

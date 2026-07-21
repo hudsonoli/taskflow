@@ -1,4 +1,5 @@
 import { CalendarDays } from "lucide-react";
+import { splitResolvedNames } from "@/components/ui/CompactList";
 import {
   prioridadeDemandaLabels,
   resolveProjetoDemandaNome,
@@ -22,13 +23,6 @@ const prioridadeBorderClassNames: Record<DemandaPrioridade, string> = {
   media: "border-l-sky-400",
   baixa: "border-l-blue-200",
 };
-
-function splitResolvedNames(value: string) {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
 
 function CompactResponsaveis({ items }: { items: string[] }) {
   const visibleItems = items.slice(0, 2);
