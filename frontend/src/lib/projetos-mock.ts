@@ -5,6 +5,10 @@ import {
 } from "@/lib/equipe-mock";
 import type {
   Projeto,
+  ProjetoAprovacao,
+  ProjetoArquivo,
+  ProjetoChecklistItem,
+  ProjetoComentario,
   ProjetoEquipeMembro,
   ProjetoHistoricoEvento,
   ProjetoModeloCampanhaItem,
@@ -139,6 +143,85 @@ function createModeloCampanha(): ProjetoModeloCampanhaItem[] {
   ];
 }
 
+function createArquivos(): ProjetoArquivo[] {
+  return [
+    {
+      id: generateId("arquivo-projeto"),
+      nome: "Briefing-geral.pdf",
+      tipo: "PDF",
+      tamanho: "1.2 MB",
+      criadoEm: "2026-07-08",
+      usuarioId: "user-2",
+      usuarioNome: "Ana Costa",
+    },
+  ];
+}
+
+function createChecklist(): ProjetoChecklistItem[] {
+  return [
+    {
+      id: generateId("checklist-projeto"),
+      descricao: "Aprovar posicionamento com o cliente",
+      concluido: true,
+      concluidoEm: "2026-07-08 10:00",
+      concluidoPor: "Ana Costa",
+    },
+    {
+      id: generateId("checklist-projeto"),
+      descricao: "Definir cronograma de entregas",
+      concluido: true,
+      concluidoEm: "2026-07-09 14:20",
+      concluidoPor: "Carlos Lima",
+    },
+    {
+      id: generateId("checklist-projeto"),
+      descricao: "Validar modelo de campanha com a equipe",
+      concluido: false,
+    },
+  ];
+}
+
+function createComentarios(): ProjetoComentario[] {
+  return [
+    {
+      id: generateId("comentario-projeto"),
+      autorId: "user-2",
+      autorNome: "Ana Costa",
+      texto: "Cliente aprovou o direcionamento inicial. Podemos seguir para produção.",
+      createdAt: "2026-07-09 09:15",
+    },
+    {
+      id: generateId("comentario-projeto"),
+      autorId: "user-3",
+      autorNome: "Carlos Lima",
+      texto: "Vou ajustar o cronograma considerando o novo prazo do cliente.",
+      createdAt: "2026-07-10 16:40",
+    },
+  ];
+}
+
+function createAprovacoes(): ProjetoAprovacao[] {
+  return [
+    {
+      id: generateId("aprovacao-projeto"),
+      titulo: "Aprovação do resumo do projeto",
+      descricao: "Validação do resumo operacional antes da divulgação às demandas vinculadas.",
+      status: "aprovado",
+      solicitadoPor: "Ana Costa",
+      solicitadoEm: "2026-07-08 11:00",
+      respondidoPor: "Hudson Cunha",
+      respondidoEm: "2026-07-08 15:30",
+    },
+    {
+      id: generateId("aprovacao-projeto"),
+      titulo: "Aprovação do modelo de campanha",
+      status: "pendente",
+      solicitadoPor: "Carlos Lima",
+      solicitadoEm: "2026-07-10 10:00",
+    },
+  ];
+}
+
 export const projetosMock: Projeto[] = [
   {
     id: "projeto-1",
@@ -162,8 +245,11 @@ export const projetosMock: Projeto[] = [
     modeloCampanhaId: "modelo-campanha-1",
     modeloCampanha: createModeloCampanha(),
     equipe: createEquipe(),
-    arquivos: [],
+    arquivos: createArquivos(),
     historico: createHistorico("Projeto criado"),
+    checklist: createChecklist(),
+    comentarios: createComentarios(),
+    aprovacoes: createAprovacoes(),
   },
   {
     id: "projeto-2",
@@ -188,6 +274,9 @@ export const projetosMock: Projeto[] = [
     equipe: createEquipe().slice(0, 1),
     arquivos: [],
     historico: createHistorico("Projeto em planejamento"),
+    checklist: createChecklist().slice(0, 1),
+    comentarios: [],
+    aprovacoes: [],
   },
   {
     id: "projeto-3",
@@ -212,6 +301,9 @@ export const projetosMock: Projeto[] = [
     equipe: createEquipe(),
     arquivos: [],
     historico: createHistorico("Projeto concluído"),
+    checklist: createChecklist().map((item) => ({ ...item, concluido: true })),
+    comentarios: createComentarios().slice(0, 1),
+    aprovacoes: createAprovacoes().map((item) => ({ ...item, status: "aprovado" as const })),
   },
 ];
 

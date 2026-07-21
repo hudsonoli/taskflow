@@ -84,6 +84,9 @@ function createProjetoFromDraft(draft: ProjetoFormDraft): Projeto {
     equipe: [],
     arquivos: [],
     historico: [createHistoricoProjeto("Projeto criado no mock local")],
+    checklist: [],
+    comentarios: [],
+    aprovacoes: [],
   };
 }
 

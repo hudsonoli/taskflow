@@ -54,6 +54,47 @@ export type ProjetoWorkflowEtapaConceitual = {
   departamentoResponsavelIds: string[];
 };
 
+// Alinhado a docs/arquitetura-taskfloww/02-modelo-dados-futuro.md, seção 5
+// (Checklist/ChecklistItem) — campos equivalentes ao desenho real futuro
+// (descricao, concluido, concluidoEm, concluidoPor), sem entidade Checklist
+// própria: aqui um projeto tem uma única lista, não múltiplos checklists.
+export type ProjetoChecklistItem = {
+  id: string;
+  descricao: string;
+  concluido: boolean;
+  concluidoEm?: string;
+  concluidoPor?: string;
+};
+
+// Alinhado a 02-modelo-dados-futuro.md, seção 9.2 (Comentario) — sem
+// entidadeTipo/entidadeId (aqui o comentário já vive embutido no próprio
+// Projeto, como historico/arquivos).
+export type ProjetoComentario = {
+  id: string;
+  autorId: string;
+  autorNome: string;
+  texto: string;
+  createdAt: string;
+};
+
+// "Aprovação" não tem entidade própria em 02-modelo-dados-futuro.md — lá é
+// modelada como evento de transição de etapa de Workflow
+// (WorkflowEtapaTemplate.exigeAprovacao + /aprovar//rejeitar). Este tipo é
+// um placeholder de estrutura visual para o nível de Projeto, sem
+// correspondência arquitetural ainda definida — ver relatório da Fase 8.
+export type ProjetoAprovacaoStatus = "pendente" | "aprovado" | "rejeitado";
+
+export type ProjetoAprovacao = {
+  id: string;
+  titulo: string;
+  descricao?: string;
+  status: ProjetoAprovacaoStatus;
+  solicitadoPor: string;
+  solicitadoEm: string;
+  respondidoPor?: string;
+  respondidoEm?: string;
+};
+
 export type Projeto = {
   id: string;
   empresaId: string;
@@ -77,6 +118,9 @@ export type Projeto = {
   equipe: ProjetoEquipeMembro[];
   arquivos: ProjetoArquivo[];
   historico: ProjetoHistoricoEvento[];
+  checklist: ProjetoChecklistItem[];
+  comentarios: ProjetoComentario[];
+  aprovacoes: ProjetoAprovacao[];
 };
 
 export type ProjetoFormDraft = Pick<

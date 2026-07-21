@@ -1,4 +1,5 @@
 import { Activity } from "lucide-react";
+import { EmptyStateIllustration } from "@/components/ui/EmptyStateIllustration";
 import type { DashboardAtividade, DashboardAtividadeTone } from "@/types/dashboard";
 import { DashboardWidget } from "./DashboardWidget";
 
@@ -23,29 +24,37 @@ export function DashboardRecentActivity({ atividades }: DashboardRecentActivityP
 
   return (
     <DashboardWidget title="Atividade recente" description="Últimos eventos do sistema.">
-      <div className="space-y-2">
-        {items.map((atividade) => (
-          <div
-            key={atividade.id}
-            className="flex items-center gap-3 rounded-xl border border-zinc-100 px-3 py-2 transition hover:bg-zinc-50"
-          >
-            <span
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${toneIconClassNames[atividade.tone]}`}
+      {items.length === 0 ? (
+        <EmptyStateIllustration
+          title="Nenhuma atividade recente"
+          description="As últimas ações do sistema aparecerão aqui."
+          size="compact"
+        />
+      ) : (
+        <div className="space-y-2">
+          {items.map((atividade) => (
+            <div
+              key={atividade.id}
+              className="flex items-center gap-3 rounded-2xl border border-zinc-100 px-3 py-2 transition hover:bg-zinc-50"
             >
-              <Activity className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-            </span>
+              <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl ${toneIconClassNames[atividade.tone]}`}
+              >
+                <Activity className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </span>
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-normal text-zinc-800">
-                {atividade.descricao}
-              </p>
-              <p className="truncate text-[11px] text-zinc-500">{atividade.usuario}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-normal text-zinc-800">
+                  {atividade.descricao}
+                </p>
+                <p className="truncate text-[11px] text-zinc-500">{atividade.usuario}</p>
+              </div>
+
+              <span className="shrink-0 text-[10px] text-zinc-400">{atividade.horario}</span>
             </div>
-
-            <span className="shrink-0 text-[10px] text-zinc-400">{atividade.horario}</span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </DashboardWidget>
   );
 }
