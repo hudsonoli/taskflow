@@ -1,0 +1,101 @@
+# TEMPLATE: backend/app/api/routes/{{plural_snake_case}}.py
+# Baseado no padrão real de backend/app/api/routes/clientes.py — substitua
+# os placeholders {{...}} e remova esta linha e todo "# TEMPLATE:".
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.dependencies.authorization import require_admin_or_gestor
+from app.models.usuario import Usuario
+from app.schemas.{{snake_case}} import {{PascalCase}}Create, {{PascalCase}}Response, {{PascalCase}}Update
+from app.services.{{snake_case}}_service import (
+    {{PascalCase}}ConflictError,
+    {{PascalCase}}InvalidDataError,
+    {{PascalCase}}InvalidEmpresaError,
+    {{PascalCase}}NotFoundError,
+    {{PascalCase}}Service,
+)
+
+router = APIRouter(prefix="/{{plural-kebab-case}}", tags=["{{plural_snake_case}}"])
+{{snake_case}}_service = {{PascalCase}}Service()
+
+
+def handle_{{snake_case}}_error(exc: Exception) -> None:
+    if isinstance(exc, {{PascalCase}}NotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if isinstance(exc, {{PascalCase}}ConflictError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if isinstance(exc, {{PascalCase}}InvalidDataError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    if isinstance(exc, {{PascalCase}}InvalidEmpresaError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    raise exc
+
+
+@router.get("", response_model=list[{{PascalCase}}Response])
+def list_{{plural_snake_case}}(
+    status_filtro: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    try:
+        itens = {{snake_case}}_service.listar_{{plural_snake_case}}(
+            db, empresa_id=current_user.empresa_id, status=status_filtro, limit=limit, offset=offset,
+        )
+        return [{{snake_case}}_service.to_response(item) for item in itens]
+    except Exception as exc:
+        handle_{{snake_case}}_error(exc)
+
+
+# TEMPLATE: caminho FastAPI real é "/{ {{snake_case}}_id }" (sem espaços) — escrito
+# com espaços aqui só para não colidir com a sintaxe de placeholder deste template.
+@router.get("/{ {{snake_case}}_id }", response_model={{PascalCase}}Response)
+def get_{{snake_case}}(
+    {{snake_case}}_id: UUID,
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    try:
+        item = {{snake_case}}_service.obter_{{snake_case}}(db, empresa_id=current_user.empresa_id, {{snake_case}}_id=str({{snake_case}}_id))
+        return {{snake_case}}_service.to_response(item)
+    except Exception as exc:
+        handle_{{snake_case}}_error(exc)
+
+
+@router.post("", response_model={{PascalCase}}Response, status_code=status.HTTP_201_CREATED)
+def create_{{snake_case}}(
+    {{snake_case}}: {{PascalCase}}Create,
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    if str({{snake_case}}.empresa_id) != current_user.empresa_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado")
+    try:
+        created = {{snake_case}}_service.criar_{{snake_case}}(
+            db, {{snake_case}}, empresa_id=current_user.empresa_id, actor_usuario_id=current_user.id,
+        )
+        return {{snake_case}}_service.to_response(created)
+    except Exception as exc:
+        handle_{{snake_case}}_error(exc)
+
+
+@router.patch("/{ {{snake_case}}_id }", response_model={{PascalCase}}Response)
+def update_{{snake_case}}(
+    {{snake_case}}_id: UUID,
+    payload: {{PascalCase}}Update,
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    try:
+        item = {{snake_case}}_service.atualizar_{{snake_case}}(
+            db, empresa_id=current_user.empresa_id, {{snake_case}}_id=str({{snake_case}}_id),
+            data=payload, actor_usuario_id=current_user.id,
+        )
+        return {{snake_case}}_service.to_response(item)
+    except Exception as exc:
+        handle_{{snake_case}}_error(exc)

@@ -1,0 +1,148 @@
+// TEMPLATE: src/components/{{kebab-case-plural}}/{{PascalCasePlural}}View.tsx
+// Baseado no padrão real de src/components/clientes/ClientesView.tsx —
+// substitua os placeholders {{...}} e remova todo comentário "// TEMPLATE:".
+//
+// Reutilize sempre @/components/cadastros (CadastroTable, CadastroToolbar,
+// CadastroIndicators) e @/components/ui — nunca recrie esses primitivos.
+
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { PageShell } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/Button";
+import {
+  CadastroIndicators,
+  CadastroTable,
+  CadastroToolbar,
+  cadastroTableHeaderClassName,
+  cadastroTableRowClassName,
+  getCadastroTableCellClassNames,
+} from "@/components/cadastros";
+import { EmptyStateIllustration } from "@/components/ui/EmptyStateIllustration";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { {{PascalCase}}CreateDrawer } from "./{{PascalCase}}CreateDrawer";
+import { {{PascalCase}}Drawer } from "./{{PascalCase}}Drawer";
+import { use{{PascalCasePlural}}List } from "./use{{PascalCasePlural}}List";
+
+type {{PascalCase}}DrawerState = { mode: "closed" } | { mode: "create" } | { mode: "detail"; {{camelCase}}Id: string };
+
+export function {{PascalCasePlural}}View() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [drawerState, setDrawerState] = useState<{{PascalCase}}DrawerState>({ mode: "closed" });
+
+  const filters = useMemo(() => ({ search: searchQuery }), [searchQuery]);
+  const { status, {{camelCasePlural}}, error, retry, hasNextPage, pageSize } = use{{PascalCasePlural}}List(filters, page);
+
+  const closeDrawer = useCallback(() => setDrawerState({ mode: "closed" }), []);
+  const openDetail = useCallback(({{camelCase}}Id: string) => setDrawerState({ mode: "detail", {{camelCase}}Id }), []);
+  const handleCreated = useCallback(() => {
+    retry();
+    setDrawerState({ mode: "closed" });
+  }, [retry]);
+
+  const { headerCell, cell } = getCadastroTableCellClassNames("compact");
+
+  function renderContent() {
+    switch (status) {
+      case "loading":
+        return (
+          <div role="status" aria-live="polite" className="rounded-2xl border border-zinc-100 bg-white px-4 py-10 text-center text-sm text-zinc-500 shadow-sm">
+            Carregando {{camelCasePlural}}...
+          </div>
+        );
+      case "error":
+        return (
+          <EmptyStateIllustration
+            size="compact"
+            title="Não foi possível carregar os {{camelCasePlural}}"
+            description={error}
+            action={<Button size="sm" colorScheme="brand" onClick={retry}>Tentar novamente</Button>}
+          />
+        );
+      case "empty":
+        return (
+          <EmptyStateIllustration
+            size="compact"
+            title="Nenhum {{camelCase}} cadastrado"
+            description="Cadastre um {{camelCase}} para começar."
+            action={<Button size="sm" colorScheme="brand" onClick={() => setDrawerState({ mode: "create" })}>Novo {{PascalCase}}</Button>}
+          />
+        );
+      case "success":
+        return (
+          <CadastroTable minWidth="640px">
+            <thead className={cadastroTableHeaderClassName}>
+              <tr>
+                <th className={headerCell}>Nome</th>
+                <th className={`${headerCell} text-right`}>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{{camelCasePlural}}.map((item) => (
+                <tr
+                  key={item.id}
+                  tabIndex={0}
+                  onClick={() => openDetail(item.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openDetail(item.id);
+                    }
+                  }}
+                  className={`cursor-pointer ${cadastroTableRowClassName}`}
+                >
+                  <td className={cell}>{item.nome}</td>
+                  <td className={`${cell} text-right`}>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); openDetail(item.id); }} className="text-[11px] text-zinc-500 hover:text-zinc-700">
+                      Ver detalhes
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </CadastroTable>
+        );
+    }
+  }
+
+  return (
+    <PageShell density="compact">
+      <PageHeader
+        title="{{PascalCasePlural}}"
+        description="Cadastro de {{camelCasePlural}}."
+        size="section"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" leftIcon={<RefreshCw className="h-3.5 w-3.5" />} onClick={retry} disabled={status === "loading"}>
+              Atualizar
+            </Button>
+            <Button size="sm" colorScheme="brand" onClick={() => setDrawerState({ mode: "create" })}>
+              Novo {{PascalCase}}
+            </Button>
+          </div>
+        }
+      />
+
+      <CadastroIndicators density="compact" items={[{ label: "Nesta página", value: {{camelCasePlural}}.length }]} />
+
+      <CadastroToolbar density="compact" searchValue={searchQuery} onSearchChange={setSearchQuery} searchPlaceholder="Pesquisar..." />
+
+      {renderContent()}
+
+      <div className="flex items-center justify-between px-1">
+        <p className="text-[11px] text-zinc-400">Página {page + 1} · {{{camelCasePlural}}.length} de até {pageSize}</p>
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" disabled={page === 0 || status === "loading"} onClick={() => setPage((c) => Math.max(0, c - 1))}>Anterior</Button>
+          <Button size="sm" variant="secondary" disabled={!hasNextPage || status === "loading"} onClick={() => setPage((c) => c + 1)}>Próxima</Button>
+        </div>
+      </div>
+
+      {drawerState.mode === "detail" ? (
+        <{{PascalCase}}Drawer key={drawerState.{{camelCase}}Id} {{camelCase}}Id={drawerState.{{camelCase}}Id} onClose={closeDrawer} onChanged={retry} />
+      ) : null}
+      {drawerState.mode === "create" ? <{{PascalCase}}CreateDrawer onClose={closeDrawer} onCreated={handleCreated} /> : null}
+    </PageShell>
+  );
+}

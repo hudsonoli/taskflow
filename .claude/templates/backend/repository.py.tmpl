@@ -1,0 +1,47 @@
+# TEMPLATE: backend/app/repositories/{{snake_case}}_repository.py
+# Baseado no padrão real de backend/app/repositories/cliente_repository.py —
+# substitua os placeholders {{...}} e remova esta linha e todo "# TEMPLATE:".
+#
+# Regra: repository nunca contém regra de negócio — só acesso a dados, e
+# sempre escopado por empresa_id (multiempresa é obrigatório, não opcional).
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.{{snake_case}} import {{PascalCase}}
+
+
+class {{PascalCase}}Repository:
+    def create(self, db: Session, {{camelCase}}: {{PascalCase}}) -> {{PascalCase}}:
+        db.add({{camelCase}})
+        db.flush()
+        return {{camelCase}}
+
+    def get_by_id(self, db: Session, *, empresa_id: str, {{snake_case}}_id: str) -> {{PascalCase}} | None:
+        statement = select({{PascalCase}}).where(
+            {{PascalCase}}.empresa_id == empresa_id,
+            {{PascalCase}}.id == {{snake_case}}_id,
+        )
+        return db.scalars(statement).first()
+
+    def list(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[{{PascalCase}}]:
+        statement = select({{PascalCase}}).where({{PascalCase}}.empresa_id == empresa_id)
+
+        if status:
+            statement = statement.where({{PascalCase}}.status == status)
+
+        statement = statement.order_by({{PascalCase}}.created_at.desc()).limit(limit).offset(offset)
+        return list(db.scalars(statement).all())
+
+    def update(self, db: Session, {{camelCase}}: {{PascalCase}}) -> {{PascalCase}}:
+        db.add({{camelCase}})
+        db.flush()
+        return {{camelCase}}

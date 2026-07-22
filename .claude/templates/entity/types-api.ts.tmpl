@@ -1,0 +1,24 @@
+// TEMPLATE: src/types/{{kebab-case}}-api.ts
+// Tipos crus retornados pela API/BFF (aliases camelCase do backend Pydantic)
+// — baseado no padrão real de src/types/cliente-api.ts. Substitua os
+// placeholders {{...}} e remova todo "// TEMPLATE:".
+
+export type {{PascalCase}}Status = "ativo" | "inativo";
+
+export type {{PascalCase}}ApiResponse = {
+  id: string;
+  empresaId: string;
+  nome: string;
+  status: {{PascalCase}}Status;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type {{PascalCase}}CreatePayload = {
+  empresaId: string;
+  nome: string;
+};
+
+export type {{PascalCase}}UpdatePayload = Partial<{
+  nome: string;
+}>;

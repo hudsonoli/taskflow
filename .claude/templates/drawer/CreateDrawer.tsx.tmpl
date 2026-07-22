@@ -1,0 +1,85 @@
+// TEMPLATE: src/components/{{kebab-case-plural}}/{{PascalCase}}CreateDrawer.tsx
+// Baseado no padrão real de src/components/clientes/ClienteCreateDrawer.tsx —
+// substitua os placeholders {{...}} e remova todo "// TEMPLATE:".
+//
+// Reutilize sempre @/components/entity (EntityDrawer, EntityHeader,
+// EntityActions, EntitySection, EntityForm) — nunca recrie esses primitivos.
+
+"use client";
+
+import { useCallback, useRef, useState } from "react";
+import { EntityActions, EntityDrawer, EntityForm, EntityHeader, EntitySection } from "@/components/entity";
+import type { {{PascalCase}}CreatePayload } from "@/types/{{kebab-case}}-api";
+import { {{PascalCase}}FormFields, type {{PascalCase}}FormFieldsValue } from "./{{PascalCase}}FormFields";
+import { use{{PascalCase}}Create } from "./use{{PascalCase}}Create";
+
+function createInitialFormValue(): {{PascalCase}}FormFieldsValue {
+  return { nome: "" };
+}
+
+function buildCreatePayload(value: {{PascalCase}}FormFieldsValue, empresaId: string): {{PascalCase}}CreatePayload {
+  return { empresaId, nome: value.nome.trim() };
+}
+
+type {{PascalCase}}CreateDrawerProps = {
+  onClose: () => void;
+  onCreated: () => void;
+};
+
+export function {{PascalCase}}CreateDrawer({ onClose, onCreated }: {{PascalCase}}CreateDrawerProps) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [value, setValue] = useState<{{PascalCase}}FormFieldsValue>(createInitialFormValue);
+  const { submit, status, error, reset } = use{{PascalCase}}Create();
+  const submitting = status === "submitting";
+
+  const handleCloseIntent = useCallback(() => {
+    if (submitting) return;
+    setValue(createInitialFormValue());
+    reset();
+    onClose();
+  }, [onClose, reset, submitting]);
+
+  async function handleSubmit() {
+    if (!formRef.current?.reportValidity()) return;
+    // TEMPLATE: empresaId deve vir do contexto de sessão do usuário logado,
+    // não hardcoded — veja como useClienteCreate resolve isso.
+    const succeeded = await submit(buildCreatePayload(value, ""));
+    if (!succeeded) return;
+    setValue(createInitialFormValue());
+    reset();
+    onCreated();
+  }
+
+  return (
+    <EntityDrawer
+      open
+      mode="edit"
+      loading={submitting}
+      onClose={handleCloseIntent}
+      header={<EntityHeader title="Novo {{PascalCase}}" description="Preencha os dados para cadastrar." onClose={handleCloseIntent} />}
+      footer={
+        <EntityActions
+          variant="edit"
+          colorScheme="brand"
+          primaryAction={{ label: "Salvar {{PascalCase}}", onClick: () => void handleSubmit(), loading: submitting }}
+          secondaryActions={[{ label: "Cancelar", onClick: handleCloseIntent, disabled: submitting }]}
+        />
+      }
+    >
+      <EntitySection id="dados" title="Dados">
+        <form ref={formRef} onSubmit={(event) => { event.preventDefault(); void handleSubmit(); }}>
+          <EntityForm>
+            <div className="col-span-12">
+              <{{PascalCase}}FormFields value={value} onChange={setValue} disabled={submitting} />
+            </div>
+          </EntityForm>
+          {error && (
+            <p role="alert" className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+              {error}
+            </p>
+          )}
+        </form>
+      </EntitySection>
+    </EntityDrawer>
+  );
+}

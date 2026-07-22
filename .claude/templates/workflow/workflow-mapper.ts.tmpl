@@ -1,0 +1,19 @@
+// TEMPLATE: adicione ao src/lib/{{kebab-case}}-api-mappers.ts quando a
+// entidade participa de um motor de estados no frontend (ex.: etapas de
+// Workflow, transições visíveis em um board) — baseado no padrão real de
+// mapeamento de Workflow (Etapa/Transição). Substitua os placeholders
+// {{...}} e remova todo "// TEMPLATE:".
+
+import type { {{PascalCase}}Status } from "@/types/{{kebab-case}}-api";
+
+// TEMPLATE: mapeie cada status para o rótulo E para as transições permitidas
+// a partir dele — a UI nunca deve oferecer um botão de transição que o
+// backend vai rejeitar (allowed_current do service espelha isto aqui).
+export const {{PASCAL_UPPER}}_TRANSITIONS: Record<{{PascalCase}}Status, {{PascalCase}}Status[]> = {
+  ativo: ["inativo"],
+  inativo: ["ativo"],
+};
+
+export function podeTransicionar{{PascalCase}}(atual: {{PascalCase}}Status, destino: {{PascalCase}}Status): boolean {
+  return {{PASCAL_UPPER}}_TRANSITIONS[atual]?.includes(destino) ?? false;
+}

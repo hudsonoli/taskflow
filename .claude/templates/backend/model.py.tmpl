@@ -1,0 +1,46 @@
+# TEMPLATE: backend/app/models/{{snake_case}}.py
+# Baseado no padrão real de backend/app/models/cliente.py — substitua os
+# placeholders {{...}} e remova esta linha e todo comentário "# TEMPLATE:".
+
+from datetime import datetime
+from enum import StrEnum
+
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+
+# TEMPLATE: remova este enum se {{PascalCase}} não tiver campo de status
+class {{PascalCase}}Status(StrEnum):
+    ATIVO = "ativo"
+    INATIVO = "inativo"
+
+
+class {{PascalCase}}(Base):
+    __tablename__ = "{{plural_snake_case}}"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ativo', 'inativo')",
+            name="ck_{{plural_snake_case}}_status",
+        ),
+        UniqueConstraint("empresa_id", "id", name="uq_{{plural_snake_case}}_empresa_id"),
+        Index("ix_{{plural_snake_case}}_empresa_id", "empresa_id"),
+        Index("ix_{{plural_snake_case}}_status", "status"),
+        Index("ix_{{plural_snake_case}}_created_at", "created_at"),
+    )
+
+    # Campos obrigatórios (CLAUDE.md — "Regras obrigatórias de modelagem")
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    empresa_id: Mapped[str] = mapped_column(ForeignKey("empresas.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    # TEMPLATE: adicione clienteId/usuarioId aqui se aplicável ao domínio, por ID — nunca por nome.
+    # cliente_id: Mapped[str | None] = mapped_column(ForeignKey("clientes.id", ondelete="SET NULL"), nullable=True)
+
+    # TEMPLATE: campos específicos da entidade abaixo.
+    nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default={{PascalCase}}Status.ATIVO.value)
+
+    empresa = relationship("Empresa")

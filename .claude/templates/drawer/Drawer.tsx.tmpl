@@ -1,0 +1,58 @@
+// TEMPLATE: src/components/{{kebab-case-plural}}/{{PascalCase}}Drawer.tsx
+// Baseado no padrão real de src/components/clientes/ClienteDrawer.tsx —
+// substitua os placeholders {{...}} e remova todo "// TEMPLATE:".
+
+"use client";
+
+import { EntityDrawer, EntityHeader, EntitySection } from "@/components/entity";
+import { {{PascalCase}}DadosSection } from "./{{PascalCase}}DadosSection";
+import { use{{PascalCase}} } from "./use{{PascalCase}}";
+
+type {{PascalCase}}DrawerProps = {
+  {{camelCase}}Id: string;
+  onClose: () => void;
+  onChanged: () => void;
+};
+
+export function {{PascalCase}}Drawer({ {{camelCase}}Id, onClose, onChanged }: {{PascalCase}}DrawerProps) {
+  const { {{camelCase}}, status, error, update, updateStatus, updateError, resetUpdateError } = use{{PascalCase}}({{camelCase}}Id);
+
+  if (status === "loading") {
+    return (
+      <EntityDrawer open mode="detail" onClose={onClose} header={<EntityHeader title="Carregando..." onClose={onClose} />}>
+        <div />
+      </EntityDrawer>
+    );
+  }
+
+  if (status === "error" || !{{camelCase}}) {
+    return (
+      <EntityDrawer open mode="detail" onClose={onClose} header={<EntityHeader title="Erro" description={error ?? undefined} onClose={onClose} />}>
+        <div />
+      </EntityDrawer>
+    );
+  }
+
+  async function handleSave(payload: Parameters<typeof update>[0]) {
+    const succeeded = await update(payload);
+    if (succeeded) onChanged();
+    return succeeded;
+  }
+
+  return (
+    <EntityDrawer open mode="detail" onClose={onClose} header={<EntityHeader title={{{camelCase}}.nome} onClose={onClose} />}>
+      <EntitySection id="dados" title="Dados">
+        <{{PascalCase}}DadosSection
+          {{camelCase}}={{{camelCase}}}
+          submitting={updateStatus === "submitting"}
+          error={updateError}
+          onSave={handleSave}
+          onResetError={resetUpdateError}
+        />
+      </EntitySection>
+      {/* TEMPLATE: adicione outras EntitySection aqui conforme as abas do
+         domínio (ex.: Endereço, Contatos, Equipe, Histórico — CLAUDE.md
+         "Cadastro de Clientes"). */}
+    </EntityDrawer>
+  );
+}

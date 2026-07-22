@@ -1,0 +1,40 @@
+// TEMPLATE: src/components/{{kebab-case-plural}}/{{PascalCase}}FormFields.tsx
+// Baseado no padrão real de src/components/clientes/ClienteFormFields.tsx —
+// substitua os placeholders {{...}} e remova todo "// TEMPLATE:".
+//
+// Regra: sem lógica de negócio aqui, sem `any` (frontend/AGENTS.md).
+
+"use client";
+
+import { Input } from "@/components/ui/Input";
+
+export type {{PascalCase}}FormFieldsValue = {
+  nome: string;
+  // TEMPLATE: adicione os demais campos do domínio aqui.
+};
+
+type {{PascalCase}}FormFieldsProps = {
+  value: {{PascalCase}}FormFieldsValue;
+  onChange: (value: {{PascalCase}}FormFieldsValue) => void;
+  disabled?: boolean;
+};
+
+export function {{PascalCase}}FormFields({ value, onChange, disabled }: {{PascalCase}}FormFieldsProps) {
+  function setField<K extends keyof {{PascalCase}}FormFieldsValue>(key: K, fieldValue: {{PascalCase}}FormFieldsValue[K]) {
+    onChange({ ...value, [key]: fieldValue });
+  }
+
+  return (
+    <div className="grid grid-cols-12 gap-3">
+      <div className="col-span-12">
+        <Input
+          label="Nome"
+          required
+          value={value.nome}
+          onChange={(event) => setField("nome", event.target.value)}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}

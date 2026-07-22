@@ -1,0 +1,53 @@
+# TEMPLATE: adicione estes métodos ao {{PascalCase}}Service quando a entidade
+# fizer parte de um motor de estados (como WorkflowEtapa/Tarefa) — baseado no
+# padrão real de backend/app/services/cliente_service.py (_alterar_status) e
+# workflow_etapa_service.py. Substitua os placeholders {{...}} e remova todo
+# "# TEMPLATE:".
+#
+# Regra: toda transição de estado é explícita (allowed_current -> novo_status),
+# nunca um "setter" genérico de status — isso é o que torna o motor auditável.
+
+class {{PascalCase}}InvalidTransitionError(ValueError):
+    pass
+
+
+# TEMPLATE: dentro de {{PascalCase}}Service —
+
+def transicionar_{{snake_case}}(
+    self,
+    db: Session,
+    *,
+    empresa_id: str,
+    {{snake_case}}_id: str,
+    novo_status: str,
+    allowed_current: set[str],
+    motivo: str | None,
+    actor_usuario_id: str,
+    event_type: DomainEventType,
+    invalid_message: str,
+) -> {{PascalCase}}:
+    try:
+        item = self.obter_{{snake_case}}(db, empresa_id=str(empresa_id), {{snake_case}}_id={{snake_case}}_id)
+        if item.status not in allowed_current:
+            raise {{PascalCase}}InvalidTransitionError(invalid_message)
+
+        now = datetime.now(timezone.utc)
+        status_anterior = item.status
+        item.status = novo_status
+        item.updated_at = now
+        self.repository.update(db, item)
+        self._publish_event(
+            db, item, event_type, actor_usuario_id,
+            occurred_at=now, status_anterior=status_anterior, status_atual=novo_status,
+        )
+        db.commit()
+        db.refresh(item)
+        return item
+    except Exception:
+        db.rollback()
+        raise
+
+# TEMPLATE: exponha um método público por transição válida do domínio (ex.:
+# suspender_{{snake_case}}, reativar_{{snake_case}}), cada um chamando
+# transicionar_{{snake_case}} com o allowed_current/novo_status certos — nunca
+# deixe o caller do service escolher livremente o novo_status.

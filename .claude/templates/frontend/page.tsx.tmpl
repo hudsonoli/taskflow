@@ -1,0 +1,16 @@
+{/* TEMPLATE: src/app/configuracoes/{{kebab-case-plural}}/page.tsx
+   Baseado no padrão real de src/app/configuracoes/clientes/page.tsx —
+   substitua os placeholders {{...}} e remova este comentário.
+   Regra inegociável do CLAUDE.md: page.tsx NUNCA contém regra de negócio,
+   só renderiza a View. */}
+
+import { Suspense } from "react";
+import { {{PascalCasePlural}}View } from "@/components/{{kebab-case-plural}}/{{PascalCasePlural}}View";
+
+export default function {{PascalCasePlural}}Page() {
+  return (
+    <Suspense>
+      <{{PascalCasePlural}}View />
+    </Suspense>
+  );
+}

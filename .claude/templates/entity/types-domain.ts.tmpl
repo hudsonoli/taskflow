@@ -1,0 +1,16 @@
+// TEMPLATE: src/types/{{kebab-case}}-domain.ts
+// Tipos de domínio (camelCase, como usados dentro dos componentes React) —
+// baseado no padrão real de src/types/cliente-domain.ts. Substitua os
+// placeholders {{...}} e remova todo "// TEMPLATE:".
+
+export type {{PascalCase}}Status = "ativo" | "inativo";
+
+export type {{PascalCase}} = {
+  id: string;
+  empresaId: string;
+  nome: string;
+  status: {{PascalCase}}Status;
+  statusLabel: string;
+  createdAt: string;
+  updatedAt: string;
+};

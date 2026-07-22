@@ -1,0 +1,24 @@
+// TEMPLATE: src/lib/{{kebab-case}}-api-mappers.ts
+// Mapeia API (aliases camelCase do backend) ↔ domínio (tipos usados pelos
+// componentes) — baseado no padrão real de src/lib/cliente-api-mappers.ts.
+// Substitua os placeholders {{...}} e remova todo "// TEMPLATE:".
+
+import type { {{PascalCase}}ApiResponse, {{PascalCase}}Status } from "@/types/{{kebab-case}}-api";
+import type { {{PascalCase}} } from "@/types/{{kebab-case}}-domain";
+
+const STATUS_LABELS: Record<{{PascalCase}}Status, string> = {
+  ativo: "Ativo",
+  inativo: "Inativo",
+};
+
+export function mapApiTo{{PascalCase}}(api: {{PascalCase}}ApiResponse): {{PascalCase}} {
+  return {
+    id: api.id,
+    empresaId: api.empresaId,
+    nome: api.nome,
+    status: api.status,
+    statusLabel: STATUS_LABELS[api.status],
+    createdAt: api.createdAt,
+    updatedAt: api.updatedAt,
+  };
+}

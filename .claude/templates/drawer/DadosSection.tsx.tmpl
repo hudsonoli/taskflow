@@ -1,0 +1,88 @@
+// TEMPLATE: src/components/{{kebab-case-plural}}/{{PascalCase}}DadosSection.tsx
+// Baseado no padrão real de src/components/clientes/ClienteDadosSection.tsx —
+// substitua os placeholders {{...}} e remova todo "// TEMPLATE:".
+//
+// Reutilize sempre EntityFieldRow (@/components/ui/EntityFieldRow) para o
+// modo leitura — nunca recrie essa exibição campo/valor.
+
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { EntityFieldRow } from "@/components/ui/EntityFieldRow";
+import type { {{PascalCase}}UpdatePayload } from "@/types/{{kebab-case}}-api";
+import type { {{PascalCase}} } from "@/types/{{kebab-case}}-domain";
+import { {{PascalCase}}FormFields, type {{PascalCase}}FormFieldsValue } from "./{{PascalCase}}FormFields";
+
+function toFormValue({{camelCase}}: {{PascalCase}}): {{PascalCase}}FormFieldsValue {
+  return { nome: {{camelCase}}.nome };
+}
+
+function buildUpdatePayload(original: {{PascalCase}}FormFieldsValue, next: {{PascalCase}}FormFieldsValue): {{PascalCase}}UpdatePayload {
+  const payload: {{PascalCase}}UpdatePayload = {};
+  if (next.nome !== original.nome) payload.nome = next.nome.trim();
+  return payload;
+}
+
+type {{PascalCase}}DadosSectionProps = {
+  {{camelCase}}: {{PascalCase}};
+  submitting: boolean;
+  error: string | null;
+  onSave: (payload: {{PascalCase}}UpdatePayload) => Promise<boolean>;
+  onResetError: () => void;
+};
+
+export function {{PascalCase}}DadosSection({ {{camelCase}}, submitting, error, onSave, onResetError }: {{PascalCase}}DadosSectionProps) {
+  const [editing, setEditing] = useState(false);
+  const original = toFormValue({{camelCase}});
+  const [value, setValue] = useState<{{PascalCase}}FormFieldsValue>(original);
+
+  function startEditing() {
+    setValue(toFormValue({{camelCase}}));
+    onResetError();
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    if (submitting) return;
+    setValue(toFormValue({{camelCase}}));
+    onResetError();
+    setEditing(false);
+  }
+
+  async function handleSave() {
+    const payload = buildUpdatePayload(original, value);
+    if (Object.keys(payload).length === 0) {
+      setEditing(false);
+      return;
+    }
+    const succeeded = await onSave(payload);
+    if (succeeded) setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <div className="space-y-4">
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <EntityFieldRow label="Nome" value={{{camelCase}}.nome} density="compact" />
+        </dl>
+        <Button size="sm" variant="secondary" onClick={startEditing}>Editar Dados</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <{{PascalCase}}FormFields value={value} onChange={setValue} disabled={submitting} />
+      {error && (
+        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <Button size="sm" colorScheme="brand" loading={submitting} onClick={() => void handleSave()}>Salvar Alterações</Button>
+        <Button size="sm" variant="secondary" disabled={submitting} onClick={cancelEditing}>Cancelar</Button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,50 @@
+# TEMPLATE: backend/alembic/versions/<timestamp>_<slug>_cria_tabela_{{plural_snake_case}}.py
+# Baseado no padrão real de 20260716_1a16_cria_tabela_clientes.py — substitua
+# os placeholders {{...}} e o down_revision pelo revision_id real da HEAD
+# atual (rode `alembic heads` antes de escrever este arquivo).
+#
+# TEMPLATE: nunca rode `alembic upgrade` automaticamente — apresente esta
+# migração para revisão do usuário antes de qualquer aplicação.
+
+"""cria tabela {{plural_snake_case}}
+
+Revision ID: {{REVISION_ID}}
+Revises: {{DOWN_REVISION}}
+Create Date: {{CREATE_DATE}}
+
+"""
+
+from typing import Sequence, Union
+
+import sqlalchemy as sa
+from alembic import op
+
+revision: str = "{{REVISION_ID}}"
+down_revision: Union[str, None] = "{{DOWN_REVISION}}"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "{{plural_snake_case}}",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("empresa_id", sa.String(length=36), nullable=False),
+        sa.Column("nome", sa.String(length=255), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False, server_default="ativo"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint("status IN ('ativo', 'inativo')", name="ck_{{plural_snake_case}}_status"),
+        sa.ForeignKeyConstraint(["empresa_id"], ["empresas.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_{{plural_snake_case}}_empresa_id", "{{plural_snake_case}}", ["empresa_id"], unique=False)
+    op.create_index("ix_{{plural_snake_case}}_status", "{{plural_snake_case}}", ["status"], unique=False)
+    op.create_index("ix_{{plural_snake_case}}_created_at", "{{plural_snake_case}}", ["created_at"], unique=False)
+
+
+def downgrade() -> None:
+    op.drop_index("ix_{{plural_snake_case}}_created_at", table_name="{{plural_snake_case}}")
+    op.drop_index("ix_{{plural_snake_case}}_status", table_name="{{plural_snake_case}}")
+    op.drop_index("ix_{{plural_snake_case}}_empresa_id", table_name="{{plural_snake_case}}")
+    op.drop_table("{{plural_snake_case}}")

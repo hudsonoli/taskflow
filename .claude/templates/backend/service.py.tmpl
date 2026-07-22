@@ -1,0 +1,171 @@
+# TEMPLATE: backend/app/services/{{snake_case}}_service.py
+# Baseado no padrão real de backend/app/services/cliente_service.py —
+# substitua os placeholders {{...}} e remova esta linha e todo "# TEMPLATE:".
+#
+# Regras: exceções tipadas (todas ValueError, nunca genéricas), publica
+# DomainEventType via DomainEventPublisher, sempre db.commit()/db.refresh()
+# dentro de try/except com db.rollback() no except.
+#
+# TEMPLATE: adicione {{PASCAL_UPPER}}_CRIADO e {{PASCAL_UPPER}}_ALTERADO em
+# app/domain/event_types.py (DomainEventType) antes de usar este service.
+
+from datetime import datetime, timezone
+from uuid import uuid4
+
+from sqlalchemy.orm import Session
+
+from app.domain.event_types import DomainEventType
+from app.models.{{snake_case}} import {{PascalCase}}, {{PascalCase}}Status
+from app.repositories.empresa_repository import EmpresaRepository
+from app.repositories.{{snake_case}}_repository import {{PascalCase}}Repository
+from app.schemas.{{snake_case}} import {{PascalCase}}Create, {{PascalCase}}Response, {{PascalCase}}Update
+from app.services.domain_event_publisher import DomainEventPublisher
+
+STATUS_ATIVO = {{PascalCase}}Status.ATIVO.value
+STATUS_INATIVO = {{PascalCase}}Status.INATIVO.value
+
+
+class {{PascalCase}}NotFoundError(ValueError):
+    pass
+
+
+class {{PascalCase}}ConflictError(ValueError):
+    pass
+
+
+class {{PascalCase}}InvalidDataError(ValueError):
+    pass
+
+
+class {{PascalCase}}InvalidEmpresaError(ValueError):
+    pass
+
+
+class {{PascalCase}}Service:
+    def __init__(
+        self,
+        repository: {{PascalCase}}Repository | None = None,
+        empresa_repository: EmpresaRepository | None = None,
+        event_publisher: DomainEventPublisher | None = None,
+    ) -> None:
+        self.repository = repository or {{PascalCase}}Repository()
+        self.empresa_repository = empresa_repository or EmpresaRepository()
+        self.event_publisher = event_publisher or DomainEventPublisher()
+
+    def criar_{{snake_case}}(
+        self,
+        db: Session,
+        data: {{PascalCase}}Create,
+        *,
+        empresa_id: str,
+        actor_usuario_id: str | None = None,
+    ) -> {{PascalCase}}:
+        context_empresa_id = str(empresa_id)
+        payload_empresa_id = str(data.empresa_id)
+        if payload_empresa_id != context_empresa_id:
+            raise {{PascalCase}}InvalidEmpresaError("Empresa do payload diverge da Empresa do contexto")
+
+        now = datetime.now(timezone.utc)
+        {{snake_case}}_id = str(uuid4())
+        {{camelCase}} = {{PascalCase}}(
+            id={{snake_case}}_id,
+            empresa_id=context_empresa_id,
+            nome=data.nome,
+            status=STATUS_ATIVO,
+            created_at=now,
+            updated_at=now,
+        )
+
+        try:
+            self._ensure_empresa_valida(db, context_empresa_id)
+            self.repository.create(db, {{camelCase}})
+            self._publish_event(db, {{camelCase}}, DomainEventType.{{PASCAL_UPPER}}_CRIADO, actor_usuario_id, occurred_at=now)
+            db.commit()
+            db.refresh({{camelCase}})
+            return {{camelCase}}
+        except Exception:
+            db.rollback()
+            raise
+
+    def obter_{{snake_case}}(self, db: Session, *, empresa_id: str, {{snake_case}}_id: str) -> {{PascalCase}}:
+        {{camelCase}} = self.repository.get_by_id(db, empresa_id=str(empresa_id), {{snake_case}}_id={{snake_case}}_id)
+        if {{camelCase}} is None:
+            raise {{PascalCase}}NotFoundError("{{PascalCase}} não encontrado")
+        return {{camelCase}}
+
+    def listar_{{plural_snake_case}}(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[{{PascalCase}}]:
+        return self.repository.list(db, empresa_id=str(empresa_id), status=status, limit=limit, offset=offset)
+
+    def atualizar_{{snake_case}}(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        {{snake_case}}_id: str,
+        data: {{PascalCase}}Update,
+        actor_usuario_id: str | None = None,
+    ) -> {{PascalCase}}:
+        try:
+            {{camelCase}} = self.obter_{{snake_case}}(db, empresa_id=str(empresa_id), {{snake_case}}_id={{snake_case}}_id)
+            updates = data.model_dump(exclude_unset=True, by_alias=False)
+            changed_fields: list[str] = []
+
+            if "nome" in updates and updates["nome"] != {{camelCase}}.nome:
+                {{camelCase}}.nome = updates["nome"]
+                changed_fields.append("nome")
+
+            if changed_fields:
+                now = datetime.now(timezone.utc)
+                {{camelCase}}.updated_at = now
+                self.repository.update(db, {{camelCase}})
+                self._publish_event(
+                    db, {{camelCase}}, DomainEventType.{{PASCAL_UPPER}}_ALTERADO, actor_usuario_id,
+                    occurred_at=now, campos_alterados=changed_fields,
+                )
+
+            db.commit()
+            db.refresh({{camelCase}})
+            return {{camelCase}}
+        except Exception:
+            db.rollback()
+            raise
+
+    def to_response(self, {{camelCase}}: {{PascalCase}}) -> {{PascalCase}}Response:
+        return {{PascalCase}}Response.model_validate({{camelCase}})
+
+    def _ensure_empresa_valida(self, db: Session, empresa_id: str) -> None:
+        empresa = self.empresa_repository.get_by_id(db, empresa_id)
+        if empresa is None:
+            raise {{PascalCase}}InvalidEmpresaError("Empresa não encontrada")
+
+    def _publish_event(
+        self,
+        db: Session,
+        {{camelCase}}: {{PascalCase}},
+        tipo: DomainEventType,
+        actor_usuario_id: str | None,
+        *,
+        occurred_at: datetime | None = None,
+        campos_alterados: list[str] | None = None,
+    ) -> None:
+        payload: dict[str, object] = {"empresa_id": {{camelCase}}.empresa_id, "{{snake_case}}_id": {{camelCase}}.id}
+        if campos_alterados is not None:
+            payload["campos_alterados"] = campos_alterados
+        self.event_publisher.publish(
+            db,
+            tipo=tipo,
+            empresa_id={{camelCase}}.empresa_id,
+            entidade_tipo="{{snake_case}}",
+            entidade_id={{camelCase}}.id,
+            usuario_id=actor_usuario_id,
+            payload=payload,
+            occurred_at=occurred_at or datetime.now(timezone.utc),
+        )
