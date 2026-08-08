@@ -15,7 +15,7 @@ import {
 import { classificarTarefa } from "@/lib/escopo-operacional";
 import { resolverUsuarioPorReferencia } from "@/lib/referencias";
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
-import type { Cliente } from "@/types/cliente";
+import type { ClienteDiretorioItem } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 
 const prioridadeClassName: Record<Demanda["prioridade"], string> = {
@@ -35,7 +35,7 @@ export function TarefasLista({
 }: {
   demandas: Demanda[];
   usuarios: UsuarioDiretorioItem[];
-  clientes: Cliente[];
+  clientes: ClienteDiretorioItem[];
   onOpenDetails?: (demandaId: string) => void;
   emptyTitle?: string;
   emptyDescription?: string;

@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import type { ClienteStatus } from "@/types/cliente";
 
-export type ClienteStatusFiltro = ClienteStatus | "todos";
+/** `arquivado` não entra aqui — arquivados têm um interruptor próprio. */
+export type ClienteStatusFiltro = Exclude<ClienteStatus, "arquivado"> | "todos";
 
 export function ClientesToolbar({
   query,
@@ -13,12 +14,16 @@ export function ClientesToolbar({
   statusFilter,
   onStatusFilterChange,
   onNewCliente,
+  mostrarArquivados,
+  onMostrarArquivadosChange,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   statusFilter: ClienteStatusFiltro;
   onStatusFilterChange: (value: ClienteStatusFiltro) => void;
   onNewCliente: () => void;
+  mostrarArquivados: boolean;
+  onMostrarArquivadosChange: (value: boolean) => void;
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -31,7 +36,7 @@ export function ClientesToolbar({
               <input
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
-                placeholder="Buscar por nome, documento, cidade ou grupo"
+                placeholder="Buscar por nome, razão social, documento ou código (C26000001)"
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 py-2.5 pl-10 pr-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-300 focus:bg-white focus:shadow-sm dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-100 dark:focus:bg-zinc-900"
               />
             </span>
@@ -50,10 +55,22 @@ export function ClientesToolbar({
           />
         </div>
 
-        <Button onClick={onNewCliente}>
-          <Plus className="h-4 w-4" />
-          Novo cliente
-        </Button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <input
+              type="checkbox"
+              checked={mostrarArquivados}
+              onChange={(event) => onMostrarArquivadosChange(event.target.checked)}
+              className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+            />
+            Ver arquivados
+          </label>
+
+          <Button onClick={onNewCliente}>
+            <Plus className="h-4 w-4" />
+            Novo cliente
+          </Button>
+        </div>
       </div>
     </div>
   );

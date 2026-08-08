@@ -38,9 +38,12 @@ import {
 import { podeCriarDemanda } from "@/types/usuario";
 import type { Demanda } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { resolverClientePorReferencia } from "@/lib/referencias";
 
 export function DashboardView() {
-  const { demandas, setDemandas, usuarioAtual, clientes } = useAppData();
+  const { demandas, setDemandas, usuarioAtual } = useAppData();
+  const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios: diretorio } = useDiretorioUsuarios();
   const [sessoes, setSessoes] = useState<SessaoTrabalho[]>([]);
@@ -238,7 +241,7 @@ export function DashboardView() {
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {tarefasCadastradas.map((demanda) => {
               const classificacao = classificarTarefa(demanda);
-              const cliente = clientes.find((item) => item.id === demanda.clienteId);
+              const cliente = resolverClientePorReferencia(demanda.clienteId, clientes);
               return (
                 <li key={demanda.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
                   <div className="min-w-0">

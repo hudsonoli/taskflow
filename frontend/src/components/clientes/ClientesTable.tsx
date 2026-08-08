@@ -1,26 +1,33 @@
-import { Pencil } from "lucide-react";
+import { ArchiveRestore, Pencil, Trash2 } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { resolveCorIdentificacaoHex, resolveResponsavelComercialNome, statusClienteLabels } from "@/lib/clientes-mock";
-import { resolverGrupoClienteNomes } from "@/lib/referencias";
-import type { Cliente, ClienteStatus } from "@/types/cliente";
-import type { GrupoClienteDiretorioItem } from "@/lib/api-backend";
+import { resolveCorIdentificacaoHex } from "@/lib/cores";
+import { resolverGrupoClienteNomes, resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { statusClienteLabels, type Cliente, type ClienteStatus } from "@/types/cliente";
+import type { GrupoClienteDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 
 const statusTone: Record<ClienteStatus, BadgeTone> = {
   ativo: "green",
   suspenso: "amber",
   inativo: "neutral",
+  arquivado: "red",
 };
 
 export function ClientesTable({
   clientes,
   grupos,
+  usuarios,
   onEdit,
+  onArquivar,
+  onRestaurar,
 }: {
   clientes: Cliente[];
   grupos: GrupoClienteDiretorioItem[];
+  usuarios: UsuarioDiretorioItem[];
   onEdit: (clienteId: string) => void;
+  onArquivar: (clienteId: string) => void;
+  onRestaurar: (clienteId: string) => void;
 }) {
   if (clientes.length === 0) {
     return <EmptyState title="Nenhum cliente encontrado" description="Ajuste a busca ou os filtros." />;
@@ -52,7 +59,9 @@ export function ClientesTable({
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {clientes.map((cliente) => (
               <tr key={cliente.id} className="group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5">
-                <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100">{cliente.codigoInterno}</td>
+                <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100" title={cliente.codigoReferencia}>
+                  #{cliente.sequencialReferencia}
+                </td>
                 <td className="px-4 py-3">
                   <button type="button" onClick={() => onEdit(cliente.id)} className="flex max-w-[240px] items-center gap-2.5 text-left">
                     <span
@@ -65,7 +74,7 @@ export function ClientesTable({
                       <span className="block truncate font-semibold text-zinc-950 transition group-hover:text-indigo-600 dark:text-zinc-50 dark:group-hover:text-indigo-400">
                         {cliente.nome}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{cliente.razaoSocial || cliente.id}</span>
+                      <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{cliente.razaoSocial || "—"}</span>
                     </span>
                   </button>
                 </td>
@@ -73,16 +82,33 @@ export function ClientesTable({
                 <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                   {cliente.cidade ? `${cliente.cidade}${cliente.uf ? `/${cliente.uf}` : ""}` : "-"}
                 </td>
-                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{resolverGrupoClienteNomes(cliente.tagIds, grupos)}</td>
-                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{resolveResponsavelComercialNome(cliente.responsavelComercialId)}</td>
+                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{resolverGrupoClienteNomes(cliente.grupoClienteIds, grupos)}</td>
+                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{cliente.responsavelComercialId
+                    ? (resolverUsuarioPorReferencia(cliente.responsavelComercialId, usuarios)?.nome ?? "-")
+                    : "-"}</td>
                 <td className="px-4 py-3">
                   <Badge tone={statusTone[cliente.status]}>{statusClienteLabels[cliente.status]}</Badge>
                 </td>
                 <td className="px-4 py-3">
-                  <Button variant="secondary" onClick={() => onEdit(cliente.id)} className="px-3 py-1.5 text-xs">
-                    <Pencil className="h-3.5 w-3.5" />
-                    Editar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {cliente.status === "arquivado" ? (
+                      <Button variant="secondary" onClick={() => onRestaurar(cliente.id)} className="px-3 py-1.5 text-xs">
+                        <ArchiveRestore className="h-3.5 w-3.5" />
+                        Restaurar
+                      </Button>
+                    ) : (
+                      <>
+                        <Button variant="secondary" onClick={() => onEdit(cliente.id)} className="px-3 py-1.5 text-xs">
+                          <Pencil className="h-3.5 w-3.5" />
+                          Editar
+                        </Button>
+                        <Button variant="secondary" onClick={() => onArquivar(cliente.id)} className="px-3 py-1.5 text-xs">
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Excluir
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

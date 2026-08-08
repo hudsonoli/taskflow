@@ -10,22 +10,22 @@ import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { Tabs } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
-import {
-  coresIdentificacaoDisponiveis,
-  detectDocumentType,
-  formatDocument,
-  generateId,
-  mockDocumentoLookup,
-  origensClienteDisponiveis,
-  resolveCorIdentificacaoHex,
-  responsaveisProjetoDisponiveis,
-  statusClienteLabels,
-} from "@/lib/clientes-mock";
+import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
+import { generateId } from "@/lib/ids";
+import { detectDocumentType, formatDocument } from "@/lib/mascaras";
+import { buscarDadosPorDocumento } from "@/lib/documento-lookup";
 import { useAppData } from "@/lib/AppDataContext";
 import { resolverGrupoClientePorReferencia } from "@/lib/referencias";
 import { podeVerDadosFinanceiros } from "@/types/usuario";
-import type { Cliente, ClienteContato, ClienteFormDraft, ClienteStatus } from "@/types/cliente";
-import type { GrupoClienteDiretorioItem } from "@/lib/api-backend";
+import {
+  origensClienteDisponiveis,
+  statusClienteLabels,
+  type Cliente,
+  type ClienteContato,
+  type ClienteFormDraft,
+  type ClienteStatusEditavel,
+} from "@/types/cliente";
+import type { GrupoClienteDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 
 const ufsDisponiveis = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB",
@@ -50,17 +50,18 @@ function createInitialDraft(cliente?: Cliente): ClienteFormDraft {
     cidade: cliente?.cidade ?? "",
     uf: cliente?.uf ?? "",
     segmento: cliente?.segmento ?? "",
-    tagIds: cliente?.tagIds ?? [],
+    grupoClienteIds: cliente?.grupoClienteIds ?? [],
     origem: cliente?.origem ?? "",
-    status: cliente?.status ?? "ativo",
+    status: (cliente?.status === "arquivado" ? "ativo" : cliente?.status) ?? "ativo",
     responsavelComercialId: cliente?.responsavelComercialId ?? "",
     clienteReferencial: cliente?.clienteReferencial ?? false,
     contatos: cliente?.contatos ?? [],
     avisarConclusaoPorEmail: cliente?.avisarConclusaoPorEmail ?? true,
-    feeMensal: cliente?.feeMensal ?? null,
+    feeMensalCentavos: cliente?.feeMensalCentavos ?? null,
     horasContratadasMes: cliente?.horasContratadasMes ?? null,
     observacoes: cliente?.observacoes ?? "",
     corIdentificacao: cliente?.corIdentificacao ?? coresIdentificacaoDisponiveis[0].id,
+    logoUrl: cliente?.logoUrl ?? "",
   };
 }
 
@@ -68,12 +69,16 @@ export function ClienteFormModal({
   open,
   cliente,
   grupos,
+  usuarios,
+  salvando,
   onClose,
   onSave,
 }: {
   open: boolean;
   cliente?: Cliente;
   grupos: GrupoClienteDiretorioItem[];
+  usuarios: UsuarioDiretorioItem[];
+  salvando: boolean;
   onClose: () => void;
   onSave: (draft: ClienteFormDraft, clienteId?: string) => void;
 }) {
@@ -108,7 +113,7 @@ export function ClienteFormModal({
 
   function handleBuscarDocumento() {
     if (!draft.documento.trim()) return;
-    const resultado = mockDocumentoLookup(draft.documento, draft.tipoDocumento);
+    const resultado = buscarDadosPorDocumento(draft.documento, draft.tipoDocumento);
     updateDraft({ nome: resultado.nome, razaoSocial: resultado.razaoSocial });
   }
 
@@ -190,20 +195,26 @@ export function ClienteFormModal({
               <Select
                 label="Status"
                 value={draft.status}
-                onChange={(event) => updateDraft({ status: event.target.value as ClienteStatus })}
-                options={Object.entries(statusClienteLabels).map(([value, label]) => ({ value, label }))}
+                onChange={(event) => updateDraft({ status: event.target.value as ClienteStatusEditavel })}
+                options={Object.entries(statusClienteLabels)
+                  .filter(([value]) => value !== "arquivado")
+                  .map(([value, label]) => ({ value, label }))}
               />
             </div>
 
             <MultiSelect
               label="Grupos de clientes"
-              values={draft.tagIds.map((referencia) => resolverGrupoClientePorReferencia(referencia, grupos)?.id ?? referencia)}
-              onChange={(values) => updateDraft({ tagIds: values })}
+              values={draft.grupoClienteIds.map(
+                (referencia) => resolverGrupoClientePorReferencia(referencia, grupos)?.id ?? referencia,
+              )}
+              onChange={(values) => updateDraft({ grupoClienteIds: values })}
               options={grupos
                 .filter(
                   (grupo) =>
                     grupo.status === "ativo" ||
-                    draft.tagIds.some((referencia) => resolverGrupoClientePorReferencia(referencia, grupos)?.id === grupo.id),
+                    draft.grupoClienteIds.some(
+                      (referencia) => resolverGrupoClientePorReferencia(referencia, grupos)?.id === grupo.id,
+                    ),
                 )
                 .map((grupo) => ({
                   value: grupo.id,
@@ -337,7 +348,15 @@ export function ClienteFormModal({
                 label="Responsável comercial"
                 value={draft.responsavelComercialId}
                 onChange={(event) => updateDraft({ responsavelComercialId: event.target.value })}
-                options={[{ value: "", label: "Selecionar…" }, ...responsaveisProjetoDisponiveis.map((usuario) => ({ value: usuario.id, label: usuario.nome }))]}
+                options={[
+                  { value: "", label: "Selecionar…" },
+                  ...usuarios
+                    .filter(
+                      (usuario) =>
+                        usuario.status === "ativo" || usuario.id === draft.responsavelComercialId,
+                    )
+                    .map((usuario) => ({ value: usuario.id, label: usuario.nome })),
+                ]}
               />
             </div>
 
@@ -350,8 +369,13 @@ export function ClienteFormModal({
               <Input
                 label="Fee mensal (R$)"
                 type="number"
-                value={draft.feeMensal ?? ""}
-                onChange={(event) => updateDraft({ feeMensal: event.target.value === "" ? null : Number(event.target.value) })}
+                value={draft.feeMensalCentavos === null ? "" : draft.feeMensalCentavos / 100}
+                onChange={(event) =>
+                  updateDraft({
+                    feeMensalCentavos:
+                      event.target.value === "" ? null : Math.round(Number(event.target.value) * 100),
+                  })
+                }
               />
               <Input
                 label="Horas contratadas/mês"
@@ -376,7 +400,7 @@ export function ClienteFormModal({
         <Button type="button" variant="secondary" onClick={onClose}>
           Cancelar
         </Button>
-        <Button type="button" disabled={!canSave} onClick={() => onSave(draft, cliente?.id)}>
+        <Button type="button" disabled={!canSave || salvando} onClick={() => onSave(draft, cliente?.id)}>
           Salvar alterações
         </Button>
       </div>

@@ -40,6 +40,7 @@ import {
 } from "@/lib/escopo-operacional";
 import type { DemandaPrioridade, DemandaStatus } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
 type PeriodoFiltro = "todos" | "hoje" | "semana" | "atrasadas";
 type OrigemFiltro = "todos" | "interna" | "cliente";
@@ -47,7 +48,8 @@ type OrigemFiltro = "todos" | "interna" | "cliente";
 const DIAS_UTEIS_SEMANA = 5;
 
 export function MeuDepartamentoView() {
-  const { demandas, clientes, projetos, regraExpediente, usuarioAtual } = useAppData();
+  const { demandas, projetos, regraExpediente, usuarioAtual } = useAppData();
+  const { clientes } = useDiretorioClientes();
   const { equipes } = useDiretorioEquipes();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios } = useDiretorioUsuarios();

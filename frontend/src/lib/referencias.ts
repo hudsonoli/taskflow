@@ -1,4 +1,5 @@
 import type {
+  ClienteDiretorioItem,
   DepartamentoDiretorioItem,
   EquipeDiretorioItem,
   GrupoClienteDiretorioItem,
@@ -41,7 +42,7 @@ export function normalizarReferenciasParaCodigoInterno(
 }
 
 /**
- * Mesmo padrão acima, pra Grupo de Cliente: `Cliente.tagIds` continua mock nesta entrega e
+ * Mesmo padrão acima, pra Grupo de Cliente: `Cliente.grupoClienteIds` já é UUID real, mas
  * guarda o `id` mock antigo (ex. "grupo-grupo-bretas"), que o backend real preservou como
  * `codigoInterno` do grupo (ver backend/app/cli/seed_grupos_cliente.py). Nenhum componente
  * deve comparar `grupo.id === referencia` diretamente — sempre por aqui, que casa por `id`
@@ -107,6 +108,34 @@ export function resolverDepartamentoNome(
   return departamento.status === "arquivado" ? `${departamento.nome} (arquivado)` : departamento.nome;
 }
 
+/**
+ * Cliente: mesmo padrão. `Demanda.clienteId`, `Projeto.clienteId` e `SLA` ainda carregam o
+ * id legado do mock (`cliente-1`, `#2001`), que o backend preservou como `codigoInterno` —
+ * então resolver por `id` OU `codigoInterno` continua obrigatório enquanto esses domínios
+ * não migrarem.
+ *
+ * Nome NUNCA entra aqui: em Cliente ele não é identidade (filiais homônimas são cadastros
+ * legítimos — ver docs/padrao-entidades-externas.md).
+ */
+export function correspondeCliente(referencia: string, cliente: ReferenciavelPorCodigoInterno): boolean {
+  return referencia === cliente.id || referencia === cliente.codigoInterno;
+}
+
+export function resolverClientePorReferencia(
+  referencia: string,
+  diretorio: ClienteDiretorioItem[],
+): ClienteDiretorioItem | undefined {
+  return diretorio.find((cliente) => correspondeCliente(referencia, cliente));
+}
+
+/** Cliente é exibido como `#<sequencial> — <nome>` (ver lib/formatarReferencia.ts). */
+export function resolverClienteNome(referencia: string, diretorio: ClienteDiretorioItem[]): string {
+  if (!referencia) return "Sem cliente";
+  const cliente = resolverClientePorReferencia(referencia, diretorio);
+  if (!cliente) return referencia;
+  return cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome;
+}
+
 /** Equipe: mesmo padrão — resolve por `id` OU `codigoInterno` legado (`equipe-1`). */
 export function correspondeEquipe(referencia: string, equipe: EquipeDiretorioItem): boolean {
   return referencia === equipe.id || referencia === equipe.codigoInterno;
@@ -127,9 +156,9 @@ export function resolverEquipeNome(referencia: string, diretorio: EquipeDiretori
   return equipe.status === "arquivado" ? `${equipe.nome} (arquivada)` : equipe.nome;
 }
 
-export function resolverGrupoClienteNomes(tagIds: string[], diretorio: GrupoClienteDiretorioItem[]): string {
-  if (tagIds.length === 0) return "-";
-  return tagIds
+export function resolverGrupoClienteNomes(referencias: string[], diretorio: GrupoClienteDiretorioItem[]): string {
+  if (referencias.length === 0) return "-";
+  return referencias
     .map((referencia) => {
       const grupo = resolverGrupoClientePorReferencia(referencia, diretorio);
       if (!grupo) return referencia;

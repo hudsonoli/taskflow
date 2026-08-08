@@ -12,6 +12,7 @@ import { SlaFormModal } from "./SlaFormModal";
 import { SlaStats } from "./SlaStats";
 import { SlaTable } from "./SlaTable";
 import { SlaToolbar } from "./SlaToolbar";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
 function normalize(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -37,7 +38,8 @@ function updateRegraFromDraft(regra: SlaRegra, draft: SlaRegraFormDraft): SlaReg
 }
 
 export function SlaView() {
-  const { slaRegras, setSlaRegras, clientes } = useAppData();
+  const { slaRegras, setSlaRegras } = useAppData();
+  const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);

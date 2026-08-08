@@ -28,6 +28,7 @@ import { DemandaChecklistCard } from "./DemandaChecklistCard";
 import { EnvioClienteCard } from "./EnvioClienteCard";
 import { RegistrarAjusteCard } from "./RegistrarAjusteCard";
 import { WorkflowEtapasEditor } from "./WorkflowEtapasEditor";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
 type DemandaSectionProps = {
   demanda: Demanda;
@@ -73,7 +74,8 @@ function updateDemanda(demanda: Demanda, patch: Partial<Demanda>, onChange: (dem
 }
 
 export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) {
-  const { projetos, clientes } = useAppData();
+  const { projetos } = useAppData();
+  const { clientes } = useDiretorioClientes();
 
   function handleProjetoChange(projetoId: string) {
     const projeto = projetos.find((item) => item.id === projetoId);

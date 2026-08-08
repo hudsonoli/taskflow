@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { resolverDepartamentoNome } from "@/lib/referencias";
 import { slaPrioridadeAlvoLabels, type SlaRegra } from "@/types/sla";
-import type { Cliente } from "@/types/cliente";
+import type { ClienteDiretorioItem } from "@/lib/api-backend";
 import type { DepartamentoDiretorioItem } from "@/lib/api-backend";
 
 const prioridadeTone: Record<SlaRegra["prioridade"], BadgeTone> = {
@@ -22,7 +22,7 @@ export function SlaTable({
 }: {
   slaRegras: SlaRegra[];
   departamentos: DepartamentoDiretorioItem[];
-  clientes: Cliente[];
+  clientes: ClienteDiretorioItem[];
   onEdit: (slaRegraId: string) => void;
 }) {
   if (slaRegras.length === 0) {

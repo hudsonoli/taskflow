@@ -6,11 +6,10 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 
-// Confirmação de "Arquivar" (soft-delete permanente, ver docs/padrao-arquivamento.md). O
-// motivo é obrigatório porque o backend exige (GrupoClienteArquivar.motivoArquivamento).
-// Diferente de Usuário: um grupo arquivado continua resolvendo nos vínculos já existentes
-// (com indicador "(arquivado)") — nada é desassociado ao arquivar.
-export function ExcluirGrupoClienteModal({
+// Arquivar = soft-delete permanente (docs/padrao-arquivamento.md). Motivo obrigatório
+// porque o backend exige. Arquivar NÃO cascateia: os vínculos com grupos de cliente e as
+// referências históricas em projetos e demandas continuam resolvendo.
+export function ArquivarClienteModal({
   open,
   nome,
   arquivando,
@@ -36,8 +35,8 @@ export function ExcluirGrupoClienteModal({
           <div>
             <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Arquivar {nome}</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              O grupo não é apagado — fica oculto da lista de opções novas, mas continua exibindo o nome nos clientes
-              que já usam essa tag, e pode ser restaurado depois.
+              O cliente não é apagado. Projetos, demandas e grupos já vinculados continuam como estão — o cadastro
+              apenas sai da listagem. Pode ser restaurado depois.
             </p>
           </div>
         </div>
@@ -56,7 +55,7 @@ export function ExcluirGrupoClienteModal({
           label="Motivo (obrigatório)"
           value={motivo}
           onChange={(event) => setMotivo(event.target.value)}
-          placeholder="Por que este grupo está sendo arquivado?"
+          placeholder="Por que este cliente está sendo arquivado?"
           rows={3}
         />
       </div>

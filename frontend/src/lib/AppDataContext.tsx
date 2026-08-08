@@ -3,7 +3,6 @@
 import { createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { demandasMock } from "@/lib/demandas-mock";
 import { projetosMock } from "@/lib/projetos-mock";
-import { clientesMock } from "@/lib/clientes-mock";
 import { pecasMock } from "@/lib/pecas-mock";
 import { fornecedoresMock } from "@/lib/fornecedores-mock";
 import { regraExpedienteMock, isDentroExpediente } from "@/lib/regra-expediente-mock";
@@ -17,7 +16,6 @@ import type { Demanda } from "@/types/demanda";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
 import type { SlaRegra } from "@/types/sla";
 import type { Projeto } from "@/types/projeto";
-import type { Cliente } from "@/types/cliente";
 import type { Peca } from "@/types/peca";
 import type { Fornecedor } from "@/types/fornecedor";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
@@ -30,8 +28,6 @@ interface AppDataContextValue {
   setDemandas: Dispatch<SetStateAction<Demanda[]>>;
   projetos: Projeto[];
   setProjetos: Dispatch<SetStateAction<Projeto[]>>;
-  clientes: Cliente[];
-  setClientes: Dispatch<SetStateAction<Cliente[]>>;
   pecas: Peca[];
   setPecas: Dispatch<SetStateAction<Peca[]>>;
   fornecedores: Fornecedor[];
@@ -68,7 +64,6 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandas, setDemandas] = useState<Demanda[]>(demandasMock);
   const [projetos, setProjetos] = useState<Projeto[]>(projetosMock);
-  const [clientes, setClientes] = useState<Cliente[]>(clientesMock);
   const [pecas, setPecas] = useState<Peca[]>(pecasMock);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>(fornecedoresMock);
   const [workflowModelos, setWorkflowModelos] = useState<WorkflowModelo[]>(workflowModelosMock);
@@ -185,8 +180,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setDemandas,
         projetos,
         setProjetos,
-        clientes,
-        setClientes,
         pecas,
         setPecas,
         fornecedores,

@@ -2,7 +2,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { resolveCorIdentificacaoHex } from "@/lib/clientes-mock";
+import { resolveCorIdentificacaoHex } from "@/lib/cores";
 import { resolverDepartamentoNome } from "@/lib/referencias";
 import { perfilUsuarioLabels } from "@/types/usuario";
 import type { Usuario } from "@/types/usuario";

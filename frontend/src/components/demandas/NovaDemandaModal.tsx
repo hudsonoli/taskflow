@@ -27,6 +27,7 @@ import { resolverDepartamentoNome } from "@/lib/referencias";
 import { aplicarModeloWorkflow } from "@/lib/workflow-modelos-mock";
 import type { Demanda, DemandaFormDraft, DemandaPrioridade, DemandaStatus, DemandaWorkflowEtapa } from "@/types/demanda";
 import { WorkflowEtapasEditor } from "./WorkflowEtapasEditor";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
 function createInitialWorkflow(): DemandaWorkflowEtapa[] {
   return [
@@ -75,7 +76,8 @@ export function NovaDemandaModal({
   onSaveAndClose: (draft: DemandaFormDraft, demandaId?: string) => void;
   onSaveAndContinue: (draft: DemandaFormDraft, demandaId?: string) => void;
 }) {
-  const { projetos, clientes, workflowModelos } = useAppData();
+  const { projetos, workflowModelos } = useAppData();
+  const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
   const diretorio = useDiretorioUsuarios().usuarios;
   // Picker só oferece usuário ativo pra seleção (referência histórica de inativo continua

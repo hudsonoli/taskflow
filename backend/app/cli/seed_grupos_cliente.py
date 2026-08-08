@@ -1,11 +1,13 @@
-"""Migra os grupos de cliente hoje mockados no frontend
+"""Popula os grupos de cliente iniciais no banco.
+
+Grupo de Cliente é entidade real desde a Fase 2A. O elenco original veio da
 (frontend/src/lib/grupos-cliente-mock.ts, derivados dos nomes de tag únicos em
-frontend/src/lib/clientes-import.json) pro banco real.
+planilha de clientes importada) pro banco real.
 
 `codigoInterno` de cada grupo é o mesmo `id` que o mock já usava (ex.
 "grupo-grupo-bretas") — de propósito, pra que `Cliente.tagIds` (que continua mock nesta
 entrega) siga resolvendo esses grupos sem precisar de nenhuma mudança em
-clientes-mock.ts/clientes-import.json (ver GrupoClienteService.create_grupo_cliente_com_codigo_legado).
+mocks do frontend, removidos na Fase 2B (ver GrupoClienteService.create_grupo_cliente_com_codigo_legado).
 
 Fonte de dados: cópia estática em app/cli/data/grupos_cliente_seed.json (o backend nunca lê
 nada de dentro de frontend/).

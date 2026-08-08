@@ -33,6 +33,14 @@ class DomainEventType(StrEnum):
     EQUIPE_MEMBRO_ADICIONADO = "equipe.membro_adicionado"
     EQUIPE_MEMBRO_REMOVIDO = "equipe.membro_removido"
 
+    # Cliente não tem tabela de histórico: estes eventos SÃO o histórico.
+    CLIENTE_CRIADO = "cliente.criado"
+    CLIENTE_ALTERADO = "cliente.alterado"
+    CLIENTE_ARQUIVADO = "cliente.arquivado"
+    CLIENTE_RESTAURADO = "cliente.restaurado"
+    CLIENTE_GRUPO_ADICIONADO = "cliente.grupo_adicionado"
+    CLIENTE_GRUPO_REMOVIDO = "cliente.grupo_removido"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

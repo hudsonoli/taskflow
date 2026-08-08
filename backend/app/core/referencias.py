@@ -23,13 +23,14 @@ from app.core.relogio import agora_utc, ano_corrente
 # Lista FECHADA e executável: só entra o domínio já migrado e com regras confirmadas.
 #
 # Prefixos reservados, ainda NÃO executáveis (entram junto da migração de cada domínio):
-#   U = usuario · C = cliente · F = fornecedor · P = projeto
+#   U = usuario · F = fornecedor · P = projeto
 #
 # `tarefa` (T) está deliberadamente fora: conflita com a numeração #AA0000 hoje em uso, que
 # dá continuidade à sequência do iClips (a partir de #002062). Pendência da Fase 2E.
 PREFIXOS_REFERENCIA: dict[str, str] = {
     "departamento": "D",
     "equipe": "E",
+    "cliente": "C",
 }
 
 SEQUENCIAL_DIGITOS = 6

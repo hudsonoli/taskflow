@@ -8,7 +8,7 @@ import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Modal } from "@/components/ui/Modal";
 import { Switch } from "@/components/ui/Switch";
 import { Textarea } from "@/components/ui/Textarea";
-import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/clientes-mock";
+import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
 import { normalizarReferenciasParaCodigoInterno } from "@/lib/referencias";
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { Departamento, DepartamentoFormDraft } from "@/types/departamento";

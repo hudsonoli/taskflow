@@ -11,7 +11,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
 import { generateId } from "@/lib/ids";
 import { formatCPF } from "@/lib/mascaras";
-import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/clientes-mock";
+import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
 import { PERFIL_PARA_PERFIL_BASE } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import {

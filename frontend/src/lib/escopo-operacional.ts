@@ -17,8 +17,7 @@ import { demandaTemResponsavel, normalizarUsuarioId } from "@/lib/demandas-mock"
 import { isDentroExpediente } from "@/lib/regra-expediente-mock";
 import { correspondeDepartamento, resolverDepartamentoPorReferencia } from "@/lib/referencias";
 import { perfisComAcessoAdministrativo, perfisComAcessoFinanceiro } from "@/types/usuario";
-import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
-import type { Cliente } from "@/types/cliente";
+import type { ClienteDiretorioItem, DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import type { RegraExpediente } from "@/types/regra-expediente";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
@@ -237,7 +236,7 @@ export function tarefasDoDepartamento(demandas: Demanda[], departamentoId: strin
  * clientes sob sua responsabilidade comercial (`Cliente.responsavelComercialId`, regra já
  * existente no cadastro de clientes).
  */
-export function tarefasDoAtendimento(demandas: Demanda[], usuario: Usuario, clientes: Cliente[], diretorio: UsuarioDiretorioItem[]): Demanda[] {
+export function tarefasDoAtendimento(demandas: Demanda[], usuario: Usuario, clientes: ClienteDiretorioItem[], diretorio: UsuarioDiretorioItem[]): Demanda[] {
   const clienteIds = new Set(
     clientes.filter((cliente) => cliente.responsavelComercialId === usuario.id).map((cliente) => cliente.id),
   );

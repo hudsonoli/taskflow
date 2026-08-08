@@ -6,7 +6,7 @@ import { listDiretorioGruposCliente, type GrupoClienteDiretorioItem } from "@/li
 /**
  * Cache remoto deduplicado do diretório de grupos de cliente — mesmo padrão de
  * lib/diretorioUsuarios.ts. Inclui ativos e arquivados (resolução histórica de
- * Cliente.tagIds — ver lib/referencias.ts); quem monta uma lista de opções selecionáveis
+ * vínculos de Cliente — ver lib/referencias.ts); quem monta uma lista de opções selecionáveis
  * nova filtra `status === "ativo"` no consumidor.
  *
  * Sem localStorage/sessionStorage, sem fallback mock. `invalidarDiretorioGruposCliente()`

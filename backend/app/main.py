@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
+    clientes,
     auth,
     departamentos,
     empresas,
@@ -41,6 +42,7 @@ app.include_router(sessoes_trabalho.router)
 app.include_router(empresas.router)
 app.include_router(usuarios.router)
 app.include_router(grupos_cliente.router)
+app.include_router(clientes.router)
 app.include_router(departamentos.router)
 app.include_router(equipes.router)
 app.include_router(auth.router)

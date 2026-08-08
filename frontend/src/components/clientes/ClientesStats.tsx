@@ -6,7 +6,8 @@ import type { Cliente } from "@/types/cliente";
 export function ClientesStats({ clientes, perfilAtual }: { clientes: Cliente[]; perfilAtual: PerfilUsuario }) {
   const ativos = clientes.filter((cliente) => cliente.status === "ativo").length;
   const referenciais = clientes.filter((cliente) => cliente.clienteReferencial).length;
-  const feeTotal = clientes.reduce((total, cliente) => total + (cliente.feeMensal ?? 0), 0);
+  // Centavos no backend (dinheiro nunca em float); converte só na apresentação.
+  const feeTotal = clientes.reduce((total, cliente) => total + (cliente.feeMensalCentavos ?? 0), 0) / 100;
   const podeVerFee = podeVerDadosFinanceiros(perfilAtual);
 
   return (

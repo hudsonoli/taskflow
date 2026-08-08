@@ -3,7 +3,7 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { statusFornecedorLabels } from "@/lib/fornecedores-mock";
-import { resolveCorIdentificacaoHex } from "@/lib/clientes-mock";
+import { resolveCorIdentificacaoHex } from "@/lib/cores";
 import type { Fornecedor, FornecedorStatus } from "@/types/fornecedor";
 
 const statusTone: Record<FornecedorStatus, BadgeTone> = {

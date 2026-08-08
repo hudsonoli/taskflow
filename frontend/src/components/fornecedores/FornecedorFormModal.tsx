@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
 import { categoriasFornecedorDisponiveis, detectDocumentType, formatDocument, statusFornecedorLabels } from "@/lib/fornecedores-mock";
-import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/clientes-mock";
+import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
 import type { Fornecedor, FornecedorFormDraft, FornecedorStatus } from "@/types/fornecedor";
 
 const ufsDisponiveis = [

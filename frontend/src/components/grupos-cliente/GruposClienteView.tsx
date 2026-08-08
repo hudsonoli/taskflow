@@ -18,11 +18,11 @@ import {
 } from "@/lib/api-backend";
 import { invalidarDiretorioGruposCliente, useDiretorioGruposCliente } from "@/lib/diretorioGruposCliente";
 import { correspondeGrupoCliente } from "@/lib/referencias";
-import { useAppData } from "@/lib/AppDataContext";
 import { ExcluirGrupoClienteModal } from "./ExcluirGrupoClienteModal";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
 export function GruposClienteView() {
-  const { clientes } = useAppData();
+  const { clientes } = useDiretorioClientes();
   const { grupos, carregando, erro } = useDiretorioGruposCliente();
   const [novoNome, setNovoNome] = useState("");
   const [criando, setCriando] = useState(false);
@@ -105,7 +105,7 @@ export function GruposClienteView() {
   }
 
   function contarClientes(grupo: (typeof grupos)[number]) {
-    return clientes.filter((cliente) => cliente.tagIds.some((referencia) => correspondeGrupoCliente(referencia, grupo)))
+    return clientes.filter((cliente) => cliente.grupoClienteIds.some((referencia) => correspondeGrupoCliente(referencia, grupo)))
       .length;
   }
 

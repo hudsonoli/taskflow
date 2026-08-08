@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { Textarea } from "@/components/ui/Textarea";
 import { slaPrioridadeAlvoLabels, type SlaPrioridadeAlvo, type SlaRegra, type SlaRegraFormDraft } from "@/types/sla";
-import type { Cliente } from "@/types/cliente";
+import type { ClienteDiretorioItem } from "@/lib/api-backend";
 import type { DepartamentoDiretorioItem } from "@/lib/api-backend";
 
 function createInitialDraft(regra?: SlaRegra): SlaRegraFormDraft {
@@ -38,7 +38,7 @@ export function SlaFormModal({
   open: boolean;
   regra?: SlaRegra;
   departamentos: DepartamentoDiretorioItem[];
-  clientes: Cliente[];
+  clientes: ClienteDiretorioItem[];
   onClose: () => void;
   onSave: (draft: SlaRegraFormDraft, slaRegraId?: string) => void;
 }) {

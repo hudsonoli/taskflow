@@ -3,8 +3,9 @@
 import { CheckCircle2, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { generateId } from "@/lib/demandas-mock";
-import { useAppData } from "@/lib/AppDataContext";
 import type { Demanda } from "@/types/demanda";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { resolverClientePorReferencia } from "@/lib/referencias";
 
 export function DemandaConclusaoBanner({
   demanda,
@@ -13,8 +14,8 @@ export function DemandaConclusaoBanner({
   demanda: Demanda;
   onChange: (demanda: Demanda) => void;
 }) {
-  const { clientes } = useAppData();
-  const cliente = clientes.find((candidate) => candidate.id === demanda.clienteId);
+  const { clientes } = useDiretorioClientes();
+  const cliente = resolverClientePorReferencia(demanda.clienteId, clientes);
 
   if (demanda.status !== "concluida" || demanda.emailConclusaoEnviado) return null;
   if (!cliente || !cliente.avisarConclusaoPorEmail) return null;

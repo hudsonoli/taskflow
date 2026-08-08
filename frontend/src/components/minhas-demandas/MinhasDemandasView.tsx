@@ -24,11 +24,14 @@ import {
 } from "@/lib/demandas-mock";
 import { classificarTarefa, podeAcessarMinhasDemandas, tarefasDoAtendimento } from "@/lib/escopo-operacional";
 import type { DemandaStatus } from "@/types/demanda";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { resolverClientePorReferencia } from "@/lib/referencias";
 
 type StatusFiltro = DemandaStatus | "todos";
 
 export function MinhasDemandasView() {
-  const { demandas, setDemandas, clientes, usuarioAtual, setDemandaParaAbrir } = useAppData();
+  const { demandas, setDemandas, usuarioAtual, setDemandaParaAbrir } = useAppData();
+  const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios } = useDiretorioUsuarios();
   const router = useRouter();
@@ -128,7 +131,7 @@ export function MinhasDemandasView() {
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {listaFiltrada.map((demanda) => {
                   const classificacao = classificarTarefa(demanda);
-                  const cliente = clientes.find((item) => item.id === demanda.clienteId);
+                  const cliente = resolverClientePorReferencia(demanda.clienteId, clientes);
                   const responsaveis = demanda.usuarioResponsavelIds
                     .map((id) => resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios))
                     .filter((usuario): usuario is (typeof usuarios)[number] => Boolean(usuario));

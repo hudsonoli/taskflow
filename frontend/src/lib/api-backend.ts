@@ -2,6 +2,14 @@ import type { PerfilUsuario, Usuario, UsuarioFormDraft } from "@/types/usuario";
 import type { GrupoCliente, GrupoClienteStatus } from "@/types/grupo-cliente";
 import type { Departamento, DepartamentoFormDraft, DepartamentoStatus } from "@/types/departamento";
 import type { Equipe, EquipeFormDraft, EquipeStatus } from "@/types/equipe";
+import type {
+  Cliente,
+  ClienteContato,
+  ClienteFormDraft,
+  ClienteStatus,
+  DocumentoTipo,
+  PossivelDuplicidadeCliente,
+} from "@/types/cliente";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -302,7 +310,7 @@ export function mapGrupoClienteReadToGrupoCliente(data: GrupoClienteReadApi): Gr
 }
 
 // Projeção mínima pro diretório (GET /grupos-cliente/diretorio) — inclui arquivados de
-// propósito, pra Cliente.tagIds antigos continuarem resolvendo nome/cor (ver
+// propósito, pra vínculos já existentes continuarem resolvendo nome/cor (ver
 // lib/diretorioGruposCliente.ts e lib/referencias.ts). Quem monta uma lista de opções
 // selecionáveis nova filtra `status === "ativo"` no cliente.
 export type GrupoClienteDiretorioItem = {
@@ -573,4 +581,199 @@ export async function arquivarEquipeReal(equipeId: string, motivoArquivamento: s
 export async function restaurarEquipeReal(equipeId: string): Promise<Equipe> {
   const restaurada = await request<EquipeReadApi>(`/equipes/${equipeId}/restaurar`, { method: "POST" });
   return mapEquipeReadToEquipe(restaurada);
+}
+
+// =====================================================================================
+// Cliente — primeira entidade comercial real (Fase 2B).
+//
+// Nome e documento NÃO são identidade: filiais homônimas com CNPJ distinto e
+// empreendimentos distintos sob o mesmo CNPJ são cadastros legítimos. Coincidência devolve
+// `possiveisDuplicidades` junto do 201/200 — informativo, nunca bloqueio.
+// Ver docs/padrao-entidades-externas.md.
+// =====================================================================================
+
+type ClienteReadApi = {
+  id: string;
+  empresaId: string;
+  codigoInterno: string;
+  codigoReferencia: string;
+  anoReferencia: number;
+  sequencialReferencia: number;
+  nome: string;
+  razaoSocial: string | null;
+  tipoDocumento: DocumentoTipo;
+  documento: string | null;
+  status: ClienteStatus;
+  email: string | null;
+  whatsapp: string | null;
+  cep: string | null;
+  bairro: string | null;
+  enderecoCompleto: string | null;
+  cidade: string | null;
+  uf: string | null;
+  segmento: string | null;
+  origem: string | null;
+  responsavelComercialId: string | null;
+  clienteReferencial: boolean;
+  avisarConclusaoPorEmail: boolean;
+  feeMensalCentavos: number | null;
+  horasContratadasMes: number | null;
+  observacoes: string | null;
+  corIdentificacao: string;
+  logoUrl: string | null;
+  contatos: ClienteContato[];
+  grupoClienteIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  arquivadoAt: string | null;
+  motivoArquivamento: string | null;
+  possiveisDuplicidades: PossivelDuplicidadeCliente[];
+};
+
+function mapClienteReadToCliente(data: ClienteReadApi): Cliente {
+  return {
+    id: data.id,
+    empresaId: data.empresaId,
+    codigoInterno: data.codigoInterno,
+    codigoReferencia: data.codigoReferencia,
+    anoReferencia: data.anoReferencia,
+    sequencialReferencia: data.sequencialReferencia,
+    logoUrl: data.logoUrl ?? undefined,
+    tipoDocumento: data.tipoDocumento,
+    documento: data.documento ?? "",
+    nome: data.nome,
+    razaoSocial: data.razaoSocial ?? "",
+    email: data.email ?? "",
+    whatsapp: data.whatsapp ?? "",
+    cep: data.cep ?? "",
+    bairro: data.bairro ?? "",
+    enderecoCompleto: data.enderecoCompleto ?? "",
+    cidade: data.cidade ?? "",
+    uf: data.uf ?? "",
+    segmento: data.segmento ?? "",
+    grupoClienteIds: data.grupoClienteIds ?? [],
+    origem: data.origem ?? "",
+    status: data.status,
+    responsavelComercialId: data.responsavelComercialId ?? "",
+    clienteReferencial: data.clienteReferencial,
+    contatos: data.contatos ?? [],
+    avisarConclusaoPorEmail: data.avisarConclusaoPorEmail,
+    feeMensalCentavos: data.feeMensalCentavos,
+    horasContratadasMes: data.horasContratadasMes,
+    observacoes: data.observacoes ?? "",
+    corIdentificacao: data.corIdentificacao,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    arquivadoAt: data.arquivadoAt,
+    motivoArquivamento: data.motivoArquivamento,
+    possiveisDuplicidades: data.possiveisDuplicidades ?? [],
+  };
+}
+
+function clienteDraftParaPayload(draft: ClienteFormDraft) {
+  return {
+    nome: draft.nome,
+    tipoDocumento: draft.tipoDocumento,
+    corIdentificacao: draft.corIdentificacao,
+    razaoSocial: draft.razaoSocial || null,
+    documento: draft.documento || null,
+    email: draft.email || null,
+    whatsapp: draft.whatsapp || null,
+    cep: draft.cep || null,
+    bairro: draft.bairro || null,
+    enderecoCompleto: draft.enderecoCompleto || null,
+    cidade: draft.cidade || null,
+    uf: draft.uf || null,
+    segmento: draft.segmento || null,
+    origem: draft.origem || null,
+    responsavelComercialId: draft.responsavelComercialId || null,
+    clienteReferencial: draft.clienteReferencial,
+    avisarConclusaoPorEmail: draft.avisarConclusaoPorEmail,
+    feeMensalCentavos: draft.feeMensalCentavos,
+    horasContratadasMes: draft.horasContratadasMes,
+    observacoes: draft.observacoes || null,
+    logoUrl: draft.logoUrl || null,
+    contatos: draft.contatos,
+    grupoClienteIds: draft.grupoClienteIds,
+  };
+}
+
+/**
+ * Projeção para seletores — inclui arquivados, para resolver referências antigas.
+ *
+ * Carrega `email`, `contatos` e `avisarConclusaoPorEmail` porque o aviso de conclusão de
+ * demanda (DemandaConclusaoBanner) precisa saber quem recebe a entrega, e ele aparece para
+ * qualquer pessoa que conclui uma tarefa — não só para admin/gestor, que são os únicos com
+ * acesso a `GET /clientes/{id}`. São os mesmos contatos que o operador já usa ao trabalhar
+ * a demanda; dado financeiro (fee, horas contratadas) continua fora daqui.
+ */
+export type ClienteDiretorioItem = {
+  id: string;
+  codigoInterno: string;
+  codigoReferencia: string;
+  sequencialReferencia: number;
+  nome: string;
+  corIdentificacao: string;
+  status: ClienteStatus;
+  grupoClienteIds: string[];
+  email: string | null;
+  contatos: ClienteContato[];
+  avisarConclusaoPorEmail: boolean;
+  /** Usado por escopo-operacional.ts para o escopo "minhas demandas" do Atendimento. */
+  responsavelComercialId: string | null;
+};
+
+export async function listDiretorioClientes(): Promise<ClienteDiretorioItem[]> {
+  return request<ClienteDiretorioItem[]>("/clientes/diretorio");
+}
+
+export async function listClientesReais(params?: {
+  status?: string;
+  search?: string;
+  grupoClienteId?: string;
+}): Promise<Cliente[]> {
+  const query = new URLSearchParams({ limit: "200" });
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  if (params?.grupoClienteId) query.set("grupoClienteId", params.grupoClienteId);
+  const data = await request<ClienteReadApi[]>(`/clientes?${query.toString()}`);
+  return data.map(mapClienteReadToCliente);
+}
+
+export async function criarClienteReal(draft: ClienteFormDraft): Promise<Cliente> {
+  const criado = await request<ClienteReadApi>("/clientes", {
+    method: "POST",
+    body: JSON.stringify(clienteDraftParaPayload(draft)),
+  });
+  // `status` só é aceito no PATCH — criar sempre nasce ativo. O PATCH seguinte preserva os
+  // `possiveisDuplicidades` já detectados na criação, que é quando eles importam.
+  if (draft.status !== "ativo") {
+    const atualizado = await atualizarClienteReal(criado.id, draft);
+    return { ...atualizado, possiveisDuplicidades: criado.possiveisDuplicidades ?? [] };
+  }
+  return mapClienteReadToCliente(criado);
+}
+
+export async function atualizarClienteReal(clienteId: string, draft: ClienteFormDraft): Promise<Cliente> {
+  const atualizado = await request<ClienteReadApi>(`/clientes/${clienteId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...clienteDraftParaPayload(draft), status: draft.status }),
+  });
+  return mapClienteReadToCliente(atualizado);
+}
+
+// "Excluir" = arquivar (soft-delete permanente) — ver docs/padrao-arquivamento.md.
+export async function arquivarClienteReal(clienteId: string, motivoArquivamento: string): Promise<Cliente> {
+  const arquivado = await request<ClienteReadApi>(`/clientes/${clienteId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+  return mapClienteReadToCliente(arquivado);
+}
+
+export async function restaurarClienteReal(clienteId: string): Promise<Cliente> {
+  const restaurado = await request<ClienteReadApi>(`/clientes/${clienteId}/restaurar`, {
+    method: "POST",
+  });
+  return mapClienteReadToCliente(restaurado);
 }
