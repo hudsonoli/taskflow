@@ -11,6 +11,7 @@ from app.api.routes import (
     empresas,
     equipes,
     eventos,
+    fornecedores,
     grupos_cliente,
     health,
     root,
@@ -43,6 +44,7 @@ app.include_router(empresas.router)
 app.include_router(usuarios.router)
 app.include_router(grupos_cliente.router)
 app.include_router(clientes.router)
+app.include_router(fornecedores.router)
 app.include_router(departamentos.router)
 app.include_router(equipes.router)
 app.include_router(auth.router)

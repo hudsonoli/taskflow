@@ -57,7 +57,7 @@ O mundo controla o nome; repetição é fato, não erro.
 | Entidade | Regra |
 |---|---|
 | **Cliente** | nome **não** é identidade · documento **não** é identidade · nem os dois juntos bloqueiam |
-| **Fornecedor** | deve seguir o mesmo princípio quando for migrado |
+| **Fornecedor** | mesma regra, aplicada na Fase 2C. A base importada confirmou a previsão: 16 dos 133 registros sem documento e documento repetido entre cadastros distintos |
 
 Unicidade em Cliente existe **apenas** onde é identidade de verdade:
 
@@ -128,12 +128,13 @@ Antes de copiar `UNIQUE(empresa_id, nome_normalizado)`, responder:
 
 Casos já decididos:
 
-- **Fornecedor** — entidade externa. Mesmo princípio de Cliente. Não copiar unicidade de nome.
+- **Fornecedor** — entidade externa, migrado na Fase 2C sem unicidade de nome nem de documento, com o mesmo alerta estruturado. Divergiu de Cliente em dois pontos deliberados: o diretório **não** inclui arquivados (nenhum domínio referencia fornecedor, então ele só serve para montar opções de vínculo novo) e o status não tem `suspenso` (seria estado sem regra de negócio).
 - **Projeto** — regra própria, a decidir na fase correspondente. Nome de projeto pode repetir entre clientes diferentes e provavelmente não deve repetir dentro do mesmo cliente; isso é decisão de negócio, não herança automática de Departamento.
 
 ## Referências
 
 - [padrao-arquivamento.md](padrao-arquivamento.md) — soft-delete, motivo obrigatório e conflito-arquivado
-- `backend/app/models/cliente.py` — a decisão registrada junto do código
-- `backend/app/services/cliente_service.py` — `detectar_possiveis_duplicidades`
-- `backend/tests/test_cliente.py` — os três casos permitidos e os três motivos de alerta
+- [pendencias-arquiteturais.md](pendencias-arquiteturais.md) — divergências conhecidas entre domínios já migrados
+- `backend/app/models/cliente.py` e `backend/app/models/fornecedor.py` — as decisões registradas junto do código
+- `backend/app/services/cliente_service.py` e `fornecedor_service.py` — `detectar_possiveis_duplicidades`
+- `backend/tests/test_cliente.py` e `test_fornecedor.py` — os casos permitidos e os três motivos de alerta

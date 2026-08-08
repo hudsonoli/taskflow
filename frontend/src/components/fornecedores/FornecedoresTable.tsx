@@ -1,22 +1,27 @@
-import { Pencil } from "lucide-react";
+import { ArchiveRestore, Archive, Pencil } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { statusFornecedorLabels } from "@/lib/fornecedores-mock";
+import { statusFornecedorLabels } from "@/lib/fornecedores";
 import { resolveCorIdentificacaoHex } from "@/lib/cores";
 import type { Fornecedor, FornecedorStatus } from "@/types/fornecedor";
 
 const statusTone: Record<FornecedorStatus, BadgeTone> = {
   ativo: "green",
   inativo: "neutral",
+  arquivado: "red",
 };
 
 export function FornecedoresTable({
   fornecedores,
   onEdit,
+  onArquivar,
+  onRestaurar,
 }: {
   fornecedores: Fornecedor[];
   onEdit: (fornecedorId: string) => void;
+  onArquivar: (fornecedorId: string) => void;
+  onRestaurar: (fornecedorId: string) => void;
 }) {
   if (fornecedores.length === 0) {
     return <EmptyState title="Nenhum fornecedor encontrado" description="Ajuste a busca ou os filtros." />;
@@ -35,9 +40,10 @@ export function FornecedoresTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[980px] w-full text-left text-sm">
+        <table className="min-w-[1060px] w-full text-left text-sm">
           <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:bg-zinc-950/40">
             <tr>
+              <th className="px-4 py-2.5">Código</th>
               <th className="px-4 py-2.5">Fornecedor</th>
               <th className="px-4 py-2.5">Categoria</th>
               <th className="px-4 py-2.5">Documento</th>
@@ -48,42 +54,72 @@ export function FornecedoresTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {fornecedores.map((fornecedor) => (
-              <tr key={fornecedor.id} className={`group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 ${fornecedor.status === "inativo" ? "opacity-60" : ""}`}>
-                <td className="px-4 py-3">
-                  <button type="button" onClick={() => onEdit(fornecedor.id)} className="flex max-w-[260px] items-center gap-2.5 text-left">
-                    <span
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                      style={{ backgroundColor: resolveCorIdentificacaoHex(fornecedor.corIdentificacao) }}
-                    >
-                      {fornecedor.nome.slice(0, 2).toUpperCase()}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold text-zinc-950 transition group-hover:text-indigo-600 dark:text-zinc-50 dark:group-hover:text-indigo-400">
-                        {fornecedor.nome}
+            {fornecedores.map((fornecedor) => {
+              const arquivado = fornecedor.status === "arquivado";
+              return (
+                <tr
+                  key={fornecedor.id}
+                  className={`group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 ${fornecedor.status !== "ativo" ? "opacity-60" : ""}`}
+                >
+                  {/* O número é o rótulo; o código completo (F26000001) fica no title. O UUID
+                      nunca aparece. Ver lib/formatarReferencia.ts. */}
+                  <td
+                    className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100"
+                    title={fornecedor.codigoReferencia}
+                  >
+                    #{fornecedor.sequencialReferencia}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button type="button" onClick={() => onEdit(fornecedor.id)} className="flex max-w-[260px] items-center gap-2.5 text-left">
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                        style={{ backgroundColor: resolveCorIdentificacaoHex(fornecedor.corIdentificacao) }}
+                      >
+                        {fornecedor.nome.slice(0, 2).toUpperCase()}
                       </span>
-                    </span>
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{fornecedor.categoria || "-"}</td>
-                <td className="px-4 py-3 font-mono text-xs tabular-nums text-zinc-600 dark:text-zinc-400">{fornecedor.documento || "-"}</td>
-                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                  {fornecedor.contatoNome ? `${fornecedor.contatoNome}${fornecedor.email ? ` · ${fornecedor.email}` : ""}` : fornecedor.email || "-"}
-                </td>
-                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                  {fornecedor.cidade ? `${fornecedor.cidade}${fornecedor.uf ? `/${fornecedor.uf}` : ""}` : "-"}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge tone={statusTone[fornecedor.status]}>{statusFornecedorLabels[fornecedor.status]}</Badge>
-                </td>
-                <td className="px-4 py-3">
-                  <Button variant="secondary" onClick={() => onEdit(fornecedor.id)} className="px-3 py-1.5 text-xs">
-                    <Pencil className="h-3.5 w-3.5" />
-                    Editar
-                  </Button>
-                </td>
-              </tr>
-            ))}
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-zinc-950 transition group-hover:text-indigo-600 dark:text-zinc-50 dark:group-hover:text-indigo-400">
+                          {fornecedor.nome}
+                        </span>
+                      </span>
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{fornecedor.categoria || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs tabular-nums text-zinc-600 dark:text-zinc-400">{fornecedor.documento || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    {fornecedor.contatoNome ? `${fornecedor.contatoNome}${fornecedor.email ? ` · ${fornecedor.email}` : ""}` : fornecedor.email || "-"}
+                  </td>
+                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    {fornecedor.cidade ? `${fornecedor.cidade}${fornecedor.uf ? `/${fornecedor.uf}` : ""}` : "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge tone={statusTone[fornecedor.status]}>{statusFornecedorLabels[fornecedor.status]}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {arquivado ? (
+                        <Button variant="secondary" onClick={() => onRestaurar(fornecedor.id)} className="px-3 py-1.5 text-xs">
+                          <ArchiveRestore className="h-3.5 w-3.5" />
+                          Restaurar
+                        </Button>
+                      ) : (
+                        <>
+                          <Button variant="secondary" onClick={() => onEdit(fornecedor.id)} className="px-3 py-1.5 text-xs">
+                            <Pencil className="h-3.5 w-3.5" />
+                            Editar
+                          </Button>
+                          {/* Arquivar = soft-delete permanente. Nunca há exclusão física. */}
+                          <Button variant="secondary" onClick={() => onArquivar(fornecedor.id)} className="px-3 py-1.5 text-xs">
+                            <Archive className="h-3.5 w-3.5" />
+                            Arquivar
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

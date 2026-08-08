@@ -19,6 +19,7 @@ from app.models import (  # noqa: E402,F401
     equipe,
     equipe_membro,
     evento,
+    fornecedor,
     grupo_cliente,
     sequencia_referencia,
     sessao_trabalho,

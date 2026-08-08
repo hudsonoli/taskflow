@@ -3,8 +3,10 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import type { Fornecedor } from "@/types/fornecedor";
 
 export function FornecedoresStats({ fornecedores }: { fornecedores: Fornecedor[] }) {
+  // Contagem explícita por status: com o arquivamento, "inativos" deixou de ser
+  // "total menos ativos" — arquivado é um terceiro estado, não uma variação de inativo.
   const ativos = fornecedores.filter((fornecedor) => fornecedor.status === "ativo").length;
-  const inativos = fornecedores.length - ativos;
+  const inativos = fornecedores.filter((fornecedor) => fornecedor.status === "inativo").length;
   const categorias = new Set(fornecedores.map((fornecedor) => fornecedor.categoria).filter(Boolean)).size;
 
   return (

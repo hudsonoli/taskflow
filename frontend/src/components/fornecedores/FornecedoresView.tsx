@@ -1,93 +1,142 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useState } from "react";
 import { Truck } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { EMPRESA_PADRAO_ID, generateId } from "@/lib/fornecedores-mock";
-import { useAppData } from "@/lib/AppDataContext";
-import type { Fornecedor, FornecedorFormDraft } from "@/types/fornecedor";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
+import { EstadoErro } from "@/components/operacional/EstadoErro";
+import {
+  arquivarFornecedorReal,
+  atualizarFornecedorReal,
+  criarFornecedorReal,
+  listFornecedoresReais,
+  restaurarFornecedorReal,
+} from "@/lib/api-backend";
+import type {
+  Fornecedor,
+  FornecedorFormDraft,
+  PossivelDuplicidadeFornecedor,
+} from "@/types/fornecedor";
+import { ArquivarFornecedorModal } from "./ArquivarFornecedorModal";
 import { FornecedorFormModal } from "./FornecedorFormModal";
 import { FornecedoresStats } from "./FornecedoresStats";
 import { FornecedoresTable } from "./FornecedoresTable";
+import { PossiveisDuplicidadesFornecedorAviso } from "./PossiveisDuplicidadesFornecedorAviso";
 import { type FornecedorStatusFiltro, FornecedoresToolbar } from "./FornecedoresToolbar";
 
-function normalize(value: string) {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
-
-function matchesFornecedor(fornecedor: Fornecedor, query: string) {
-  const haystack = [fornecedor.nome, fornecedor.categoria, fornecedor.documento, fornecedor.cidade, fornecedor.email].join(" ");
-  return normalize(haystack).includes(normalize(query));
-}
-
-function createFornecedorFromDraft(draft: FornecedorFormDraft): Fornecedor {
-  const now = new Date().toISOString();
-  return {
-    id: generateId("fornecedor"),
-    empresaId: EMPRESA_PADRAO_ID,
-    ...draft,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-function updateFornecedorFromDraft(fornecedor: Fornecedor, draft: FornecedorFormDraft): Fornecedor {
-  return { ...fornecedor, ...draft, updatedAt: new Date().toISOString() };
-}
-
 export function FornecedoresView() {
-  const { fornecedores, setFornecedores } = useAppData();
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<FornecedorStatusFiltro>("todos");
+  const [mostrarArquivados, setMostrarArquivados] = useState(false);
   const [creatingFornecedor, setCreatingFornecedor] = useState(false);
   const [editingFornecedorId, setEditingFornecedorId] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [arquivarFornecedorId, setArquivarFornecedorId] = useState<string | null>(null);
+  const [arquivando, setArquivando] = useState(false);
+  // Devolvido pela API na criação/alteração — informativo, nunca bloqueia.
+  const [possiveisDuplicidades, setPossiveisDuplicidades] = useState<PossivelDuplicidadeFornecedor[]>([]);
 
-  const editingFornecedor = fornecedores.find((fornecedor) => fornecedor.id === editingFornecedorId);
+  const editingFornecedor = fornecedores.find((item) => item.id === editingFornecedorId);
+  const arquivarFornecedor = fornecedores.find((item) => item.id === arquivarFornecedorId);
 
-  const filteredFornecedores = useMemo(
-    () =>
-      fornecedores.filter((fornecedor) => {
-        const statusMatches = statusFilter === "todos" || fornecedor.status === statusFilter;
-        const queryMatches = query.trim() ? matchesFornecedor(fornecedor, query) : true;
-        return statusMatches && queryMatches;
-      }),
-    [fornecedores, query, statusFilter],
-  );
-
-  function handleSave(draft: FornecedorFormDraft, fornecedorId?: string) {
-    if (!fornecedorId) {
-      setFornecedores((current) => [createFornecedorFromDraft(draft), ...current]);
-    } else {
-      setFornecedores((current) => current.map((fornecedor) => (fornecedor.id === fornecedorId ? updateFornecedorFromDraft(fornecedor, draft) : fornecedor)));
+  // A busca vai para o backend: assim `codigoReferencia` (F26000001), `codigoInterno` e o
+  // documento sem pontuação também são pesquisáveis, não só o que está na tela. A regra de
+  // interpretação do termo é única e mora em backend/app/core/busca.py.
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const data = await listFornecedoresReais({
+        search: query.trim() || undefined,
+        status: mostrarArquivados ? "arquivado" : statusFilter === "todos" ? undefined : statusFilter,
+      });
+      setFornecedores(data);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível carregar os fornecedores.");
+    } finally {
+      setCarregando(false);
     }
-    setCreatingFornecedor(false);
-    setEditingFornecedorId(null);
+  }, [query, statusFilter, mostrarArquivados]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void carregar();
+    }, 250); // debounce da busca
+    return () => clearTimeout(timeout);
+  }, [carregar]);
+
+  async function handleSave(draft: FornecedorFormDraft, fornecedorId?: string) {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const salvo = fornecedorId
+        ? await atualizarFornecedorReal(fornecedorId, draft)
+        : await criarFornecedorReal(draft);
+
+      // Coincidência de nome/documento NÃO impede o cadastro — só avisa. Ver
+      // docs/padrao-entidades-externas.md.
+      setPossiveisDuplicidades(salvo.possiveisDuplicidades);
+
+      await carregar();
+      setCreatingFornecedor(false);
+      setEditingFornecedorId(null);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível salvar o fornecedor.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function handleArquivar(motivo: string) {
+    if (!arquivarFornecedorId) return;
+    setArquivando(true);
+    setErro(null);
+    try {
+      await arquivarFornecedorReal(arquivarFornecedorId, motivo);
+      await carregar();
+      setArquivarFornecedorId(null);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível arquivar o fornecedor.");
+    } finally {
+      setArquivando(false);
+    }
+  }
+
+  async function handleRestaurar(fornecedorId: string) {
+    setErro(null);
+    try {
+      await restaurarFornecedorReal(fornecedorId);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível restaurar o fornecedor.");
+    }
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
-              <Truck className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Fornecedores</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                Gráficas, produtoras, freelancers, mídia — vincule-os aos custos das demandas.
-              </p>
-            </div>
-          </div>
-          <Badge tone="blue">Dados locais</Badge>
+      <PageHeader
+        icon={<Truck className="h-5 w-5" />}
+        title="Fornecedores"
+        description="Gráficas, produtoras, freelancers, mídia — vincule-os aos custos das demandas."
+        action={<Badge tone="green">Banco real</Badge>}
+      />
+
+      {erro && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          {erro}
         </div>
-      </motion.div>
+      )}
+
+      {possiveisDuplicidades.length > 0 && (
+        <PossiveisDuplicidadesFornecedorAviso
+          duplicidades={possiveisDuplicidades}
+          onDispensar={() => setPossiveisDuplicidades([])}
+        />
+      )}
 
       <FornecedoresStats fornecedores={fornecedores} />
 
@@ -97,12 +146,30 @@ export function FornecedoresView() {
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         onNewFornecedor={() => setCreatingFornecedor(true)}
+        mostrarArquivados={mostrarArquivados}
+        onMostrarArquivadosChange={setMostrarArquivados}
       />
 
-      <FornecedoresTable fornecedores={filteredFornecedores} onEdit={setEditingFornecedorId} />
+      {carregando ? (
+        <EstadoCarregando />
+      ) : erro && fornecedores.length === 0 ? (
+        <EstadoErro mensagem={erro} onRetry={carregar} />
+      ) : (
+        <FornecedoresTable
+          fornecedores={fornecedores}
+          onEdit={setEditingFornecedorId}
+          onArquivar={setArquivarFornecedorId}
+          onRestaurar={handleRestaurar}
+        />
+      )}
 
       {creatingFornecedor && (
-        <FornecedorFormModal open onClose={() => setCreatingFornecedor(false)} onSave={handleSave} />
+        <FornecedorFormModal
+          open
+          salvando={salvando}
+          onClose={() => setCreatingFornecedor(false)}
+          onSave={handleSave}
+        />
       )}
 
       {editingFornecedor && (
@@ -110,8 +177,19 @@ export function FornecedoresView() {
           key={editingFornecedor.id}
           open
           fornecedor={editingFornecedor}
+          salvando={salvando}
           onClose={() => setEditingFornecedorId(null)}
           onSave={handleSave}
+        />
+      )}
+
+      {arquivarFornecedor && (
+        <ArquivarFornecedorModal
+          open
+          nome={arquivarFornecedor.nome}
+          arquivando={arquivando}
+          onClose={() => setArquivarFornecedorId(null)}
+          onConfirm={handleArquivar}
         />
       )}
     </div>

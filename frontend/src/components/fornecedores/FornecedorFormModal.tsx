@@ -8,9 +8,15 @@ import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
-import { categoriasFornecedorDisponiveis, detectDocumentType, formatDocument, statusFornecedorLabels } from "@/lib/fornecedores-mock";
+import {
+  categoriasFornecedorDisponiveis,
+  detectDocumentType,
+  formatDocument,
+  statusFornecedorEditaveis,
+  statusFornecedorLabels,
+} from "@/lib/fornecedores";
 import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
-import type { Fornecedor, FornecedorFormDraft, FornecedorStatus } from "@/types/fornecedor";
+import type { Fornecedor, FornecedorFormDraft, FornecedorStatusEditavel } from "@/types/fornecedor";
 
 const ufsDisponiveis = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB",
@@ -24,6 +30,9 @@ const tabs = [
 ];
 
 function createInitialDraft(fornecedor?: Fornecedor): FornecedorFormDraft {
+  // `arquivado` nunca chega aqui: a tabela oferece Restaurar, não Editar, para arquivados.
+  const status: FornecedorStatusEditavel =
+    fornecedor?.status === "inativo" ? "inativo" : "ativo";
   return {
     tipoDocumento: fornecedor?.tipoDocumento ?? "cnpj",
     documento: fornecedor?.documento ?? "",
@@ -38,7 +47,7 @@ function createInitialDraft(fornecedor?: Fornecedor): FornecedorFormDraft {
     enderecoCompleto: fornecedor?.enderecoCompleto ?? "",
     cidade: fornecedor?.cidade ?? "",
     uf: fornecedor?.uf ?? "",
-    status: fornecedor?.status ?? "ativo",
+    status,
     observacoes: fornecedor?.observacoes ?? "",
     corIdentificacao: fornecedor?.corIdentificacao ?? coresIdentificacaoDisponiveis[0].id,
   };
@@ -47,11 +56,13 @@ function createInitialDraft(fornecedor?: Fornecedor): FornecedorFormDraft {
 export function FornecedorFormModal({
   open,
   fornecedor,
+  salvando,
   onClose,
   onSave,
 }: {
   open: boolean;
   fornecedor?: Fornecedor;
+  salvando: boolean;
   onClose: () => void;
   onSave: (draft: FornecedorFormDraft, fornecedorId?: string) => void;
 }) {
@@ -59,7 +70,7 @@ export function FornecedorFormModal({
   const [activeTab, setActiveTab] = useState("dados");
 
   const editing = fornecedor !== undefined;
-  const canSave = draft.nome.trim().length > 0;
+  const canSave = draft.nome.trim().length > 0 && !salvando;
   const documentoLabel = draft.tipoDocumento === "cpf" ? "CPF" : "CNPJ";
 
   function updateDraft(patch: Partial<FornecedorFormDraft>) {
@@ -86,7 +97,10 @@ export function FornecedorFormModal({
               {editing ? `Editando: ${fornecedor.nome}` : "Novo fornecedor"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Gráficas, produtoras, freelancers, mídia — cadastro local.
+              Gráficas, produtoras, freelancers, mídia.
+              {editing && (
+                <span className="ml-1 font-mono text-xs opacity-70">{fornecedor.codigoReferencia}</span>
+              )}
             </p>
           </div>
         </div>
@@ -132,11 +146,15 @@ export function FornecedorFormModal({
                 onChange={(event) => handleDocumentoChange(event.target.value)}
                 placeholder="00.000.000/0000-00"
               />
+              {/* Só ativo e inativo: `arquivado` entra pela ação Arquivar, com motivo. */}
               <Select
                 label="Status"
                 value={draft.status}
-                onChange={(event) => updateDraft({ status: event.target.value as FornecedorStatus })}
-                options={Object.entries(statusFornecedorLabels).map(([value, label]) => ({ value, label }))}
+                onChange={(event) => updateDraft({ status: event.target.value as FornecedorStatusEditavel })}
+                options={statusFornecedorEditaveis.map((value) => ({
+                  value,
+                  label: statusFornecedorLabels[value],
+                }))}
               />
             </div>
 
@@ -215,7 +233,7 @@ export function FornecedorFormModal({
           Cancelar
         </Button>
         <Button type="button" disabled={!canSave} onClick={() => onSave(draft, fornecedor?.id)}>
-          Salvar alterações
+          {salvando ? "Salvando…" : "Salvar alterações"}
         </Button>
       </div>
     </Modal>

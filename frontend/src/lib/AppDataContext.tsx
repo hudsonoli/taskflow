@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState, type Dispatch, type Rea
 import { demandasMock } from "@/lib/demandas-mock";
 import { projetosMock } from "@/lib/projetos-mock";
 import { pecasMock } from "@/lib/pecas-mock";
-import { fornecedoresMock } from "@/lib/fornecedores-mock";
 import { regraExpedienteMock, isDentroExpediente } from "@/lib/regra-expediente-mock";
 import { configuracaoEmailMock } from "@/lib/configuracao-email-mock";
 import { configuracaoNumeracaoTarefaMock } from "@/lib/configuracao-numeracao-tarefa-mock";
@@ -17,7 +16,6 @@ import type { WorkflowModelo } from "@/types/workflow-modelo";
 import type { SlaRegra } from "@/types/sla";
 import type { Projeto } from "@/types/projeto";
 import type { Peca } from "@/types/peca";
-import type { Fornecedor } from "@/types/fornecedor";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
 import type { RegraExpediente } from "@/types/regra-expediente";
 import type { ConfiguracaoEmail } from "@/types/configuracao-email";
@@ -30,8 +28,6 @@ interface AppDataContextValue {
   setProjetos: Dispatch<SetStateAction<Projeto[]>>;
   pecas: Peca[];
   setPecas: Dispatch<SetStateAction<Peca[]>>;
-  fornecedores: Fornecedor[];
-  setFornecedores: Dispatch<SetStateAction<Fornecedor[]>>;
   workflowModelos: WorkflowModelo[];
   setWorkflowModelos: Dispatch<SetStateAction<WorkflowModelo[]>>;
   slaRegras: SlaRegra[];
@@ -65,7 +61,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandas, setDemandas] = useState<Demanda[]>(demandasMock);
   const [projetos, setProjetos] = useState<Projeto[]>(projetosMock);
   const [pecas, setPecas] = useState<Peca[]>(pecasMock);
-  const [fornecedores, setFornecedores] = useState<Fornecedor[]>(fornecedoresMock);
   const [workflowModelos, setWorkflowModelos] = useState<WorkflowModelo[]>(workflowModelosMock);
   const [slaRegras, setSlaRegras] = useState<SlaRegra[]>(slaRegrasMock);
   const [regraExpediente, setRegraExpediente] = useState<RegraExpediente>(regraExpedienteMock);
@@ -182,8 +177,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setProjetos,
         pecas,
         setPecas,
-        fornecedores,
-        setFornecedores,
         workflowModelos,
         setWorkflowModelos,
         slaRegras,

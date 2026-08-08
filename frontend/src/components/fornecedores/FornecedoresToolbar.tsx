@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import type { FornecedorStatus } from "@/types/fornecedor";
 
-export type FornecedorStatusFiltro = FornecedorStatus | "todos";
+/** `arquivado` não entra aqui — arquivados têm um interruptor próprio. */
+export type FornecedorStatusFiltro = Exclude<FornecedorStatus, "arquivado"> | "todos";
 
 export function FornecedoresToolbar({
   query,
@@ -13,12 +14,16 @@ export function FornecedoresToolbar({
   statusFilter,
   onStatusFilterChange,
   onNewFornecedor,
+  mostrarArquivados,
+  onMostrarArquivadosChange,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   statusFilter: FornecedorStatusFiltro;
   onStatusFilterChange: (value: FornecedorStatusFiltro) => void;
   onNewFornecedor: () => void;
+  mostrarArquivados: boolean;
+  onMostrarArquivadosChange: (value: boolean) => void;
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -31,7 +36,7 @@ export function FornecedoresToolbar({
               <input
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
-                placeholder="Buscar por nome, categoria, documento ou cidade"
+                placeholder="Buscar por nome, documento ou código (F26000001)"
                 className="w-full rounded-xl border border-zinc-200/80 bg-zinc-50/70 py-2.5 pl-10 pr-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-300 focus:bg-white focus:shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-100 dark:focus:bg-zinc-900"
               />
             </span>
@@ -49,10 +54,22 @@ export function FornecedoresToolbar({
           />
         </div>
 
-        <Button onClick={onNewFornecedor}>
-          <Plus className="h-4 w-4" />
-          Novo fornecedor
-        </Button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <input
+              type="checkbox"
+              checked={mostrarArquivados}
+              onChange={(event) => onMostrarArquivadosChange(event.target.checked)}
+              className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+            />
+            Ver arquivados
+          </label>
+
+          <Button onClick={onNewFornecedor}>
+            <Plus className="h-4 w-4" />
+            Novo fornecedor
+          </Button>
+        </div>
       </div>
     </div>
   );

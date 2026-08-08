@@ -30,6 +30,13 @@ O mínimo de dígitos protege o outro lado: `"1"` ou `"12"` casariam com quase t
 o menor pedaço de documento que ainda discrimina (o sufixo `0245` de uma filial, por
 exemplo) — foi o caso de uso real que motivou permitir busca parcial.
 
+O mínimo vale **só para documento**. A busca textual não tem comprimento mínimo, então um
+termo de um caractere alcança quase toda a base — todo `codigoReferencia` contém os dígitos
+do ano (`C26…`, `F26…`), e o código é pesquisável de propósito. Isso é casamento textual
+legítimo, não o incidente descrito acima, e está mantido conscientemente; se um mínimo
+textual for adotado, ele entra aqui e vale para todos os domínios de uma vez. Ver
+docs/pendencias-arquiteturais.md, item 3.
+
 Exemplos:
 
     "BRETAS"               -> texto

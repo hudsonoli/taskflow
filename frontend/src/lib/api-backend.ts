@@ -10,6 +10,12 @@ import type {
   DocumentoTipo,
   PossivelDuplicidadeCliente,
 } from "@/types/cliente";
+import type {
+  Fornecedor,
+  FornecedorFormDraft,
+  FornecedorStatus,
+  PossivelDuplicidadeFornecedor,
+} from "@/types/fornecedor";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -776,4 +782,167 @@ export async function restaurarClienteReal(clienteId: string): Promise<Cliente> 
     method: "POST",
   });
   return mapClienteReadToCliente(restaurado);
+}
+
+// =====================================================================================
+// Fornecedor — último cadastro comercial a sair do mock (Fase 2C).
+//
+// Mesmo contrato de Cliente: nome e documento NÃO são identidade, coincidência devolve
+// `possiveisDuplicidades` junto do 201/200 — informativo, nunca bloqueio.
+// Ver docs/padrao-entidades-externas.md.
+//
+// Diferença relevante: `/fornecedores/diretorio` NÃO inclui arquivados. Cliente inclui
+// porque Demanda e Projeto guardam referências históricas a resolver; nenhum domínio
+// referencia fornecedor, então o diretório só serve para montar opções de vínculo novo — e
+// arquivado nunca é uma opção nova.
+// =====================================================================================
+
+type FornecedorReadApi = {
+  id: string;
+  empresaId: string;
+  codigoInterno: string;
+  codigoReferencia: string;
+  anoReferencia: number;
+  sequencialReferencia: number;
+  nome: string;
+  tipoDocumento: DocumentoTipo;
+  documento: string | null;
+  status: FornecedorStatus;
+  categoria: string | null;
+  contatoNome: string | null;
+  email: string | null;
+  whatsapp: string | null;
+  site: string | null;
+  cep: string | null;
+  bairro: string | null;
+  enderecoCompleto: string | null;
+  cidade: string | null;
+  uf: string | null;
+  observacoes: string | null;
+  corIdentificacao: string;
+  createdAt: string;
+  updatedAt: string;
+  arquivadoAt: string | null;
+  motivoArquivamento: string | null;
+  possiveisDuplicidades: PossivelDuplicidadeFornecedor[];
+};
+
+function mapFornecedorReadToFornecedor(data: FornecedorReadApi): Fornecedor {
+  return {
+    id: data.id,
+    empresaId: data.empresaId,
+    codigoInterno: data.codigoInterno,
+    codigoReferencia: data.codigoReferencia,
+    anoReferencia: data.anoReferencia,
+    sequencialReferencia: data.sequencialReferencia,
+    tipoDocumento: data.tipoDocumento,
+    documento: data.documento ?? "",
+    nome: data.nome,
+    categoria: data.categoria ?? "",
+    contatoNome: data.contatoNome ?? "",
+    email: data.email ?? "",
+    whatsapp: data.whatsapp ?? "",
+    site: data.site ?? "",
+    cep: data.cep ?? "",
+    bairro: data.bairro ?? "",
+    enderecoCompleto: data.enderecoCompleto ?? "",
+    cidade: data.cidade ?? "",
+    uf: data.uf ?? "",
+    status: data.status,
+    observacoes: data.observacoes ?? "",
+    corIdentificacao: data.corIdentificacao,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    arquivadoAt: data.arquivadoAt,
+    motivoArquivamento: data.motivoArquivamento,
+    possiveisDuplicidades: data.possiveisDuplicidades ?? [],
+  };
+}
+
+function fornecedorDraftParaPayload(draft: FornecedorFormDraft) {
+  return {
+    nome: draft.nome,
+    tipoDocumento: draft.tipoDocumento,
+    corIdentificacao: draft.corIdentificacao,
+    status: draft.status,
+    documento: draft.documento || null,
+    categoria: draft.categoria || null,
+    contatoNome: draft.contatoNome || null,
+    email: draft.email || null,
+    whatsapp: draft.whatsapp || null,
+    site: draft.site || null,
+    cep: draft.cep || null,
+    bairro: draft.bairro || null,
+    enderecoCompleto: draft.enderecoCompleto || null,
+    cidade: draft.cidade || null,
+    uf: draft.uf || null,
+    observacoes: draft.observacoes || null,
+  };
+}
+
+/** Projeção para seletores de vínculo. Só ativos e inativos — ver bloco acima. */
+export type FornecedorDiretorioItem = {
+  id: string;
+  codigoInterno: string;
+  codigoReferencia: string;
+  sequencialReferencia: number;
+  nome: string;
+  categoria: string | null;
+  corIdentificacao: string;
+  status: FornecedorStatus;
+};
+
+export async function listDiretorioFornecedores(): Promise<FornecedorDiretorioItem[]> {
+  return request<FornecedorDiretorioItem[]>("/fornecedores/diretorio");
+}
+
+export async function listFornecedoresReais(params?: {
+  status?: string;
+  search?: string;
+}): Promise<Fornecedor[]> {
+  const query = new URLSearchParams({ limit: "200" });
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  const data = await request<FornecedorReadApi[]>(`/fornecedores?${query.toString()}`);
+  return data.map(mapFornecedorReadToFornecedor);
+}
+
+// Diferente de Cliente, `status` é aceito na criação (o cadastro pode nascer inativo), então
+// não há PATCH de acerto logo em seguida.
+export async function criarFornecedorReal(draft: FornecedorFormDraft): Promise<Fornecedor> {
+  const criado = await request<FornecedorReadApi>("/fornecedores", {
+    method: "POST",
+    body: JSON.stringify(fornecedorDraftParaPayload(draft)),
+  });
+  return mapFornecedorReadToFornecedor(criado);
+}
+
+export async function atualizarFornecedorReal(
+  fornecedorId: string,
+  draft: FornecedorFormDraft,
+): Promise<Fornecedor> {
+  const atualizado = await request<FornecedorReadApi>(`/fornecedores/${fornecedorId}`, {
+    method: "PATCH",
+    body: JSON.stringify(fornecedorDraftParaPayload(draft)),
+  });
+  return mapFornecedorReadToFornecedor(atualizado);
+}
+
+// "Excluir" = arquivar (soft-delete permanente) — ver docs/padrao-arquivamento.md.
+export async function arquivarFornecedorReal(
+  fornecedorId: string,
+  motivoArquivamento: string,
+): Promise<Fornecedor> {
+  const arquivado = await request<FornecedorReadApi>(`/fornecedores/${fornecedorId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+  return mapFornecedorReadToFornecedor(arquivado);
+}
+
+export async function restaurarFornecedorReal(fornecedorId: string): Promise<Fornecedor> {
+  const restaurado = await request<FornecedorReadApi>(`/fornecedores/${fornecedorId}/restaurar`, {
+    method: "POST",
+  });
+  return mapFornecedorReadToFornecedor(restaurado);
 }
