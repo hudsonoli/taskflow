@@ -1,0 +1,29 @@
+[
+  {
+    "codigoInterno": "equipe-1",
+    "nome": "Squad Criação",
+    "descricao": "Time responsável pela criação de peças, campanhas e materiais institucionais.",
+    "corIdentificacao": "purple",
+    "departamentoCodigoInterno": "dep-criacao",
+    "liderCodigoInterno": "usuario-3",
+    "membrosCodigoInterno": ["usuario-3", "usuario-4"]
+  },
+  {
+    "codigoInterno": "equipe-2",
+    "nome": "Squad Atendimento",
+    "descricao": "Time responsável pelo relacionamento e alinhamento com os clientes.",
+    "corIdentificacao": "blue",
+    "departamentoCodigoInterno": "dep-atendimento",
+    "liderCodigoInterno": "usuario-2",
+    "membrosCodigoInterno": ["usuario-2"]
+  },
+  {
+    "codigoInterno": "equipe-3",
+    "nome": "Squad Conteúdo",
+    "descricao": "Time responsável por conteúdo editorial e mídias sociais.",
+    "corIdentificacao": "pink",
+    "departamentoCodigoInterno": "dep-conteudo",
+    "liderCodigoInterno": "usuario-5",
+    "membrosCodigoInterno": ["usuario-5"]
+  }
+]

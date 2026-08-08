@@ -1,0 +1,10 @@
+[
+  { "codigoInterno": "grupo-allos", "nome": "ALLOS", "corIdentificacao": "zinc" },
+  { "codigoInterno": "grupo-cartao-bretas", "nome": "CARTÃO BRETAS", "corIdentificacao": "blue" },
+  { "codigoInterno": "grupo-grupo-bretas", "nome": "GRUPO BRETAS", "corIdentificacao": "green" },
+  { "codigoInterno": "grupo-grupo-brk", "nome": "GRUPO BRK", "corIdentificacao": "orange" },
+  { "codigoInterno": "grupo-grupo-cmo-construtora", "nome": "GRUPO CMO CONSTRUTORA", "corIdentificacao": "red" },
+  { "codigoInterno": "grupo-grupo-novo-mundo", "nome": "GRUPO NOVO MUNDO", "corIdentificacao": "purple" },
+  { "codigoInterno": "grupo-grupo-polyelle", "nome": "GRUPO POLYELLE", "corIdentificacao": "pink" },
+  { "codigoInterno": "grupo-terrano", "nome": "TERRANO", "corIdentificacao": "cyan" }
+]

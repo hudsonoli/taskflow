@@ -1,0 +1,23 @@
+frontend/node_modules/
+frontend/.next/
+frontend/next.out.log
+frontend/next.err.log
+frontend/.dev-server.log
+
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.db
+backend/uvicorn.out.log
+backend/uvicorn.err.log
+backend/.dev-server.log
+# Dumps de banco feitos antes de migrations — contêm dados reais e hashes de senha.
+backend/backups/
+
+*.pyc
+.env
+.env.local
+.env.*.local
+
+# Config local de tooling (preview do editor) — não é parte do app.
+.claude/

@@ -1,0 +1,44 @@
+[
+  {
+    "codigoInterno": "dep-atendimento",
+    "nome": "Atendimento",
+    "descricao": "Relacionamento com o cliente e alinhamento de demandas.",
+    "corIdentificacao": "blue"
+  },
+  {
+    "codigoInterno": "dep-criacao",
+    "nome": "Criação",
+    "descricao": "Direção de arte, design e desenvolvimento de peças.",
+    "corIdentificacao": "orange"
+  },
+  {
+    "codigoInterno": "dep-midia",
+    "nome": "Mídia",
+    "descricao": "Planejamento e execução de mídia paga.",
+    "corIdentificacao": "purple"
+  },
+  {
+    "codigoInterno": "dep-trafego",
+    "nome": "Tráfego",
+    "descricao": "Distribuição e acompanhamento operacional das demandas.",
+    "corIdentificacao": "cyan"
+  },
+  {
+    "codigoInterno": "dep-conteudo",
+    "nome": "Conteúdo",
+    "descricao": "Produção de texto, copy e redação.",
+    "corIdentificacao": "pink"
+  },
+  {
+    "codigoInterno": "dep-diretoria",
+    "nome": "Diretoria",
+    "descricao": "Direção geral da agência.",
+    "corIdentificacao": "zinc"
+  },
+  {
+    "codigoInterno": "dep-orcamento-producao",
+    "nome": "Orçamento/Produção",
+    "descricao": "Orçamentação e produção de peças e campanhas.",
+    "corIdentificacao": "yellow"
+  }
+]

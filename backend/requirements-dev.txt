@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest>=8,<9
+# fastapi.testclient/starlette.testclient exigem httpx em tempo de execução (não é puxado
+# transitivamente por fastapi/starlette, só usado em teste) — sem isso TestClient nem importa.
+httpx>=0.27,<1
