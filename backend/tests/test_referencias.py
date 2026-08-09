@@ -42,15 +42,16 @@ def _criar_empresa(db: Session) -> Empresa:
 def test_lista_executavel_cobre_apenas_dominios_ja_migrados() -> None:
     """A lista é FECHADA: cada domínio entra junto da própria migração, nunca antes.
 
-    departamento e equipe entraram na Fase 2A; cliente na 2B; fornecedor na 2C. Tarefa fica
-    fora por causa do conflito com a numeração #AA0000 do iClips (pendência da Fase 2E);
-    usuario e projeto entram nas fases correspondentes.
+    departamento e equipe entraram na Fase 2A; cliente na 2B; fornecedor na 2C; projeto na
+    2D. Tarefa fica fora por causa do conflito com a numeração #AA0000 do iClips (pendência
+    da Fase 2E); usuario entra na fase correspondente.
     """
     assert PREFIXOS_REFERENCIA == {
         "departamento": "D",
         "equipe": "E",
         "cliente": "C",
         "fornecedor": "F",
+        "projeto": "P",
     }
 
 
@@ -60,6 +61,10 @@ def test_formato_do_codigo_de_cliente() -> None:
 
 def test_formato_do_codigo_de_fornecedor() -> None:
     assert formatar_codigo_referencia("fornecedor", 2026, 1) == "F26000001"
+
+
+def test_formato_do_codigo_de_projeto() -> None:
+    assert formatar_codigo_referencia("projeto", 2026, 1) == "P26000001"
 
 
 def test_tipo_entidade_fora_da_lista_levanta_erro(db_session: Session, empresa) -> None:

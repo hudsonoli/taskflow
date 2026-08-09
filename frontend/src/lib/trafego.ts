@@ -1,5 +1,5 @@
 import { EMPRESA_PADRAO_ID } from "@/lib/ids";
-import { departamentosProjetoDisponiveis, responsaveisProjetoDisponiveis } from "@/lib/projetos-mock";
+import { departamentosProjetoDisponiveis, responsaveisProjetoDisponiveis } from "@/lib/legacy-referencias-mock";
 import { demandasMock, normalizarUsuarioId } from "@/lib/demandas-mock";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import type { TrafegoCargaItem, TrafegoFiltersState, TrafegoResumo } from "@/types/trafego";

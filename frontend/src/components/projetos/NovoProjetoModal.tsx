@@ -8,47 +8,60 @@ import { Modal } from "@/components/ui/Modal";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
-import {
-  clientesProjetoDisponiveis,
-  departamentosProjetoDisponiveis,
-  prioridadeProjetoLabels,
-  responsaveisProjetoDisponiveis,
-  statusProjetoLabels,
-} from "@/lib/projetos-mock";
-import type { Projeto, ProjetoFormDraft, ProjetoPrioridade, ProjetoStatus } from "@/types/projeto";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
+import type {
+  Projeto,
+  ProjetoFormDraft,
+  ProjetoPrioridade,
+  ProjetoStatusEditavel,
+} from "@/types/projeto";
 
 function createInitialDraft(projeto?: Projeto): ProjetoFormDraft {
   return {
     nome: projeto?.nome ?? "",
-    clienteId: projeto?.clienteId ?? clientesProjetoDisponiveis[0].id,
+    // Vazio por padrão: projeto interno da agência não tem cliente, e escolher um
+    // arbitrariamente inventaria vínculo comercial.
+    clienteId: projeto?.clienteId ?? "",
     campanha: projeto?.campanha ?? "",
-    responsavelIds: projeto?.responsavelIds ?? [responsaveisProjetoDisponiveis[0].id],
-    departamentoResponsavelIds: projeto?.departamentoResponsavelIds ?? [departamentosProjetoDisponiveis[0].id],
+    responsavelIds: projeto?.responsavelIds ?? [],
+    departamentoResponsavelIds: projeto?.departamentoResponsavelIds ?? [],
     dataInicio: projeto?.dataInicio ?? "",
     dataFimPrevista: projeto?.dataFimPrevista ?? "",
-    status: projeto?.status ?? "planejamento",
+    // `arquivado` nunca chega ao formulário: a tabela oferece Restaurar, não Editar.
+    status: (projeto?.status === "arquivado" ? "planejamento" : projeto?.status) ?? "planejamento",
     prioridade: projeto?.prioridade ?? "media",
     descricao: projeto?.descricao ?? "",
+    resumo: projeto?.resumo ?? "",
+    equipe: projeto?.equipe ?? [],
+    modeloCampanha: projeto?.modeloCampanha ?? [],
   };
 }
 
 export function NovoProjetoModal({
   open,
   projeto,
+  salvando,
   onClose,
   onSaveAndClose,
   onSaveAndContinue,
 }: {
   open: boolean;
   projeto?: Projeto;
+  salvando: boolean;
   onClose: () => void;
   onSaveAndClose: (draft: ProjetoFormDraft, projetoId?: string) => void;
   onSaveAndContinue: (draft: ProjetoFormDraft, projetoId?: string) => void;
 }) {
   const [draft, setDraft] = useState<ProjetoFormDraft>(() => createInitialDraft(projeto));
+  const { clientes } = useDiretorioClientes();
+  const { usuarios } = useDiretorioUsuarios();
+  const { departamentos } = useDiretorioDepartamentos();
 
   const editing = projeto !== undefined;
-  const canSave = draft.nome.trim().length > 0 && draft.campanha.trim().length > 0;
+  const canSave = draft.nome.trim().length > 0 && !salvando;
 
   function updateDraft(patch: Partial<ProjetoFormDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -66,7 +79,7 @@ export function NovoProjetoModal({
               {editing ? "Editar projeto" : "Novo projeto"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Cadastro local para organizar campanha, equipe e modelo de demandas.
+              Organize campanha, equipe e modelo de demandas.
             </p>
           </div>
         </div>
@@ -86,7 +99,12 @@ export function NovoProjetoModal({
           label="Cliente"
           value={draft.clienteId}
           onChange={(event) => updateDraft({ clienteId: event.target.value })}
-          options={clientesProjetoDisponiveis.map((cliente) => ({ value: cliente.id, label: cliente.nome }))}
+          options={[
+            { value: "", label: "Sem cliente (projeto interno)" },
+            ...clientes
+              .filter((cliente) => cliente.status === "ativo")
+              .map((cliente) => ({ value: cliente.id, label: cliente.nome })),
+          ]}
         />
         <Input label="Campanha" value={draft.campanha} onChange={(event) => updateDraft({ campanha: event.target.value })} />
         <Input
@@ -104,8 +122,10 @@ export function NovoProjetoModal({
         <Select
           label="Status"
           value={draft.status}
-          onChange={(event) => updateDraft({ status: event.target.value as ProjetoStatus })}
-          options={Object.entries(statusProjetoLabels).map(([value, label]) => ({ value, label }))}
+          onChange={(event) => updateDraft({ status: event.target.value as ProjetoStatusEditavel })}
+          options={Object.entries(statusProjetoLabels)
+            .filter(([value]) => value !== "arquivado")
+            .map(([value, label]) => ({ value, label }))}
         />
         <Select
           label="Prioridade"
@@ -120,13 +140,17 @@ export function NovoProjetoModal({
           label="Usuários responsáveis"
           values={draft.responsavelIds}
           onChange={(values) => updateDraft({ responsavelIds: values })}
-          options={responsaveisProjetoDisponiveis.map((responsavel) => ({ value: responsavel.id, label: responsavel.nome }))}
+          options={usuarios
+            .filter((usuario) => usuario.status === "ativo")
+            .map((usuario) => ({ value: usuario.id, label: usuario.nome }))}
         />
         <MultiSelect
           label="Departamentos responsáveis"
           values={draft.departamentoResponsavelIds}
           onChange={(values) => updateDraft({ departamentoResponsavelIds: values })}
-          options={departamentosProjetoDisponiveis.map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
+          options={departamentos
+            .filter((departamento) => departamento.status === "ativo")
+            .map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
         />
       </div>
 
@@ -139,10 +163,10 @@ export function NovoProjetoModal({
           Cancelar
         </Button>
         <Button type="button" variant="secondary" disabled={!canSave} onClick={() => onSaveAndContinue(draft, projeto?.id)}>
-          Salvar e continuar
+          {salvando ? "Salvando…" : "Salvar e continuar"}
         </Button>
         <Button type="button" disabled={!canSave} onClick={() => onSaveAndClose(draft, projeto?.id)}>
-          Salvar e fechar
+          {salvando ? "Salvando…" : "Salvar e fechar"}
         </Button>
       </div>
     </Modal>

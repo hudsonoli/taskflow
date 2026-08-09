@@ -25,23 +25,33 @@ num registro cujo arquivamento é permanente.
 
 Estado atual:
 
-| Domínio | `"   "` como motivo |
-|---|---|
-| **Fornecedor** | **rejeitado (422)** — validador com `strip()` em `FornecedorArquivar` |
-| Cliente | aceito |
-| Departamento | aceito |
-| Equipe | aceito |
-| Usuário | aceito |
+| Domínio | `"   "` como motivo | Desde |
+|---|---|---|
+| **Fornecedor** | **rejeitado (422)** — validador com `strip()` em `FornecedorArquivar` | Fase 2C |
+| **Projeto** | **rejeitado (422)** — validador com `strip()` em `ProjetoArquivar` | Fase 2D |
+| Cliente | aceito | — |
+| Usuário | aceito | — |
+| Departamento | aceito | — |
+| Equipe | aceito | — |
 
-Fornecedor divergiu porque a Fase 2C exigia explicitamente motivo obrigatório, e entregar o
-contrário do pedido seria pior que a inconsistência. Os outros quatro **não foram alterados**:
-ampliar o escopo da fase para dentro deles era justamente o que não se queria.
+Placar atual: **2 rejeitam, 4 aceitam.**
 
-**A resolver numa microfase de padronização:** aplicar a mesma validação a Cliente,
-Departamento, Equipe e Usuário — ou, se a decisão for outra, remover a de Fornecedor. O que
+Os dois divergentes não são desvio de rota: cada fase exigia explicitamente motivo
+obrigatório, e entregar o contrário do pedido seria pior que a inconsistência. Projeto seguiu
+Fornecedor por ser o padrão mais recente e mais correto — copiar o comportamento permissivo
+de Cliente só para "manter simetria" teria propagado o problema em vez de contê-lo.
+
+Os quatro restantes **continuam intocados de propósito**: alterá-los dentro de uma fase de
+domínio seria ampliar escopo sem mandato. A cada nova fase o desequilíbrio cresce, e é isso
+que torna a padronização cada vez mais urgente.
+
+**A resolver numa microfase de padronização:** aplicar a mesma validação a Cliente, Usuário,
+Departamento e Equipe — ou, se a decisão for outra, remover a de Fornecedor e Projeto. O que
 não pode permanecer é a diferença silenciosa.
 
-Referência: `backend/app/schemas/fornecedor.py` → `FornecedorArquivar.motivo_nao_pode_ser_so_espaco`.
+Referências:
+`backend/app/schemas/fornecedor.py` → `FornecedorArquivar.motivo_nao_pode_ser_so_espaco`
+`backend/app/schemas/projeto.py` → `ProjetoArquivar.motivo_nao_pode_ser_so_espaco`
 
 ---
 

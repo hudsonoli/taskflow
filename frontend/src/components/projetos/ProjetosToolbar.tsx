@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import type { ProjetoStatus } from "@/types/projeto";
 
-export type ProjetoStatusFiltro = ProjetoStatus | "todos";
+/** `arquivado` não entra aqui — arquivados têm um interruptor próprio. */
+export type ProjetoStatusFiltro = Exclude<ProjetoStatus, "arquivado"> | "todos";
 
 export function ProjetosToolbar({
   query,
@@ -13,12 +14,16 @@ export function ProjetosToolbar({
   statusFilter,
   onStatusFilterChange,
   onNewProject,
+  mostrarArquivados,
+  onMostrarArquivadosChange,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   statusFilter: ProjetoStatusFiltro;
   onStatusFilterChange: (value: ProjetoStatusFiltro) => void;
   onNewProject: () => void;
+  mostrarArquivados: boolean;
+  onMostrarArquivadosChange: (value: boolean) => void;
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -50,6 +55,16 @@ export function ProjetosToolbar({
             ]}
           />
         </div>
+
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <input
+            type="checkbox"
+            checked={mostrarArquivados}
+            onChange={(event) => onMostrarArquivadosChange(event.target.checked)}
+            className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+          />
+          Ver arquivados
+        </label>
 
         <Button onClick={onNewProject}>
           <Plus className="h-4 w-4" />

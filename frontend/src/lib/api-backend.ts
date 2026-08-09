@@ -16,6 +16,13 @@ import type {
   FornecedorStatus,
   PossivelDuplicidadeFornecedor,
 } from "@/types/fornecedor";
+import type {
+  Projeto,
+  ProjetoFormDraft,
+  ProjetoModeloCampanhaItem,
+  ProjetoPrioridade,
+  ProjetoStatus,
+} from "@/types/projeto";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -50,6 +57,16 @@ export class DepartamentoArquivadoConflictError extends Error {
   }
 }
 
+export class ProjetoArquivadoConflictError extends Error {
+  projetoArquivadoId: string;
+
+  constructor(message: string, projetoArquivadoId: string) {
+    super(message);
+    this.name = "ProjetoArquivadoConflictError";
+    this.projetoArquivadoId = projetoArquivadoId;
+  }
+}
+
 // Cliente genérico pro proxy autenticado (/api/backend/**) — nunca fala direto com o
 // FastAPI, nunca vê o token (fica no cookie HttpOnly, ver lib/server/backend.ts).
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -76,6 +93,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new DepartamentoArquivadoConflictError(
         message ?? "Departamento arquivado já existe",
         detail.departamentoArquivadoId,
+      );
+    }
+    if (detail && typeof detail === "object" && detail.code === "PROJETO_ARQUIVADO_EXISTENTE") {
+      throw new ProjetoArquivadoConflictError(
+        message ?? "Projeto arquivado já existe",
+        detail.projetoArquivadoId,
       );
     }
     throw new Error(message ?? `Erro ${response.status}`);
@@ -945,4 +968,135 @@ export async function restaurarFornecedorReal(fornecedorId: string): Promise<For
     method: "POST",
   });
   return mapFornecedorReadToFornecedor(restaurado);
+}
+
+// =====================================================================================
+// Projeto — o trabalho contratado, sob o qual as demandas acontecem (Fase 2D).
+//
+// Unicidade **por cliente**: dois "Campanha de Natal" para clientes diferentes são
+// legítimos; dois para o mesmo cliente devolvem 409. Se o conflito for com um projeto
+// arquivado, o 409 traz `projetoArquivadoId` para a UI oferecer restaurar
+// (ProjetoArquivadoConflictError abaixo) — mesmo contrato de Usuário e Grupo de Cliente.
+//
+// Não há `listDiretorioProjetos` aqui: o endpoint existe no backend, mas nenhuma tela o
+// consome ainda. Quando Demanda migrar, entra junto com o consumidor.
+// =====================================================================================
+
+type ProjetoReadApi = {
+  id: string;
+  empresaId: string;
+  codigoInterno: string;
+  codigoReferencia: string;
+  anoReferencia: number;
+  sequencialReferencia: number;
+  nome: string;
+  campanha: string | null;
+  descricao: string | null;
+  resumo: string | null;
+  status: ProjetoStatus;
+  prioridade: ProjetoPrioridade;
+  clienteId: string | null;
+  dataInicio: string | null;
+  dataFimPrevista: string | null;
+  modeloCampanhaId: string | null;
+  modeloCampanha: ProjetoModeloCampanhaItem[];
+  responsavelIds: string[];
+  departamentoResponsavelIds: string[];
+  equipe: { usuarioId: string; funcao: string | null }[];
+  createdAt: string;
+  updatedAt: string;
+  arquivadoAt: string | null;
+  motivoArquivamento: string | null;
+};
+
+function mapProjetoReadToProjeto(data: ProjetoReadApi): Projeto {
+  return {
+    id: data.id,
+    empresaId: data.empresaId,
+    codigoInterno: data.codigoInterno,
+    codigoReferencia: data.codigoReferencia,
+    anoReferencia: data.anoReferencia,
+    sequencialReferencia: data.sequencialReferencia,
+    nome: data.nome,
+    campanha: data.campanha ?? "",
+    descricao: data.descricao ?? "",
+    resumo: data.resumo ?? "",
+    status: data.status,
+    prioridade: data.prioridade,
+    clienteId: data.clienteId ?? "",
+    dataInicio: data.dataInicio ?? "",
+    dataFimPrevista: data.dataFimPrevista ?? "",
+    modeloCampanhaId: data.modeloCampanhaId ?? "",
+    modeloCampanha: data.modeloCampanha ?? [],
+    responsavelIds: data.responsavelIds ?? [],
+    departamentoResponsavelIds: data.departamentoResponsavelIds ?? [],
+    equipe: (data.equipe ?? []).map((m) => ({ usuarioId: m.usuarioId, funcao: m.funcao ?? "" })),
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    arquivadoAt: data.arquivadoAt,
+    motivoArquivamento: data.motivoArquivamento,
+  };
+}
+
+function projetoDraftParaPayload(draft: ProjetoFormDraft) {
+  return {
+    nome: draft.nome,
+    status: draft.status,
+    prioridade: draft.prioridade,
+    campanha: draft.campanha || null,
+    descricao: draft.descricao || null,
+    resumo: draft.resumo || null,
+    clienteId: draft.clienteId || null,
+    dataInicio: draft.dataInicio || null,
+    dataFimPrevista: draft.dataFimPrevista || null,
+    modeloCampanha: draft.modeloCampanha,
+    responsavelIds: draft.responsavelIds,
+    departamentoResponsavelIds: draft.departamentoResponsavelIds,
+    equipe: draft.equipe.map((m) => ({ usuarioId: m.usuarioId, funcao: m.funcao || null })),
+  };
+}
+
+export async function listProjetosReais(params?: {
+  status?: string;
+  search?: string;
+  clienteId?: string;
+  departamentoId?: string;
+}): Promise<Projeto[]> {
+  const query = new URLSearchParams({ limit: "200" });
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  if (params?.clienteId) query.set("clienteId", params.clienteId);
+  if (params?.departamentoId) query.set("departamentoId", params.departamentoId);
+  const data = await request<ProjetoReadApi[]>(`/projetos?${query.toString()}`);
+  return data.map(mapProjetoReadToProjeto);
+}
+
+export async function criarProjetoReal(draft: ProjetoFormDraft): Promise<Projeto> {
+  const criado = await request<ProjetoReadApi>("/projetos", {
+    method: "POST",
+    body: JSON.stringify(projetoDraftParaPayload(draft)),
+  });
+  return mapProjetoReadToProjeto(criado);
+}
+
+export async function atualizarProjetoReal(projetoId: string, draft: ProjetoFormDraft): Promise<Projeto> {
+  const atualizado = await request<ProjetoReadApi>(`/projetos/${projetoId}`, {
+    method: "PATCH",
+    body: JSON.stringify(projetoDraftParaPayload(draft)),
+  });
+  return mapProjetoReadToProjeto(atualizado);
+}
+
+// "Excluir" = arquivar (soft-delete permanente) — ver docs/padrao-arquivamento.md.
+export async function arquivarProjetoReal(projetoId: string, motivoArquivamento: string): Promise<Projeto> {
+  const arquivado = await request<ProjetoReadApi>(`/projetos/${projetoId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+  return mapProjetoReadToProjeto(arquivado);
+}
+
+export async function restaurarProjetoReal(projetoId: string): Promise<Projeto> {
+  const restaurado = await request<ProjetoReadApi>(`/projetos/${projetoId}/restaurar`, { method: "POST" });
+  return mapProjetoReadToProjeto(restaurado);
 }

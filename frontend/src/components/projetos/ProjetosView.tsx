@@ -1,150 +1,133 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useState } from "react";
 import { FolderKanban } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
+import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
-  AGENCIA_PADRAO_ID,
-  EMPRESA_PADRAO_ID,
-  generateCodigoInterno,
-  generateId,
-  resolveClienteProjetoNome,
-  resolveDepartamentosProjetoNomes,
-  resolveResponsaveisProjetoNomes,
-} from "@/lib/projetos-mock";
-import { useAppData } from "@/lib/AppDataContext";
+  ProjetoArquivadoConflictError,
+  arquivarProjetoReal,
+  atualizarProjetoReal,
+  criarProjetoReal,
+  listProjetosReais,
+  restaurarProjetoReal,
+} from "@/lib/api-backend";
 import type { Projeto, ProjetoFormDraft } from "@/types/projeto";
+import { ArquivarProjetoModal } from "./ArquivarProjetoModal";
 import { NovoProjetoModal } from "./NovoProjetoModal";
 import { ProjetoDetailsDrawer } from "./ProjetoDetailsDrawer";
 import { ProjetosStats } from "./ProjetosStats";
 import { ProjetosTable } from "./ProjetosTable";
 import { type ProjetoStatusFiltro, ProjetosToolbar } from "./ProjetosToolbar";
 
-function normalize(value: string) {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
-
-function matchesProjeto(projeto: Projeto, query: string) {
-  const haystack = [
-    projeto.nome,
-    resolveClienteProjetoNome(projeto.clienteId),
-    projeto.campanha,
-    resolveResponsaveisProjetoNomes(projeto.responsavelIds),
-    resolveDepartamentosProjetoNomes(projeto.departamentoResponsavelIds),
-    projeto.codigoInterno,
-  ].join(" ");
-
-  return normalize(haystack).includes(normalize(query));
-}
-
-function createHistoricoProjeto(acao: string) {
-  return {
-    id: generateId("hist-projeto"),
-    usuarioId: "user-1",
-    usuario: "Você",
-    acao,
-    dataHora: new Date().toLocaleString("pt-BR"),
-    ip: "127.0.0.1",
-    dispositivo: "Workspace local",
-  };
-}
-
-function createProjetoFromDraft(draft: ProjetoFormDraft): Projeto {
-  const now = new Date().toISOString();
-
-  return {
-    id: generateId("projeto"),
-    empresaId: EMPRESA_PADRAO_ID,
-    agenciaId: AGENCIA_PADRAO_ID,
-    clienteId: draft.clienteId,
-    codigoInterno: generateCodigoInterno(),
-    nome: draft.nome,
-    campanha: draft.campanha,
-    descricao: draft.descricao,
-    status: draft.status,
-    prioridade: draft.prioridade,
-    responsavelIds: draft.responsavelIds,
-    departamentoResponsavelIds: draft.departamentoResponsavelIds,
-    dataInicio: draft.dataInicio,
-    dataFimPrevista: draft.dataFimPrevista,
-    createdAt: now,
-    updatedAt: now,
-    resumo: "",
-    modeloCampanhaId: generateId("modelo-campanha"),
-    modeloCampanha: [],
-    equipe: [],
-    arquivos: [],
-    historico: [createHistoricoProjeto("Projeto criado")],
-  };
-}
-
-function updateProjetoFromDraft(projeto: Projeto, draft: ProjetoFormDraft): Projeto {
-  return {
-    ...projeto,
-    clienteId: draft.clienteId,
-    nome: draft.nome,
-    campanha: draft.campanha,
-    descricao: draft.descricao,
-    status: draft.status,
-    prioridade: draft.prioridade,
-    responsavelIds: draft.responsavelIds,
-    departamentoResponsavelIds: draft.departamentoResponsavelIds,
-    dataInicio: draft.dataInicio,
-    dataFimPrevista: draft.dataFimPrevista,
-    updatedAt: new Date().toISOString(),
-    historico: [createHistoricoProjeto("Projeto atualizado"), ...projeto.historico],
-  };
-}
-
 export function ProjetosView() {
-  const { projetos, setProjetos } = useAppData();
+  const [projetos, setProjetos] = useState<Projeto[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProjetoStatusFiltro>("todos");
+  const [mostrarArquivados, setMostrarArquivados] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [arquivarProjetoId, setArquivarProjetoId] = useState<string | null>(null);
+  const [arquivando, setArquivando] = useState(false);
+  // Conflito com projeto arquivado: guarda o id para oferecer "restaurar" em vez de só
+  // mostrar erro de duplicidade (ver docs/padrao-arquivamento.md).
+  const [conflitoArquivadoId, setConflitoArquivadoId] = useState<string | null>(null);
 
   const selectedProject = projetos.find((projeto) => projeto.id === selectedProjectId);
   const editingProject = projetos.find((projeto) => projeto.id === editingProjectId);
+  const arquivarProjeto = projetos.find((projeto) => projeto.id === arquivarProjetoId);
 
-  const filteredProjects = useMemo(
-    () =>
-      projetos.filter((projeto) => {
-        const statusMatches = statusFilter === "todos" || projeto.status === statusFilter;
-        const queryMatches = query.trim() ? matchesProjeto(projeto, query) : true;
-        return statusMatches && queryMatches;
-      }),
-    [projetos, query, statusFilter],
-  );
-
-  function upsertProject(draft: ProjetoFormDraft, projetoId?: string) {
-    if (!projetoId) {
-      const newProject = createProjetoFromDraft(draft);
-      setProjetos((current) => [newProject, ...current]);
-      return newProject.id;
+  // A busca vai para o backend: assim `codigoReferencia` (P26000001) e a campanha também
+  // são pesquisáveis, não só o que está na tela.
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const data = await listProjetosReais({
+        search: query.trim() || undefined,
+        status: mostrarArquivados ? "arquivado" : statusFilter === "todos" ? undefined : statusFilter,
+      });
+      setProjetos(data);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível carregar os projetos.");
+    } finally {
+      setCarregando(false);
     }
+  }, [query, statusFilter, mostrarArquivados]);
 
-    setProjetos((current) => current.map((projeto) => (projeto.id === projetoId ? updateProjetoFromDraft(projeto, draft) : projeto)));
-    return projetoId;
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void carregar();
+    }, 250); // debounce da busca
+    return () => clearTimeout(timeout);
+  }, [carregar]);
+
+  async function salvar(draft: ProjetoFormDraft, projetoId?: string): Promise<string | null> {
+    setSalvando(true);
+    setErro(null);
+    setConflitoArquivadoId(null);
+    try {
+      const salvo = projetoId
+        ? await atualizarProjetoReal(projetoId, draft)
+        : await criarProjetoReal(draft);
+      await carregar();
+      setCreatingProject(false);
+      setEditingProjectId(null);
+      return salvo.id;
+    } catch (error) {
+      if (error instanceof ProjetoArquivadoConflictError) {
+        setConflitoArquivadoId(error.projetoArquivadoId);
+        setErro(error.message);
+      } else {
+        setErro(error instanceof Error ? error.message : "Não foi possível salvar o projeto.");
+      }
+      return null;
+    } finally {
+      setSalvando(false);
+    }
   }
 
-  function handleSaveAndClose(draft: ProjetoFormDraft, projetoId?: string) {
-    upsertProject(draft, projetoId);
-    setCreatingProject(false);
-    setEditingProjectId(null);
+  async function handleSaveAndClose(draft: ProjetoFormDraft, projetoId?: string) {
+    await salvar(draft, projetoId);
   }
 
-  function handleSaveAndContinue(draft: ProjetoFormDraft, projetoId?: string) {
-    const nextProjectId = upsertProject(draft, projetoId);
-    setCreatingProject(false);
-    setEditingProjectId(null);
-    setSelectedProjectId(nextProjectId);
+  async function handleSaveAndContinue(draft: ProjetoFormDraft, projetoId?: string) {
+    const id = await salvar(draft, projetoId);
+    if (id) setSelectedProjectId(id);
   }
 
-  function handleProjectChange(nextProject: Projeto) {
-    setProjetos((current) => current.map((projeto) => (projeto.id === nextProject.id ? nextProject : projeto)));
+  async function handleArquivar(motivo: string) {
+    if (!arquivarProjetoId) return;
+    setArquivando(true);
+    setErro(null);
+    try {
+      await arquivarProjetoReal(arquivarProjetoId, motivo);
+      await carregar();
+      setArquivarProjetoId(null);
+      setSelectedProjectId(null);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível arquivar o projeto.");
+    } finally {
+      setArquivando(false);
+    }
+  }
+
+  async function handleRestaurar(projetoId: string) {
+    setErro(null);
+    setConflitoArquivadoId(null);
+    try {
+      await restaurarProjetoReal(projetoId);
+      await carregar();
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível restaurar o projeto.");
+    }
   }
 
   function openEdit(projetoId: string) {
@@ -154,27 +137,27 @@ export function ProjetosView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
-              <FolderKanban className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Projetos</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                Raiz de cada empreendimento/campanha — as demandas se organizam a partir de um projeto.
-              </p>
-            </div>
-          </div>
-          <Badge tone="blue">Dados locais</Badge>
+      <PageHeader
+        icon={<FolderKanban className="h-5 w-5" />}
+        title="Projetos"
+        description="Raiz de cada empreendimento/campanha — as demandas se organizam a partir de um projeto."
+        action={<Badge tone="green">Banco real</Badge>}
+      />
+
+      {erro && (
+        <div className="flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          <span>{erro}</span>
+          {conflitoArquivadoId && (
+            <button
+              type="button"
+              onClick={() => handleRestaurar(conflitoArquivadoId)}
+              className="self-start rounded-lg border border-red-300 px-2 py-1 font-medium transition hover:bg-red-100 dark:border-red-500/40 dark:hover:bg-red-500/20"
+            >
+              Restaurar o projeto arquivado
+            </button>
+          )}
         </div>
-      </motion.div>
+      )}
 
       <ProjetosStats projetos={projetos} />
 
@@ -184,17 +167,37 @@ export function ProjetosView() {
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         onNewProject={() => setCreatingProject(true)}
+        mostrarArquivados={mostrarArquivados}
+        onMostrarArquivadosChange={setMostrarArquivados}
       />
 
-      {filteredProjects.length === 0 ? (
-        <EmptyState title="Nenhum projeto encontrado" description="Ajuste a busca ou os filtros para visualizar os projetos cadastrados." />
+      {carregando ? (
+        <EstadoCarregando />
+      ) : erro && projetos.length === 0 ? (
+        <EstadoErro mensagem={erro} onRetry={carregar} />
+      ) : projetos.length === 0 ? (
+        <EmptyState
+          title={query.trim() ? "Nenhum projeto encontrado" : "Nenhum projeto cadastrado"}
+          description={
+            query.trim()
+              ? "Ajuste a busca ou os filtros para visualizar os projetos cadastrados."
+              : "Crie o primeiro projeto para começar a organizar as demandas."
+          }
+        />
       ) : (
-        <ProjetosTable projetos={filteredProjects} onOpenDetails={setSelectedProjectId} onEdit={openEdit} />
+        <ProjetosTable
+          projetos={projetos}
+          onOpenDetails={setSelectedProjectId}
+          onEdit={openEdit}
+          onArquivar={setArquivarProjetoId}
+          onRestaurar={handleRestaurar}
+        />
       )}
 
       {creatingProject && (
         <NovoProjetoModal
           open
+          salvando={salvando}
           onClose={() => setCreatingProject(false)}
           onSaveAndClose={handleSaveAndClose}
           onSaveAndContinue={handleSaveAndContinue}
@@ -206,9 +209,20 @@ export function ProjetosView() {
           key={editingProject.id}
           open
           projeto={editingProject}
+          salvando={salvando}
           onClose={() => setEditingProjectId(null)}
           onSaveAndClose={handleSaveAndClose}
           onSaveAndContinue={handleSaveAndContinue}
+        />
+      )}
+
+      {arquivarProjeto && (
+        <ArquivarProjetoModal
+          open
+          nome={arquivarProjeto.nome}
+          arquivando={arquivando}
+          onClose={() => setArquivarProjetoId(null)}
+          onConfirm={handleArquivar}
         />
       )}
 
@@ -216,7 +230,6 @@ export function ProjetosView() {
         projeto={selectedProject}
         onClose={() => setSelectedProjectId(null)}
         onEdit={openEdit}
-        onChange={handleProjectChange}
       />
     </div>
   );

@@ -15,7 +15,15 @@ Fonte de dados: `app/cli/data/usuarios_seed.json` — **a única fonte oficial**
 nunca lê nada de dentro de frontend/, e a cópia que existia lá foi removida junto com o
 mock. Mais os 5 usuários demo replicados abaixo.
 
-Uso: python -m app.cli.seed_usuarios
+## Depende de seed_departamentos
+
+Os usuários trazem o **nome** do departamento, que precisa existir no cadastro para virar
+`departamento_id`. Rodar este seed antes de `seed_departamentos` levanta
+`DepartamentoNaoResolvidoError` — nunca grava `NULL` em silêncio.
+
+Uso: `python -m app.cli.seed_all` (recomendado, garante a ordem) ou
+`python -m app.cli.seed_usuarios` isoladamente, com os departamentos já semeados.
+Ver docs/reconstrucao-banco.md.
 """
 
 import json
@@ -34,6 +42,21 @@ from app.schemas.empresa import EmpresaCreate
 from app.services.empresa_service import EmpresaService
 
 DATA_FILE = Path(__file__).parent / "data" / "usuarios_seed.json"
+
+
+class DepartamentoNaoResolvidoError(RuntimeError):
+    """O seed traz um departamento para o usuário, mas ele não existe no cadastro.
+
+    Levantado **antes de gravar qualquer coisa**. Até a Fase 2C isso virava
+    `departamento_id = NULL` em silêncio: rodar `seed_usuarios` antes de
+    `seed_departamentos` produzia 38 usuários sem vínculo, e o seed terminava dizendo
+    "Usuários criados: 38" como se tudo estivesse certo. O banco ficava sintaticamente
+    válido e semanticamente errado — o pior tipo de falha.
+
+    Nunca criar o departamento automaticamente nem adivinhar por similaridade: os dois
+    inventariam um relacionamento que ninguém pediu. A saída é rodar os seeds na ordem
+    oficial (ver docs/reconstrucao-banco.md).
+    """
 
 
 def _normalizar_nome_departamento(nome: str) -> str:
@@ -141,10 +164,8 @@ def seed_usuarios(output=print) -> None:
             )
             output(f"Empresa criada: {empresa.id} ({empresa.codigo_interno})")
 
-        # D3-A: o seed nunca mais grava o NOME do departamento. A planilha traz nome
-        # livre; aqui ele é resolvido para o `id` real de Departamento (mesma empresa).
-        # Nome que não existir no cadastro vira vínculo nulo — melhor sem departamento do
-        # que com relacionamento inventado.
+        # D3-A: o seed nunca mais grava o NOME do departamento. A planilha traz nome livre;
+        # aqui ele é resolvido para o `id` real de Departamento (mesma empresa).
         from app.repositories.departamento_repository import DepartamentoRepository
 
         departamento_repository = DepartamentoRepository()
@@ -153,10 +174,41 @@ def seed_usuarios(output=print) -> None:
             for d in departamento_repository.list_diretorio(db, empresa_id=empresa.id)
         }
 
+        # Coleta ANTES de gravar qualquer coisa: um relatório com todos os nomes que não
+        # resolvem vale mais do que abortar no primeiro e obrigar a rodar de novo para achar
+        # o próximo.
+        nao_resolvidos: list[str] = []
+
+        def registrar_se_nao_resolve(identificacao: str, email: str, nome_departamento: str | None) -> None:
+            if not nome_departamento or not nome_departamento.strip():
+                return  # ausência legítima — ver docstring de _resolver_departamento
+            if _normalizar_nome_departamento(nome_departamento) not in departamentos_por_nome:
+                nao_resolvidos.append(
+                    f"{identificacao} <{email}>: departamento '{nome_departamento}' não encontrado"
+                )
+
+        importados = _carregar_usuarios_importados()
+        for item in USUARIOS_DEMO:
+            registrar_se_nao_resolve(item["codigo_interno"], item["email"], item.get("departamento"))
+        for item in importados:
+            registrar_se_nao_resolve(item["id"], item["email"], item.get("departamento"))
+
+        if nao_resolvidos:
+            raise DepartamentoNaoResolvidoError(
+                "Não é possível semear usuários: "
+                f"{len(nao_resolvidos)} vínculo(s) de departamento não resolvem.\n  "
+                + "\n  ".join(nao_resolvidos)
+                + "\n\nRode `python -m app.cli.seed_departamentos` antes — ou use o "
+                "orquestrador oficial `python -m app.cli.seed_all`, que garante a ordem. "
+                "Ver docs/reconstrucao-banco.md."
+            )
+
         def resolver_departamento(nome: str | None) -> str | None:
+            """Só chega aqui depois da checagem acima, então `None` significa exatamente uma
+            coisa: o dado de origem não tem departamento. Nunca "não encontrei"."""
             if not nome or not nome.strip():
                 return None
-            return departamentos_por_nome.get(_normalizar_nome_departamento(nome))
+            return departamentos_por_nome[_normalizar_nome_departamento(nome)]
 
         criados = 0
         pulados = 0
@@ -182,7 +234,7 @@ def seed_usuarios(output=print) -> None:
             criados += 1 if criado else 0
             pulados += 0 if criado else 1
 
-        for item in _carregar_usuarios_importados():
+        for item in importados:
             criado = _criar_usuario(
                 db,
                 empresa_id=empresa.id,

@@ -1,14 +1,11 @@
-import { CalendarDays, Eye, Pencil } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarDays, Eye, Pencil } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import {
-  prioridadeProjetoLabels,
-  resolveClienteProjetoNome,
-  resolveDepartamentosProjetoNomes,
-  resolveResponsaveisProjetoNomes,
-  statusProjetoLabels,
-} from "@/lib/projetos-mock";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type { Projeto, ProjetoPrioridade, ProjetoStatus } from "@/types/projeto";
 
 const statusTone: Record<ProjetoStatus, BadgeTone> = {
@@ -17,6 +14,7 @@ const statusTone: Record<ProjetoStatus, BadgeTone> = {
   pausado: "amber",
   concluido: "green",
   cancelado: "neutral",
+  arquivado: "red",
 };
 
 const prioridadeClassName: Record<ProjetoPrioridade, string> = {
@@ -24,10 +22,6 @@ const prioridadeClassName: Record<ProjetoPrioridade, string> = {
   media: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-400",
   baixa: "border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-400",
 };
-
-function splitResolvedNames(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
-}
 
 function CompactList({ items }: { items: string[] }) {
   const visibleItems = items.slice(0, 2);
@@ -57,11 +51,19 @@ export function ProjetosTable({
   projetos,
   onOpenDetails,
   onEdit,
+  onArquivar,
+  onRestaurar,
 }: {
   projetos: Projeto[];
   onOpenDetails: (projetoId: string) => void;
   onEdit: (projetoId: string) => void;
+  onArquivar: (projetoId: string) => void;
+  onRestaurar: (projetoId: string) => void;
 }) {
+  const { clientes } = useDiretorioClientes();
+  const { usuarios } = useDiretorioUsuarios();
+  const { departamentos } = useDiretorioDepartamentos();
+
   if (projetos.length === 0) {
     return <EmptyState title="Nenhum projeto encontrado" description="Ajuste a busca ou os filtros." />;
   }
@@ -93,12 +95,21 @@ export function ProjetosTable({
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {projetos.map((projeto) => {
-              const responsaveis = splitResolvedNames(resolveResponsaveisProjetoNomes(projeto.responsavelIds));
-              const departamentos = splitResolvedNames(resolveDepartamentosProjetoNomes(projeto.departamentoResponsavelIds));
+              const responsaveis = projeto.responsavelIds.map(
+                (id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? id,
+              );
+              const departamentosDoProjeto = projeto.departamentoResponsavelIds.map(
+                (id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id,
+              );
+              const nomeCliente =
+                clientes.find((cliente) => cliente.id === projeto.clienteId)?.nome ?? "Sem cliente";
+              const arquivado = projeto.status === "arquivado";
 
               return (
                 <tr key={projeto.id} className="group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5">
-                  <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100">{projeto.codigoInterno}</td>
+                  <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100" title={projeto.codigoReferencia}>
+                    #{projeto.sequencialReferencia}
+                  </td>
                   <td className="px-4 py-3">
                     <button
                       type="button"
@@ -106,16 +117,15 @@ export function ProjetosTable({
                       className="max-w-[240px] text-left font-semibold text-zinc-950 transition hover:text-indigo-600 dark:text-zinc-50 dark:hover:text-indigo-400"
                     >
                       <span className="block truncate">{projeto.nome}</span>
-                      <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{projeto.id}</span>
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{resolveClienteProjetoNome(projeto.clienteId)}</td>
+                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{nomeCliente}</td>
                   <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{projeto.campanha}</td>
                   <td className="px-4 py-3">
                     <CompactList items={responsaveis} />
                   </td>
                   <td className="px-4 py-3">
-                    <CompactList items={departamentos} />
+                    <CompactList items={departamentosDoProjeto} />
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={statusTone[projeto.status]}>{statusProjetoLabels[projeto.status]}</Badge>
@@ -137,10 +147,24 @@ export function ProjetosTable({
                         <Eye className="h-3.5 w-3.5" />
                         Detalhes
                       </Button>
-                      <Button variant="secondary" onClick={() => onEdit(projeto.id)} className="px-3 py-1.5 text-xs">
-                        <Pencil className="h-3.5 w-3.5" />
-                        Editar
-                      </Button>
+                      {arquivado ? (
+                        <Button variant="secondary" onClick={() => onRestaurar(projeto.id)} className="px-3 py-1.5 text-xs">
+                          <ArchiveRestore className="h-3.5 w-3.5" />
+                          Restaurar
+                        </Button>
+                      ) : (
+                        <>
+                          <Button variant="secondary" onClick={() => onEdit(projeto.id)} className="px-3 py-1.5 text-xs">
+                            <Pencil className="h-3.5 w-3.5" />
+                            Editar
+                          </Button>
+                          {/* Arquivar = soft-delete permanente. Nunca há exclusão física. */}
+                          <Button variant="secondary" onClick={() => onArquivar(projeto.id)} className="px-3 py-1.5 text-xs">
+                            <Archive className="h-3.5 w-3.5" />
+                            Arquivar
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

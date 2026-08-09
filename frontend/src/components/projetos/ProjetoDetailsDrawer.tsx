@@ -6,13 +6,10 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DetailsModal } from "@/components/ui/DetailsModal";
 import { Tabs } from "@/components/ui/Tabs";
-import {
-  prioridadeProjetoLabels,
-  resolveClienteProjetoNome,
-  resolveDepartamentosProjetoNomes,
-  resolveResponsaveisProjetoNomes,
-  statusProjetoLabels,
-} from "@/lib/projetos-mock";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type { Projeto, ProjetoStatus } from "@/types/projeto";
 import {
   ArquivosProjetoSection,
@@ -40,20 +37,48 @@ const statusTone: Record<ProjetoStatus, BadgeTone> = {
   pausado: "amber",
   concluido: "green",
   cancelado: "neutral",
+  arquivado: "red",
 };
 
+/**
+ * Painel de **inspeção** do projeto — somente leitura.
+ *
+ * Decisão da Fase 2D, aprovada: até então as seções editavam em linha, gravando direto no
+ * estado local do mock. Com persistência real isso viraria um PATCH por tecla digitada.
+ *
+ * O desenho adotado separa os papéis:
+ * - **este drawer** inspeciona;
+ * - **`NovoProjetoModal`** edita;
+ * - salvar é um ato explícito, com resposta única do servidor.
+ *
+ * Deliberadamente **sem autosave** nesta fase. Se um dia a edição em linha voltar, ela
+ * precisa de debounce e de um indicador de estado de gravação — nada disso é grátis, e
+ * inventá-lo agora seria dívida sem demanda. O botão "Editar projeto" leva ao modal.
+ */
 export function ProjetoDetailsDrawer({
   projeto,
   onClose,
   onEdit,
-  onChange,
 }: {
   projeto?: Projeto;
   onClose: () => void;
   onEdit: (projetoId: string) => void;
-  onChange: (projeto: Projeto) => void;
 }) {
   const [activeTab, setActiveTab] = useState("dados");
+  const { clientes } = useDiretorioClientes();
+  const { usuarios } = useDiretorioUsuarios();
+  const { departamentos } = useDiretorioDepartamentos();
+
+  const nomeCliente =
+    clientes.find((cliente) => cliente.id === projeto?.clienteId)?.nome ?? "Sem cliente";
+  const nomesResponsaveis =
+    (projeto?.responsavelIds ?? [])
+      .map((id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? id)
+      .join(", ") || "-";
+  const nomesDepartamentos =
+    (projeto?.departamentoResponsavelIds ?? [])
+      .map((id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id)
+      .join(", ") || "-";
 
   return (
     <DetailsModal
@@ -62,7 +87,7 @@ export function ProjetoDetailsDrawer({
       onEdit={projeto ? () => onEdit(projeto.id) : undefined}
       editLabel="Editar projeto"
       title={projeto?.nome ?? "Projeto"}
-      description={projeto ? `${projeto.codigoInterno} · ${resolveClienteProjetoNome(projeto.clienteId)}` : undefined}
+      description={projeto ? `${projeto.codigoReferencia} · ${nomeCliente}` : undefined}
       footer={
         <div className="flex justify-end">
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -82,7 +107,7 @@ export function ProjetoDetailsDrawer({
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">Painel do projeto</p>
                   <h3 className="mt-1 text-lg font-semibold text-zinc-950 dark:text-zinc-50">{projeto.campanha}</h3>
-                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{resolveClienteProjetoNome(projeto.clienteId)}</p>
+                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{nomeCliente}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -95,10 +120,10 @@ export function ProjetoDetailsDrawer({
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Responsáveis</p>
               <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
                 <UsersRound className="h-4 w-4 text-zinc-400" />
-                {resolveResponsaveisProjetoNomes(projeto.responsavelIds)}
+                {nomesResponsaveis}
               </p>
               <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                {resolveDepartamentosProjetoNomes(projeto.departamentoResponsavelIds)}
+                {nomesDepartamentos}
               </p>
             </div>
 
@@ -110,13 +135,13 @@ export function ProjetoDetailsDrawer({
 
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-          {activeTab === "dados" && <DadosProjetoSection projeto={projeto} onChange={onChange} />}
+          {activeTab === "dados" && <DadosProjetoSection projeto={projeto} somenteLeitura />}
           {activeTab === "demandas" && <ProjetoDemandasSection projetoId={projeto.id} />}
-          {activeTab === "resumo" && <ResumoProjetoSection projeto={projeto} onChange={onChange} />}
-          {activeTab === "modelo" && <ModeloCampanhaSection projeto={projeto} onChange={onChange} />}
-          {activeTab === "equipe" && <EquipeProjetoSection projeto={projeto} onChange={onChange} />}
+          {activeTab === "resumo" && <ResumoProjetoSection projeto={projeto} somenteLeitura />}
+          {activeTab === "modelo" && <ModeloCampanhaSection projeto={projeto} somenteLeitura />}
+          {activeTab === "equipe" && <EquipeProjetoSection projeto={projeto} somenteLeitura />}
           {activeTab === "arquivos" && <ArquivosProjetoSection />}
-          {activeTab === "historico" && <HistoricoProjetoSection projeto={projeto} />}
+          {activeTab === "historico" && <HistoricoProjetoSection />}
         </div>
       )}
     </DetailsModal>

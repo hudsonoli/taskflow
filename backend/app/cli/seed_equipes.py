@@ -10,7 +10,17 @@ o JSON de seed nunca carrega UUID, porque os IDs técnicos mudam a cada ambiente
 **Idempotência antes de consumir sequência**: busca por (empresa, codigoInterno) e, se já
 existir, ignora sem chamar `gerar_proxima_referencia`.
 
-Uso: python -m app.cli.seed_equipes
+## Depende de seed_departamentos e seed_usuarios
+
+Toda referência não resolvida **aborta** (`ReferenciaDeEquipeNaoResolvidaError`), antes de
+gravar qualquer coisa. Até então o seed pulava a equipe inválida, imprimia "invalida" no
+fim e saía com sucesso — e membro não resolvido era simplesmente filtrado da lista, criando
+a equipe com menos gente do que o dado de origem manda. Mesma classe de falha silenciosa
+que existia em `seed_usuarios`: banco válido, conteúdo errado.
+
+Uso: `python -m app.cli.seed_all` (recomendado, garante a ordem) ou
+`python -m app.cli.seed_equipes` isoladamente, com departamentos e usuários já semeados.
+Ver docs/reconstrucao-banco.md.
 """
 
 import json
@@ -26,6 +36,17 @@ from app.services.empresa_service import EmpresaService
 from app.services.equipe_service import EquipeService
 
 DATA_FILE = Path(__file__).parent / "data" / "equipes_seed.json"
+
+
+class ReferenciaDeEquipeNaoResolvidaError(RuntimeError):
+    """Departamento, líder ou membro citado pelo seed não existe no cadastro.
+
+    Levantado **antes de gravar qualquer coisa**, com a lista completa — não no primeiro
+    problema, para não obrigar a rodar de novo a cada correção.
+
+    Nunca criar a referência automaticamente nem seguir sem ela: uma equipe com dois
+    membros em vez de quatro é pior que nenhuma equipe, porque parece certa.
+    """
 
 
 def seed_equipes(output=print) -> None:
@@ -55,6 +76,44 @@ def seed_equipes(output=print) -> None:
             )
             usuario = db.scalars(statement).first()
             return usuario.id if usuario else None
+
+        # --- checagem prévia de TODAS as referências, antes de qualquer escrita -------
+        nao_resolvidas: list[str] = []
+        for item in itens:
+            codigo_interno = item.get("codigoInterno") or "<sem codigoInterno>"
+            # Já existente é ignorado adiante; não faz sentido cobrar referências dele.
+            if item.get("codigoInterno") and equipe_service.repository.get_by_codigo_interno(
+                db, empresa_id=empresa.id, codigo_interno=item["codigoInterno"]
+            ):
+                continue
+
+            codigo_departamento = item.get("departamentoCodigoInterno")
+            if codigo_departamento and departamento_service.repository.get_by_codigo_interno(
+                db, empresa_id=empresa.id, codigo_interno=codigo_departamento
+            ) is None:
+                nao_resolvidas.append(
+                    f"{codigo_interno}: departamento '{codigo_departamento}' não encontrado"
+                )
+
+            codigo_lider = item.get("liderCodigoInterno")
+            if codigo_lider and resolver_usuario(codigo_lider) is None:
+                nao_resolvidas.append(f"{codigo_interno}: líder '{codigo_lider}' não encontrado")
+
+            for codigo_membro in item.get("membrosCodigoInterno", []):
+                if resolver_usuario(codigo_membro) is None:
+                    nao_resolvidas.append(
+                        f"{codigo_interno}: membro '{codigo_membro}' não encontrado"
+                    )
+
+        if nao_resolvidas:
+            raise ReferenciaDeEquipeNaoResolvidaError(
+                f"Não é possível semear equipes: {len(nao_resolvidas)} referência(s) não "
+                "resolvem.\n  " + "\n  ".join(nao_resolvidas)
+                + "\n\nRode `python -m app.cli.seed_departamentos` e "
+                "`python -m app.cli.seed_usuarios` antes — ou use o orquestrador oficial "
+                "`python -m app.cli.seed_all`, que garante a ordem. "
+                "Ver docs/reconstrucao-banco.md."
+            )
 
         for item in itens:
             codigo_interno = item.get("codigoInterno")

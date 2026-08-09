@@ -1,15 +1,12 @@
+import { AGENCIA_PADRAO_ID, EMPRESA_PADRAO_ID, generateCodigoInterno, generateId } from "@/lib/ids";
 import {
-  AGENCIA_PADRAO_ID,
-  EMPRESA_PADRAO_ID,
   departamentosProjetoDisponiveis,
-  generateCodigoInterno,
-  generateId,
-  projetosMock,
+  projetosLegado,
   resolveClienteProjetoNome,
   resolveDepartamentosProjetoNomes,
   resolveResponsaveisProjetoNomes,
   responsaveisProjetoDisponiveis,
-} from "@/lib/projetos-mock";
+} from "@/lib/legacy-referencias-mock";
 import type {
   Demanda,
   DemandaHistoricoEvento,
@@ -33,7 +30,7 @@ export {
   responsaveisProjetoDisponiveis,
 };
 
-export const projetosDemandaDisponiveis = projetosMock.map((projeto) => ({
+export const projetosDemandaDisponiveis = projetosLegado.map((projeto) => ({
   id: projeto.id,
   nome: projeto.nome,
   clienteId: projeto.clienteId,
@@ -264,11 +261,11 @@ export function resolveResponsaveisDemandaNomes(ids: string[], usuarios: Usuario
 }
 
 export function resolveProjetoResumo(projetoId: string): string {
-  return projetosMock.find((projeto) => projeto.id === projetoId)?.resumo ?? "";
+  return projetosLegado.find((projeto) => projeto.id === projetoId)?.resumo ?? "";
 }
 
 export function resolveModeloCampanhaPorProjeto(projetoId: string) {
-  return projetosMock.find((projeto) => projeto.id === projetoId)?.modeloCampanha ?? [];
+  return projetosLegado.find((projeto) => projeto.id === projetoId)?.modeloCampanha ?? [];
 }
 
 export function formatPrazo(value: string): string {

@@ -47,6 +47,19 @@ class DomainEventType(StrEnum):
     FORNECEDOR_ARQUIVADO = "fornecedor.arquivado"
     FORNECEDOR_RESTAURADO = "fornecedor.restaurado"
 
+    # Projeto, como Cliente e Fornecedor, não tem tabela de histórico: estes eventos SÃO o
+    # histórico (o mock tinha `historico[]` com usuário, ip e dispositivo — virou evento).
+    PROJETO_CRIADO = "projeto.criado"
+    PROJETO_ALTERADO = "projeto.alterado"
+    PROJETO_ARQUIVADO = "projeto.arquivado"
+    PROJETO_RESTAURADO = "projeto.restaurado"
+    PROJETO_RESPONSAVEL_ADICIONADO = "projeto.responsavel_adicionado"
+    PROJETO_RESPONSAVEL_REMOVIDO = "projeto.responsavel_removido"
+    PROJETO_DEPARTAMENTO_ADICIONADO = "projeto.departamento_adicionado"
+    PROJETO_DEPARTAMENTO_REMOVIDO = "projeto.departamento_removido"
+    PROJETO_MEMBRO_ADICIONADO = "projeto.membro_adicionado"
+    PROJETO_MEMBRO_REMOVIDO = "projeto.membro_removido"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

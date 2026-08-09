@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { demandasMock } from "@/lib/demandas-mock";
-import { projetosMock } from "@/lib/projetos-mock";
+import { projetosLegado, type ProjetoLegado } from "@/lib/legacy-referencias-mock";
 import { pecasMock } from "@/lib/pecas-mock";
 import { regraExpedienteMock, isDentroExpediente } from "@/lib/regra-expediente-mock";
 import { configuracaoEmailMock } from "@/lib/configuracao-email-mock";
@@ -14,7 +14,6 @@ import { generateId, formatCodigoTarefa } from "@/lib/ids";
 import type { Demanda } from "@/types/demanda";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
 import type { SlaRegra } from "@/types/sla";
-import type { Projeto } from "@/types/projeto";
 import type { Peca } from "@/types/peca";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
 import type { RegraExpediente } from "@/types/regra-expediente";
@@ -24,8 +23,13 @@ import type { ConfiguracaoNumeracaoTarefa } from "@/types/configuracao-numeracao
 interface AppDataContextValue {
   demandas: Demanda[];
   setDemandas: Dispatch<SetStateAction<Demanda[]>>;
-  projetos: Projeto[];
-  setProjetos: Dispatch<SetStateAction<Projeto[]>>;
+  /**
+   * Projeção LEGADA, não Projeto real. Projeto migrou na Fase 2D e `ProjetosView` fala
+   * direto com a API. Isto existe só para Demandas, Relatórios e Meu Departamento, que
+   * ainda são mock e referenciam `projeto-1/2/3` — ver lib/legacy-referencias-mock.ts.
+   * Somente leitura: não há `setProjetos`.
+   */
+  projetos: ProjetoLegado[];
   pecas: Peca[];
   setPecas: Dispatch<SetStateAction<Peca[]>>;
   workflowModelos: WorkflowModelo[];
@@ -59,7 +63,7 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandas, setDemandas] = useState<Demanda[]>(demandasMock);
-  const [projetos, setProjetos] = useState<Projeto[]>(projetosMock);
+  const projetos = projetosLegado;
   const [pecas, setPecas] = useState<Peca[]>(pecasMock);
   const [workflowModelos, setWorkflowModelos] = useState<WorkflowModelo[]>(workflowModelosMock);
   const [slaRegras, setSlaRegras] = useState<SlaRegra[]>(slaRegrasMock);
@@ -174,7 +178,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         demandas,
         setDemandas,
         projetos,
-        setProjetos,
         pecas,
         setPecas,
         workflowModelos,
