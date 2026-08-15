@@ -14,6 +14,9 @@ from app.db.base import Base  # noqa: E402
 from app.models import (  # noqa: E402,F401
     cliente,
     cliente_grupo,
+    demanda,
+    demanda_departamento,
+    demanda_responsavel,
     departamento,
     empresa,
     equipe,
@@ -25,6 +28,7 @@ from app.models import (  # noqa: E402,F401
     projeto_departamento,
     projeto_equipe_membro,
     projeto_responsavel,
+    sequencia_operacional,
     sequencia_referencia,
     sessao_trabalho,
     usuario,

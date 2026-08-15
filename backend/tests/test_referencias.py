@@ -43,8 +43,11 @@ def test_lista_executavel_cobre_apenas_dominios_ja_migrados() -> None:
     """A lista é FECHADA: cada domínio entra junto da própria migração, nunca antes.
 
     departamento e equipe entraram na Fase 2A; cliente na 2B; fornecedor na 2C; projeto na
-    2D. Tarefa fica fora por causa do conflito com a numeração #AA0000 do iClips (pendência
-    da Fase 2E); usuario entra na fase correspondente.
+    2D; tarefa (Demanda) na 2E.1. `usuario` entra na fase correspondente.
+
+    O código de tarefa é `T26000001` e reinicia por ano, como todos os outros. A continuidade
+    com a numeração do iClips é responsabilidade de um contador SEPARADO e contínuo —
+    `app/core/sequencias_operacionais.py` —, não deste.
     """
     assert PREFIXOS_REFERENCIA == {
         "departamento": "D",
@@ -52,6 +55,7 @@ def test_lista_executavel_cobre_apenas_dominios_ja_migrados() -> None:
         "cliente": "C",
         "fornecedor": "F",
         "projeto": "P",
+        "tarefa": "T",
     }
 
 
@@ -67,9 +71,15 @@ def test_formato_do_codigo_de_projeto() -> None:
     assert formatar_codigo_referencia("projeto", 2026, 1) == "P26000001"
 
 
+def test_formato_do_codigo_de_tarefa() -> None:
+    assert formatar_codigo_referencia("tarefa", 2026, 1) == "T26000001"
+
+
 def test_tipo_entidade_fora_da_lista_levanta_erro(db_session: Session, empresa) -> None:
+    """`usuario` tem prefixo reservado (U) mas ainda não é executável — pedir código para ele
+    precisa falhar, não gerar um número silenciosamente."""
     with pytest.raises(TipoEntidadeNaoSuportadoError):
-        gerar_proxima_referencia(db_session, empresa_id=empresa.id, tipo_entidade="tarefa")
+        gerar_proxima_referencia(db_session, empresa_id=empresa.id, tipo_entidade="usuario")
 
 
 def test_formato_do_codigo() -> None:

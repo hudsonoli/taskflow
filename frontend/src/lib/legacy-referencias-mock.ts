@@ -25,7 +25,7 @@ export const clientesProjetoDisponiveis = [
   { id: "cliente-3", nome: "Loja Boxx" },
 ];
 
-/** Consumida por `lib/relatorios.ts`, `lib/trafego.ts` e `lib/demandas-mock.ts`. */
+/** Consumida por `lib/relatorios.ts`, `lib/trafego.ts` e `lib/demandas.ts`. */
 export const responsaveisProjetoDisponiveis = [
   { id: "user-1", nome: "Hudson Cunha" },
   { id: "user-2", nome: "Ana Costa" },
@@ -34,7 +34,7 @@ export const responsaveisProjetoDisponiveis = [
   { id: "user-5", nome: "Maria Souza" },
 ];
 
-/** Consumida por `lib/trafego.ts` e `lib/demandas-mock.ts`. */
+/** Consumida por `lib/trafego.ts` e `lib/demandas.ts`. */
 export const departamentosProjetoDisponiveis = [
   { id: "dep-atendimento", nome: "Atendimento" },
   { id: "dep-criacao", nome: "Criação" },
@@ -108,10 +108,10 @@ function criarModeloCampanha(seed: string): ProjetoModeloCampanhaItem[] {
 /**
  * Os 3 projetos que existiam em `projetosMock`, reduzidos aos **cinco campos** que os
  * consumidores ainda mockados leem de fato (`id`, `nome`, `clienteId` diretamente; `resumo`
- * e `modeloCampanha` pelas funções de resolução de `demandas-mock.ts`).
+ * e `modeloCampanha` pelas funções de resolução de `lib/demandas.ts`).
  *
  * Eles **não** entram no banco, **não** aparecem em `ProjetosView` e **não** são Projeto
- * real para efeito nenhum. Existem por um motivo só: `demandas-mock.ts` referencia
+ * real para efeito nenhum. Existem por um motivo só: `lib/demandas.ts` referencia
  * `projeto-1/2/3`, e a Fase 2D nasce com seed vazio — nenhum projeto real carrega esses
  * ids. Sem esta projeção, as demandas mostrariam o id cru no lugar do nome.
  *
@@ -146,7 +146,7 @@ export const projetosLegado: ProjetoLegado[] = [
 // Resolvedores — vinham de projetos-mock.ts
 // ======================================================================================
 
-export function resolveClienteProjetoNome(clienteId: string): string {
+export function resolveClienteProjetoNome(clienteId: string | null | undefined): string {
   if (!clienteId) return "Sem cliente (sem projeto vinculado)";
   return clientesProjetoDisponiveis.find((cliente) => cliente.id === clienteId)?.nome ?? clienteId;
 }

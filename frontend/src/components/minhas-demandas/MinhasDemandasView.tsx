@@ -21,11 +21,12 @@ import {
   resolveDepartamentosProjetoNomes,
   statusDemandaLabels,
   statusDemandaTone,
-} from "@/lib/demandas-mock";
+} from "@/lib/demandas";
 import { classificarTarefa, podeAcessarMinhasDemandas, tarefasDoAtendimento } from "@/lib/escopo-operacional";
 import type { DemandaStatus } from "@/types/demanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { resolverClientePorReferencia } from "@/lib/referencias";
+import { rotuloDemanda } from "@/lib/referencias";
 
 type StatusFiltro = DemandaStatus | "todos";
 
@@ -152,7 +153,7 @@ export function MinhasDemandasView() {
                           className="max-w-[220px] text-left font-semibold text-zinc-950 transition hover:text-indigo-600 dark:text-zinc-50 dark:hover:text-indigo-400"
                         >
                           <span className="block truncate">{demanda.nome}</span>
-                          <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{demanda.codigoInterno}</span>
+                          <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{rotuloDemanda(demanda)}</span>
                         </button>
                       </td>
                       <td className="max-w-[140px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">{cliente?.nome ?? "Sem cliente"}</td>

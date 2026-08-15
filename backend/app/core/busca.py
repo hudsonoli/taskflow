@@ -65,31 +65,58 @@ PONTUACAO_DOCUMENTO = frozenset(".-/ ")
 
 @dataclass(frozen=True)
 class TermoBusca:
-    """Resultado da interpretação. `documento` é None quando a busca por documento não deve
-    ser ativada — nunca uma string vazia, para o chamador não precisar testar dois casos."""
+    """Resultado da interpretação. `documento` e `numero` são None quando o respectivo ramo
+    não deve ser ativado — nunca vazio/zero, para o chamador não precisar testar dois casos.
+
+    Cada domínio usa o que lhe cabe: Cliente e Fornecedor olham `documento`; Demanda olha
+    `numero`. `texto` vale sempre.
+    """
 
     texto: str
     documento: str | None
+    numero: int | None = None
 
     @property
     def vazio(self) -> bool:
         return not self.texto
 
 
+def _interpretar_numero(texto: str) -> int | None:
+    """Número operacional da Demanda (`2063`, `#2063`).
+
+    **Igualdade exata, não busca parcial** — é a diferença que dispensa comprimento mínimo:
+    `numero_operacional = 2063` casa um registro, nunca uma faixa. O mínimo de
+    MIN_DIGITOS_DOCUMENTO existe porque `documento` usa ILIKE parcial, que alarga; aqui não
+    há o que alargar.
+
+    Aceita `#` na frente porque é como a operação escreve. `#` continua fora de
+    PONTUACAO_DOCUMENTO, então `#2001` segue com `documento = None` — a regressão da Fase 2B
+    permanece válida sem alteração.
+    """
+    candidato = texto.removeprefix("#")
+    if not candidato.isdigit():
+        return None
+    valor = int(candidato)
+    # Guarda contra termo absurdamente longo virando bigint fora de faixa no Postgres.
+    return valor if valor <= 2_147_483_647 else None
+
+
 def interpretar_termo_busca(termo: str | None) -> TermoBusca:
     """Decide o que fazer com o que a pessoa digitou. Função pura — sem banco, sem I/O."""
     texto = (termo or "").strip()
     if not texto:
-        return TermoBusca(texto="", documento=None)
+        return TermoBusca(texto="", documento=None, numero=None)
+
+    numero = _interpretar_numero(texto)
 
     # Qualquer caractere que não seja dígito nem pontuação de documento significa intenção
     # textual. É o que impede que "QA FASE2B" (letras) e "#2001" (código) sejam lidos como
     # documento.
     if any(c not in PONTUACAO_DOCUMENTO and not c.isdigit() for c in texto):
-        return TermoBusca(texto=texto, documento=None)
+        return TermoBusca(texto=texto, documento=None, numero=numero)
 
     digitos = "".join(caractere for caractere in texto if caractere.isdigit())
     if len(digitos) < MIN_DIGITOS_DOCUMENTO:
-        return TermoBusca(texto=texto, documento=None)
+        return TermoBusca(texto=texto, documento=None, numero=numero)
 
-    return TermoBusca(texto=texto, documento=digitos)
+    return TermoBusca(texto=texto, documento=digitos, numero=numero)

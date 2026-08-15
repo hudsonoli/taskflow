@@ -6,20 +6,21 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { rotuloDemanda } from "@/lib/referencias";
 import {
   compararPorAgenda,
   normalizarUsuarioId,
   resolveProjetoDemandaNome,
   statusDemandaLabels,
   statusDemandaTone,
-} from "@/lib/demandas-mock";
+} from "@/lib/demandas";
 import type { Demanda } from "@/types/demanda";
 
 const formatHora = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const formatDiaGrupo = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
 
 function chaveDoDia(demanda: Demanda): string {
-  const prazo = new Date(demanda.prazoEtapaAtual);
+  const prazo = new Date(demanda.prazoEtapaAtual ?? "");
   if (Number.isNaN(prazo.getTime())) return "sem-prazo";
   return prazo.toISOString().slice(0, 10);
 }
@@ -60,7 +61,7 @@ export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; o
 
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {demandasDoDia.map((demanda) => {
-              const prazo = new Date(demanda.prazoEtapaAtual);
+              const prazo = new Date(demanda.prazoEtapaAtual ?? "");
               const hora = Number.isNaN(prazo.getTime()) ? "—" : formatHora.format(prazo);
               const responsaveis = demanda.usuarioResponsavelIds
                 .map((id) => resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios))
@@ -79,7 +80,7 @@ export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; o
                       {demanda.nome}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-zinc-400">
-                      {demanda.codigoInterno} · {resolveProjetoDemandaNome(demanda.projetoId)}
+                      {rotuloDemanda(demanda)} · {resolveProjetoDemandaNome(demanda.projetoId)}
                     </span>
                   </button>
 

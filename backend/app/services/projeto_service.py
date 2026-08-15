@@ -128,9 +128,6 @@ class ProjetoService:
             projeto = Projeto(
                 id=str(uuid4()),
                 empresa_id=empresa_id,
-                # Sem código legado, o codigoInterno deriva do código de referência —
-                # continua único por empresa e não consome outra sequência.
-                codigo_interno=referencia.codigo_referencia,
                 codigo_referencia=referencia.codigo_referencia,
                 ano_referencia=referencia.ano_referencia,
                 sequencial_referencia=referencia.sequencial_referencia,
@@ -460,7 +457,6 @@ class ProjetoService:
             ProjetoDiretorioRead.model_validate(
                 {
                     "id": projeto.id,
-                    "codigoInterno": projeto.codigo_interno,
                     "codigoReferencia": projeto.codigo_referencia,
                     "sequencialReferencia": projeto.sequencial_referencia,
                     "nome": projeto.nome,
@@ -476,7 +472,6 @@ class ProjetoService:
         return {
             "id": projeto.id,
             "empresaId": projeto.empresa_id,
-            "codigoInterno": projeto.codigo_interno,
             "codigoReferencia": projeto.codigo_referencia,
             "anoReferencia": projeto.ano_referencia,
             "sequencialReferencia": projeto.sequencial_referencia,

@@ -5,7 +5,7 @@ import { CheckCircle2, ClipboardCheck, Clock3 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Select } from "@/components/ui/Select";
 import { analisarPerformanceColaborador } from "@/lib/relatorios";
-import { responsaveisProjetoDisponiveis } from "@/lib/demandas-mock";
+import { responsaveisProjetoDisponiveis } from "@/lib/demandas";
 import { useAppData } from "@/lib/AppDataContext";
 import { DemandasPorProjetoDonut } from "./DemandasPorProjetoDonut";
 

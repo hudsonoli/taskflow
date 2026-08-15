@@ -5,9 +5,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AtSign, Bell, ClipboardList } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAppData } from "@/lib/AppDataContext";
-import { demandaTemResponsavel } from "@/lib/demandas-mock";
+import { demandaTemResponsavel } from "@/lib/demandas";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda, DemandaComentario } from "@/types/demanda";
 
 type MencaoNotificacao = { tipo: "mencao"; demanda: Demanda; comentario: DemandaComentario };
@@ -136,7 +137,7 @@ export function NotificationBell() {
                       <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                          {demanda.codigoInterno} · {demanda.nome}
+                          {rotuloDemanda(demanda)} · {demanda.nome}
                         </p>
                       </div>
                     </button>

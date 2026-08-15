@@ -2,24 +2,15 @@
 
 import { CalendarDays, Eye, Pencil } from "lucide-react";
 import { AvatarStack } from "@/components/ui/AvatarStack";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, resolveProjetoDemandaNome, statusDemandaLabels } from "@/lib/demandas-mock";
+import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, resolveProjetoDemandaNome, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverUsuarioPorReferencia } from "@/lib/referencias";
-import type { Demanda, DemandaPrioridade, DemandaStatus } from "@/types/demanda";
+import { rotuloDemanda } from "@/lib/referencias";
+import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 
-const statusTone: Record<DemandaStatus, BadgeTone> = {
-  rascunho: "neutral",
-  planejada: "blue",
-  em_execucao: "green",
-  pausada: "amber",
-  bloqueada: "red",
-  aguardando_cliente: "amber",
-  concluida: "green",
-  cancelada: "neutral",
-};
 
 const prioridadeClassName: Record<DemandaPrioridade, string> = {
   alta: "border-zinc-300 bg-zinc-50 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200",
@@ -73,7 +64,7 @@ export function DemandasTable({
 
               return (
                 <tr key={demanda.id} className="group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5">
-                  <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100">{demanda.codigoInterno}</td>
+                  <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100">{rotuloDemanda(demanda)}</td>
                   <td className="px-4 py-3">
                     <button
                       type="button"
@@ -104,7 +95,7 @@ export function DemandasTable({
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <Badge tone={statusTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
+                    <Badge tone={statusDemandaTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
                     {demanda.status === "aguardando_cliente" && demanda.prazoRetornoCliente && (
                       <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
                         Retorno até {formatPrazo(demanda.prazoRetornoCliente)}

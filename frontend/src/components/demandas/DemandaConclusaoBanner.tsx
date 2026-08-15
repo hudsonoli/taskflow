@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { generateId } from "@/lib/demandas-mock";
+import { generateId } from "@/lib/demandas";
 import type { Demanda } from "@/types/demanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { resolverClientePorReferencia } from "@/lib/referencias";

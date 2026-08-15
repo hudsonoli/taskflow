@@ -15,7 +15,7 @@ import {
   resolveDepartamentosProjetoNomes,
   resolveResponsaveisDemandaNomes,
   statusDemandaLabels,
-} from "@/lib/demandas-mock";
+} from "@/lib/demandas";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { resolverDepartamentoNome } from "@/lib/referencias";
@@ -24,11 +24,12 @@ import { normalizarReferenciasParaCodigoInterno } from "@/lib/referencias";
 import type { Demanda, DemandaPrioridade, DemandaStatus } from "@/types/demanda";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { DemandaArquivosCard } from "./DemandaArquivosCard";
+import { RecursoIndisponivel } from "./RecursoIndisponivel";
 import { DemandaChecklistCard } from "./DemandaChecklistCard";
 import { EnvioClienteCard } from "./EnvioClienteCard";
 import { RegistrarAjusteCard } from "./RegistrarAjusteCard";
-import { WorkflowEtapasEditor } from "./WorkflowEtapasEditor";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { rotuloDemanda } from "@/lib/referencias";
 
 type DemandaSectionProps = {
   demanda: Demanda;
@@ -90,7 +91,7 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <Input label="Código" value={demanda.codigoInterno} disabled />
+        <Input label="Código" value={rotuloDemanda(demanda)} disabled />
         <Input
           label="PIT (opcional)"
           placeholder="Ex: C3A-0008/26"
@@ -99,7 +100,7 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
         />
         <Combobox
           label="Projeto"
-          value={demanda.projetoId}
+          value={demanda.projetoId ?? ""}
           onChange={handleProjetoChange}
           options={projetos.map((projeto) => ({ value: projeto.id, label: projeto.nome }))}
           placeholder="Buscar projeto…"
@@ -107,7 +108,7 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
         />
         <Combobox
           label="Cliente"
-          value={demanda.clienteId}
+          value={demanda.clienteId ?? ""}
           onChange={(clienteId) => updateDemanda(demanda, { clienteId }, onChange)}
           options={clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))}
           placeholder="Buscar cliente…"
@@ -116,7 +117,7 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
         <Input
           label="Prazo atual (data e horário)"
           type="datetime-local"
-          value={demanda.prazoEtapaAtual}
+          value={demanda.prazoEtapaAtual ?? ""}
           onChange={(event) => updateDemanda(demanda, { prazoEtapaAtual: event.target.value }, onChange)}
         />
         <Select
@@ -145,27 +146,30 @@ export function BriefingDemandaSection({ demanda, onChange }: DemandaSectionProp
   return (
     <SectionShell title="Briefing" description="Use negrito, grifo e cor de fonte para destacar pontos do briefing." icon={<FileText className="h-5 w-5" />}>
       <RichTextEditor
-        value={demanda.briefing}
+        value={demanda.briefing ?? ""}
         onChange={(html) => updateDemanda(demanda, { briefing: html }, onChange)}
       />
 
       <div className="mt-4 flex flex-col gap-3">
-        <DemandaChecklistCard demanda={demanda} onChange={onChange} />
-        <DemandaArquivosCard demanda={demanda} onChange={onChange} />
+        <DemandaChecklistCard />
+        <DemandaArquivosCard />
       </div>
     </SectionShell>
   );
 }
 
-export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProps) {
+/**
+ * O `WorkflowEtapasEditor` deixou de ser renderizado na Fase 2E.1.
+ *
+ * Ele montava etapas a partir do modelo de workflow e as gravava em `demanda.workflowEtapas`
+ * — campo que não tem tabela nesta fase. Mantido o editor, a pessoa preencheria as etapas, a
+ * tela mostraria salvo e nada existiria no banco. O componente segue no repositório, intacto,
+ * para voltar em 2E.2.
+ */
+export function WorkflowDemandaSection() {
   return (
-    <SectionShell title="Workflow" description="Etapas livres, ajustadas conforme o fluxo de cada tarefa." icon={<GitBranch className="h-5 w-5" />}>
-      <WorkflowEtapasEditor
-        etapas={demanda.workflowEtapas}
-        etapaAtualId={demanda.etapaAtualId}
-        onEtapasChange={(etapas) => updateDemanda(demanda, { workflowEtapas: etapas }, onChange)}
-        onEtapaAtualChange={(id) => updateDemanda(demanda, { etapaAtualId: id }, onChange)}
-      />
+    <SectionShell title="Workflow" description="Etapas do fluxo de execução da tarefa." icon={<GitBranch className="h-5 w-5" />}>
+      <RecursoIndisponivel recurso="Etapas de workflow" fase="Fase 2E.2" />
     </SectionShell>
   );
 }

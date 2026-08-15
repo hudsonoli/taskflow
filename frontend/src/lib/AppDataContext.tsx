@@ -1,16 +1,15 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { demandasMock } from "@/lib/demandas-mock";
 import { projetosLegado, type ProjetoLegado } from "@/lib/legacy-referencias-mock";
 import { pecasMock } from "@/lib/pecas-mock";
-import { regraExpedienteMock, isDentroExpediente } from "@/lib/regra-expediente-mock";
+import { regraExpedienteMock } from "@/lib/regra-expediente-mock";
 import { configuracaoEmailMock } from "@/lib/configuracao-email-mock";
 import { configuracaoNumeracaoTarefaMock } from "@/lib/configuracao-numeracao-tarefa-mock";
 import { workflowModelosMock } from "@/lib/workflow-modelos-mock";
 import { slaRegrasMock } from "@/lib/sla-mock";
 import { fetchSessao, fetchUsuarioAtualCompleto, logout as logoutRequest } from "@/lib/auth";
-import { generateId, formatCodigoTarefa } from "@/lib/ids";
+import { listDemandasReais } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
 import type { SlaRegra } from "@/types/sla";
@@ -21,8 +20,21 @@ import type { ConfiguracaoEmail } from "@/types/configuracao-email";
 import type { ConfiguracaoNumeracaoTarefa } from "@/types/configuracao-numeracao-tarefa";
 
 interface AppDataContextValue {
+  /**
+   * Demandas REAIS, vindas da API e **já escopadas pelo servidor** (Fase 2E.1).
+   *
+   * Não há mais fallback para `demandasMock`, e nenhuma demanda é meio-API meio-mock: as
+   * cinco coleções sem tabela (`workflowEtapas`, `checklist`, `arquivos`, `comentarios`,
+   * `historico`) chegam vazias e assim ficam até 2E.2–2E.4.
+   *
+   * Com a base nova nascendo vazia, as telas operacionais mostram estado vazio real até que
+   * demandas sejam criadas — o mesmo que aconteceu quando Projeto migrou.
+   */
   demandas: Demanda[];
+  /** Atualização otimista local. Quem escreve de verdade é a API — ver lib/api-backend.ts. */
   setDemandas: Dispatch<SetStateAction<Demanda[]>>;
+  demandasCarregando: boolean;
+  recarregarDemandas: () => Promise<void>;
   /**
    * Projeção LEGADA, não Projeto real. Projeto migrou na Fase 2D e `ProjetosView` fala
    * direto com a API. Isto existe só para Demandas, Relatórios e Meu Departamento, que
@@ -42,8 +54,6 @@ interface AppDataContextValue {
   setConfiguracaoEmail: Dispatch<SetStateAction<ConfiguracaoEmail>>;
   configuracaoNumeracaoTarefa: ConfiguracaoNumeracaoTarefa;
   setConfiguracaoNumeracaoTarefa: Dispatch<SetStateAction<ConfiguracaoNumeracaoTarefa>>;
-  // Gera o próximo código de tarefa (#AA0000) e avança o contador configurado.
-  gerarProximoCodigoTarefa: () => string;
   // Intenção de abrir uma tarefa específica (ex.: clique em notificação) — consumida pela tela de Tarefas.
   demandaParaAbrir: { demandaId: string; aba?: string } | null;
   setDemandaParaAbrir: Dispatch<SetStateAction<{ demandaId: string; aba?: string } | null>>;
@@ -62,7 +72,8 @@ interface AppDataContextValue {
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const [demandas, setDemandas] = useState<Demanda[]>(demandasMock);
+  const [demandas, setDemandas] = useState<Demanda[]>([]);
+  const [demandasCarregando, setDemandasCarregando] = useState(true);
   const projetos = projetosLegado;
   const [pecas, setPecas] = useState<Peca[]>(pecasMock);
   const [workflowModelos, setWorkflowModelos] = useState<WorkflowModelo[]>(workflowModelosMock);
@@ -119,57 +130,40 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timeout);
   }, []);
 
-  // Regra de expediente: fora do horário configurado, demandas "em execução" são pausadas automaticamente.
+  // A pausa automática por expediente saiu daqui na Fase 2E.1.
+  //
+  // Ela rodava num setInterval do navegador, mudava `status` para "pausada" e escrevia em
+  // `historico[]`. As duas coisas deixaram de existir: `historico` não tem tabela, e o
+  // expediente passou a ser validado no servidor — que recusa a ENTRADA em `em_execucao`
+  // fora do horário com 409 `FORA_DE_EXPEDIENTE`.
+  //
+  // Pausar trabalho JÁ EM CURSO é outra coisa, e não pode viver no cliente: só rodaria com
+  // alguém logado e a aba aberta. Vira job de backend — ver docs/pendencias-arquiteturais.md.
+
   useEffect(() => {
-    function aplicarRegraExpediente() {
-      const agora = new Date();
-      if (isDentroExpediente(agora, regraExpediente)) return;
+    // Demanda é escopada por usuário: só faz sentido carregar depois da sessão resolvida, e
+    // recarregar quando ela muda. O setTimeout(0) segue o mesmo padrão do efeito de sessão
+    // acima — tira o setState do corpo do efeito e evita a cascata de renders.
+    const timeout = setTimeout(() => {
+      if (!autenticado || mustChangePassword) {
+        setDemandas([]);
+        setDemandasCarregando(false);
+        return;
+      }
+      void recarregarDemandas();
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [autenticado, mustChangePassword]);
 
-      setDemandas((current) => {
-        let alterou = false;
-        const proximo = current.map((demanda) => {
-          if (demanda.status !== "em_execucao") return demanda;
-          alterou = true;
-          return {
-            ...demanda,
-            status: "pausada" as const,
-            updatedAt: agora.toISOString(),
-            historico: [
-              {
-                id: generateId("hist-demanda-auto"),
-                usuarioId: "sistema",
-                usuario: "Sistema",
-                acao: "Pausada automaticamente — fora do horário de expediente",
-                dataHora: agora.toLocaleString("pt-BR"),
-                ip: "—",
-                dispositivo: "Regra automática",
-              },
-              ...demanda.historico,
-            ],
-          };
-        });
-        return alterou ? proximo : current;
-      });
+  async function recarregarDemandas() {
+    setDemandasCarregando(true);
+    try {
+      setDemandas(await listDemandasReais());
+    } catch {
+      // Falha de rede não pode virar "não há demandas": mantém o que já estava em tela.
+    } finally {
+      setDemandasCarregando(false);
     }
-
-    aplicarRegraExpediente();
-    const intervalId = setInterval(aplicarRegraExpediente, 20000);
-    return () => clearInterval(intervalId);
-  }, [regraExpediente]);
-
-  function gerarProximoCodigoTarefa(): string {
-    const anoAtual = new Date().getFullYear();
-    // Vira o ano automaticamente reiniciando em 1, a menos que o número já esteja configurado para o ano corrente.
-    const numero = configuracaoNumeracaoTarefa.ano === anoAtual ? configuracaoNumeracaoTarefa.proximoNumero : 1;
-
-    setConfiguracaoNumeracaoTarefa((current) => ({
-      ...current,
-      ano: anoAtual,
-      proximoNumero: numero + 1,
-      updatedAt: new Date().toISOString(),
-    }));
-
-    return formatCodigoTarefa(anoAtual, numero);
   }
 
   return (
@@ -177,6 +171,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       value={{
         demandas,
         setDemandas,
+        demandasCarregando,
+        recarregarDemandas,
         projetos,
         pecas,
         setPecas,
@@ -190,7 +186,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setConfiguracaoEmail,
         configuracaoNumeracaoTarefa,
         setConfiguracaoNumeracaoTarefa,
-        gerarProximoCodigoTarefa,
         demandaParaAbrir,
         setDemandaParaAbrir,
         sessaoCarregando,

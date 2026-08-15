@@ -14,7 +14,7 @@ import {
   resolveResponsaveisProjetoNomes,
   responsaveisProjetoDisponiveis,
   workflowEtapaStatusLabels,
-} from "@/lib/demandas-mock";
+} from "@/lib/demandas";
 import type { DemandaWorkflowEtapa, DemandaWorkflowEtapaStatus } from "@/types/demanda";
 import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
 

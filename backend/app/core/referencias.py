@@ -25,14 +25,16 @@ from app.core.relogio import agora_utc, ano_corrente
 # Prefixos reservados, ainda NÃO executáveis (entram junto da migração de cada domínio):
 #   U = usuario
 #
-# `tarefa` (T) está deliberadamente fora: conflita com a numeração #AA0000 hoje em uso, que
-# dá continuidade à sequência do iClips (a partir de #002062). Pendência da Fase 2E.
+# `tarefa` emite o código oficial da Demanda (T26000001), anual como os demais. A
+# continuidade com a numeração do iClips é responsabilidade de OUTRO contador, contínuo e
+# sem ano — ver app/core/sequencias_operacionais.py.
 PREFIXOS_REFERENCIA: dict[str, str] = {
     "departamento": "D",
     "equipe": "E",
     "cliente": "C",
     "fornecedor": "F",
     "projeto": "P",
+    "tarefa": "T",
 }
 
 SEQUENCIAL_DIGITOS = 6

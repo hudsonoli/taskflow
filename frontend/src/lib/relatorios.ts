@@ -1,5 +1,6 @@
 import { clientesProjetoDisponiveis, responsaveisProjetoDisponiveis } from "@/lib/legacy-referencias-mock";
 import type { ProjetoLegado } from "@/lib/legacy-referencias-mock";
+import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
 
 
@@ -73,7 +74,7 @@ export function volumeSemanal(referenceDate: Date, demandas: Demanda[], semanas 
     fim.setDate(fim.getDate() + 7);
 
     const count = demandas.filter((demanda) => {
-      const criada = new Date(demanda.dataCriacao);
+      const criada = new Date(demanda.createdAt);
       return criada >= inicio && criada < fim;
     }).length;
 
@@ -132,7 +133,7 @@ export function analisarProjeto(projetoId: string, demandasTodas: Demanda[], pro
   const projeto = projetos.find((item) => item.id === projetoId);
   const demandas = demandasTodas.filter((demanda) => demanda.projetoId === projetoId);
 
-  const tempoAbertura = demandas.map((demanda) => diffEmDias(demanda.dataCriacao, demanda.dataInicio));
+  const tempoAbertura = demandas.map((demanda) => diffEmDias(demanda.createdAt, demanda.dataInicio ?? ""));
   const temposRetorno = demandas
     .filter((demanda) => demanda.enviadoClienteEm && demanda.retornoRecebidoEm)
     .map((demanda) => diffEmDias(demanda.enviadoClienteEm as string, demanda.retornoRecebidoEm as string));
@@ -189,9 +190,9 @@ export function analisarPecasPorProjeto(projetoId: string, demandasTodas: Demand
     return {
       demandaId: demanda.id,
       nome: demanda.nome,
-      codigoInterno: demanda.codigoInterno,
+      codigoInterno: rotuloDemanda(demanda),
       redator,
-      tempoEmPautaDias: emAndamento ? null : diffEmDias(demanda.dataCriacao, demanda.updatedAt),
+      tempoEmPautaDias: emAndamento ? null : diffEmDias(demanda.createdAt, demanda.updatedAt),
       emAndamento,
       ajustesInternos,
       ajustesCliente,
@@ -214,7 +215,7 @@ export function analisarPerformanceColaborador(colaboradorId: string, demandasTo
   const demandasDoColaborador = demandasTodas.filter((demanda) => demanda.usuarioResponsavelIds.includes(colaboradorId));
   const entregues = demandasDoColaborador.filter((demanda) => demanda.status === "concluida");
 
-  const entreguesNoPrazo = entregues.filter((demanda) => new Date(demanda.updatedAt) <= new Date(demanda.dataFimPrevista)).length;
+  const entreguesNoPrazo = entregues.filter((demanda) => new Date(demanda.updatedAt) <= new Date(demanda.dataFimPrevista ?? "")).length;
   const entreguesEmAtraso = entregues.length - entreguesNoPrazo;
 
   const etapaContagem = new Map<string, number>();

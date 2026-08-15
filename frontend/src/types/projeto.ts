@@ -48,8 +48,6 @@ export type ProjetoEquipeMembro = {
 export type Projeto = {
   id: string;
   empresaId: string;
-  /** Chave estável de importação/integração. Nunca exibido. */
-  codigoInterno: string;
   /** Identidade de negócio: P26000001. Imutável, pesquisável. */
   codigoReferencia: string;
   anoReferencia: number;

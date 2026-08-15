@@ -1,0 +1,177 @@
+/**
+ * Rótulos e helpers de Demanda.
+ *
+ * Substitui `demandas-mock.ts`, removido na Fase 2E.1: Demanda passou a vir da API, e o
+ * arquivo antigo misturava dados falsos com funções de apresentação legítimas. Aqui ficou só
+ * o que é apresentação — não há dado de demanda neste módulo.
+ *
+ * As referências a **projeto** ainda resolvem pela projeção legada
+ * (`lib/legacy-referencias-mock.ts`) porque Demanda guarda `projetoId` de projetos reais mas
+ * as telas ainda exibem nomes da lista legada. Some quando as telas operacionais migrarem
+ * (Fase 2E.5).
+ */
+
+import { AGENCIA_PADRAO_ID, EMPRESA_PADRAO_ID, generateCodigoInterno, generateId } from "@/lib/ids";
+import {
+  departamentosProjetoDisponiveis,
+  projetosLegado,
+  resolveClienteProjetoNome,
+  resolveDepartamentosProjetoNomes,
+  resolveResponsaveisProjetoNomes,
+  responsaveisProjetoDisponiveis,
+} from "@/lib/legacy-referencias-mock";
+import type {
+  Demanda,
+  DemandaPrioridade,
+  DemandaStatus,
+  DemandaWorkflowEtapaStatus,
+} from "@/types/demanda";
+import type { UsuarioDiretorioItem } from "@/lib/api-backend";
+import { correspondeUsuario, resolverUsuarioPorReferencia } from "@/lib/referencias";
+
+export {
+  AGENCIA_PADRAO_ID,
+  EMPRESA_PADRAO_ID,
+  departamentosProjetoDisponiveis,
+  generateCodigoInterno,
+  generateId,
+  resolveClienteProjetoNome,
+  resolveDepartamentosProjetoNomes,
+  resolveResponsaveisProjetoNomes,
+  responsaveisProjetoDisponiveis,
+};
+
+export const projetosDemandaDisponiveis = projetosLegado.map((projeto) => ({
+  id: projeto.id,
+  nome: projeto.nome,
+  clienteId: projeto.clienteId,
+}));
+
+export const statusDemandaLabels: Record<DemandaStatus, string> = {
+  rascunho: "Rascunho",
+  planejada: "Planejada",
+  em_execucao: "Em execução",
+  pausada: "Pausada",
+  bloqueada: "Bloqueada",
+  aguardando_cliente: "Aguardando cliente",
+  concluida: "Concluída",
+  cancelada: "Cancelada",
+  arquivada: "Arquivada",
+};
+
+// Status oferecidos no formulário e no Kanban. `arquivada` fica de fora de propósito: entra
+// pela rota de arquivamento, com motivo obrigatório, e um PATCH com ela devolve 422.
+export const statusDemandaEditaveis = [
+  "rascunho",
+  "planejada",
+  "em_execucao",
+  "pausada",
+  "bloqueada",
+  "aguardando_cliente",
+  "concluida",
+  "cancelada",
+] as const;
+
+export const prioridadeDemandaLabels: Record<DemandaPrioridade, string> = {
+  baixa: "Baixa",
+  media: "Média",
+  alta: "Alta",
+};
+
+// Cor associada a cada status — centralizado para não ser redefinido em cada tela/lista.
+export const statusDemandaTone: Record<DemandaStatus, "neutral" | "blue" | "green" | "amber" | "red"> = {
+  rascunho: "neutral",
+  planejada: "blue",
+  em_execucao: "green",
+  pausada: "amber",
+  bloqueada: "red",
+  aguardando_cliente: "amber",
+  concluida: "green",
+  cancelada: "neutral",
+  arquivada: "neutral",
+};
+
+export const workflowEtapaStatusLabels: Record<DemandaWorkflowEtapaStatus, string> = {
+  pendente: "Pendente",
+  em_execucao: "Em execução",
+  pausada: "Pausada",
+  concluida: "Concluída",
+};
+
+export function resolveProjetoDemandaNome(projetoId: string | null | undefined): string {
+  if (!projetoId) return "Sem projeto";
+  return projetosDemandaDisponiveis.find((projeto) => projeto.id === projetoId)?.nome ?? projetoId;
+}
+
+export function resolveClienteIdByProjetoId(projetoId: string | null | undefined): string {
+  if (!projetoId) return "";
+  return projetosDemandaDisponiveis.find((projeto) => projeto.id === projetoId)?.clienteId ?? "";
+}
+
+// Compatibilidade entre a lista mock legada de responsáveis (ids "user-N") e o cadastro real de
+// usuários (ids "usuario-N") — normaliza até os dois cadastros serem unificados.
+export function normalizarUsuarioId(id: string): string {
+  return id.replace(/^user-/, "usuario-");
+}
+
+/**
+ * `usuarioId` pode ser UUID real ou codigoInterno — o registro guardado em
+ * `usuarioResponsavelIds` é resolvido no diretório e comparado nos dois formatos (ver
+ * lib/referencias.ts). Precisa do diretório porque `usuarioAtual.id` (sessão real) é
+ * sempre UUID, mas relações antigas podem ter sido gravadas como codigoInterno.
+ */
+export function demandaTemResponsavel(demanda: Demanda, usuarioId: string, diretorio: UsuarioDiretorioItem[]): boolean {
+  return demanda.usuarioResponsavelIds.some((id) => {
+    const normalizado = normalizarUsuarioId(id);
+    if (normalizado === usuarioId) return true;
+    const resolvido = resolverUsuarioPorReferencia(normalizado, diretorio);
+    return resolvido ? correspondeUsuario(usuarioId, resolvido) : false;
+  });
+}
+
+export function resolveResponsaveisDemandaNomes(ids: string[], usuarios: UsuarioDiretorioItem[]): string {
+  if (ids.length === 0) return "-";
+  return ids
+    .map((id) => resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios)?.nome ?? id)
+    .join(", ");
+}
+
+export function resolveProjetoResumo(projetoId: string | null | undefined): string {
+  if (!projetoId) return "";
+  return projetosLegado.find((projeto) => projeto.id === projetoId)?.resumo ?? "";
+}
+
+export function resolveModeloCampanhaPorProjeto(projetoId: string | null | undefined) {
+  if (!projetoId) return [];
+  return projetosLegado.find((projeto) => projeto.id === projetoId)?.modeloCampanha ?? [];
+}
+
+export function formatPrazo(value: string | null | undefined): string {
+  if (!value) return "Sem prazo";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const hasTime = value.includes("T");
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    ...(hasTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+  }).format(date);
+}
+
+/**
+ * Ordena por `prazoEtapaAtual` (campo MANUAL, não derivado das etapas — ver types/demanda.ts).
+ * Tarefas sem prazo ficam por último. Usado pela Pauta para agrupar por dia e ordenar dentro
+ * do dia na mesma ordem vista pela equipe.
+ */
+export function compararPorAgenda(a: Demanda, b: Demanda): number {
+  const prazoA = a.prazoEtapaAtual ? new Date(a.prazoEtapaAtual).getTime() : Number.NaN;
+  const prazoB = b.prazoEtapaAtual ? new Date(b.prazoEtapaAtual).getTime() : Number.NaN;
+  const validoA = !Number.isNaN(prazoA);
+  const validoB = !Number.isNaN(prazoB);
+
+  if (!validoA && !validoB) return 0;
+  if (!validoA) return 1;
+  if (!validoB) return -1;
+  return prazoA - prazoB;
+}

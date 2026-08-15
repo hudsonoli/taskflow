@@ -11,11 +11,12 @@ import {
   resolveProjetoDemandaNome,
   statusDemandaLabels,
   statusDemandaTone,
-} from "@/lib/demandas-mock";
+} from "@/lib/demandas";
 import { classificarTarefa } from "@/lib/escopo-operacional";
 import { resolverUsuarioPorReferencia } from "@/lib/referencias";
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { ClienteDiretorioItem } from "@/lib/api-backend";
+import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
 
 const prioridadeClassName: Record<Demanda["prioridade"], string> = {
@@ -75,7 +76,7 @@ export function TarefasLista({
                       className="max-w-[240px] text-left font-semibold text-zinc-950 transition hover:text-indigo-600 disabled:cursor-default disabled:hover:text-zinc-950 dark:text-zinc-50 dark:disabled:hover:text-zinc-50 dark:hover:text-indigo-400"
                     >
                       <span className="block truncate">{demanda.nome}</span>
-                      <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{demanda.codigoInterno}</span>
+                      <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{rotuloDemanda(demanda)}</span>
                     </button>
                   </td>
                   <td className="max-w-[160px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">{cliente?.nome ?? "Sem cliente"}</td>

@@ -121,10 +121,13 @@ export function correspondeCliente(referencia: string, cliente: ReferenciavelPor
   return referencia === cliente.id || referencia === cliente.codigoInterno;
 }
 
+// Aceita nulo porque `Demanda.clienteId` é opcional de verdade no banco — tarefa interna não
+// tem cliente. Sem cliente não há o que resolver: `undefined`, e quem chama já trata esse caso.
 export function resolverClientePorReferencia(
-  referencia: string,
+  referencia: string | null | undefined,
   diretorio: ClienteDiretorioItem[],
 ): ClienteDiretorioItem | undefined {
+  if (!referencia) return undefined;
   return diretorio.find((cliente) => correspondeCliente(referencia, cliente));
 }
 
@@ -165,4 +168,23 @@ export function resolverGrupoClienteNomes(referencias: string[], diretorio: Grup
       return grupo.status === "arquivado" ? `${grupo.nome} (arquivado)` : grupo.nome;
     })
     .join(", ");
+}
+
+/**
+ * Rótulo operacional da Demanda — `#2063`.
+ *
+ * É o identificador que a operação reconhece e o que aparece em listagem, card e cabeçalho.
+ * O `#` é **apresentação**: no banco `numero_operacional` é inteiro, ordenado e comparado
+ * como número. Centralizado aqui para que mudar a forma de escrever seja uma edição só.
+ *
+ * O UUID nunca é exibido; `codigoReferencia` (`T26000001`) é a identidade oficial e aparece
+ * em detalhe, busca e auditoria — ver `rotuloReferenciaDemanda`.
+ */
+export function rotuloDemanda(demanda: { numeroOperacional: number }): string {
+  return `#${demanda.numeroOperacional}`;
+}
+
+/** Identidade oficial, para detalhe/tooltip/auditoria. Reinicia por ano, ao contrário de `#2063`. */
+export function rotuloReferenciaDemanda(demanda: { codigoReferencia: string }): string {
+  return demanda.codigoReferencia;
 }

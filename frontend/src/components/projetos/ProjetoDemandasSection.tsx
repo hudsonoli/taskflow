@@ -1,22 +1,12 @@
 "use client";
 
 import { ClipboardList } from "lucide-react";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatPrazo, statusDemandaLabels } from "@/lib/demandas-mock";
+import { formatPrazo, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import { useAppData } from "@/lib/AppDataContext";
-import type { DemandaStatus } from "@/types/demanda";
+import { rotuloDemanda } from "@/lib/referencias";
 
-const statusTone: Record<DemandaStatus, BadgeTone> = {
-  rascunho: "neutral",
-  planejada: "blue",
-  em_execucao: "green",
-  pausada: "amber",
-  bloqueada: "red",
-  aguardando_cliente: "amber",
-  concluida: "green",
-  cancelada: "neutral",
-};
 
 export function ProjetoDemandasSection({ projetoId }: { projetoId: string }) {
   const { demandas: todasDemandas } = useAppData();
@@ -47,10 +37,10 @@ export function ProjetoDemandasSection({ projetoId }: { projetoId: string }) {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{demanda.nome}</p>
                   <p className="text-xs text-zinc-400">
-                    {demanda.codigoInterno} · prazo {formatPrazo(demanda.prazoEtapaAtual)}
+                    {rotuloDemanda(demanda)} · prazo {formatPrazo(demanda.prazoEtapaAtual)}
                   </p>
                 </div>
-                <Badge tone={statusTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
+                <Badge tone={statusDemandaTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
               </li>
             ))}
           </ul>

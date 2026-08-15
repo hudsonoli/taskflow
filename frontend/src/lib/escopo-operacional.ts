@@ -13,7 +13,7 @@
 // token; `horasExecutadasPorEscopo` -> agregação SQL).
 
 import { elapsedSeconds } from "@/lib/trafego";
-import { demandaTemResponsavel, normalizarUsuarioId } from "@/lib/demandas-mock";
+import { demandaTemResponsavel, normalizarUsuarioId } from "@/lib/demandas";
 import { isDentroExpediente } from "@/lib/regra-expediente-mock";
 import { correspondeDepartamento, resolverDepartamentoPorReferencia } from "@/lib/referencias";
 import { perfisComAcessoAdministrativo, perfisComAcessoFinanceiro } from "@/types/usuario";

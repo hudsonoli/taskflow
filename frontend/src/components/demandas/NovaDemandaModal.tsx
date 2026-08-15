@@ -13,39 +13,26 @@ import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { Select } from "@/components/ui/Select";
 import {
   departamentosProjetoDisponiveis,
-  generateId,
   normalizarUsuarioId,
   prioridadeDemandaLabels,
   resolveModeloCampanhaPorProjeto,
+  statusDemandaEditaveis,
   statusDemandaLabels,
-} from "@/lib/demandas-mock";
+} from "@/lib/demandas";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { normalizarReferenciasParaCodigoInterno } from "@/lib/referencias";
 import { resolverDepartamentoNome } from "@/lib/referencias";
-import { aplicarModeloWorkflow } from "@/lib/workflow-modelos-mock";
-import type { Demanda, DemandaFormDraft, DemandaPrioridade, DemandaStatus, DemandaWorkflowEtapa } from "@/types/demanda";
-import { WorkflowEtapasEditor } from "./WorkflowEtapasEditor";
+import type { Demanda, DemandaFormDraft, DemandaPrioridade, DemandaStatusEditavel } from "@/types/demanda";
+import { RecursoIndisponivel } from "./RecursoIndisponivel";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
-function createInitialWorkflow(): DemandaWorkflowEtapa[] {
-  return [
-    {
-      id: generateId("etapa-demanda"),
-      nome: "Atendimento",
-      ordem: 1,
-      usuarioResponsavelIds: [],
-      departamentoResponsavelIds: [],
-      prazoHoras: 8,
-      status: "pendente",
-    },
-  ];
-}
+// `createInitialWorkflow` saiu na Fase 2E.1: montava uma etapa inicial para um campo que não
+// tem tabela. Volta em 2E.2, junto do editor de etapas.
 
 function createInitialDraft(demanda?: Demanda): DemandaFormDraft {
   const projectId = demanda?.projetoId ?? "";
-  const workflowEtapas = demanda?.workflowEtapas ?? createInitialWorkflow();
 
   return {
     nome: demanda?.nome ?? "",
@@ -54,12 +41,10 @@ function createInitialDraft(demanda?: Demanda): DemandaFormDraft {
     clienteId: demanda?.clienteId ?? "",
     briefing: demanda?.briefing ?? "",
     prioridade: demanda?.prioridade ?? "media",
-    status: demanda?.status ?? "planejada",
+    status: (demanda?.status ?? "planejada") as DemandaStatusEditavel,
     usuarioResponsavelIds: demanda?.usuarioResponsavelIds ?? [],
     departamentoResponsavelIds: demanda?.departamentoResponsavelIds ?? [departamentosProjetoDisponiveis[0].id],
     dataFimPrevista: demanda?.dataFimPrevista ?? "",
-    workflowEtapas,
-    etapaAtualId: demanda?.etapaAtualId ?? workflowEtapas[0].id,
   };
 }
 
@@ -76,7 +61,7 @@ export function NovaDemandaModal({
   onSaveAndClose: (draft: DemandaFormDraft, demandaId?: string) => void;
   onSaveAndContinue: (draft: DemandaFormDraft, demandaId?: string) => void;
 }) {
-  const { projetos, workflowModelos } = useAppData();
+  const { projetos } = useAppData();
   const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
   const diretorio = useDiretorioUsuarios().usuarios;
@@ -111,14 +96,8 @@ export function NovaDemandaModal({
     setBriefingRevision((revision) => revision + 1);
   }
 
-  function aplicarModelo(modeloId: string) {
-    const modelo = workflowModelos.find((item) => item.id === modeloId);
-    if (!modelo) return;
-    const workflowEtapas = aplicarModeloWorkflow(modelo);
-    updateDraft({ workflowEtapas, etapaAtualId: workflowEtapas[0]?.id ?? "" });
-  }
-
-  const modelosAtivos = workflowModelos.filter((modelo) => modelo.ativo);
+  // `aplicarModelo` saiu na Fase 2E.1 junto do editor de etapas: aplicar um modelo de
+  // workflow só faz sentido se houver onde gravar as etapas resultantes.
 
   return (
     <Modal open={open} onClose={onClose} maxWidthClassName="max-w-3xl">
@@ -181,7 +160,7 @@ export function NovaDemandaModal({
         />
         <Combobox
           label="Projeto (opcional)"
-          value={draft.projetoId}
+          value={draft.projetoId ?? ""}
           onChange={handleProjectChange}
           options={projetos.map((projeto) => ({ value: projeto.id, label: projeto.nome }))}
           placeholder="Buscar projeto…"
@@ -189,7 +168,7 @@ export function NovaDemandaModal({
         />
         <Combobox
           label="Cliente"
-          value={draft.clienteId}
+          value={draft.clienteId ?? ""}
           onChange={(clienteId) => updateDraft({ clienteId })}
           options={clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))}
           placeholder="Buscar cliente…"
@@ -198,7 +177,7 @@ export function NovaDemandaModal({
         <Input
           label="Prazo (data e horário)"
           type="datetime-local"
-          value={draft.dataFimPrevista}
+          value={draft.dataFimPrevista ?? ""}
           onChange={(event) => updateDraft({ dataFimPrevista: event.target.value })}
         />
         <Select
@@ -210,8 +189,9 @@ export function NovaDemandaModal({
         <Select
           label="Status"
           value={draft.status}
-          onChange={(event) => updateDraft({ status: event.target.value as DemandaStatus })}
-          options={Object.entries(statusDemandaLabels).map(([value, label]) => ({ value, label }))}
+          onChange={(event) => updateDraft({ status: event.target.value as DemandaStatusEditavel })}
+          // `arquivada` fica fora: arquivar tem rota própria, com motivo obrigatório.
+          options={statusDemandaEditaveis.map((value) => ({ value, label: statusDemandaLabels[value] }))}
         />
       </div>
 
@@ -241,40 +221,14 @@ export function NovaDemandaModal({
 
       <div className="mt-4">
         <span className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Briefing</span>
-        <RichTextEditor key={briefingRevision} value={draft.briefing} onChange={(html) => updateDraft({ briefing: html })} />
+        <RichTextEditor key={briefingRevision} value={draft.briefing ?? ""} onChange={(html) => updateDraft({ briefing: html })} />
       </div>
 
-      <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Workflow</p>
-          {modelosAtivos.length > 0 && (
-            <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-              <span className="font-medium">Aplicar modelo</span>
-              <select
-                defaultValue=""
-                onChange={(event) => {
-                  if (!event.target.value) return;
-                  aplicarModelo(event.target.value);
-                  event.target.value = "";
-                }}
-                className="rounded-lg border border-zinc-200 bg-zinc-50/70 px-2 py-1.5 text-xs font-semibold text-zinc-700 outline-none focus:border-indigo-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200"
-              >
-                <option value="">Selecionar…</option>
-                {modelosAtivos.map((modeloOpcao) => (
-                  <option key={modeloOpcao.id} value={modeloOpcao.id}>
-                    {modeloOpcao.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-        <WorkflowEtapasEditor
-          etapas={draft.workflowEtapas}
-          etapaAtualId={draft.etapaAtualId}
-          onEtapasChange={(etapas) => updateDraft({ workflowEtapas: etapas })}
-          onEtapaAtualChange={(id) => updateDraft({ etapaAtualId: id })}
-        />
+      {/* O editor de etapas e o seletor de modelo de workflow não são renderizados nesta
+          fase: não há tabela para gravá-las, e um formulário que aceita e descarta é pior
+          que um que não existe. Ver RecursoIndisponivel. */}
+      <div className="mt-4">
+        <RecursoIndisponivel recurso="Etapas de workflow" fase="Fase 2E.2" />
       </div>
 
       <div className="mt-6 flex flex-col justify-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800 sm:flex-row">

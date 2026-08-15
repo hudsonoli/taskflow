@@ -109,6 +109,17 @@ def test_sequencial_avanca_sem_buracos(client_admin: TestClient) -> None:
     assert _criar(client_admin)["sequencialReferencia"] == primeiro + 1
 
 
+def test_projeto_nao_expoe_codigo_interno(client_admin: TestClient) -> None:
+    """Removido na microfase 2D.1: sem importação de Projeto, era cópia literal do
+    `codigo_referencia`. Projeto tem dois identificadores — UUID e codigoReferencia."""
+    criado = _criar(client_admin)
+    assert "codigoInterno" not in criado
+    listado = client_admin.get("/projetos", params={"limit": 200}).json()[0]
+    assert "codigoInterno" not in listado
+    diretorio = client_admin.get("/projetos/diretorio").json()[0]
+    assert "codigoInterno" not in diretorio
+
+
 def test_codigo_referencia_e_imutavel_no_patch(client_admin: TestClient) -> None:
     criado = _criar(client_admin)
     alterado = client_admin.patch(f"/projetos/{criado['id']}", json={"nome": "Outro Nome"}).json()
@@ -240,6 +251,8 @@ def test_patch_para_o_proprio_nome_nao_conflita(client_admin: TestClient) -> Non
     [
         ("empresaId", str(uuid.uuid4())),
         ("actorUsuarioId", str(uuid.uuid4())),
+        # `codigoInterno` foi removido na microfase 2D.1 — continua no rol de proibidos
+        # porque `extra="forbid"` deve recusar campo inexistente, não ignorá-lo.
         ("codigoInterno", "forjado"),
         ("codigoReferencia", "P26999999"),
         ("anoReferencia", 26),
@@ -506,11 +519,11 @@ def test_projeto_de_outra_empresa_devolve_404(
         text(
             """
             INSERT INTO projetos (
-                id, empresa_id, codigo_interno, codigo_referencia, ano_referencia,
+                id, empresa_id, codigo_referencia, ano_referencia,
                 sequencial_referencia, nome, nome_normalizado, status, prioridade,
                 created_at, updated_at
             ) VALUES (
-                :id, :emp, 'alheio-1', 'P26099999', 26, 99999, 'Alheio', 'alheio',
+                :id, :emp, 'P26099999', 26, 99999, 'Alheio', 'alheio',
                 'ativo', 'media', :a, :a
             )
             """
@@ -604,7 +617,6 @@ def test_nenhum_termo_alfanumerico_vira_filtro_de_documento(
             alvo in achado["nome"].lower()
             or alvo in (achado["campanha"] or "").lower()
             or alvo in achado["codigoReferencia"].lower()
-            or alvo in achado["codigoInterno"].lower()
         )
         assert justificado, f"{achado['nome']} não se justifica pelo texto {termo!r}"
 

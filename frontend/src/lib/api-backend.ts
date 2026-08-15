@@ -23,6 +23,14 @@ import type {
   ProjetoPrioridade,
   ProjetoStatus,
 } from "@/types/projeto";
+import type {
+  Demanda,
+  DemandaDiretorio,
+  DemandaFormDraft,
+  DemandaPrioridade,
+  DemandaStatus,
+  DemandaStatusEditavel,
+} from "@/types/demanda";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -67,6 +75,31 @@ export class ProjetoArquivadoConflictError extends Error {
   }
 }
 
+export type JanelaExpediente = {
+  manhaInicio: string;
+  manhaFim: string;
+  tardeInicio: string;
+  tardeFim: string;
+  toleranciaRetomadaMinutos: number;
+};
+
+/**
+ * Iniciar execução fora do expediente. A **regra vive no servidor** — até a Fase 2E ela só
+ * existia no Kanban, e qualquer `curl` a contornava.
+ *
+ * A janela vem junto do erro para a interface conseguir dizer *quando* poderá, sem repetir a
+ * regra no cliente e criar uma segunda fonte da mesma verdade.
+ */
+export class ForaDeExpedienteError extends Error {
+  expediente: JanelaExpediente;
+
+  constructor(message: string, expediente: JanelaExpediente) {
+    super(message);
+    this.name = "ForaDeExpedienteError";
+    this.expediente = expediente;
+  }
+}
+
 // Cliente genérico pro proxy autenticado (/api/backend/**) — nunca fala direto com o
 // FastAPI, nunca vê o token (fica no cookie HttpOnly, ver lib/server/backend.ts).
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -99,6 +132,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new ProjetoArquivadoConflictError(
         message ?? "Projeto arquivado já existe",
         detail.projetoArquivadoId,
+      );
+    }
+    if (detail && typeof detail === "object" && detail.code === "FORA_DE_EXPEDIENTE") {
+      throw new ForaDeExpedienteError(
+        message ?? "Fora do expediente",
+        detail.expediente as JanelaExpediente,
       );
     }
     throw new Error(message ?? `Erro ${response.status}`);
@@ -985,7 +1024,6 @@ export async function restaurarFornecedorReal(fornecedorId: string): Promise<For
 type ProjetoReadApi = {
   id: string;
   empresaId: string;
-  codigoInterno: string;
   codigoReferencia: string;
   anoReferencia: number;
   sequencialReferencia: number;
@@ -1013,7 +1051,6 @@ function mapProjetoReadToProjeto(data: ProjetoReadApi): Projeto {
   return {
     id: data.id,
     empresaId: data.empresaId,
-    codigoInterno: data.codigoInterno,
     codigoReferencia: data.codigoReferencia,
     anoReferencia: data.anoReferencia,
     sequencialReferencia: data.sequencialReferencia,
@@ -1099,4 +1136,218 @@ export async function arquivarProjetoReal(projetoId: string, motivoArquivamento:
 export async function restaurarProjetoReal(projetoId: string): Promise<Projeto> {
   const restaurado = await request<ProjetoReadApi>(`/projetos/${projetoId}/restaurar`, { method: "POST" });
   return mapProjetoReadToProjeto(restaurado);
+}
+
+// =====================================================================================
+// Demanda — a unidade de trabalho da operação; a interface chama de Tarefa (Fase 2E.1).
+//
+// Primeiro domínio OPERACIONAL: ao contrário dos cadastros, é lido por qualquer autenticado,
+// e **o que cada um enxerga é decidido no servidor**. `listDemandasReais()` sem parâmetro já
+// vem escopado; `escopo` só estreita. Pedir um escopo sem direito devolve 403 — não uma lista
+// vazia, que esconderia o erro de permissão.
+//
+// Acesso direto por UUID também é escopado: `getDemandaReal` de uma demanda fora do escopo
+// devolve 404, mesmo sendo da mesma empresa.
+//
+// **Sem unicidade de nome**: duas tarefas "Ajuste banner" no mesmo dia são rotina, então não
+// existe conflito de duplicidade aqui — nenhum `DemandaArquivadaConflictError`.
+// =====================================================================================
+
+export type DemandaEscopo = "meus" | "meu-departamento" | "atendimento";
+
+type DemandaReadApi = {
+  id: string;
+  empresaId: string;
+  codigoReferencia: string;
+  anoReferencia: number;
+  sequencialReferencia: number;
+  numeroOperacional: number;
+  nome: string;
+  pit: string | null;
+  briefing: string | null;
+  status: DemandaStatus;
+  prioridade: DemandaPrioridade;
+  sinalizada: boolean;
+  motivoBloqueio: string | null;
+  clienteId: string | null;
+  projetoId: string | null;
+  criadoPorUsuarioId: string | null;
+  dataInicio: string | null;
+  dataFimPrevista: string | null;
+  prazoEtapaAtual: string | null;
+  enviadoClienteEm: string | null;
+  prazoRetornoCliente: string | null;
+  retornoRecebidoEm: string | null;
+  emailConclusaoEnviado: boolean;
+  emailConclusaoData: string | null;
+  usuarioResponsavelIds: string[];
+  departamentoResponsavelIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  arquivadoAt: string | null;
+  arquivadoPorUsuarioId: string | null;
+  motivoArquivamento: string | null;
+  restauradoAt: string | null;
+  restauradoPorUsuarioId: string | null;
+  statusAnteriorArquivamento: DemandaStatus | null;
+};
+
+// As cinco coleções e `etapaAtualId` são fixadas vazias aqui porque não há tabela nenhuma por
+// trás delas nesta fase. Vazio é a verdade, não um placeholder à espera de conteúdo.
+function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
+  return {
+    id: data.id,
+    empresaId: data.empresaId,
+    codigoReferencia: data.codigoReferencia,
+    anoReferencia: data.anoReferencia,
+    sequencialReferencia: data.sequencialReferencia,
+    numeroOperacional: data.numeroOperacional,
+    nome: data.nome,
+    pit: data.pit,
+    briefing: data.briefing,
+    status: data.status,
+    prioridade: data.prioridade,
+    sinalizada: data.sinalizada,
+    motivoBloqueio: data.motivoBloqueio,
+    clienteId: data.clienteId,
+    projetoId: data.projetoId,
+    criadoPorUsuarioId: data.criadoPorUsuarioId,
+    dataInicio: data.dataInicio,
+    dataFimPrevista: data.dataFimPrevista,
+    prazoEtapaAtual: data.prazoEtapaAtual,
+    enviadoClienteEm: data.enviadoClienteEm,
+    prazoRetornoCliente: data.prazoRetornoCliente,
+    retornoRecebidoEm: data.retornoRecebidoEm,
+    emailConclusaoEnviado: data.emailConclusaoEnviado,
+    emailConclusaoData: data.emailConclusaoData,
+    usuarioResponsavelIds: data.usuarioResponsavelIds ?? [],
+    departamentoResponsavelIds: data.departamentoResponsavelIds ?? [],
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    arquivadoAt: data.arquivadoAt,
+    arquivadoPorUsuarioId: data.arquivadoPorUsuarioId,
+    motivoArquivamento: data.motivoArquivamento,
+    restauradoAt: data.restauradoAt,
+    restauradoPorUsuarioId: data.restauradoPorUsuarioId,
+    statusAnteriorArquivamento: data.statusAnteriorArquivamento,
+    workflowEtapas: [],
+    etapaAtualId: null,
+    checklist: [],
+    arquivos: [],
+    comentarios: [],
+    historico: [],
+  };
+}
+
+// `workflowEtapas` e `etapaAtualId` NÃO entram no payload: não há tabela, e enviá-los
+// devolveria 422 por `extra="forbid"`. É recusa explícita, não descarte silencioso.
+function demandaDraftParaPayload(draft: DemandaFormDraft) {
+  return {
+    nome: draft.nome,
+    status: draft.status,
+    prioridade: draft.prioridade,
+    pit: draft.pit || null,
+    briefing: draft.briefing || null,
+    clienteId: draft.clienteId || null,
+    projetoId: draft.projetoId || null,
+    dataFimPrevista: draft.dataFimPrevista || null,
+    usuarioResponsavelIds: draft.usuarioResponsavelIds,
+    departamentoResponsavelIds: draft.departamentoResponsavelIds,
+  };
+}
+
+export async function listDemandasReais(params?: {
+  status?: string;
+  search?: string;
+  clienteId?: string;
+  projetoId?: string;
+  departamentoId?: string;
+  escopo?: DemandaEscopo;
+}): Promise<Demanda[]> {
+  const query = new URLSearchParams({ limit: "200" });
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  if (params?.clienteId) query.set("clienteId", params.clienteId);
+  if (params?.projetoId) query.set("projetoId", params.projetoId);
+  if (params?.departamentoId) query.set("departamentoId", params.departamentoId);
+  if (params?.escopo) query.set("escopo", params.escopo);
+  const data = await request<DemandaReadApi[]>(`/demandas?${query.toString()}`);
+  return data.map(mapDemandaReadToDemanda);
+}
+
+export async function getDemandaReal(demandaId: string): Promise<Demanda> {
+  return mapDemandaReadToDemanda(await request<DemandaReadApi>(`/demandas/${demandaId}`));
+}
+
+export async function listDiretorioDemandas(): Promise<DemandaDiretorio[]> {
+  return request<DemandaDiretorio[]>("/demandas/diretorio");
+}
+
+export async function criarDemandaReal(draft: DemandaFormDraft): Promise<Demanda> {
+  const criada = await request<DemandaReadApi>("/demandas", {
+    method: "POST",
+    body: JSON.stringify(demandaDraftParaPayload(draft)),
+  });
+  return mapDemandaReadToDemanda(criada);
+}
+
+export async function atualizarDemandaReal(demandaId: string, draft: DemandaFormDraft): Promise<Demanda> {
+  const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}`, {
+    method: "PATCH",
+    body: JSON.stringify(demandaDraftParaPayload(draft)),
+  });
+  return mapDemandaReadToDemanda(atualizada);
+}
+
+/**
+ * Alteração parcial e avulsa — status pelo Kanban, bandeira, prazo.
+ *
+ * `motivoBloqueio` é **obrigatório** ao ir para `bloqueada` (422 sem ele) e é limpo pelo
+ * servidor ao sair do bloqueio. Entrar em `em_execucao` fora do expediente levanta
+ * `ForaDeExpedienteError`, que carrega a janela vigente.
+ */
+export async function patchDemandaReal(
+  demandaId: string,
+  campos: Partial<{
+    nome: string;
+    status: DemandaStatusEditavel;
+    prioridade: DemandaPrioridade;
+    sinalizada: boolean;
+    motivoBloqueio: string | null;
+    briefing: string | null;
+    pit: string | null;
+    clienteId: string | null;
+    projetoId: string | null;
+    dataInicio: string | null;
+    dataFimPrevista: string | null;
+    prazoEtapaAtual: string | null;
+    enviadoClienteEm: string | null;
+    prazoRetornoCliente: string | null;
+    retornoRecebidoEm: string | null;
+    emailConclusaoEnviado: boolean;
+    emailConclusaoData: string | null;
+    usuarioResponsavelIds: string[];
+    departamentoResponsavelIds: string[];
+  }>,
+): Promise<Demanda> {
+  const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}`, {
+    method: "PATCH",
+    body: JSON.stringify(campos),
+  });
+  return mapDemandaReadToDemanda(atualizada);
+}
+
+// "Excluir" = arquivar (soft-delete permanente) — ver docs/padrao-arquivamento.md.
+// Restrito a admin/gestor no servidor; operador recebe 403.
+export async function arquivarDemandaReal(demandaId: string, motivoArquivamento: string): Promise<Demanda> {
+  const arquivada = await request<DemandaReadApi>(`/demandas/${demandaId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+  return mapDemandaReadToDemanda(arquivada);
+}
+
+export async function restaurarDemandaReal(demandaId: string): Promise<Demanda> {
+  const restaurada = await request<DemandaReadApi>(`/demandas/${demandaId}/restaurar`, { method: "POST" });
+  return mapDemandaReadToDemanda(restaurada);
 }

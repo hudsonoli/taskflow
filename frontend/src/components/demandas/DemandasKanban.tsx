@@ -6,7 +6,7 @@ import { Clock, Lock } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { avaliarExpedienteOperacional, MOTIVO_INICIAR_FORA_EXPEDIENTE } from "@/lib/escopo-operacional";
 import { useAppData } from "@/lib/AppDataContext";
-import type { Demanda, DemandaStatus } from "@/types/demanda";
+import type { Demanda, DemandaStatus, DemandaStatusEditavel } from "@/types/demanda";
 import { DemandaKanbanCardOverlay } from "./DemandaKanbanCard";
 import { DemandaKanbanColumn } from "./DemandaKanbanColumn";
 
@@ -14,7 +14,7 @@ type KanbanColumnConfig = {
   id: string;
   title: string;
   description: string;
-  statuses: DemandaStatus[];
+  statuses: DemandaStatusEditavel[];
   tone: BadgeTone;
 };
 
@@ -34,7 +34,7 @@ export function DemandasKanban({
 }: {
   demandas: Demanda[];
   onOpenDetails: (demandaId: string) => void;
-  onMoveDemanda: (demandaId: string, novoStatus: DemandaStatus) => void;
+  onMoveDemanda: (demandaId: string, novoStatus: DemandaStatusEditavel) => void;
 }) {
   const { regraExpediente } = useAppData();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -62,7 +62,9 @@ export function DemandasKanban({
     () =>
       kanbanColumns.map((column) => ({
         ...column,
-        demandas: demandas.filter((demanda) => column.statuses.includes(demanda.status)),
+        // `arquivada` não chega aqui: a listagem já a exclui e o Kanban não tem essa coluna.
+        // O alargamento é só para comparar com o status vindo da API.
+        demandas: demandas.filter((demanda) => (column.statuses as DemandaStatus[]).includes(demanda.status)),
       })),
     [demandas],
   );
@@ -81,7 +83,7 @@ export function DemandasKanban({
     const column = kanbanColumns.find((candidate) => candidate.id === over.id);
     const demanda = demandas.find((candidate) => candidate.id === active.id);
     if (!column || !demanda) return;
-    if (column.statuses.includes(demanda.status)) return;
+    if ((column.statuses as DemandaStatus[]).includes(demanda.status)) return;
 
     // Colunas que agrupam mais de um status (ex.: Rascunho/Planejada) usam o
     // primeiro status da lista como destino ao soltar o card.

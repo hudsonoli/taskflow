@@ -60,6 +60,20 @@ class DomainEventType(StrEnum):
     PROJETO_MEMBRO_ADICIONADO = "projeto.membro_adicionado"
     PROJETO_MEMBRO_REMOVIDO = "projeto.membro_removido"
 
+    # Demanda não tem tabela de histórico: estes eventos SÃO o histórico. O campo
+    # `historico[]` do mock, com ip e dispositivo, vira payload de evento.
+    DEMANDA_CRIADA = "demanda.criada"
+    DEMANDA_ALTERADA = "demanda.alterada"
+    DEMANDA_STATUS_ALTERADO = "demanda.status_alterado"
+    DEMANDA_BLOQUEADA = "demanda.bloqueada"
+    DEMANDA_DESBLOQUEADA = "demanda.desbloqueada"
+    DEMANDA_RESPONSAVEL_ADICIONADO = "demanda.responsavel_adicionado"
+    DEMANDA_RESPONSAVEL_REMOVIDO = "demanda.responsavel_removido"
+    DEMANDA_DEPARTAMENTO_ADICIONADO = "demanda.departamento_adicionado"
+    DEMANDA_DEPARTAMENTO_REMOVIDO = "demanda.departamento_removido"
+    DEMANDA_ARQUIVADA = "demanda.arquivada"
+    DEMANDA_RESTAURADA = "demanda.restaurada"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import clsx from "clsx";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { BadgeTone } from "@/components/ui/Badge";
-import { compararPorAgenda, resolveProjetoDemandaNome, statusDemandaTone } from "@/lib/demandas-mock";
+import { compararPorAgenda, resolveProjetoDemandaNome, statusDemandaTone } from "@/lib/demandas";
 import type { Demanda } from "@/types/demanda";
 
 const toneClassNames: Record<BadgeTone, string> = {
@@ -85,8 +85,8 @@ export function PautaGantt({
 
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {ordenadas.map((demanda) => {
-              const inicio = new Date(demanda.dataInicio);
-              const fim = new Date(demanda.dataFimPrevista || demanda.prazoEtapaAtual);
+              const inicio = new Date(demanda.dataInicio ?? "");
+              const fim = new Date(demanda.dataFimPrevista || demanda.prazoEtapaAtual || "");
               const inicioValido = !Number.isNaN(inicio.getTime());
               const fimValido = !Number.isNaN(fim.getTime());
 

@@ -28,15 +28,22 @@ class Projeto(Base):
 
     ## Identidade
 
-    - `id`: UUID técnico, usado em PK/FK e rotas. Nunca exibido;
-    - `codigo_referencia` (P26000001): identidade de negócio, imutável e pesquisável;
-    - `codigo_interno`: chave estável de **importação/integração** — permite a um importador
-      futuro localizar um projeto sem depender do UUID, que muda a cada ambiente.
+    **Dois identificadores, não três:**
 
-    **`codigo_interno` NÃO resolve os ids do mock (`projeto-1/2/3`).** A Fase 2D nasce com
-    seed vazio: não existe projeto real carregando esses valores. A compatibilidade de que
-    `demandas-mock.ts` precisa mora numa projeção legada no frontend
-    (`lib/legacy-referencias-mock.ts`), fora do banco, e some quando Demanda migrar.
+    - `id`: UUID técnico, usado em PK/FK e rotas. Nunca exibido;
+    - `codigo_referencia` (P26000001): identidade de negócio, imutável e pesquisável.
+
+    Não há `codigo_interno`. Ele existiu na Fase 2D como "chave de importação" e foi removido
+    na microfase 2D.1 (migration `9c2f8ab41d63`), quando ficou decidido que **não haverá
+    importação histórica de Projetos** — eles nascem vazios e são criados pela interface.
+
+    Sem importação a coluna não tinha função, e o levantamento mostrou que nunca teve: o único
+    caminho de escrita gravava `codigo_interno = codigo_referencia` (cópia literal), nenhum
+    componente a exibia, e a busca fazia um `OR codigo_interno ILIKE` sempre redundante por
+    comparar o mesmo valor duas vezes. Diferente de Cliente e Fornecedor, Projeto nunca chegou
+    a ter um `create_*_com_codigo_legado` — não havia seed nem importador para chamá-lo.
+
+    Demanda segue o mesmo desenho — UUID + `codigo_referencia`, sem ponte de importação.
 
     ## Unicidade: por (cliente, nome), não por nome
 
@@ -82,7 +89,6 @@ class Projeto(Base):
             "data_inicio IS NULL OR data_fim_prevista IS NULL OR data_fim_prevista >= data_inicio",
             name="ck_projetos_periodo",
         ),
-        UniqueConstraint("empresa_id", "codigo_interno", name="uq_projetos_empresa_codigo_interno"),
         UniqueConstraint("empresa_id", "codigo_referencia", name="uq_projetos_empresa_codigo_referencia"),
         UniqueConstraint(
             "empresa_id", "ano_referencia", "sequencial_referencia", name="uq_projetos_empresa_ano_sequencial"
@@ -105,7 +111,6 @@ class Projeto(Base):
         Index("ix_projetos_empresa_id", "empresa_id"),
         Index("ix_projetos_status", "status"),
         Index("ix_projetos_codigo_referencia", "codigo_referencia"),
-        Index("ix_projetos_codigo_interno", "codigo_interno"),
         Index("ix_projetos_nome_normalizado", "nome_normalizado"),
         Index("ix_projetos_cliente_id", "cliente_id"),
     )
@@ -115,7 +120,6 @@ class Projeto(Base):
     empresa_id: Mapped[str] = mapped_column(ForeignKey("empresas.id"), nullable=False)
 
     # --- identidade de negócio ----------------------------------------------------
-    codigo_interno: Mapped[str] = mapped_column(String(64), nullable=False)
     codigo_referencia: Mapped[str] = mapped_column(String(16), nullable=False)
     ano_referencia: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     sequencial_referencia: Mapped[int] = mapped_column(Integer, nullable=False)

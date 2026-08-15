@@ -6,29 +6,44 @@ import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
-  EMPRESA_PADRAO_ID,
-  AGENCIA_PADRAO_ID,
-  generateId,
   resolveClienteProjetoNome,
   resolveDepartamentosProjetoNomes,
   resolveProjetoDemandaNome,
   resolveResponsaveisDemandaNomes,
-  statusDemandaLabels,
-} from "@/lib/demandas-mock";
+} from "@/lib/demandas";
+import {
+  atualizarDemandaReal,
+  criarDemandaReal,
+  ForaDeExpedienteError,
+  patchDemandaReal,
+} from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { resolverDepartamentoNome } from "@/lib/referencias";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
+import { rotuloDemanda } from "@/lib/referencias";
 import { podeCriarDemanda } from "@/types/usuario";
-import type { Demanda, DemandaFormDraft, DemandaHistoricoEvento, DemandaStatus } from "@/types/demanda";
-import type { Usuario } from "@/types/usuario";
+import type { Demanda, DemandaFormDraft, DemandaStatusEditavel } from "@/types/demanda";
 import { DemandaDetailsDrawer } from "./DemandaDetailsDrawer";
 import { DemandasKanban } from "./DemandasKanban";
 import { DemandasStats } from "./DemandasStats";
 import { DemandasTable } from "./DemandasTable";
 import { type DemandasViewMode, type DemandaStatusFiltro, DemandasToolbar } from "./DemandasToolbar";
+import { MotivoBloqueioModal } from "./MotivoBloqueioModal";
 import { NovaDemandaModal } from "./NovaDemandaModal";
+
+/**
+ * Erro de expediente chega estruturado do servidor, com a janela vigente — a interface
+ * apresenta, não recalcula. Qualquer outro erro vira a própria mensagem da API.
+ */
+function mensagemDeErro(error: unknown): string {
+  if (error instanceof ForaDeExpedienteError) {
+    const { manhaInicio, manhaFim, tardeInicio, tardeFim } = error.expediente;
+    return `${error.message} (${manhaInicio}–${manhaFim} e ${tardeInicio}–${tardeFim})`;
+  }
+  return error instanceof Error ? error.message : "Não foi possível salvar a tarefa.";
+}
 
 function normalize(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -37,7 +52,7 @@ function normalize(value: string) {
 function matchesDemanda(demanda: Demanda, query: string, usuarios: UsuarioDiretorioItem[]) {
   const haystack = [
     demanda.nome,
-    demanda.codigoInterno,
+    rotuloDemanda(demanda),
     demanda.pit ?? "",
     resolveProjetoDemandaNome(demanda.projetoId),
     resolveClienteProjetoNome(demanda.clienteId),
@@ -48,77 +63,10 @@ function matchesDemanda(demanda: Demanda, query: string, usuarios: UsuarioDireto
   return normalize(haystack).includes(normalize(query));
 }
 
-function createHistoricoDemanda(acao: string, usuarioAtual?: Usuario): DemandaHistoricoEvento {
-  return {
-    id: generateId("hist-demanda"),
-    usuarioId: usuarioAtual?.id ?? "user-1",
-    usuario: usuarioAtual?.nome ?? "Você",
-    acao,
-    dataHora: new Date().toLocaleString("pt-BR"),
-    ip: "127.0.0.1",
-    dispositivo: "Workspace local",
-  };
-}
-
-function createDemandaFromDraft(draft: DemandaFormDraft, codigoInterno: string, usuarioAtual?: Usuario): Demanda {
-  const now = new Date().toISOString();
-  const today = now.slice(0, 10);
-
-  return {
-    id: generateId("demanda"),
-    empresaId: EMPRESA_PADRAO_ID,
-    agenciaId: AGENCIA_PADRAO_ID,
-    projetoId: draft.projetoId,
-    clienteId: draft.clienteId,
-    codigoInterno,
-    nome: draft.nome,
-    pit: draft.pit?.trim() ? draft.pit.trim() : undefined,
-    briefing: draft.briefing,
-    status: draft.status,
-    prioridade: draft.prioridade,
-    usuarioResponsavelIds: draft.usuarioResponsavelIds,
-    departamentoResponsavelIds: draft.departamentoResponsavelIds,
-    workflowEtapas: draft.workflowEtapas,
-    etapaAtualId: draft.etapaAtualId,
-    prazoEtapaAtual: draft.dataFimPrevista,
-    dataCriacao: today,
-    dataInicio: today,
-    dataFimPrevista: draft.dataFimPrevista,
-    emailConclusaoEnviado: false,
-    sinalizada: false,
-    checklist: [],
-    arquivos: [],
-    comentarios: [],
-    createdAt: now,
-    updatedAt: now,
-    historico: [createHistoricoDemanda("Tarefa criada", usuarioAtual)],
-  };
-}
-
-function updateDemandaFromDraft(demanda: Demanda, draft: DemandaFormDraft, usuarioAtual?: Usuario): Demanda {
-  // Reabrir e concluir de novo deve poder oferecer o aviso de entrega novamente.
-  const reconcluida = draft.status === "concluida" && demanda.status !== "concluida";
-
-  return {
-    ...demanda,
-    projetoId: draft.projetoId,
-    clienteId: draft.clienteId,
-    nome: draft.nome,
-    pit: draft.pit?.trim() ? draft.pit.trim() : undefined,
-    briefing: draft.briefing,
-    status: draft.status,
-    prioridade: draft.prioridade,
-    usuarioResponsavelIds: draft.usuarioResponsavelIds,
-    departamentoResponsavelIds: draft.departamentoResponsavelIds,
-    workflowEtapas: draft.workflowEtapas,
-    etapaAtualId: draft.etapaAtualId,
-    dataFimPrevista: draft.dataFimPrevista,
-    prazoEtapaAtual: draft.dataFimPrevista,
-    emailConclusaoEnviado: reconcluida ? false : demanda.emailConclusaoEnviado,
-    updatedAt: new Date().toISOString(),
-    historico: [createHistoricoDemanda("Tarefa atualizada", usuarioAtual), ...demanda.historico],
-  };
-}
+// `createHistoricoDemanda`, `createDemandaFromDraft` e `updateDemandaFromDraft` saíram na
+// Fase 2E.1. Os três montavam uma Demanda no navegador — inclusive `codigoInterno` e entradas
+// de `historico[]` com ip e dispositivo inventados. Agora quem cria a demanda e emite os dois
+// números é o servidor, e o histórico é evento de domínio.
 
 function statusMatchesFilter(demanda: Demanda, statusFilter: DemandaStatusFiltro) {
   if (statusFilter === "todos") return true;
@@ -129,8 +77,7 @@ function statusMatchesFilter(demanda: Demanda, statusFilter: DemandaStatusFiltro
 }
 
 export function DemandasView() {
-  const { demandas, setDemandas, usuarioAtual, gerarProximoCodigoTarefa, demandaParaAbrir, setDemandaParaAbrir } =
-    useAppData();
+  const { demandas, setDemandas, usuarioAtual, demandaParaAbrir, setDemandaParaAbrir } = useAppData();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios } = useDiretorioUsuarios();
   const [query, setQuery] = useState("");
@@ -140,6 +87,9 @@ export function DemandasView() {
   const [editingDemandId, setEditingDemandId] = useState<string | null>(null);
   const [selectedDemandId, setSelectedDemandId] = useState<string | null>(null);
   const [selectedInitialTab, setSelectedInitialTab] = useState<string | undefined>(undefined);
+  const [erro, setErro] = useState<string | null>(null);
+  // Id da demanda aguardando motivo de bloqueio; null quando o modal está fechado.
+  const [bloqueandoId, setBloqueandoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!demandaParaAbrir) return;
@@ -152,6 +102,7 @@ export function DemandasView() {
   }, [demandaParaAbrir, setDemandaParaAbrir]);
 
   const selectedDemand = demandas.find((demanda) => demanda.id === selectedDemandId);
+  const bloqueandoDemanda = demandas.find((demanda) => demanda.id === bloqueandoId);
   const editingDemand = demandas.find((demanda) => demanda.id === editingDemandId);
 
   const departamentoAtualNome = usuarioAtual ? resolverDepartamentoNome(usuarioAtual.departamentoId, departamentos) : "";
@@ -166,27 +117,33 @@ export function DemandasView() {
     [demandas, query, statusFilter, usuarios],
   );
 
-  function upsertDemand(draft: DemandaFormDraft, demandaId?: string) {
-    if (!demandaId) {
-      const newDemand = createDemandaFromDraft(draft, gerarProximoCodigoTarefa(), usuarioAtual);
-      setDemandas((current) => [newDemand, ...current]);
-      return newDemand.id;
+  async function upsertDemand(draft: DemandaFormDraft, demandaId?: string): Promise<string | null> {
+    setErro(null);
+    try {
+      if (!demandaId) {
+        const criada = await criarDemandaReal(draft);
+        setDemandas((current) => [criada, ...current]);
+        return criada.id;
+      }
+      const atualizada = await atualizarDemandaReal(demandaId, draft);
+      setDemandas((current) => current.map((demanda) => (demanda.id === demandaId ? atualizada : demanda)));
+      return demandaId;
+    } catch (error) {
+      setErro(mensagemDeErro(error));
+      return null;
     }
-
-    setDemandas((current) =>
-      current.map((demanda) => (demanda.id === demandaId ? updateDemandaFromDraft(demanda, draft, usuarioAtual) : demanda)),
-    );
-    return demandaId;
   }
 
-  function handleSaveAndClose(draft: DemandaFormDraft, demandaId?: string) {
-    upsertDemand(draft, demandaId);
+  async function handleSaveAndClose(draft: DemandaFormDraft, demandaId?: string) {
+    const salvo = await upsertDemand(draft, demandaId);
+    if (!salvo) return; // erro já exibido — o formulário continua aberto com o que foi digitado
     setCreatingDemand(false);
     setEditingDemandId(null);
   }
 
-  function handleSaveAndContinue(draft: DemandaFormDraft, demandaId?: string) {
-    const nextDemandId = upsertDemand(draft, demandaId);
+  async function handleSaveAndContinue(draft: DemandaFormDraft, demandaId?: string) {
+    const nextDemandId = await upsertDemand(draft, demandaId);
+    if (!nextDemandId) return;
     setCreatingDemand(false);
     setEditingDemandId(null);
     setSelectedDemandId(nextDemandId);
@@ -196,23 +153,28 @@ export function DemandasView() {
     setDemandas((current) => current.map((demanda) => (demanda.id === nextDemand.id ? nextDemand : demanda)));
   }
 
-  function handleMoveDemand(demandaId: string, novoStatus: DemandaStatus) {
-    setDemandas((current) =>
-      current.map((demanda) => {
-        if (demanda.id !== demandaId) return demanda;
-        const reconcluida = novoStatus === "concluida" && demanda.status !== "concluida";
-        return {
-          ...demanda,
-          status: novoStatus,
-          emailConclusaoEnviado: reconcluida ? false : demanda.emailConclusaoEnviado,
-          updatedAt: new Date().toISOString(),
-          historico: [
-            createHistoricoDemanda(`Status alterado para ${statusDemandaLabels[novoStatus]} (Kanban)`, usuarioAtual),
-            ...demanda.historico,
-          ],
-        };
-      }),
-    );
+  async function aplicarStatus(demandaId: string, novoStatus: DemandaStatusEditavel, motivoBloqueio?: string) {
+    setErro(null);
+    try {
+      const atualizada = await patchDemandaReal(demandaId, {
+        status: novoStatus,
+        ...(motivoBloqueio ? { motivoBloqueio } : {}),
+      });
+      setDemandas((current) => current.map((demanda) => (demanda.id === demandaId ? atualizada : demanda)));
+    } catch (error) {
+      // Inclui o 409 de expediente: a mensagem e a janela vêm do servidor, que é onde a regra
+      // mora agora. A UI não recalcula horário nenhum.
+      setErro(mensagemDeErro(error));
+    }
+  }
+
+  function handleMoveDemand(demandaId: string, novoStatus: DemandaStatusEditavel) {
+    // Bloquear exige motivo — pedir antes evita um 422 previsível.
+    if (novoStatus === "bloqueada") {
+      setBloqueandoId(demandaId);
+      return;
+    }
+    void aplicarStatus(demandaId, novoStatus);
   }
 
   function openEdit(demandaId: string) {
@@ -243,6 +205,15 @@ export function DemandasView() {
           <Badge tone="blue">Dados locais</Badge>
         </div>
       </motion.div>
+
+      {erro && (
+        <div
+          role="alert"
+          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
+        >
+          {erro}
+        </div>
+      )}
 
       <DemandasStats demandas={demandas} />
 
@@ -292,6 +263,18 @@ export function DemandasView() {
         onClose={() => setSelectedDemandId(null)}
         onEdit={openEdit}
         onChange={handleDemandChange}
+      />
+
+      <MotivoBloqueioModal
+        open={bloqueandoId !== null}
+        rotulo={bloqueandoDemanda ? rotuloDemanda(bloqueandoDemanda) : ""}
+        salvando={false}
+        onClose={() => setBloqueandoId(null)}
+        onConfirm={(motivo) => {
+          const alvo = bloqueandoId;
+          setBloqueandoId(null);
+          if (alvo) void aplicarStatus(alvo, "bloqueada", motivo);
+        }}
       />
     </div>
   );

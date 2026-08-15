@@ -79,7 +79,6 @@ class _ProjetoCamposComuns(BaseModel):
     modelo_campanha: list[ProjetoModeloCampanhaItem] | None = Field(
         default=None, alias="modeloCampanha"
     )
-    # Relações por UUID. `codigoInterno` é ponte de importação e NUNCA é aceito aqui.
     responsavel_ids: list[UUID] | None = Field(default=None, alias="responsavelIds")
     departamento_responsavel_ids: list[UUID] | None = Field(
         default=None, alias="departamentoResponsavelIds"
@@ -87,9 +86,9 @@ class _ProjetoCamposComuns(BaseModel):
     equipe: list[ProjetoEquipeMembroPayload] | None = None
 
 
-# `extra="forbid"` é deliberado: enviar empresaId, actorUsuarioId, codigoInterno,
-# codigoReferencia, anoReferencia, sequencialReferencia ou o antigo `agenciaId` devolve 422
-# em vez de ser ignorado em silêncio.
+# `extra="forbid"` é deliberado: enviar empresaId, actorUsuarioId, codigoReferencia,
+# anoReferencia, sequencialReferencia ou o antigo `agenciaId` devolve 422 em vez de ser
+# ignorado em silêncio. `codigoInterno` não existe mais — ver microfase 2D.1.
 class ProjetoCreate(_ProjetoCamposComuns):
     nome: str = Field(min_length=1, max_length=255)
     status: ProjetoStatusEditavel = "planejamento"
@@ -128,7 +127,6 @@ class ProjetoArquivar(BaseModel):
 class ProjetoRead(BaseModel):
     id: UUID
     empresa_id: UUID = Field(alias="empresaId")
-    codigo_interno: str = Field(alias="codigoInterno")
     codigo_referencia: str = Field(alias="codigoReferencia")
     ano_referencia: int = Field(alias="anoReferencia")
     sequencial_referencia: int = Field(alias="sequencialReferencia")
@@ -174,7 +172,6 @@ class ProjetoRead(BaseModel):
 # GET /projetos com `status=arquivado`.
 class ProjetoDiretorioRead(BaseModel):
     id: UUID
-    codigo_interno: str = Field(alias="codigoInterno")
     codigo_referencia: str = Field(alias="codigoReferencia")
     sequencial_referencia: int = Field(alias="sequencialReferencia")
     nome: str

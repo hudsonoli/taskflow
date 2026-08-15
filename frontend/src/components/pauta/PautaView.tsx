@@ -6,7 +6,8 @@ import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { useAppData } from "@/lib/AppDataContext";
-import { resolveProjetoDemandaNome } from "@/lib/demandas-mock";
+import { resolveProjetoDemandaNome } from "@/lib/demandas";
+import { rotuloDemanda } from "@/lib/referencias";
 import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer";
 import type { Demanda } from "@/types/demanda";
 import { PautaGantt } from "./PautaGantt";
@@ -19,7 +20,7 @@ function normalize(value: string) {
 
 function matchesQuery(demanda: Demanda, query: string) {
   if (!query.trim()) return true;
-  const haystack = [demanda.nome, demanda.codigoInterno, demanda.pit ?? "", resolveProjetoDemandaNome(demanda.projetoId)].join(" ");
+  const haystack = [demanda.nome, rotuloDemanda(demanda), demanda.pit ?? "", resolveProjetoDemandaNome(demanda.projetoId)].join(" ");
   return normalize(haystack).includes(normalize(query));
 }
 
@@ -48,7 +49,7 @@ export function PautaView() {
 
   const filteredDemands = useMemo(() => {
     return demandas.filter((demanda) => {
-      const prazo = new Date(demanda.prazoEtapaAtual);
+      const prazo = new Date(demanda.prazoEtapaAtual ?? "");
       const dentroDoPeriodo = !Number.isNaN(prazo.getTime()) && prazo >= periodoInicio && prazo <= periodoFim;
       const departamentoMatches =
         departamentoIds.length === 0 || demanda.departamentoResponsavelIds.some((id) => departamentoIds.includes(id));

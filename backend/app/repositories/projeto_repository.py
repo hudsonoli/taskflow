@@ -24,14 +24,6 @@ class ProjetoRepository:
     def get_by_id(self, db: Session, projeto_id: str) -> Projeto | None:
         return db.get(Projeto, projeto_id)
 
-    def get_by_codigo_interno(
-        self, db: Session, *, empresa_id: str, codigo_interno: str
-    ) -> Projeto | None:
-        statement = select(Projeto).where(
-            Projeto.empresa_id == empresa_id, Projeto.codigo_interno == codigo_interno
-        )
-        return db.scalars(statement).first()
-
     def get_by_cliente_e_nome(
         self,
         db: Session,
@@ -102,7 +94,6 @@ class ProjetoRepository:
                     Projeto.nome.ilike(like),
                     Projeto.campanha.ilike(like),
                     Projeto.codigo_referencia.ilike(like),
-                    Projeto.codigo_interno.ilike(like),
                 )
             )
 

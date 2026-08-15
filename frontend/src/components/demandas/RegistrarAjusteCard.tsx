@@ -2,7 +2,7 @@
 
 import { RotateCcw, UserCog, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { generateId } from "@/lib/demandas-mock";
+import { generateId } from "@/lib/demandas";
 import type { Demanda, DemandaHistoricoTipo } from "@/types/demanda";
 
 const TIPOS: { tipo: DemandaHistoricoTipo; label: string; acao: string; icon: typeof UserCog }[] = [

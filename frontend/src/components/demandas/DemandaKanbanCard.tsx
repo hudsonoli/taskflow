@@ -5,9 +5,10 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
 import { AvatarStack } from "@/components/ui/AvatarStack";
-import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, resolveProjetoDemandaNome } from "@/lib/demandas-mock";
+import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, resolveProjetoDemandaNome } from "@/lib/demandas";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 
 // Esquema pedido pelo time: alta = azul marinho, média = azul céu, baixa = azul bebê.
@@ -34,7 +35,7 @@ function CardContent({ demanda }: { demanda: Demanda }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-            {demanda.codigoInterno}
+            {rotuloDemanda(demanda)}
           </span>
           <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-zinc-950 transition group-hover:text-indigo-600 dark:text-zinc-50 dark:group-hover:text-indigo-400">
             {demanda.nome}

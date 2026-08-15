@@ -5,7 +5,7 @@ import { CheckCircle2, Clock, Send } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { formatPrazo, generateId } from "@/lib/demandas-mock";
+import { formatPrazo, generateId } from "@/lib/demandas";
 import type { Demanda } from "@/types/demanda";
 
 function defaultPrazoRetorno(): string {

@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { MessageSquare, Send } from "lucide-react";
 import { useAppData } from "@/lib/AppDataContext";
-import { generateId } from "@/lib/demandas-mock";
+import { generateId } from "@/lib/demandas";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import type { Demanda } from "@/types/demanda";
 

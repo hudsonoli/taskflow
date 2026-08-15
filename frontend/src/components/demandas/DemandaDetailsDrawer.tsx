@@ -7,17 +7,11 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DetailsModal } from "@/components/ui/DetailsModal";
 import { Tabs } from "@/components/ui/Tabs";
-import {
-  formatPrazo,
-  normalizarUsuarioId,
-  prioridadeDemandaLabels,
-  resolveProjetoDemandaNome,
-  resolveProjetoResumo,
-  statusDemandaLabels,
-} from "@/lib/demandas-mock";
+import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, resolveProjetoDemandaNome, resolveProjetoResumo, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverUsuarioPorReferencia } from "@/lib/referencias";
-import type { Demanda, DemandaPrioridade, DemandaStatus } from "@/types/demanda";
+import { rotuloDemanda } from "@/lib/referencias";
+import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 import { AtividadeDemandaSection } from "./AtividadeDemandaSection";
 import { DemandaConclusaoBanner } from "./DemandaConclusaoBanner";
 import {
@@ -37,16 +31,6 @@ const tabs = [
   { id: "historico", label: "Histórico" },
 ];
 
-const statusTone: Record<DemandaStatus, BadgeTone> = {
-  rascunho: "neutral",
-  planejada: "blue",
-  em_execucao: "green",
-  pausada: "amber",
-  bloqueada: "red",
-  aguardando_cliente: "amber",
-  concluida: "green",
-  cancelada: "neutral",
-};
 
 const prioridadeTone: Record<DemandaPrioridade, BadgeTone> = {
   alta: "blue",
@@ -77,7 +61,7 @@ export function DemandaDetailsDrawer({
       onEdit={demanda ? () => onEdit(demanda.id) : undefined}
       editLabel="Editar tarefa"
       title={demanda?.nome ?? "Tarefa"}
-      description={demanda ? `${demanda.codigoInterno} · ${resolveProjetoDemandaNome(demanda.projetoId)}` : undefined}
+      description={demanda ? `${rotuloDemanda(demanda)} · ${resolveProjetoDemandaNome(demanda.projetoId)}` : undefined}
       footer={
         <div className="flex justify-end">
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -106,7 +90,7 @@ export function DemandaDetailsDrawer({
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge tone={statusTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
+                <Badge tone={statusDemandaTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
                 <Badge tone={prioridadeTone[demanda.prioridade]}>{prioridadeDemandaLabels[demanda.prioridade]}</Badge>
               </div>
             </div>
@@ -162,7 +146,7 @@ export function DemandaDetailsDrawer({
 
           {activeTab === "dados" && <DadosDemandaSection demanda={demanda} onChange={onChange} />}
           {activeTab === "briefing" && <BriefingDemandaSection key={demanda.id} demanda={demanda} onChange={onChange} />}
-          {activeTab === "workflow" && <WorkflowDemandaSection demanda={demanda} onChange={onChange} />}
+          {activeTab === "workflow" && <WorkflowDemandaSection />}
           {activeTab === "responsaveis" && <ResponsaveisDemandaSection demanda={demanda} onChange={onChange} />}
           {activeTab === "atividade" && <AtividadeDemandaSection demanda={demanda} onChange={onChange} />}
           {activeTab === "historico" && <HistoricoDemandaSection demanda={demanda} />}

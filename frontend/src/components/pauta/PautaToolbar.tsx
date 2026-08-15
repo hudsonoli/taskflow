@@ -3,7 +3,7 @@
 import { CalendarRange, List, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { MultiSelect } from "@/components/ui/MultiSelect";
-import { departamentosProjetoDisponiveis } from "@/lib/demandas-mock";
+import { departamentosProjetoDisponiveis } from "@/lib/demandas";
 
 export type PautaViewMode = "lista" | "gantt";
 export type PautaPeriodoFiltro = "hoje" | "7d" | "30d";
