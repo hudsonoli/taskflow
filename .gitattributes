@@ -1,0 +1,23 @@
+# Política de line endings do TaskFloww V2 — o histórico é LF; este arquivo torna isso
+# explícito e independente da config local (core.autocrlf) de cada máquina.
+
+* text=auto eol=lf
+
+# Scripts shell sempre LF, mesmo em checkout no Windows.
+*.sh text eol=lf
+
+# Binários já presentes no projeto — sem normalização de EOL.
+*.ico binary
+
+# Binários comuns de asset web — ainda não presentes no projeto, mas cobertos com
+# antecedência para quando upload de arquivo/logo entrar em uso (ver
+# docs/pendencias-arquiteturais.md, item 9).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
