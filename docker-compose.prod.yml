@@ -1,0 +1,64 @@
+services:
+  taskfloww_db:
+    image: postgres:16-alpine
+    container_name: taskfloww_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - taskfloww_db_data:/var/lib/postgresql/data
+    networks:
+      - taskfloww_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  taskfloww_api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taskfloww_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      taskfloww_db:
+        condition: service_healthy
+    networks:
+      - taskfloww_net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  taskfloww_front:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: taskfloww_front_prod
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://taskfloww_api:8000
+      EMPRESA_CODIGO: ${EMPRESA_CODIGO}
+      NODE_ENV: production
+    depends_on:
+      taskfloww_api:
+        condition: service_healthy
+    networks:
+      - taskfloww_net
+      - proxy
+
+networks:
+  taskfloww_net:
+    driver: bridge
+  proxy:
+    external: true
+
+volumes:
+  taskfloww_db_data:
