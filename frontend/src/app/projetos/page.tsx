@@ -1,5 +1,10 @@
+import { AreaAdministrativaGuard } from "@/components/operacional/AreaAdministrativaGuard";
 import { ProjetosView } from "@/components/projetos/ProjetosView";
 
 export default function ProjetosPage() {
-  return <ProjetosView />;
+  return (
+    <AreaAdministrativaGuard>
+      <ProjetosView />
+    </AreaAdministrativaGuard>
+  );
 }

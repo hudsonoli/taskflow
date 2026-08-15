@@ -17,6 +17,7 @@ import { demandaTemResponsavel, normalizarUsuarioId } from "@/lib/demandas";
 import { isDentroExpediente } from "@/lib/regra-expediente-mock";
 import { correspondeDepartamento, resolverDepartamentoPorReferencia } from "@/lib/referencias";
 import { perfisComAcessoAdministrativo, perfisComAcessoFinanceiro } from "@/types/usuario";
+import { PERFIL_PARA_PERFIL_BASE } from "@/lib/api-backend";
 import type { ClienteDiretorioItem, DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import type { RegraExpediente } from "@/types/regra-expediente";
@@ -176,6 +177,30 @@ export function podeAcessarCentralTrafego(usuario: Usuario): boolean {
  */
 export function podeAcessarAcessos(usuario: Usuario): boolean {
   return perfisComAcessoAdministrativo.includes(usuario.perfil);
+}
+
+/**
+ * Áreas administrativas: Configurações, Projetos e Relatórios.
+ *
+ * Espelha a autorização REAL do backend — `GET /projetos`, `/clientes`, `/fornecedores`,
+ * `/departamentos`, `/equipes`, `/grupos-cliente` e `/usuarios` devolvem **403** para
+ * operador. Enquanto isso valer, exibir o item no menu só produz "Acesso negado" como se
+ * fosse navegação normal.
+ *
+ * A regra: o menu não oferece caminho que a API recusa. Quando algum desses domínios abrir
+ * para mais perfis, muda-se aqui **depois** de mudar o backend — nunca antes, e nunca só
+ * aqui para "fazer a tela aparecer".
+ *
+ * Head e Atendimento não entram: são atributos operacionais (`liderDepartamento`, nome do
+ * departamento), não concessão administrativa. Head tem Meu Departamento; Atendimento tem
+ * Minhas Demandas.
+ *
+ * Derivado de `PERFIL_PARA_PERFIL_BASE`, e não de uma lista escrita à mão: o backend só
+ * conhece três perfis (`admin`/`gestor`/`operador`), e é o mapeamento que decide quem recebe
+ * 403. Uma lista paralela poderia divergir dele em silêncio.
+ */
+export function podeAcessarAreaAdministrativa(usuario: Usuario): boolean {
+  return PERFIL_PARA_PERFIL_BASE[usuario.perfil] !== "operador";
 }
 
 // ---------------------------------------------------------------------------------
