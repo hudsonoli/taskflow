@@ -1,12 +1,24 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Index, Integer, String, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
 
 class SessaoTrabalho(Base):
+    """Sessão de trabalho — Central de Tráfego.
+
+    ## `usuario_id` / `departamento_id` — expand/contract concluído (migrations 0015–0018)
+
+    Até `0018`, `usuario_id`/`departamento_id` eram texto livre legado do mock (`"user-1"`),
+    sem FK — mesmo defeito já corrigido para `usuarios.departamento_id` (`0007`/`0008`/`0009`),
+    aqui reaplicado com o mesmo padrão. `usuario_id`/`departamento_id`, abaixo, JÁ SÃO a coluna
+    final: FK real para `usuarios`/`departamentos`, `ON DELETE SET NULL`. A coluna transitória
+    `usuario_uuid`/`departamento_uuid` (que coexistiu com o texto legado durante a janela de
+    expansão) foi renomeada para o nome definitivo em `0018` — não existe mais.
+    """
+
     __tablename__ = "sessoes_trabalho"
     __table_args__ = (
         CheckConstraint(
@@ -53,12 +65,19 @@ class SessaoTrabalho(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    empresa_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    empresa_id: Mapped[str] = mapped_column(ForeignKey("empresas.id"), nullable=False)
     agencia_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     demanda_id: Mapped[str] = mapped_column(String(128), nullable=False)
     workflow_etapa_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    usuario_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    departamento_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Nullable de propósito: vínculo por usuário OU por departamento (nunca os dois sem
+    # justificativa — ver SessaoTrabalhoService._validate_responsavel). SET NULL em vez de
+    # cascade: apagar um usuário/departamento nunca pode apagar a sessão.
+    usuario_id: Mapped[str | None] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    departamento_id: Mapped[str | None] = mapped_column(
+        ForeignKey("departamentos.id", ondelete="SET NULL"), nullable=True
+    )
     evento_inicio_id: Mapped[str] = mapped_column(String(36), nullable=False)
     evento_fim_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)

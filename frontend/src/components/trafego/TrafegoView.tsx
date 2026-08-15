@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { listSessoesTrabalho } from "@/lib/api";
 import { useAppData } from "@/lib/AppDataContext";
+import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { podeAcessarCentralTrafego } from "@/lib/escopo-operacional";
 import {
-  EMPRESA_TRAFEGO_PADRAO_ID,
   buildCarga,
   buildCargaEquipe,
   buildResumo,
@@ -39,6 +40,8 @@ const initialFilters: TrafegoFiltersState = {
 export function TrafegoView() {
   const { demandas, usuarioAtual } = useAppData();
   const { equipes } = useDiretorioEquipes();
+  const { usuarios } = useDiretorioUsuarios();
+  const { departamentos } = useDiretorioDepartamentos();
   const [filters, setFilters] = useState<TrafegoFiltersState>(initialFilters);
   const [sessoesAtivas, setSessoesAtivas] = useState<SessaoTrabalho[]>([]);
   const [sessoesEncerradas, setSessoesEncerradas] = useState<SessaoTrabalho[]>([]);
@@ -50,12 +53,11 @@ export function TrafegoView() {
     setLoading(true);
     setErro(null);
     try {
-      const ativasPromise = listSessoesTrabalho({ empresaId: EMPRESA_TRAFEGO_PADRAO_ID, status: "ativa" });
+      const ativasPromise = listSessoesTrabalho({ status: "ativa" });
       const encerradasPromise =
         filters.status === "ativa"
           ? Promise.resolve([])
           : listSessoesTrabalho({
-              empresaId: EMPRESA_TRAFEGO_PADRAO_ID,
               status: "encerrada",
               dataInicio: periodoParaDataInicio[filters.periodo](),
             });
@@ -77,8 +79,20 @@ export function TrafegoView() {
     return () => clearTimeout(timeout);
   }, [carregar]);
 
-  const ativasFiltradas = filterSessoes(sessoesAtivas, filters);
-  const encerradasFiltradas = filterSessoes(sessoesEncerradas, filters);
+  // O diretório sai das demandas do contexto, que já vêm escopadas pelo servidor — não há
+  // segunda busca nem segunda fonte de verdade sobre o que este usuário pode ver.
+  const diretorioDemandas = demandas.map((demanda) => ({
+    id: demanda.id,
+    numeroOperacional: demanda.numeroOperacional,
+    codigoReferencia: demanda.codigoReferencia,
+    nome: demanda.nome,
+    status: demanda.status,
+    clienteId: demanda.clienteId,
+    projetoId: demanda.projetoId,
+  }));
+
+  const ativasFiltradas = filterSessoes(sessoesAtivas, filters, diretorioDemandas);
+  const encerradasFiltradas = filterSessoes(sessoesEncerradas, filters, diretorioDemandas);
   const resumo = buildResumo(ativasFiltradas, encerradasFiltradas, now);
   const cargaUsuarios = buildCarga(ativasFiltradas, "usuario", now);
   const cargaDepartamentos = buildCarga(ativasFiltradas, "departamento", now);
@@ -101,8 +115,8 @@ export function TrafegoView() {
   return (
     <div className="flex flex-col gap-6">
       <TrafegoHeader onRefresh={carregar} refreshing={loading} />
-      <TrafegoIniciarSessao onCreated={carregar} />
-      <TrafegoFilters filters={filters} onChange={setFilters} />
+      <TrafegoIniciarSessao onCreated={carregar} demandas={diretorioDemandas} />
+      <TrafegoFilters filters={filters} onChange={setFilters} usuarios={usuarios} departamentos={departamentos} />
 
       {erro ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
@@ -117,11 +131,18 @@ export function TrafegoView() {
             sessoes={[...ativasFiltradas, ...encerradasFiltradas]}
             periodoInicio={periodoParaDataInicio[filters.periodo]()}
           />
-          <TrafegoAgoraTable sessoes={ativasFiltradas} now={now} onChanged={carregar} />
+          <TrafegoAgoraTable
+              sessoes={ativasFiltradas}
+              now={now}
+              onChanged={carregar}
+              diretorioDemandas={diretorioDemandas}
+              diretorioUsuarios={usuarios}
+              diretorioDepartamentos={departamentos}
+            />
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <TrafegoCargaUsuarios cargas={cargaUsuarios} />
-            <TrafegoCargaDepartamentos cargas={cargaDepartamentos} />
+            <TrafegoCargaUsuarios cargas={cargaUsuarios} diretorio={usuarios} />
+            <TrafegoCargaDepartamentos cargas={cargaDepartamentos} diretorio={departamentos} />
             <TrafegoCargaEquipes cargas={cargaEquipes} equipes={equipes} />
           </div>
         </>

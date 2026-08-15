@@ -5,11 +5,27 @@ import { PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { abrirSessaoTrabalho } from "@/lib/api";
-import { EMPRESA_TRAFEGO_PADRAO_ID, trafegoDemandasDisponiveis, trafegoUsuariosDisponiveis } from "@/lib/trafego";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import type { DemandaDiretorio } from "@/types/demanda";
 
-export function TrafegoIniciarSessao({ onCreated }: { onCreated: () => void }) {
-  const [usuarioId, setUsuarioId] = useState(trafegoUsuariosDisponiveis[0].id);
-  const [demandaId, setDemandaId] = useState(trafegoDemandasDisponiveis[0].id);
+/**
+ * `usuarioId` enviado ao abrir sessão é o **UUID real** de `usuarios.id`, vindo do diretório
+ * autenticado — não mais a lista mock (`user-1`…`user-5`) de `legacy-referencias-mock.ts`.
+ *
+ * Isso não é só limpeza: é o que faz `sessoes_trabalho.usuario_uuid` ter produtor. Sem um UUID
+ * real chegando aqui, toda sessão nova nasceria com o vínculo de usuário não resolvível —
+ * ver docstring de `app/models/sessao_trabalho.py` no backend.
+ */
+export function TrafegoIniciarSessao({
+  onCreated,
+  demandas,
+}: {
+  onCreated: () => void;
+  demandas: DemandaDiretorio[];
+}) {
+  const { usuarios } = useDiretorioUsuarios();
+  const [usuarioId, setUsuarioId] = useState("");
+  const [demandaId, setDemandaId] = useState("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -18,7 +34,6 @@ export function TrafegoIniciarSessao({ onCreated }: { onCreated: () => void }) {
     setErro(null);
     try {
       await abrirSessaoTrabalho({
-        empresaId: EMPRESA_TRAFEGO_PADRAO_ID,
         demandaId,
         usuarioId,
       });
@@ -38,16 +53,22 @@ export function TrafegoIniciarSessao({ onCreated }: { onCreated: () => void }) {
             label="Usuário"
             value={usuarioId}
             onChange={(event) => setUsuarioId(event.target.value)}
-            options={trafegoUsuariosDisponiveis.map((usuario) => ({ value: usuario.id, label: usuario.nome }))}
+            options={[
+              { value: "", label: "Selecionar…" },
+              ...usuarios.map((usuario) => ({ value: usuario.id, label: usuario.nome })),
+            ]}
           />
           <Select
             label="Demanda"
             value={demandaId}
             onChange={(event) => setDemandaId(event.target.value)}
-            options={trafegoDemandasDisponiveis.map((demanda) => ({ value: demanda.id, label: demanda.nome }))}
+            options={demandas.map((demanda) => ({
+                value: demanda.id,
+                label: `#${demanda.numeroOperacional} — ${demanda.nome}`,
+              }))}
           />
         </div>
-        <Button onClick={handleIniciar} disabled={loading}>
+        <Button onClick={handleIniciar} disabled={loading || !demandaId || !usuarioId}>
           <PlayCircle className="h-4 w-4" />
           {loading ? "Iniciando…" : "Iniciar sessão de teste"}
         </Button>

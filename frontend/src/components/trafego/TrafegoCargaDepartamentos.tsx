@@ -1,9 +1,16 @@
 import { Badge } from "@/components/ui/Badge";
 import { RankingCard } from "@/components/ui/RankingCard";
 import { classifyCarga, formatTempoOperacional, resolveTrafegoDepartamentoNome } from "@/lib/trafego";
+import type { DepartamentoDiretorioItem } from "@/lib/api-backend";
 import type { TrafegoCargaItem } from "@/types/trafego";
 
-export function TrafegoCargaDepartamentos({ cargas }: { cargas: TrafegoCargaItem[] }) {
+export function TrafegoCargaDepartamentos({
+  cargas,
+  diretorio,
+}: {
+  cargas: TrafegoCargaItem[];
+  diretorio: DepartamentoDiretorioItem[];
+}) {
   const maxValue = Math.max(1, ...cargas.map((carga) => carga.tempoAtivoTotalSegundos));
 
   return (
@@ -16,7 +23,7 @@ export function TrafegoCargaDepartamentos({ cargas }: { cargas: TrafegoCargaItem
         const classification = classifyCarga(carga.tempoAtivoTotalSegundos);
         return {
           id: carga.agrupamentoId,
-          label: resolveTrafegoDepartamentoNome(carga.agrupamentoId),
+          label: resolveTrafegoDepartamentoNome(carga.agrupamentoId, diretorio),
           value: carga.tempoAtivoTotalSegundos,
           maxValue,
           displayValue: formatTempoOperacional(carga.tempoAtivoTotalSegundos),

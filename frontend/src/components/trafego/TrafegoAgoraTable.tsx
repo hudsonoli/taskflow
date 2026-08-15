@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { fecharSessaoTrabalho } from "@/lib/api";
 import { elapsedSeconds, formatTempoOperacional, resolveTrafegoDemandaNome, resolveTrafegoDepartamentoNome, resolveTrafegoUsuarioNome } from "@/lib/trafego";
+import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import type { DemandaDiretorio } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 
 function formatInicio(value: string) {
@@ -19,7 +21,23 @@ function formatInicio(value: string) {
   }).format(new Date(value));
 }
 
-export function TrafegoAgoraTable({ sessoes, now, onChanged }: { sessoes: SessaoTrabalho[]; now: Date; onChanged: () => void }) {
+export function TrafegoAgoraTable({
+  sessoes,
+  now,
+  onChanged,
+  diretorioDemandas,
+  diretorioUsuarios,
+  diretorioDepartamentos,
+}: {
+  sessoes: SessaoTrabalho[];
+  now: Date;
+  onChanged: () => void;
+  // Vem do contexto/hooks de diretório, já escopados pelo servidor — a tabela não busca nada
+  // por conta própria.
+  diretorioDemandas: DemandaDiretorio[];
+  diretorioUsuarios: UsuarioDiretorioItem[];
+  diretorioDepartamentos: DepartamentoDiretorioItem[];
+}) {
   const [encerrandoId, setEncerrandoId] = useState<string | null>(null);
 
   const ordenadas = [...sessoes].sort((a, b) => elapsedSeconds(b, now) - elapsedSeconds(a, now));
@@ -75,12 +93,12 @@ export function TrafegoAgoraTable({ sessoes, now, onChanged }: { sessoes: Sessao
                             <Activity className="h-4 w-4" />
                           </span>
                           <div>
-                            <p className="font-semibold text-zinc-950 dark:text-zinc-50">{resolveTrafegoUsuarioNome(sessao.usuarioId)}</p>
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400">{resolveTrafegoDepartamentoNome(sessao.departamentoId)}</p>
+                            <p className="font-semibold text-zinc-950 dark:text-zinc-50">{resolveTrafegoUsuarioNome(sessao.usuarioId, diretorioUsuarios)}</p>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">{resolveTrafegoDepartamentoNome(sessao.departamentoId, diretorioDepartamentos)}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{resolveTrafegoDemandaNome(sessao.demandaId)}</td>
+                      <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{resolveTrafegoDemandaNome(sessao.demandaId, diretorioDemandas)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-400">{formatInicio(sessao.inicioEm)}</td>
                       <td className="px-4 py-3 text-right font-mono font-bold tabular-nums text-zinc-950 dark:text-zinc-50">
                         {formatTempoOperacional(elapsedSeconds(sessao, now))}

@@ -6,15 +6,19 @@ import { Input } from "@/components/ui/Input";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
-import { trafegoDepartamentosDisponiveis, trafegoUsuariosDisponiveis } from "@/lib/trafego";
+import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { TrafegoFiltersState } from "@/types/trafego";
 
 export function TrafegoFilters({
   filters,
   onChange,
+  usuarios,
+  departamentos,
 }: {
   filters: TrafegoFiltersState;
   onChange: (filters: TrafegoFiltersState) => void;
+  usuarios: UsuarioDiretorioItem[];
+  departamentos: DepartamentoDiretorioItem[];
 }) {
   function updateFilter<Key extends keyof TrafegoFiltersState>(key: Key, value: TrafegoFiltersState[Key]) {
     onChange({ ...filters, [key]: value });
@@ -59,13 +63,13 @@ export function TrafegoFilters({
           values={filters.usuarioIds}
           onChange={(values) => updateFilter("usuarioIds", values)}
           placeholder="Selecionar usuários…"
-          options={trafegoUsuariosDisponiveis.map((usuario) => ({ id: usuario.id, nome: usuario.nome }))}
+          options={usuarios.map((usuario) => ({ id: usuario.id, nome: usuario.nome }))}
         />
         <MultiSelect
           label="Departamento"
           values={filters.departamentoIds}
           onChange={(values) => updateFilter("departamentoIds", values)}
-          options={trafegoDepartamentosDisponiveis.map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
+          options={departamentos.map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
         />
         <Input
           label="Demanda"

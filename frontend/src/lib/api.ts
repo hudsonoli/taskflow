@@ -75,8 +75,9 @@ export async function excluirArquivoDemanda(codigo: string, nomeArquivo: string,
   }
 }
 
+// Sem `empresaId`: a empresa vem do token no servidor. Mandá-la do cliente era um convite a
+// divergir — o valor em uso era a string mock "empresa-principal", que nem existe no banco.
 export interface ListSessoesTrabalhoParams {
-  empresaId?: string;
   usuarioId?: string;
   departamentoId?: string;
   status?: SessaoTrabalhoStatus;
@@ -86,7 +87,6 @@ export interface ListSessoesTrabalhoParams {
 
 export async function listSessoesTrabalho(params: ListSessoesTrabalhoParams = {}): Promise<SessaoTrabalho[]> {
   const search = new URLSearchParams();
-  if (params.empresaId) search.set("empresaId", params.empresaId);
   if (params.usuarioId) search.set("usuarioId", params.usuarioId);
   if (params.departamentoId) search.set("departamentoId", params.departamentoId);
   if (params.status) search.set("status", params.status);
@@ -103,7 +103,6 @@ export async function listSessoesTrabalho(params: ListSessoesTrabalhoParams = {}
 }
 
 export interface AbrirSessaoTrabalhoPayload {
-  empresaId: string;
   agenciaId?: string | null;
   demandaId: string;
   workflowEtapaId?: string | null;
@@ -141,6 +140,24 @@ export async function listEventos(params: ListEventosParams = {}): Promise<Event
   });
   if (!response.ok) {
     throw new Error("Falha ao carregar eventos");
+  }
+  return response.json();
+}
+
+export interface HorasDepartamento {
+  departamentoId: string;
+  horasConsumidas: number;
+  sessoesConsideradas: number;
+}
+
+export async function getHorasDepartamento(departamentoId: string): Promise<HorasDepartamento> {
+  const search = new URLSearchParams({ departamentoId });
+  const response = await fetch(`${API_PROXY}/sessoes-trabalho/horas?${search.toString()}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? "Falha ao carregar horas consumidas do departamento");
   }
   return response.json();
 }
