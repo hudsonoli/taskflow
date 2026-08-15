@@ -23,23 +23,20 @@ import { TarefasLista } from "@/components/operacional/TarefasLista";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { listSessoesTrabalho } from "@/lib/api";
+import { getHorasDepartamento } from "@/lib/api";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
-import { demandaTemResponsavel, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels } from "@/lib/demandas-mock";
+import { demandaTemResponsavel, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels } from "@/lib/demandas";
 import {
   capacidadeAproximada,
   classificarTarefa,
   detectarSobrecargaEstimada,
   formatHoras,
   horasEstimadasDemanda,
-  horasExecutadasPorEscopo,
   podeAcessarMeuDepartamento,
   resolverHeadDepartamento,
   tarefasDoDepartamento,
 } from "@/lib/escopo-operacional";
 import type { DemandaPrioridade, DemandaStatus } from "@/types/demanda";
-import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
 type PeriodoFiltro = "todos" | "hoje" | "semana" | "atrasadas";
@@ -63,48 +60,50 @@ export function MeuDepartamentoView() {
   const [periodo, setPeriodo] = useState<PeriodoFiltro>("todos");
   const [origem, setOrigem] = useState<OrigemFiltro>("todos");
 
-  const [sessoes, setSessoes] = useState<SessaoTrabalho[]>([]);
-  const [carregandoSessoes, setCarregandoSessoes] = useState(true);
-  const [erroSessoes, setErroSessoes] = useState<string | null>(null);
+  const [horasConsumidas, setHorasConsumidas] = useState(0);
+  const [carregandoHoras, setCarregandoHoras] = useState(true);
+  const [erroHoras, setErroHoras] = useState<string | null>(null);
 
-  async function carregarSessoes() {
-    setCarregandoSessoes(true);
-    setErroSessoes(null);
+  const departamentoHead = usuarioAtual ? resolverHeadDepartamento(usuarioAtual, departamentos) : undefined;
+  const podeAcessar = usuarioAtual ? podeAcessarMeuDepartamento(usuarioAtual, departamentos) : false;
+
+  async function carregarHoras(departamentoId: string) {
+    setCarregandoHoras(true);
+    setErroHoras(null);
     try {
-      const resultado = await listSessoesTrabalho({ limit: 200 });
-      setSessoes(resultado);
+      const resultado = await getHorasDepartamento(departamentoId);
+      setHorasConsumidas(resultado.horasConsumidas);
     } catch (error) {
-      setErroSessoes(error instanceof Error ? error.message : "Não foi possível carregar as sessões (API indisponível).");
+      setErroHoras(error instanceof Error ? error.message : "Não foi possível carregar as horas (API indisponível).");
     } finally {
-      setCarregandoSessoes(false);
+      setCarregandoHoras(false);
     }
   }
 
   useEffect(() => {
+    if (!departamentoHead) return;
     const timeoutId = setTimeout(() => {
-      void carregarSessoes();
+      void carregarHoras(departamentoHead.id);
     }, 0);
     return () => clearTimeout(timeoutId);
-  }, []);
-
-  const departamentoHead = usuarioAtual ? resolverHeadDepartamento(usuarioAtual, departamentos) : undefined;
-  const podeAcessar = usuarioAtual ? podeAcessarMeuDepartamento(usuarioAtual, departamentos) : false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [departamentoHead?.id]);
 
   const tarefasDoDept = useMemo(
     () => (departamentoHead ? tarefasDoDepartamento(demandas, departamentoHead.id) : []),
     [demandas, departamentoHead],
   );
 
+  // Colaborador estrutural do departamento = vínculo organizacional (usuarios.departamentoId),
+  // não responsabilidade em Demanda — existe mesmo sem nenhuma tarefa atribuída ainda. Só
+  // usuários ativos entram na base de capacidade/sobrecarga (mesmo padrão de
+  // `UsuarioDiretorioItem` para listas selecionáveis).
   const colaboradoresOptions = useMemo(() => {
-    const ids = new Set<string>();
-    tarefasDoDept.forEach((demanda) =>
-      demanda.usuarioResponsavelIds.forEach((id) => {
-        const resolvido = resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios);
-        if (resolvido) ids.add(resolvido.id);
-      }),
+    if (!departamentoHead) return [];
+    return usuarios.filter(
+      (usuario) => usuario.departamentoId === departamentoHead.id && usuario.status === "ativo",
     );
-    return usuarios.filter((usuario) => ids.has(usuario.id));
-  }, [tarefasDoDept, usuarios]);
+  }, [usuarios, departamentoHead]);
 
   const clientesOptions = useMemo(() => {
     const ids = new Set(tarefasDoDept.map((demanda) => demanda.clienteId).filter(Boolean));
@@ -150,10 +149,6 @@ export function MeuDepartamentoView() {
   const concluidas = classificacoesDept.filter((c) => c.concluida).length;
 
   const horasEstimadasTotal = tarefasDoDept.reduce((total, demanda) => total + horasEstimadasDemanda(demanda), 0);
-  const horasConsumidas = horasExecutadasPorEscopo(sessoes, {
-    usuarioIds: colaboradoresOptions.map((usuario) => usuario.id),
-    departamentoIds: departamentoHead ? [departamentoHead.id] : [],
-  });
   const capacidadeTotal = capacidadeAproximada(regraExpediente, colaboradoresOptions.length, DIAS_UTEIS_SEMANA);
   const capacidadeDisponivel = Math.max(0, capacidadeTotal - horasConsumidas);
 
@@ -174,7 +169,7 @@ export function MeuDepartamentoView() {
     { key: "atrasadas", title: "Atrasadas", value: atrasadas, description: "Prazo da etapa atual vencido.", icon: <AlertTriangle size={16} />, tone: "red" },
     { key: "concluidas", title: "Concluídas", value: concluidas, description: "Finalizadas.", icon: <CheckCircle2 size={16} />, tone: "green" },
     { key: "horas-estimadas", title: "Horas estimadas (aprox.)", value: formatHoras(horasEstimadasTotal), description: "Soma do workflow — estimativa derivada.", icon: <Timer size={16} />, tone: "neutral" },
-    { key: "horas-consumidas", title: "Horas consumidas", value: carregandoSessoes ? "…" : formatHoras(horasConsumidas), description: "Sessões de trabalho reais do departamento.", icon: <Timer size={16} />, tone: "neutral" },
+    { key: "horas-consumidas", title: "Horas consumidas", value: carregandoHoras ? "…" : formatHoras(horasConsumidas), description: "Sessões de trabalho reais do departamento.", icon: <Timer size={16} />, tone: "neutral" },
     { key: "capacidade-disponivel", title: "Capacidade disponível (aprox.)", value: formatHoras(capacidadeDisponivel), description: "Capacidade aproximada da semana menos consumido.", icon: <Gauge size={16} />, tone: "blue" },
     { key: "sobrecarregados", title: "Colaboradores sobrecarregados", value: colaboradoresSobrecarregados, description: "Estimativa acima da capacidade aproximada.", icon: <ShieldAlert size={16} />, tone: colaboradoresSobrecarregados > 0 ? "red" : "neutral" },
   ];
@@ -199,7 +194,12 @@ export function MeuDepartamentoView() {
 
       <IndicadoresGrid itens={indicadores} colunas={4} />
 
-      {erroSessoes && <EstadoErro mensagem={`${erroSessoes} — horas consumidas ficaram indisponíveis.`} onRetry={() => void carregarSessoes()} />}
+      {erroHoras && departamentoHead && (
+        <EstadoErro
+          mensagem={`${erroHoras} — horas consumidas ficaram indisponíveis.`}
+          onRetry={() => void carregarHoras(departamentoHead.id)}
+        />
+      )}
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Filtros</p>

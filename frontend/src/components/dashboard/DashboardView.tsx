@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -11,44 +11,29 @@ import {
   Flag,
   Lock,
   PauseCircle,
-  RotateCw,
   Send,
   Sparkles,
-  Timer,
   TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { SessoesTrabalhoPanel } from "@/components/dashboard/SessoesTrabalhoPanel";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { listSessoesTrabalho } from "@/lib/api";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverDepartamentoNome } from "@/lib/referencias";
-import { formatPrazo, generateId, resolveProjetoDemandaNome, statusDemandaLabels } from "@/lib/demandas-mock";
-import {
-  classificarTarefa,
-  formatHoras,
-  horasEstimadasDemanda,
-  horasExecutadasPorEscopo,
-  inicioDaSemana,
-  mesmoDia,
-  tarefasDoUsuario,
-} from "@/lib/escopo-operacional";
+import { formatPrazo, generateId, resolveProjetoDemandaNome, statusDemandaLabels } from "@/lib/demandas";
+import { classificarTarefa, inicioDaSemana, mesmoDia, tarefasDoUsuario } from "@/lib/escopo-operacional";
 import { podeCriarDemanda } from "@/types/usuario";
 import type { Demanda } from "@/types/demanda";
-import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { resolverClientePorReferencia } from "@/lib/referencias";
+import { rotuloDemanda } from "@/lib/referencias";
 
 export function DashboardView() {
   const { demandas, setDemandas, usuarioAtual } = useAppData();
   const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios: diretorio } = useDiretorioUsuarios();
-  const [sessoes, setSessoes] = useState<SessaoTrabalho[]>([]);
-  const [carregandoSessoes, setCarregandoSessoes] = useState(true);
-  const [erroSessoes, setErroSessoes] = useState<string | null>(null);
 
   const departamentoAtualNome = usuarioAtual ? resolverDepartamentoNome(usuarioAtual.departamentoId, departamentos) : "";
   const podeSinalizar = usuarioAtual ? podeCriarDemanda(usuarioAtual, departamentoAtualNome) : false;
@@ -57,28 +42,6 @@ export function DashboardView() {
     () => (usuarioAtual ? tarefasDoUsuario(demandas, usuarioAtual.id, diretorio) : []),
     [demandas, usuarioAtual, diretorio],
   );
-
-  async function carregarSessoes() {
-    if (!usuarioAtual) return;
-    setCarregandoSessoes(true);
-    setErroSessoes(null);
-    try {
-      const resultado = await listSessoesTrabalho({ usuarioId: usuarioAtual.id, limit: 200 });
-      setSessoes(resultado);
-    } catch (error) {
-      setErroSessoes(error instanceof Error ? error.message : "Não foi possível carregar as sessões (API indisponível).");
-    } finally {
-      setCarregandoSessoes(false);
-    }
-  }
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      void carregarSessoes();
-    }, 0);
-    return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usuarioAtual?.id]);
 
   const classificacoes = useMemo(
     () => minhasTarefas.map((demanda) => ({ demanda, classificacao: classificarTarefa(demanda) })),
@@ -95,9 +58,6 @@ export function DashboardView() {
   const previstasHoje = classificacoes.filter((item) => item.classificacao.previstaHoje).length;
   const previstasSemana = classificacoes.filter((item) => item.classificacao.previstaSemana).length;
 
-  const horasEstimadasTotal = minhasTarefas.reduce((total, demanda) => total + horasEstimadasDemanda(demanda), 0);
-  const horasExecutadasTotal = usuarioAtual ? horasExecutadasPorEscopo(sessoes, { usuarioIds: [usuarioAtual.id] }) : 0;
-
   const STATS = [
     { label: "Tarefas ativas", value: String(ativas), icon: Sparkles, accent: "linear-gradient(135deg,#6366f1,#8b5cf6)" },
     { label: "Novas", value: String(novas), icon: CalendarClock, accent: "linear-gradient(135deg,#38bdf8,#6366f1)" },
@@ -108,18 +68,6 @@ export function DashboardView() {
     { label: "Concluídas", value: String(concluidas), icon: CheckCircle2, accent: "linear-gradient(135deg,#22c55e,#0ea5e9)" },
     { label: "Previstas para hoje", value: String(previstasHoje), icon: CalendarDays, accent: "linear-gradient(135deg,#8b5cf6,#6366f1)" },
     { label: "Previstas para a semana", value: String(previstasSemana), icon: Clock3, accent: "linear-gradient(135deg,#8b5cf6,#a855f7)" },
-    {
-      label: "Horas estimadas (aprox.)",
-      value: formatHoras(horasEstimadasTotal),
-      icon: Timer,
-      accent: "linear-gradient(135deg,#64748b,#475569)",
-    },
-    {
-      label: "Horas executadas",
-      value: carregandoSessoes ? "…" : formatHoras(horasExecutadasTotal),
-      icon: Timer,
-      accent: "linear-gradient(135deg,#22c55e,#16a34a)",
-    },
   ];
 
   const agora = new Date();
@@ -195,25 +143,11 @@ export function DashboardView() {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {STATS.map((stat, index) => (
           <StatCard key={stat.label} index={index} {...stat} />
         ))}
       </div>
-
-      {erroSessoes && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-          <span>{erroSessoes} — &quot;Horas executadas&quot; ficou indisponível.</span>
-          <button
-            type="button"
-            onClick={() => void carregarSessoes()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-semibold hover:bg-red-100 dark:border-red-500/30 dark:hover:bg-red-500/10"
-          >
-            <RotateCw className="h-3.5 w-3.5" />
-            Tentar novamente
-          </button>
-        </div>
-      )}
 
       <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 shadow-sm dark:border-indigo-500/20 dark:bg-indigo-500/5 sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-500 dark:text-indigo-400">Resumo</p>
@@ -246,7 +180,7 @@ export function DashboardView() {
                 <li key={demanda.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {demanda.codigoInterno} · {demanda.nome}
+                      {rotuloDemanda(demanda)} · {demanda.nome}
                     </p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
                       <span>{cliente?.nome ?? "Sem cliente"}</span>
@@ -293,8 +227,6 @@ export function DashboardView() {
           </ul>
         )}
       </div>
-
-      <SessoesTrabalhoPanel />
     </div>
   );
 }
