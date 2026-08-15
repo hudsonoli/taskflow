@@ -2,6 +2,21 @@ import type { SessaoTrabalho, SessaoTrabalhoStatus } from "@/types/sessao-trabal
 import type { DemandaArquivo } from "@/types/demanda";
 import type { EventoApi } from "@/types/acesso";
 
+/**
+ * Estas chamadas passaram a ir pelo **proxy autenticado** (`/api/backend/**`), como o resto
+ * do app já fazia em `api-backend.ts`.
+ *
+ * Antes elas falavam direto com o FastAPI (`http://localhost:8010`), sem token nenhum — e era
+ * essa a razão de `/eventos`, `/sessoes-trabalho` e os uploads de Demanda terem nascido sem
+ * autenticação no backend: nenhum chamador enviava credencial, então exigir uma teria
+ * quebrado as telas. Corrigido dos dois lados na mesma entrega.
+ *
+ * O proxy lê o cookie HttpOnly e injeta `Authorization: Bearer` — o navegador nunca vê o JWT.
+ */
+const API_PROXY = "/api/backend";
+
+// URL de download/preview de arquivo. Continua apontando para o backend, que serve
+// `/uploads/**` como conteúdo estático — ver docs/pendencias-arquiteturais.md, item 9.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8010";
 
 export { API_BASE_URL };
@@ -13,7 +28,7 @@ export function resolveArquivoUrl(url: string): string {
 export async function uploadArquivoDemanda(codigo: string, file: File): Promise<DemandaArquivo> {
   const formData = new FormData();
   formData.append("file", file);
-  const response = await fetch(`${API_BASE_URL}/demandas/${encodeURIComponent(codigo)}/uploads`, {
+  const response = await fetch(`${API_PROXY}/demandas/${encodeURIComponent(codigo)}/uploads`, {
     method: "POST",
     body: formData,
   });
@@ -27,7 +42,7 @@ export async function uploadArquivoDemanda(codigo: string, file: File): Promise<
 export async function uploadArquivoFinalDemanda(codigo: string, file: File): Promise<DemandaArquivo> {
   const formData = new FormData();
   formData.append("file", file);
-  const response = await fetch(`${API_BASE_URL}/demandas/${encodeURIComponent(codigo)}/uploads/final`, {
+  const response = await fetch(`${API_PROXY}/demandas/${encodeURIComponent(codigo)}/uploads/final`, {
     method: "POST",
     body: formData,
   });
@@ -39,7 +54,7 @@ export async function uploadArquivoFinalDemanda(codigo: string, file: File): Pro
 }
 
 export async function listarArquivosDemanda(codigo: string): Promise<DemandaArquivo[]> {
-  const response = await fetch(`${API_BASE_URL}/demandas/${encodeURIComponent(codigo)}/uploads`, {
+  const response = await fetch(`${API_PROXY}/demandas/${encodeURIComponent(codigo)}/uploads`, {
     cache: "no-store",
   });
   if (!response.ok) {
@@ -51,7 +66,7 @@ export async function listarArquivosDemanda(codigo: string): Promise<DemandaArqu
 export async function excluirArquivoDemanda(codigo: string, nomeArquivo: string, final: boolean): Promise<void> {
   const search = final ? "?final=true" : "";
   const response = await fetch(
-    `${API_BASE_URL}/demandas/${encodeURIComponent(codigo)}/uploads/${encodeURIComponent(nomeArquivo)}${search}`,
+    `${API_PROXY}/demandas/${encodeURIComponent(codigo)}/uploads/${encodeURIComponent(nomeArquivo)}${search}`,
     { method: "DELETE" },
   );
   if (!response.ok && response.status !== 204) {
@@ -78,7 +93,7 @@ export async function listSessoesTrabalho(params: ListSessoesTrabalhoParams = {}
   if (params.dataInicio) search.set("dataInicio", params.dataInicio);
   search.set("limit", String(params.limit ?? 100));
 
-  const response = await fetch(`${API_BASE_URL}/sessoes-trabalho?${search.toString()}`, {
+  const response = await fetch(`${API_PROXY}/sessoes-trabalho?${search.toString()}`, {
     cache: "no-store",
   });
   if (!response.ok) {
@@ -97,7 +112,7 @@ export interface AbrirSessaoTrabalhoPayload {
 }
 
 export async function abrirSessaoTrabalho(payload: AbrirSessaoTrabalhoPayload): Promise<SessaoTrabalho> {
-  const response = await fetch(`${API_BASE_URL}/sessoes-trabalho/abrir`, {
+  const response = await fetch(`${API_PROXY}/sessoes-trabalho/abrir`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -121,7 +136,7 @@ export async function listEventos(params: ListEventosParams = {}): Promise<Event
   search.set("limit", String(params.limit ?? 100));
   if (params.offset) search.set("offset", String(params.offset));
 
-  const response = await fetch(`${API_BASE_URL}/eventos?${search.toString()}`, {
+  const response = await fetch(`${API_PROXY}/eventos?${search.toString()}`, {
     cache: "no-store",
   });
   if (!response.ok) {
@@ -131,7 +146,7 @@ export async function listEventos(params: ListEventosParams = {}): Promise<Event
 }
 
 export async function fecharSessaoTrabalho(sessaoId: string, motivoEncerramento: string): Promise<SessaoTrabalho> {
-  const response = await fetch(`${API_BASE_URL}/sessoes-trabalho/${sessaoId}/fechar`, {
+  const response = await fetch(`${API_PROXY}/sessoes-trabalho/${sessaoId}/fechar`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ motivoEncerramento }),

@@ -16,13 +16,21 @@ async function proxy(request: NextRequest, path: string[]) {
   const targetUrl = `${BACKEND_URL}/${path.join("/")}${request.nextUrl.search}`;
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
 
+  // Upload de arquivo é multipart, não JSON. Forçar `application/json` aqui destruía o
+  // boundary do FormData — por isso os uploads falavam direto com o FastAPI, sem token.
+  // Repassa o Content-Type original quando houver, e só assume JSON no caso comum.
+  const contentTypeOriginal = request.headers.get("content-type");
+  const ehMultipart = contentTypeOriginal?.includes("multipart/form-data") ?? false;
+
   const backendResponse = await fetch(targetUrl, {
     method: request.method,
     headers: {
       Authorization: `Bearer ${token}`,
-      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      ...(hasBody ? { "Content-Type": contentTypeOriginal ?? "application/json" } : {}),
     },
-    body: hasBody ? await request.text() : undefined,
+    // `arrayBuffer` preserva bytes de qualquer corpo, inclusive binário; `text()` corromperia
+    // o conteúdo de um PDF ou PNG.
+    body: hasBody ? (ehMultipart ? await request.arrayBuffer() : await request.text()) : undefined,
     cache: "no-store",
   });
 
@@ -52,6 +60,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
+  const { path } = await params;
+  return proxy(request, path);
+}
+
+// DELETE faltava, e era por isso que a exclusão de arquivo de Demanda ia direto ao FastAPI,
+// sem passar pelo cookie de sessão.
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
   const { path } = await params;
   return proxy(request, path);
 }
