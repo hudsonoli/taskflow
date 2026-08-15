@@ -107,6 +107,127 @@ divergir entre repositories — foi a divergência que causou o incidente.
 
 ---
 
+## 4. `codigo_interno` — quais domínios ainda precisam dele
+
+**Origem:** microfase 2D.1.
+
+`codigo_interno` nasceu como "chave estável de importação": permite a um importador localizar
+um registro sem depender do UUID, que muda a cada ambiente. Isso só faz sentido **onde há
+importação**.
+
+A decisão de arquitetura de 2026-08-09 fixou que as únicas importações por XLSX serão
+Departamentos, Usuários, Clientes, Fornecedores, Grupos de Cliente, Categorias, Peças e
+Modelos de Workflow. **Projetos e Demandas nascem vazios.**
+
+| Domínio | `codigo_interno` | Situação |
+|---|---|---|
+| Departamento, Equipe, GrupoCliente, Cliente, Fornecedor | **mantido** | serão importados — a chave tem função |
+| **Projeto** | **removido em 2D.1** | sem importação, era cópia literal do `codigo_referencia` |
+| **Demanda** | **nunca terá** | mesma razão |
+
+Não há pendência aberta aqui — o registro existe para que ninguém reintroduza o campo por
+simetria ao criar um domínio novo. **Antes de acrescentar `codigo_interno`, pergunte se
+aquele domínio será importado.** Se não for, o campo é peso morto com UNIQUE e índice.
+
+---
+
+## 5. Pausa automática por fim de expediente
+
+**Aberta.** Precisa de um job no backend.
+
+Até a Fase 2E.1, `AppDataContext.tsx` mantinha um `setInterval` de 20 segundos que, fora do
+expediente, mudava toda demanda `em_execucao` para `pausada` e escrevia uma linha em
+`demanda.historico[]` assinada como "Sistema".
+
+Isso foi **removido**, por dois motivos independentes:
+
+1. `historico[]` não tem tabela nesta fase — a linha não teria onde ser gravada;
+2. a regra só rodava com alguém logado e a aba aberta. Ninguém trabalhando às 19h significava
+   nenhuma pausa registrada; duas abas abertas, duas execuções concorrentes.
+
+O que **entrou no lugar**: `app/core/expediente.py` recusa a *entrada* em `em_execucao` fora
+do horário, com 409 `FORA_DE_EXPEDIENTE` — validação no servidor, que nenhum `curl` contorna.
+
+O que **falta**: pausar trabalho **já em curso** quando o expediente termina. É trabalho
+periódico de servidor (job agendado), não de navegador. Enquanto não existir, uma tarefa
+iniciada às 18h55 permanece `em_execucao` durante a noite.
+
+Relacionado: `RegraExpediente` ainda é constante em `app/core/expediente.py`, não tabela — a
+janela não é editável pela interface. A assinatura já recebe a regra como argumento, então
+quando houver tabela muda quem produz `REGRA_PADRAO`, não quem a consome.
+
+---
+
+## 6. `criado_por` fora do escopo-base do operador
+
+**Aberta.** Decisão de produto, não defeito de implementação.
+
+A tabela de escopo aprovada define `operador` como *responsável **ou** departamento*;
+`criado_por` entra apenas no escopo de Atendimento. A consequência observável:
+
+> Um operador **sem departamento** que cria uma demanda **sem se atribuir** recebe 201 e, no
+> instante seguinte, 404 no mesmo id.
+
+Está fixado em
+`backend/tests/test_demanda.py::test_operador_criador_sem_vinculo_perde_a_demanda_de_vista`
+para que qualquer mudança de comportamento seja deliberada.
+
+Duas saídas possíveis, ambas para a Fase 2E.5: incluir `criado_por` no escopo-base de todo
+mundo, ou fazer a interface atribuir o criador como responsável por padrão. A primeira muda a
+regra; a segunda muda o formulário. Não foi decidido.
+
+---
+
+## 9. `/uploads/**` é servido como estático, sem autenticação
+
+**Aberta.** Exposição conhecida, deixada deliberadamente para uma decisão sua.
+
+`app/main.py` monta `StaticFiles(directory="uploads")` em `/uploads`. Os **endpoints** de
+arquivo (`/demandas/{codigo}/uploads`) passaram a exigir autenticação e escopo da própria
+Demanda, mas o **conteúdo** continua acessível por URL direta: quem souber
+`/uploads/T26000001/arquivo.pdf` baixa o arquivo sem token.
+
+Não foi corrigido junto porque muda como a interface carrega imagem e download —
+`resolveArquivoUrl` em `frontend/src/lib/api.ts` monta `<img src>` apontando para esse
+caminho. A correção real é servir o arquivo por um endpoint autenticado (streaming com
+checagem de escopo) e abandonar o mount estático.
+
+Baixo risco **hoje**, porque `arquivos` não tem persistência na Fase 2E.1 e a interface não
+oferece upload — a pasta nasce vazia. Vira risco real em 2E.3, quando o upload voltar.
+
+---
+
+## 10. `GET /sessoes-trabalho/horas` reclassifica sessões antigas quando um usuário muda de departamento
+
+**Aberta.** Limitação conhecida e aceita nesta fase — documentada, não corrigida.
+
+Uma sessão conta para o agregado de horas de um departamento (`SessaoTrabalhoRepository.horas_departamento`)
+quando `sessao.departamento_id` aponta pra ele **OU** quando o usuário responsável pela sessão
+pertence **atualmente** a ele (`usuarios.departamento_id`, lido no momento da consulta — não
+uma foto do departamento de quando a sessão aconteceu).
+
+Consequência: se um usuário muda de departamento, as sessões antigas dele que não têm
+`departamento_id` próprio (a maioria — esse campo só é preenchido quando a sessão nasce sem
+usuário) migram de classificação junto. O agregado do departamento novo passa a contar horas
+que, na época, foram de outro departamento; o antigo deixa de contar.
+
+Não há tabela de histórico de lotação por período nesta fase — não é possível reconstruir "de
+qual departamento este usuário era, na data desta sessão" sem criar esse histórico. A regra
+usa o vínculo atual porque é o único dado disponível, e é a mesma regra já aprovada para
+"colaborador estrutural do departamento" (`usuarios.departamento_id`) usada em
+`app/core/escopo.py::pode_consultar_horas_departamento` e em
+`MeuDepartamentoView.tsx::colaboradoresOptions`.
+
+**Não resolver isso agora.** Se um histórico de lotação por período for criado no futuro (para
+outro motivo), revisitar `horas_departamento` para usar o departamento vigente na data da
+sessão, não o atual.
+
+Referências:
+`backend/app/repositories/sessao_trabalho_repository.py::horas_departamento`
+`backend/app/schemas/sessao_trabalho.py::SessaoTrabalhoHorasRead` (docstring com a mesma nota)
+
+---
+
 ## Referências
 
 - [padrao-arquivamento.md](padrao-arquivamento.md) — soft-delete, motivo obrigatório, conflito-arquivado
