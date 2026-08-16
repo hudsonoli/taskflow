@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Modal } from "@/components/ui/Modal";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { generateId } from "@/lib/ids";
+import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import {
   workflowEtapaTipoLabels,
@@ -28,6 +30,7 @@ function createEtapa(): WorkflowModeloEtapa {
     quantidadeAntesDeadline: 1,
     unidadePrazo: "dias_corridos",
     usuarioResponsavelIds: [],
+    departamentoResponsavelIds: [],
   };
 }
 
@@ -53,6 +56,7 @@ export function WorkflowModeloFormModal({
   salvando?: boolean;
 }) {
   const { usuarios } = useDiretorioUsuarios();
+  const { departamentos } = useDiretorioDepartamentos();
   const [draft, setDraft] = useState<WorkflowModeloFormDraft>(() => createInitialDraft(modelo));
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
@@ -69,6 +73,11 @@ export function WorkflowModeloFormModal({
       corIdentificacao: usuario.corIdentificacao,
       fotoUrl: usuario.fotoUrl,
     }));
+
+  // Mesmo critério: picker só oferece departamento ativo, grava departamento.id real.
+  const departamentoOptions = departamentos
+    .filter((departamento) => departamento.status === "ativo")
+    .map((departamento) => ({ value: departamento.id, label: departamento.nome }));
 
   function updateDraft(patch: Partial<WorkflowModeloFormDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -261,7 +270,7 @@ export function WorkflowModeloFormModal({
                     </div>
 
                     <MemberSelector
-                      label="Responsáveis padrão"
+                      label="Responsáveis padrão (usuários)"
                       values={etapa.usuarioResponsavelIds}
                       onChange={(values) => updateEtapa(etapa.id, { usuarioResponsavelIds: values })}
                       placeholder="Selecionar responsáveis…"
@@ -270,6 +279,13 @@ export function WorkflowModeloFormModal({
                     {responsaveisSelecionados.length === 0 && (
                       <p className="text-xs text-zinc-400">Sem responsável padrão — definido na tarefa ao aplicar o modelo.</p>
                     )}
+
+                    <MultiSelect
+                      label="Departamentos responsáveis padrão"
+                      values={etapa.departamentoResponsavelIds}
+                      onChange={(values) => updateEtapa(etapa.id, { departamentoResponsavelIds: values })}
+                      options={departamentoOptions}
+                    />
                   </div>
                 )}
               </div>

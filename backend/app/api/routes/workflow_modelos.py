@@ -10,6 +10,7 @@ from app.models.usuario import Usuario
 from app.schemas.workflow_modelo import (
     WorkflowModeloArquivar,
     WorkflowModeloCreate,
+    WorkflowModeloDiretorioRead,
     WorkflowModeloRead,
     WorkflowModeloUpdate,
 )
@@ -88,10 +89,27 @@ def list_workflow_modelos(
     return [workflow_modelo_service.to_read(db, item) for item in workflow_modelos]
 
 
+@router.get("/diretorio", response_model=list[WorkflowModeloDiretorioRead])
+def list_diretorio(
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    # Aberto a qualquer autenticado — mesmo tier de leitura/criação de Demanda: selecionar
+    # workflow ao criar tarefa não é administrar Workflow (isso continua require_admin_or_gestor
+    # em todas as outras rotas deste router). Só ativo: não há referência histórica a
+    # resolver aqui, diferente do /diretorio de Departamento/Cliente.
+    workflow_modelos = workflow_modelo_service.list_diretorio(db, empresa_id=current_user.empresa_id)
+    return [workflow_modelo_service.to_diretorio_read(item) for item in workflow_modelos]
+
+
 @router.get("/{workflow_modelo_id}", response_model=WorkflowModeloRead)
 def get_workflow_modelo(
     workflow_modelo_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    # Aberto a qualquer autenticado — mesmo motivo de GET /diretorio: quem pode criar
+    # Demanda precisa ver o detalhe completo (etapas) do workflow escolhido antes de aplicar,
+    # não só nome/id. Ainda tenant-escopado (ensure_resource_empresa abaixo); administrar
+    # (POST/PATCH/arquivar/restaurar) continua admin/gestor.
+    current_user: Usuario = Depends(get_current_user_password_ready),
     db: Session = Depends(get_db),
 ):
     try:

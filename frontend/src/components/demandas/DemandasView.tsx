@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   resolveClienteProjetoNome,
-  resolveDepartamentosProjetoNomes,
   resolveProjetoDemandaNome,
   resolveResponsaveisDemandaNomes,
 } from "@/lib/demandas";
@@ -21,7 +20,7 @@ import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { resolverDepartamentoNome } from "@/lib/referencias";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import type { UsuarioDiretorioItem } from "@/lib/api-backend";
+import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
 import { podeCriarDemanda } from "@/types/usuario";
 import type { Demanda, DemandaFormDraft, DemandaStatusEditavel } from "@/types/demanda";
@@ -49,7 +48,12 @@ function normalize(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-function matchesDemanda(demanda: Demanda, query: string, usuarios: UsuarioDiretorioItem[]) {
+function matchesDemanda(
+  demanda: Demanda,
+  query: string,
+  usuarios: UsuarioDiretorioItem[],
+  departamentos: DepartamentoDiretorioItem[],
+) {
   const haystack = [
     demanda.nome,
     rotuloDemanda(demanda),
@@ -57,7 +61,7 @@ function matchesDemanda(demanda: Demanda, query: string, usuarios: UsuarioDireto
     resolveProjetoDemandaNome(demanda.projetoId),
     resolveClienteProjetoNome(demanda.clienteId),
     resolveResponsaveisDemandaNomes(demanda.usuarioResponsavelIds, usuarios),
-    resolveDepartamentosProjetoNomes(demanda.departamentoResponsavelIds),
+    demanda.departamentoResponsavelIds.map((id) => resolverDepartamentoNome(id, departamentos)).join(" "),
   ].join(" ");
 
   return normalize(haystack).includes(normalize(query));
@@ -111,10 +115,10 @@ export function DemandasView() {
   const filteredDemands = useMemo(
     () =>
       demandas.filter((demanda) => {
-        const queryMatches = query.trim() ? matchesDemanda(demanda, query, usuarios) : true;
+        const queryMatches = query.trim() ? matchesDemanda(demanda, query, usuarios, departamentos) : true;
         return statusMatchesFilter(demanda, statusFilter) && queryMatches;
       }),
-    [demandas, query, statusFilter, usuarios],
+    [demandas, query, statusFilter, usuarios, departamentos],
   );
 
   async function upsertDemand(draft: DemandaFormDraft, demandaId?: string): Promise<string | null> {
@@ -202,7 +206,7 @@ export function DemandasView() {
               </p>
             </div>
           </div>
-          <Badge tone="blue">Dados locais</Badge>
+          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

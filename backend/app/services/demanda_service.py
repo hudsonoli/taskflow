@@ -13,12 +13,18 @@ from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
 from app.models.demanda_departamento import DemandaDepartamento
 from app.models.demanda_responsavel import DemandaResponsavel
+from app.models.demanda_workflow_etapa import DemandaWorkflowEtapa
+from app.models.demanda_workflow_etapa_departamento_responsavel import (
+    DemandaWorkflowEtapaDepartamentoResponsavel,
+)
+from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaResponsavel
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.demanda_repository import DemandaRepository
 from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.projeto_repository import ProjetoRepository
 from app.repositories.usuario_repository import UsuarioRepository
-from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate
+from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
+from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead
 from app.services.domain_event_publisher import DomainEventPublisher
 
 # `tarefa` no gerador de referência (prefixo T) e `demanda` no contador operacional: são
@@ -36,6 +42,12 @@ STATUS_BLOQUEADA = "bloqueada"
 # Mesma regra de Cliente, Projeto e Departamento: um usuário nestes estados não pode ser
 # DEFINIDO como responsável novo. Vínculo histórico continua valendo.
 STATUS_USUARIO_INVALIDO = {"arquivado", "inativo", "bloqueado"}
+
+# Toda etapa materializada nasce pendente — não há automação de avanço nesta fase (ver
+# docstring de DemandaWorkflowEtapa e a decisão de etapa_atual ser derivada, não persistida).
+STATUS_ETAPA_WORKFLOW_PENDENTE = "pendente"
+STATUS_ETAPA_WORKFLOW_CONCLUIDA = "concluida"
+WORKFLOW_MODELO_STATUS_ATIVO = "ativo"
 
 _CAMPOS_SIMPLES = (
     "pit",
@@ -97,6 +109,10 @@ class DemandaDepartamentoInvalidoError(ValueError):
     """Departamento inexistente, de outra empresa ou arquivado (vínculo novo)."""
 
 
+class DemandaWorkflowModeloInvalidoError(ValueError):
+    """WorkflowModelo inexistente, de outra empresa ou não ativo (aplicação nova)."""
+
+
 class DemandaService:
     def __init__(
         self,
@@ -105,6 +121,7 @@ class DemandaService:
         projeto_repository: ProjetoRepository | None = None,
         usuario_repository: UsuarioRepository | None = None,
         departamento_repository: DepartamentoRepository | None = None,
+        workflow_modelo_repository: WorkflowModeloRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
         regra_expediente: RegraExpediente | None = None,
     ) -> None:
@@ -113,6 +130,7 @@ class DemandaService:
         self.projeto_repository = projeto_repository or ProjetoRepository()
         self.usuario_repository = usuario_repository or UsuarioRepository()
         self.departamento_repository = departamento_repository or DepartamentoRepository()
+        self.workflow_modelo_repository = workflow_modelo_repository or WorkflowModeloRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
         # Injetável para o teste conseguir fixar a janela sem depender do relógio da máquina.
         self.regra_expediente = regra_expediente or REGRA_PADRAO
@@ -132,6 +150,7 @@ class DemandaService:
         now = agora_utc()
         cliente_id = str(data.cliente_id) if data.cliente_id else None
         projeto_id = str(data.projeto_id) if data.projeto_id else None
+        workflow_modelo_id = str(data.workflow_modelo_id) if data.workflow_modelo_id else None
         responsavel_ids = [str(uid) for uid in (data.responsavel_ids or [])]
         departamento_ids = [str(did) for did in (data.departamento_responsavel_ids or [])]
         status = data.status or STATUS_PADRAO
@@ -143,6 +162,8 @@ class DemandaService:
                 self._ensure_cliente_valido(db, empresa_id, cliente_id)
             if projeto_id is not None:
                 self._ensure_projeto_valido(db, empresa_id, projeto_id)
+            if workflow_modelo_id is not None:
+                self._ensure_workflow_modelo_valido(db, empresa_id, workflow_modelo_id)
             for usuario_id in responsavel_ids:
                 self._ensure_usuario_valido(db, empresa_id, usuario_id)
             for departamento_id in departamento_ids:
@@ -171,11 +192,17 @@ class DemandaService:
                 cliente_id=cliente_id,
                 projeto_id=projeto_id,
                 criado_por_usuario_id=actor_usuario_id,
+                workflow_modelo_id=workflow_modelo_id,
                 created_at=now,
                 updated_at=now,
                 **{campo: getattr(data, campo) for campo in _CAMPOS_SIMPLES},
             )
             self.repository.create(db, demanda)
+
+            if workflow_modelo_id is not None:
+                self._materializar_workflow(
+                    db, demanda, workflow_modelo_id=workflow_modelo_id, empresa_id=empresa_id, now=now
+                )
 
             for usuario_id in responsavel_ids:
                 self.repository.adicionar_responsavel(
@@ -467,35 +494,79 @@ class DemandaService:
     # ----------------------------------------------------------------------------------
 
     def to_read(self, db: Session, demanda: Demanda) -> DemandaRead:
+        etapas_por_demanda = self._etapas_workflow_por_demanda(db, [demanda.id])
+        etapas = etapas_por_demanda.get(demanda.id, [])
         return DemandaRead.model_validate(
             {
                 **self._campos_base(demanda),
                 "usuarioResponsavelIds": self.repository.listar_responsavel_ids(db, demanda.id),
                 "departamentoResponsavelIds": self.repository.listar_departamento_ids(db, demanda.id),
+                "workflowEtapas": etapas,
+                "etapaAtualId": self._derivar_etapa_atual_id(etapas),
             }
         )
 
     def to_read_lote(self, db: Session, demandas: list[Demanda]) -> list[DemandaRead]:
-        """Duas queries para a página inteira, em vez de duas por linha."""
+        """Poucas queries para a página inteira, em vez de N por linha."""
         ids = [d.id for d in demandas]
         responsaveis = self.repository.listar_responsavel_ids_em_lote(db, ids)
         departamentos = self.repository.listar_departamento_ids_em_lote(db, ids)
+        etapas_por_demanda = self._etapas_workflow_por_demanda(db, ids)
         return [
             DemandaRead.model_validate(
                 {
                     **self._campos_base(demanda),
                     "usuarioResponsavelIds": responsaveis.get(demanda.id, []),
                     "departamentoResponsavelIds": departamentos.get(demanda.id, []),
+                    "workflowEtapas": (etapas := etapas_por_demanda.get(demanda.id, [])),
+                    "etapaAtualId": self._derivar_etapa_atual_id(etapas),
                 }
             )
             for demanda in demandas
         ]
 
+    def _etapas_workflow_por_demanda(
+        self, db: Session, demanda_ids: list[str]
+    ) -> dict[str, list[DemandaWorkflowEtapaRead]]:
+        """Materializa `DemandaWorkflowEtapaRead` em lote — etapas + responsáveis (usuário e
+        departamento) de todas as Demandas pedidas, em poucas queries."""
+        etapas_por_demanda = self.repository.listar_etapas_workflow_em_lote(db, demanda_ids)
+        etapa_ids = [etapa.id for etapas in etapas_por_demanda.values() for etapa in etapas]
+        usuarios_por_etapa = self.repository.listar_etapa_responsavel_ids_em_lote(db, etapa_ids)
+        departamentos_por_etapa = self.repository.listar_etapa_departamento_ids_em_lote(db, etapa_ids)
+
+        return {
+            demanda_id: [
+                DemandaWorkflowEtapaRead(
+                    id=etapa.id,
+                    ordem=etapa.ordem,
+                    nome=etapa.nome,
+                    tipo=etapa.tipo,
+                    quantidadeAntesDeadline=etapa.quantidade_antes_deadline,
+                    unidadePrazo=etapa.unidade_prazo,
+                    status=etapa.status,
+                    usuarioResponsavelIds=usuarios_por_etapa.get(etapa.id, []),
+                    departamentoResponsavelIds=departamentos_por_etapa.get(etapa.id, []),
+                )
+                for etapa in etapas
+            ]
+            for demanda_id, etapas in etapas_por_demanda.items()
+        }
+
+    @staticmethod
+    def _derivar_etapa_atual_id(etapas: list[DemandaWorkflowEtapaRead]) -> str | None:
+        """Etapa atual = menor `ordem` com `status != 'concluida'`. Derivado sempre em
+        runtime, nunca persistido (ver docstring de DemandaWorkflowEtapa)."""
+        pendentes = [etapa for etapa in etapas if etapa.status != STATUS_ETAPA_WORKFLOW_CONCLUIDA]
+        if not pendentes:
+            return None
+        return str(min(pendentes, key=lambda etapa: etapa.ordem).id)
+
     @staticmethod
     def _campos_base(demanda: Demanda) -> dict:
-        # As cinco coleções sem tabela e `etapaAtualId` NÃO aparecem aqui: os defaults do
-        # DemandaRead já as devolvem vazias. Repeti-las daria a impressão de que há algo de
-        # onde vieram.
+        # As quatro coleções sem tabela (checklist/arquivos/comentarios/historico) NÃO
+        # aparecem aqui: os defaults do DemandaRead já as devolvem vazias. Repeti-las daria a
+        # impressão de que há algo de onde vieram.
         return {
             "id": demanda.id,
             "empresaId": demanda.empresa_id,
@@ -513,6 +584,7 @@ class DemandaService:
             "clienteId": demanda.cliente_id,
             "projetoId": demanda.projeto_id,
             "criadoPorUsuarioId": demanda.criado_por_usuario_id,
+            "workflowModeloId": demanda.workflow_modelo_id,
             "dataInicio": demanda.data_inicio,
             "dataFimPrevista": demanda.data_fim_prevista,
             "prazoEtapaAtual": demanda.prazo_etapa_atual,
@@ -574,6 +646,83 @@ class DemandaService:
             raise DemandaProjetoInvalidoError(
                 "Projeto arquivado não aceita novos vínculos — restaure-o antes"
             )
+
+    def _ensure_workflow_modelo_valido(self, db: Session, empresa_id: str, workflow_modelo_id: str) -> None:
+        workflow_modelo = self.workflow_modelo_repository.get_by_id(db, workflow_modelo_id)
+        if workflow_modelo is None or workflow_modelo.empresa_id != empresa_id:
+            raise DemandaWorkflowModeloInvalidoError("Modelo de workflow não encontrado para esta empresa")
+        if workflow_modelo.status != WORKFLOW_MODELO_STATUS_ATIVO:
+            raise DemandaWorkflowModeloInvalidoError(
+                "Modelo de workflow precisa estar ativo para ser aplicado a uma nova tarefa"
+            )
+
+    def _materializar_workflow(
+        self,
+        db: Session,
+        demanda: Demanda,
+        *,
+        workflow_modelo_id: str,
+        empresa_id: str,
+        now: datetime,
+    ) -> None:
+        """Copia as etapas (e responsáveis) do WorkflowModelo pra Demanda — snapshot, não
+        referência viva. Roda dentro da MESMA transação de `create_demanda`: qualquer erro
+        aqui (ex.: responsável do template que ficou inválido nesse meio-tempo) sobe e o
+        rollback do método chamador desfaz a Demanda inteira junto — nenhuma etapa órfã.
+
+        Reaproveita `_ensure_usuario_valido`/`_ensure_departamento_valido` (as mesmas regras
+        já usadas pros responsáveis diretos da Demanda) em vez de confiar cegamente no que o
+        template tinha — um responsável pode ter sido arquivado depois da última edição do
+        WorkflowModelo.
+        """
+        etapas_modelo = self.workflow_modelo_repository.list_etapas(db, workflow_modelo_id)
+        etapa_ids_modelo = [etapa.id for etapa in etapas_modelo]
+        usuarios_por_etapa = self.workflow_modelo_repository.get_responsavel_ids_por_etapa(
+            db, etapa_ids_modelo
+        )
+        departamentos_por_etapa = self.workflow_modelo_repository.get_departamento_responsavel_ids_por_etapa(
+            db, etapa_ids_modelo
+        )
+
+        etapas_objetos = [
+            DemandaWorkflowEtapa(
+                id=str(uuid4()),
+                demanda_id=demanda.id,
+                ordem=etapa_modelo.ordem,
+                nome=etapa_modelo.nome,
+                tipo=etapa_modelo.tipo,
+                quantidade_antes_deadline=etapa_modelo.quantidade_antes_deadline,
+                unidade_prazo=etapa_modelo.unidade_prazo,
+                status=STATUS_ETAPA_WORKFLOW_PENDENTE,
+                created_at=now,
+                updated_at=now,
+            )
+            for etapa_modelo in etapas_modelo
+        ]
+        self.repository.criar_etapas_workflow(db, etapas_objetos)
+
+        responsavel_rows: list[DemandaWorkflowEtapaResponsavel] = []
+        departamento_responsavel_rows: list[DemandaWorkflowEtapaDepartamentoResponsavel] = []
+        for etapa_modelo, etapa_objeto in zip(etapas_modelo, etapas_objetos):
+            for usuario_id in usuarios_por_etapa.get(etapa_modelo.id, []):
+                self._ensure_usuario_valido(db, empresa_id, usuario_id)
+                responsavel_rows.append(
+                    DemandaWorkflowEtapaResponsavel(
+                        demanda_workflow_etapa_id=etapa_objeto.id, usuario_id=usuario_id, created_at=now
+                    )
+                )
+            for departamento_id in departamentos_por_etapa.get(etapa_modelo.id, []):
+                self._ensure_departamento_valido(db, empresa_id, departamento_id)
+                departamento_responsavel_rows.append(
+                    DemandaWorkflowEtapaDepartamentoResponsavel(
+                        demanda_workflow_etapa_id=etapa_objeto.id,
+                        departamento_id=departamento_id,
+                        created_at=now,
+                    )
+                )
+
+        self.repository.criar_etapa_responsaveis(db, responsavel_rows)
+        self.repository.criar_etapa_departamentos_responsaveis(db, departamento_responsavel_rows)
 
     def _ensure_usuario_valido(self, db: Session, empresa_id: str, usuario_id: str) -> None:
         usuario = self.usuario_repository.get_by_id(db, usuario_id)

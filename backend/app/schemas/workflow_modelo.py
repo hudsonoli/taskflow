@@ -23,6 +23,9 @@ class WorkflowModeloEtapaWrite(BaseModel):
     quantidade_antes_deadline: int = Field(alias="quantidadeAntesDeadline", ge=0)
     unidade_prazo: WorkflowUnidadePrazo = Field(alias="unidadePrazo")
     usuario_responsavel_ids: list[UUID] = Field(default_factory=list, alias="usuarioResponsavelIds")
+    departamento_responsavel_ids: list[UUID] = Field(
+        default_factory=list, alias="departamentoResponsavelIds"
+    )
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -60,6 +63,7 @@ class WorkflowModeloEtapaRead(BaseModel):
     quantidade_antes_deadline: int = Field(alias="quantidadeAntesDeadline")
     unidade_prazo: WorkflowUnidadePrazo = Field(alias="unidadePrazo")
     usuario_responsavel_ids: list[UUID] = Field(alias="usuarioResponsavelIds")
+    departamento_responsavel_ids: list[UUID] = Field(alias="departamentoResponsavelIds")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -91,3 +95,14 @@ class WorkflowModeloRead(BaseModel):
     @classmethod
     def validate_timezone(cls, value: datetime | None) -> datetime | None:
         return ensure_timezone_aware(value)
+
+
+# Projeção mínima pra seleção operacional (Nova Tarefa) — só ativo, sem etapas. Diferente do
+# /diretorio de Departamento/Cliente, que inclui arquivado pra resolver referência histórica:
+# aqui não há referência histórica nenhuma pra resolver, só seleção pra frente.
+class WorkflowModeloDiretorioRead(BaseModel):
+    id: UUID
+    codigo_referencia: str = Field(alias="codigoReferencia")
+    nome: str
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)

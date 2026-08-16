@@ -16,6 +16,7 @@ import { elapsedSeconds } from "@/lib/trafego";
 import { demandaTemResponsavel, normalizarUsuarioId } from "@/lib/demandas";
 import { isDentroExpediente } from "@/lib/regra-expediente-mock";
 import { correspondeDepartamento, resolverDepartamentoPorReferencia } from "@/lib/referencias";
+import { converterQuantidadeEmHoras } from "@/lib/workflow-modelo";
 import { perfisComAcessoAdministrativo, perfisComAcessoFinanceiro } from "@/types/usuario";
 import { PERFIL_PARA_PERFIL_BASE } from "@/lib/api-backend";
 import type { ClienteDiretorioItem, DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
@@ -281,11 +282,15 @@ export function tarefasDoAtendimento(demandas: Demanda[], usuario: Usuario, clie
 // ---------------------------------------------------------------------------------
 
 /**
- * Horas estimadas derivadas: soma de `prazoHoras` das etapas do workflow da tarefa.
- * Aproximação — não existe hoje um campo dedicado de estimativa por tarefa.
+ * Horas estimadas derivadas: soma do prazo relativo (`quantidadeAntesDeadline`/`unidadePrazo`)
+ * de cada etapa de workflow materializada na tarefa, convertido pra horas. Aproximação — não
+ * existe hoje um campo dedicado de estimativa por tarefa.
  */
 export function horasEstimadasDemanda(demanda: Demanda): number {
-  return demanda.workflowEtapas.reduce((total, etapa) => total + (etapa.prazoHoras || 0), 0);
+  return demanda.workflowEtapas.reduce(
+    (total, etapa) => total + converterQuantidadeEmHoras(etapa.quantidadeAntesDeadline, etapa.unidadePrazo),
+    0,
+  );
 }
 
 export type EscopoHoras = { usuarioIds?: string[]; departamentoIds?: string[] };

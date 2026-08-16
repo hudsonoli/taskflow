@@ -17,6 +17,9 @@ from app.models import (  # noqa: E402,F401
     demanda,
     demanda_departamento,
     demanda_responsavel,
+    demanda_workflow_etapa,
+    demanda_workflow_etapa_departamento_responsavel,
+    demanda_workflow_etapa_responsavel,
     departamento,
     empresa,
     equipe,
@@ -35,6 +38,7 @@ from app.models import (  # noqa: E402,F401
     usuario_credencial,
     workflow_modelo,
     workflow_modelo_etapa,
+    workflow_modelo_etapa_departamento_responsavel,
     workflow_modelo_etapa_responsavel,
 )
 

@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.models.workflow_modelo import WorkflowModelo
 from app.models.workflow_modelo_etapa import WorkflowModeloEtapa
+from app.models.workflow_modelo_etapa_departamento_responsavel import (
+    WorkflowModeloEtapaDepartamentoResponsavel,
+)
 from app.models.workflow_modelo_etapa_responsavel import WorkflowModeloEtapaResponsavel
 
 STATUS_ARQUIVADO = "arquivado"
@@ -121,3 +124,34 @@ class WorkflowModeloRepository:
         for etapa_id, usuario_id in db.execute(statement):
             resultado[etapa_id].append(usuario_id)
         return resultado
+
+    def create_etapa_departamentos_responsaveis(
+        self, db: Session, responsaveis: list[WorkflowModeloEtapaDepartamentoResponsavel]
+    ) -> None:
+        for responsavel in responsaveis:
+            db.add(responsavel)
+        db.flush()
+
+    def get_departamento_responsavel_ids_por_etapa(
+        self, db: Session, etapa_ids: list[str]
+    ) -> dict[str, list[str]]:
+        """Mesma forma de `get_responsavel_ids_por_etapa`, lado departamento."""
+        resultado: dict[str, list[str]] = {etapa_id: [] for etapa_id in etapa_ids}
+        if not etapa_ids:
+            return resultado
+        statement = select(
+            WorkflowModeloEtapaDepartamentoResponsavel.workflow_modelo_etapa_id,
+            WorkflowModeloEtapaDepartamentoResponsavel.departamento_id,
+        ).where(WorkflowModeloEtapaDepartamentoResponsavel.workflow_modelo_etapa_id.in_(etapa_ids))
+        for etapa_id, departamento_id in db.execute(statement):
+            resultado[etapa_id].append(departamento_id)
+        return resultado
+
+    def list_diretorio(self, db: Session, *, empresa_id: str) -> list[WorkflowModelo]:
+        """Só ativo — sem referência histórica a resolver aqui (ver docstring do schema)."""
+        statement = (
+            select(WorkflowModelo)
+            .where(WorkflowModelo.empresa_id == empresa_id, WorkflowModelo.status == "ativo")
+            .order_by(WorkflowModelo.nome.asc())
+        )
+        return list(db.scalars(statement).all())

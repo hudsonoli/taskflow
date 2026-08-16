@@ -30,6 +30,7 @@ from app.services.demanda_service import (
     DemandaProjetoInvalidoError,
     DemandaService,
     DemandaUsuarioInvalidoError,
+    DemandaWorkflowModeloInvalidoError,
 )
 
 router = APIRouter(
@@ -79,6 +80,7 @@ def handle_demanda_error(exc: Exception) -> None:
             DemandaProjetoInvalidoError,
             DemandaUsuarioInvalidoError,
             DemandaDepartamentoInvalidoError,
+            DemandaWorkflowModeloInvalidoError,
         ),
     ):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

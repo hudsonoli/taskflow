@@ -8,6 +8,11 @@ from app.core.escopo import EscopoDemanda
 from app.models.demanda import Demanda
 from app.models.demanda_departamento import DemandaDepartamento
 from app.models.demanda_responsavel import DemandaResponsavel
+from app.models.demanda_workflow_etapa import DemandaWorkflowEtapa
+from app.models.demanda_workflow_etapa_departamento_responsavel import (
+    DemandaWorkflowEtapaDepartamentoResponsavel,
+)
+from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaResponsavel
 
 STATUS_ARQUIVADO = "arquivada"
 
@@ -296,3 +301,64 @@ class DemandaRepository:
         return db.scalar(
             select(func.max(Demanda.numero_operacional)).where(Demanda.empresa_id == empresa_id)
         )
+
+    # ----------------------------------------------------------------------------------
+    # Etapas de workflow materializadas — ver app/models/demanda_workflow_etapa.py
+    # ----------------------------------------------------------------------------------
+
+    def criar_etapas_workflow(self, db: Session, etapas: list[DemandaWorkflowEtapa]) -> None:
+        for etapa in etapas:
+            db.add(etapa)
+        db.flush()
+
+    def criar_etapa_responsaveis(self, db: Session, responsaveis: list[DemandaWorkflowEtapaResponsavel]) -> None:
+        for responsavel in responsaveis:
+            db.add(responsavel)
+        db.flush()
+
+    def criar_etapa_departamentos_responsaveis(
+        self, db: Session, responsaveis: list[DemandaWorkflowEtapaDepartamentoResponsavel]
+    ) -> None:
+        for responsavel in responsaveis:
+            db.add(responsavel)
+        db.flush()
+
+    def listar_etapas_workflow_em_lote(
+        self, db: Session, demanda_ids: list[str]
+    ) -> dict[str, list[DemandaWorkflowEtapa]]:
+        """Uma query para a página inteira — mesmo motivo de `listar_responsavel_ids_em_lote`."""
+        agrupado: dict[str, list[DemandaWorkflowEtapa]] = {did: [] for did in demanda_ids}
+        if not demanda_ids:
+            return agrupado
+        statement = (
+            select(DemandaWorkflowEtapa)
+            .where(DemandaWorkflowEtapa.demanda_id.in_(demanda_ids))
+            .order_by(DemandaWorkflowEtapa.demanda_id.asc(), DemandaWorkflowEtapa.ordem.asc())
+        )
+        for etapa in db.scalars(statement).all():
+            agrupado[etapa.demanda_id].append(etapa)
+        return agrupado
+
+    def listar_etapa_responsavel_ids_em_lote(self, db: Session, etapa_ids: list[str]) -> dict[str, list[str]]:
+        resultado: dict[str, list[str]] = {etapa_id: [] for etapa_id in etapa_ids}
+        if not etapa_ids:
+            return resultado
+        statement = select(
+            DemandaWorkflowEtapaResponsavel.demanda_workflow_etapa_id,
+            DemandaWorkflowEtapaResponsavel.usuario_id,
+        ).where(DemandaWorkflowEtapaResponsavel.demanda_workflow_etapa_id.in_(etapa_ids))
+        for etapa_id, usuario_id in db.execute(statement):
+            resultado[etapa_id].append(usuario_id)
+        return resultado
+
+    def listar_etapa_departamento_ids_em_lote(self, db: Session, etapa_ids: list[str]) -> dict[str, list[str]]:
+        resultado: dict[str, list[str]] = {etapa_id: [] for etapa_id in etapa_ids}
+        if not etapa_ids:
+            return resultado
+        statement = select(
+            DemandaWorkflowEtapaDepartamentoResponsavel.demanda_workflow_etapa_id,
+            DemandaWorkflowEtapaDepartamentoResponsavel.departamento_id,
+        ).where(DemandaWorkflowEtapaDepartamentoResponsavel.demanda_workflow_etapa_id.in_(etapa_ids))
+        for etapa_id, departamento_id in db.execute(statement):
+            resultado[etapa_id].append(departamento_id)
+        return resultado

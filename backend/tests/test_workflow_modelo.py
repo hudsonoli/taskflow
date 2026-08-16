@@ -27,6 +27,7 @@ def _etapa(
     quantidade: int = 1,
     unidade: str = "dias_corridos",
     responsavel_ids: list[str] | None = None,
+    departamento_ids: list[str] | None = None,
 ) -> dict:
     return {
         "nome": nome,
@@ -34,6 +35,7 @@ def _etapa(
         "quantidadeAntesDeadline": quantidade,
         "unidadePrazo": unidade,
         "usuarioResponsavelIds": responsavel_ids or [],
+        "departamentoResponsavelIds": departamento_ids or [],
     }
 
 
@@ -66,6 +68,30 @@ def _criar_usuario_na_empresa(db: Session, empresa: Empresa, status: str = "ativ
     db.add(usuario)
     db.flush()
     return usuario
+
+
+def _criar_departamento_na_empresa(db: Session, empresa: Empresa, status: str = "ativo"):
+    from app.models.departamento import Departamento
+
+    agora = datetime.now(timezone.utc)
+    sufixo = uuid.uuid4().hex[:8]
+    departamento = Departamento(
+        id=str(uuid.uuid4()),
+        empresa_id=empresa.id,
+        codigo_interno=f"dep-{sufixo}",
+        codigo_referencia=f"D26{sufixo[:6]}",
+        ano_referencia=26,
+        sequencial_referencia=int(sufixo[:5], 16) % 900000,
+        nome=f"Departamento {sufixo}",
+        nome_normalizado=f"departamento {sufixo}",
+        cor_identificacao="blue",
+        status=status,
+        created_at=agora,
+        updated_at=agora,
+    )
+    db.add(departamento)
+    db.flush()
+    return departamento
 
 
 # --------------------------------------------------------------------------------------
@@ -372,6 +398,76 @@ def test_responsavel_de_etapa_continua_resolvendo_apos_inativacao(
 
 
 # --------------------------------------------------------------------------------------
+# Departamento responsável de etapa
+# --------------------------------------------------------------------------------------
+
+def test_departamento_responsavel_de_etapa_da_mesma_empresa_e_aceito(
+    client_admin: TestClient, db_session: Session, empresa: Empresa
+) -> None:
+    departamento = _criar_departamento_na_empresa(db_session, empresa)
+    etapas = [_etapa(departamento_ids=[departamento.id])]
+    resposta = client_admin.post("/workflow-modelos", json=_payload(etapas=etapas))
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["etapas"][0]["departamentoResponsavelIds"] == [departamento.id]
+
+
+def test_departamento_responsavel_de_etapa_cross_tenant_422(
+    client_admin: TestClient, outra_empresa: Empresa, db_session: Session
+) -> None:
+    departamento_alheio = _criar_departamento_na_empresa(db_session, outra_empresa)
+    etapas = [_etapa(departamento_ids=[departamento_alheio.id])]
+    resposta = client_admin.post("/workflow-modelos", json=_payload(etapas=etapas))
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_departamento_responsavel_de_etapa_arquivado_nao_pode_ser_definido(
+    client_admin: TestClient, db_session: Session, empresa: Empresa
+) -> None:
+    departamento = _criar_departamento_na_empresa(db_session, empresa, status="arquivado")
+    etapas = [_etapa(departamento_ids=[departamento.id])]
+    resposta = client_admin.post("/workflow-modelos", json=_payload(etapas=etapas))
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_departamento_responsavel_de_etapa_inativo_e_aceito(
+    client_admin: TestClient, db_session: Session, empresa: Empresa
+) -> None:
+    """Mesmo critério de Demanda: só arquivado bloqueia vínculo novo — inativo não."""
+    departamento = _criar_departamento_na_empresa(db_session, empresa, status="inativo")
+    etapas = [_etapa(departamento_ids=[departamento.id])]
+    resposta = client_admin.post("/workflow-modelos", json=_payload(etapas=etapas))
+    assert resposta.status_code == 201, resposta.text
+
+
+def test_usuario_e_departamento_responsaveis_convivem_na_mesma_etapa(
+    client_admin: TestClient, usuario_gestor: Usuario, db_session: Session, empresa: Empresa
+) -> None:
+    departamento = _criar_departamento_na_empresa(db_session, empresa)
+    etapas = [_etapa(responsavel_ids=[usuario_gestor.id], departamento_ids=[departamento.id])]
+    resposta = client_admin.post("/workflow-modelos", json=_payload(etapas=etapas))
+    assert resposta.status_code == 201, resposta.text
+    corpo = resposta.json()["etapas"][0]
+    assert corpo["usuarioResponsavelIds"] == [usuario_gestor.id]
+    assert corpo["departamentoResponsavelIds"] == [departamento.id]
+
+
+def test_editar_substitui_departamentos_responsaveis_por_completo(
+    client_admin: TestClient, db_session: Session, empresa: Empresa
+) -> None:
+    dep_a = _criar_departamento_na_empresa(db_session, empresa)
+    dep_b = _criar_departamento_na_empresa(db_session, empresa)
+    criado = client_admin.post(
+        "/workflow-modelos", json=_payload(etapas=[_etapa(departamento_ids=[dep_a.id])])
+    ).json()
+
+    resposta = client_admin.patch(
+        f"/workflow-modelos/{criado['id']}", json={"etapas": [_etapa(departamento_ids=[dep_b.id])]}
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["etapas"][0]["departamentoResponsavelIds"] == [dep_b.id]
+
+
+# --------------------------------------------------------------------------------------
 # Isolamento por empresa e autorização
 # --------------------------------------------------------------------------------------
 
@@ -413,6 +509,24 @@ def test_isolamento_por_empresa_em_todas_as_rotas(
     assert all(w["id"] != alheio_id for w in client_admin.get("/workflow-modelos").json())
 
 
+def test_operador_le_detalhe_completo_para_previa_na_selecao(
+    client_operador: TestClient, client_admin: TestClient
+) -> None:
+    """GET /{id} é aberto (diferente de GET "" e do CRUD): quem pode criar Demanda precisa
+    ver as etapas do workflow escolhido antes de aplicar — não só nome/id do diretório."""
+    criado = client_admin.post("/workflow-modelos", json=_payload(etapas=[_etapa("Etapa")])).json()
+    resposta = client_operador.get(f"/workflow-modelos/{criado['id']}")
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["etapas"][0]["nome"] == "Etapa"
+
+
+def test_operador_le_detalhe_completo_cross_tenant_404(
+    client_operador: TestClient, outra_empresa: Empresa, db_session: Session
+) -> None:
+    alheio_id = _workflow_modelo_de_outra_empresa(db_session, outra_empresa)
+    assert client_operador.get(f"/workflow-modelos/{alheio_id}").status_code == 404
+
+
 def test_sem_token_401(client: TestClient) -> None:
     assert client.get("/workflow-modelos").status_code == 401
     assert client.post("/workflow-modelos", json=_payload()).status_code == 401
@@ -428,7 +542,6 @@ def test_operador_403_nas_demais_rotas_de_escrita(
 ) -> None:
     criado = client_admin.post("/workflow-modelos", json=_payload()).json()
     assert client_operador.get("/workflow-modelos").status_code == 403
-    assert client_operador.get(f"/workflow-modelos/{criado['id']}").status_code == 403
     assert client_operador.patch(f"/workflow-modelos/{criado['id']}", json={"nome": "X"}).status_code == 403
     assert (
         client_operador.post(

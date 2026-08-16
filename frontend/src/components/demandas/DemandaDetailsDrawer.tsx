@@ -146,7 +146,7 @@ export function DemandaDetailsDrawer({
 
           {activeTab === "dados" && <DadosDemandaSection demanda={demanda} onChange={onChange} />}
           {activeTab === "briefing" && <BriefingDemandaSection key={demanda.id} demanda={demanda} onChange={onChange} />}
-          {activeTab === "workflow" && <WorkflowDemandaSection />}
+          {activeTab === "workflow" && <WorkflowDemandaSection demanda={demanda} />}
           {activeTab === "responsaveis" && <ResponsaveisDemandaSection demanda={demanda} onChange={onChange} />}
           {activeTab === "atividade" && <AtividadeDemandaSection demanda={demanda} onChange={onChange} />}
           {activeTab === "historico" && <HistoricoDemandaSection demanda={demanda} />}

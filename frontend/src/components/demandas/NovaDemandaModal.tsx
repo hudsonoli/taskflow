@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ClipboardPlus, Sparkles, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ClipboardPlus, GitBranch, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Combobox } from "@/components/ui/Combobox";
@@ -12,39 +12,34 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { Select } from "@/components/ui/Select";
 import {
-  departamentosProjetoDisponiveis,
-  normalizarUsuarioId,
   prioridadeDemandaLabels,
   resolveModeloCampanhaPorProjeto,
   statusDemandaEditaveis,
   statusDemandaLabels,
 } from "@/lib/demandas";
-import { useAppData } from "@/lib/AppDataContext";
+import { obterWorkflowModeloReal } from "@/lib/api-backend";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { normalizarReferenciasParaCodigoInterno } from "@/lib/referencias";
-import { resolverDepartamentoNome } from "@/lib/referencias";
+import { useDiretorioWorkflowModelos } from "@/lib/diretorioWorkflowModelos";
+import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
+import type { WorkflowModelo } from "@/types/workflow-modelo";
 import type { Demanda, DemandaFormDraft, DemandaPrioridade, DemandaStatusEditavel } from "@/types/demanda";
-import { RecursoIndisponivel } from "./RecursoIndisponivel";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
-// `createInitialWorkflow` saiu na Fase 2E.1: montava uma etapa inicial para um campo que não
-// tem tabela. Volta em 2E.2, junto do editor de etapas.
-
 function createInitialDraft(demanda?: Demanda): DemandaFormDraft {
-  const projectId = demanda?.projetoId ?? "";
-
   return {
     nome: demanda?.nome ?? "",
     pit: demanda?.pit ?? "",
-    projetoId: projectId,
+    projetoId: demanda?.projetoId ?? "",
     clienteId: demanda?.clienteId ?? "",
     briefing: demanda?.briefing ?? "",
     prioridade: demanda?.prioridade ?? "media",
     status: (demanda?.status ?? "planejada") as DemandaStatusEditavel,
     usuarioResponsavelIds: demanda?.usuarioResponsavelIds ?? [],
-    departamentoResponsavelIds: demanda?.departamentoResponsavelIds ?? [departamentosProjetoDisponiveis[0].id],
+    departamentoResponsavelIds: demanda?.departamentoResponsavelIds ?? [],
     dataFimPrevista: demanda?.dataFimPrevista ?? "",
+    workflowModeloId: null,
   };
 }
 
@@ -61,15 +56,19 @@ export function NovaDemandaModal({
   onSaveAndClose: (draft: DemandaFormDraft, demandaId?: string) => void;
   onSaveAndContinue: (draft: DemandaFormDraft, demandaId?: string) => void;
 }) {
-  const { projetos } = useAppData();
+  const { projetos } = useDiretorioProjetos();
   const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
-  const diretorio = useDiretorioUsuarios().usuarios;
+  const { usuarios: diretorio } = useDiretorioUsuarios();
+  const { workflowModelos } = useDiretorioWorkflowModelos();
   // Picker só oferece usuário ativo pra seleção (referência histórica de inativo continua
   // resolvendo em outros lugares via resolverUsuarioPorReferencia).
   const usuarios = diretorio.filter((usuario) => usuario.status === "ativo");
   const [draft, setDraft] = useState<DemandaFormDraft>(() => createInitialDraft(demanda));
   const [briefingRevision, setBriefingRevision] = useState(0);
+  const [workflowPreview, setWorkflowPreview] = useState<WorkflowModelo | null>(null);
+  const previewAtual = draft.workflowModeloId && workflowPreview?.id === draft.workflowModeloId ? workflowPreview : null;
+  const carregandoWorkflow = Boolean(draft.workflowModeloId) && previewAtual === null;
 
   const editing = demanda !== undefined;
   const canSave = draft.nome.trim().length > 0;
@@ -96,8 +95,23 @@ export function NovaDemandaModal({
     setBriefingRevision((revision) => revision + 1);
   }
 
-  // `aplicarModelo` saiu na Fase 2E.1 junto do editor de etapas: aplicar um modelo de
-  // workflow só faz sentido se houver onde gravar as etapas resultantes.
+  useEffect(() => {
+    let cancelado = false;
+    const modeloId = draft.workflowModeloId;
+    if (!modeloId) {
+      return;
+    }
+    obterWorkflowModeloReal(modeloId)
+      .then((modelo) => {
+        if (!cancelado) setWorkflowPreview(modelo);
+      })
+      .catch(() => {
+        // mantém previewAtual nulo (derivado por id) até uma tentativa bem-sucedida
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [draft.workflowModeloId]);
 
   return (
     <Modal open={open} onClose={onClose} maxWidthClassName="max-w-3xl">
@@ -111,7 +125,7 @@ export function NovaDemandaModal({
               {editing ? "Editar tarefa" : "Nova tarefa"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Cadastro local para estruturar tarefas, briefing, workflow e responsáveis.
+              Estruture a tarefa: dados principais, briefing, workflow e responsáveis.
             </p>
           </div>
         </div>
@@ -198,15 +212,15 @@ export function NovaDemandaModal({
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <MemberSelector
           label="Usuários responsáveis"
-          values={normalizarReferenciasParaCodigoInterno(draft.usuarioResponsavelIds.map(normalizarUsuarioId), diretorio)}
+          values={draft.usuarioResponsavelIds}
           onChange={(values) => updateDraft({ usuarioResponsavelIds: values })}
           placeholder="Selecionar responsáveis…"
           options={usuarios.map((usuario) => ({
-            // Enquanto Demanda continuar mock, o valor gravado é o codigoInterno (não o
-            // UUID real) — ver lib/referencias.ts / docs/padrao-arquivamento.md.
-            id: usuario.codigoInterno,
+            id: usuario.id,
             nome: usuario.nome,
-            subtitulo: resolverDepartamentoNome(usuario.departamentoId ?? "", departamentos),
+            subtitulo: usuario.departamentoId
+              ? departamentos.find((departamento) => departamento.id === usuario.departamentoId)?.nome
+              : undefined,
             corIdentificacao: usuario.corIdentificacao,
             fotoUrl: usuario.fotoUrl,
           }))}
@@ -215,7 +229,9 @@ export function NovaDemandaModal({
           label="Departamentos responsáveis"
           values={draft.departamentoResponsavelIds}
           onChange={(values) => updateDraft({ departamentoResponsavelIds: values })}
-          options={departamentosProjetoDisponiveis.map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
+          options={departamentos
+            .filter((departamento) => departamento.status === "ativo")
+            .map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
         />
       </div>
 
@@ -224,12 +240,56 @@ export function NovaDemandaModal({
         <RichTextEditor key={briefingRevision} value={draft.briefing ?? ""} onChange={(html) => updateDraft({ briefing: html })} />
       </div>
 
-      {/* O editor de etapas e o seletor de modelo de workflow não são renderizados nesta
-          fase: não há tabela para gravá-las, e um formulário que aceita e descarta é pior
-          que um que não existe. Ver RecursoIndisponivel. */}
-      <div className="mt-4">
-        <RecursoIndisponivel recurso="Etapas de workflow" fase="Fase 2E.2" />
-      </div>
+      {!editing ? (
+        <div className="mt-4">
+          <span className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Workflow (opcional)
+          </span>
+          <Combobox
+            label="Modelo de workflow"
+            value={draft.workflowModeloId ?? ""}
+            onChange={(workflowModeloId) => updateDraft({ workflowModeloId: workflowModeloId || null })}
+            options={workflowModelos.map((modelo) => ({ value: modelo.id, label: modelo.nome }))}
+            placeholder="Buscar workflow…"
+            emptyLabel="Nenhum workflow ativo encontrado"
+          />
+          {draft.workflowModeloId && (
+            <div className="mt-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3.5 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
+                <GitBranch className="h-3.5 w-3.5" />
+                Etapas aplicadas ao criar
+              </div>
+              {carregandoWorkflow ? (
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Carregando etapas…</p>
+              ) : (
+                <ol className="mt-2 flex flex-col gap-1.5">
+                  {previewAtual?.etapas.map((etapa, index) => (
+                    <li key={etapa.id} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-bold text-white">
+                        {index + 1}
+                      </span>
+                      <span className="truncate">{etapa.nome}</span>
+                      <Badge tone={etapa.tipo === "aprovacao" ? "amber" : "blue"}>
+                        {workflowEtapaTipoLabels[etapa.tipo]}
+                      </Badge>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+        </div>
+      ) : demanda.workflowEtapas.length > 0 ? (
+        <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50/60 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <GitBranch className="h-3.5 w-3.5" />
+            Workflow aplicado — {demanda.workflowEtapas.length} etapa(s)
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+            Etapas já materializadas na criação. Ver detalhe e progresso na aba Workflow da tarefa.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-6 flex flex-col justify-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800 sm:flex-row">
         <Button type="button" variant="secondary" onClick={onClose}>

@@ -9,11 +9,16 @@ from app.core.relogio import agora_utc
 from app.domain.event_types import DomainEventType
 from app.models.workflow_modelo import WorkflowModelo
 from app.models.workflow_modelo_etapa import WorkflowModeloEtapa
+from app.models.workflow_modelo_etapa_departamento_responsavel import (
+    WorkflowModeloEtapaDepartamentoResponsavel,
+)
 from app.models.workflow_modelo_etapa_responsavel import WorkflowModeloEtapaResponsavel
+from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.schemas.workflow_modelo import (
     WorkflowModeloCreate,
+    WorkflowModeloDiretorioRead,
     WorkflowModeloEtapaRead,
     WorkflowModeloEtapaWrite,
     WorkflowModeloRead,
@@ -30,6 +35,9 @@ STATUS_ARQUIVADO = "arquivado"
 # Mesmo conjunto usado em Departamento/Projeto/Demanda: um usuário nestes estados não pode
 # ser DEFINIDO como responsável novo de uma etapa. Vínculo histórico não é afetado.
 STATUS_USUARIO_INVALIDO_COMO_RESPONSAVEL = {"arquivado", "inativo", "bloqueado"}
+# Mesmo critério de DemandaService._ensure_departamento_valido: só arquivado bloqueia novo
+# vínculo — inativo continua podendo ser definido como responsável.
+STATUS_DEPARTAMENTO_INVALIDO_COMO_RESPONSAVEL = {"arquivado"}
 
 
 class WorkflowModeloNotFoundError(ValueError):
@@ -63,10 +71,12 @@ class WorkflowModeloService:
         self,
         repository: WorkflowModeloRepository | None = None,
         usuario_repository: UsuarioRepository | None = None,
+        departamento_repository: DepartamentoRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
     ) -> None:
         self.repository = repository or WorkflowModeloRepository()
         self.usuario_repository = usuario_repository or UsuarioRepository()
+        self.departamento_repository = departamento_repository or DepartamentoRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
 
     # ----------------------------------------------------------------------------------
@@ -116,6 +126,10 @@ class WorkflowModeloService:
             self._ensure_nome_disponivel(db, empresa_id, nome_normalizado)
             usuario_ids = {str(uid) for etapa in etapas_data for uid in etapa.usuario_responsavel_ids}
             self._ensure_responsaveis_validos(db, empresa_id, usuario_ids)
+            departamento_ids = {
+                str(did) for etapa in etapas_data for did in etapa.departamento_responsavel_ids
+            }
+            self._ensure_departamentos_validos(db, empresa_id, departamento_ids)
 
             # Contador, entidade e evento na MESMA transação: se a criação falhar abaixo, o
             # incremento da sequência sofre rollback junto e o número não é queimado.
@@ -183,6 +197,9 @@ class WorkflowModeloService:
             raise WorkflowModeloNotFoundError("Modelo de workflow não encontrado")
         return workflow_modelo
 
+    def list_diretorio(self, db: Session, *, empresa_id: str) -> list[WorkflowModelo]:
+        return self.repository.list_diretorio(db, empresa_id=empresa_id)
+
     # ----------------------------------------------------------------------------------
     # Alteração e ciclo de vida
     # ----------------------------------------------------------------------------------
@@ -214,6 +231,10 @@ class WorkflowModeloService:
             if updates.get("etapas") is not None:
                 usuario_ids = {str(uid) for etapa in data.etapas for uid in etapa.usuario_responsavel_ids}
                 self._ensure_responsaveis_validos(db, workflow_modelo.empresa_id, usuario_ids)
+                departamento_ids = {
+                    str(did) for etapa in data.etapas for did in etapa.departamento_responsavel_ids
+                }
+                self._ensure_departamentos_validos(db, workflow_modelo.empresa_id, departamento_ids)
                 self._substituir_etapas(db, workflow_modelo, data.etapas, now=now)
                 changed_fields.append("etapas")
 
@@ -316,7 +337,9 @@ class WorkflowModeloService:
 
     def to_read(self, db: Session, workflow_modelo: WorkflowModelo) -> WorkflowModeloRead:
         etapas = self.repository.list_etapas(db, workflow_modelo.id)
-        responsaveis_por_etapa = self.repository.get_responsavel_ids_por_etapa(db, [etapa.id for etapa in etapas])
+        etapa_ids = [etapa.id for etapa in etapas]
+        responsaveis_por_etapa = self.repository.get_responsavel_ids_por_etapa(db, etapa_ids)
+        departamentos_por_etapa = self.repository.get_departamento_responsavel_ids_por_etapa(db, etapa_ids)
         etapas_read = [
             WorkflowModeloEtapaRead(
                 id=etapa.id,
@@ -326,6 +349,7 @@ class WorkflowModeloService:
                 quantidadeAntesDeadline=etapa.quantidade_antes_deadline,
                 unidadePrazo=etapa.unidade_prazo,
                 usuarioResponsavelIds=responsaveis_por_etapa.get(etapa.id, []),
+                departamentoResponsavelIds=departamentos_por_etapa.get(etapa.id, []),
             )
             for etapa in etapas
         ]
@@ -347,6 +371,13 @@ class WorkflowModeloService:
             restauradoAt=workflow_modelo.restaurado_at,
             restauradoPorUsuarioId=workflow_modelo.restaurado_por_usuario_id,
             statusAnteriorArquivamento=workflow_modelo.status_anterior_arquivamento,
+        )
+
+    def to_diretorio_read(self, workflow_modelo: WorkflowModelo) -> WorkflowModeloDiretorioRead:
+        return WorkflowModeloDiretorioRead(
+            id=workflow_modelo.id,
+            codigoReferencia=workflow_modelo.codigo_referencia,
+            nome=workflow_modelo.nome,
         )
 
     # ----------------------------------------------------------------------------------
@@ -386,6 +417,15 @@ class WorkflowModeloService:
         ]
         self.repository.create_etapa_responsaveis(db, responsavel_rows)
 
+        departamento_responsavel_rows = [
+            WorkflowModeloEtapaDepartamentoResponsavel(
+                workflow_modelo_etapa_id=etapa_objeto.id, departamento_id=str(did), created_at=now
+            )
+            for etapa_objeto, etapa_data in zip(etapa_objetos, etapas_data)
+            for did in etapa_data.departamento_responsavel_ids
+        ]
+        self.repository.create_etapa_departamentos_responsaveis(db, departamento_responsavel_rows)
+
     def _ensure_nome_disponivel(
         self,
         db: Session,
@@ -416,6 +456,19 @@ class WorkflowModeloService:
             if usuario.status in STATUS_USUARIO_INVALIDO_COMO_RESPONSAVEL:
                 raise WorkflowModeloResponsavelInvalidoError(
                     f"Usuário com status '{usuario.status}' não pode ser definido como responsável de etapa"
+                )
+
+    def _ensure_departamentos_validos(self, db: Session, empresa_id: str, departamento_ids: set[str]) -> None:
+        """Mesmo critério de `_ensure_responsaveis_validos`, lado departamento."""
+        for departamento_id in departamento_ids:
+            departamento = self.departamento_repository.get_by_id(db, departamento_id)
+            if departamento is None or departamento.empresa_id != empresa_id:
+                raise WorkflowModeloResponsavelInvalidoError(
+                    "Departamento responsável de etapa não encontrado nesta empresa"
+                )
+            if departamento.status in STATUS_DEPARTAMENTO_INVALIDO_COMO_RESPONSAVEL:
+                raise WorkflowModeloResponsavelInvalidoError(
+                    f"Departamento com status '{departamento.status}' não pode ser definido como responsável de etapa"
                 )
 
     def _publish_event(

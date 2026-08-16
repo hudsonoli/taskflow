@@ -23,6 +23,14 @@ export type WorkflowModeloEtapa = {
   quantidadeAntesDeadline: number;
   unidadePrazo: WorkflowUnidadePrazo;
   usuarioResponsavelIds: string[];
+  departamentoResponsavelIds: string[];
+};
+
+/** Projeção mínima pra seleção operacional (Nova Tarefa) — só workflow ativo, sem etapas. */
+export type WorkflowModeloDiretorioItem = {
+  id: string;
+  codigoReferencia: string;
+  nome: string;
 };
 
 export type WorkflowModelo = {

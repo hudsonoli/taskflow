@@ -30,8 +30,16 @@ import type {
   DemandaPrioridade,
   DemandaStatus,
   DemandaStatusEditavel,
+  DemandaWorkflowEtapa,
+  DemandaWorkflowEtapaStatus,
 } from "@/types/demanda";
-import type { WorkflowModelo, WorkflowModeloEtapa, WorkflowModeloFormDraft, WorkflowModeloStatus } from "@/types/workflow-modelo";
+import type {
+  WorkflowModelo,
+  WorkflowModeloDiretorioItem,
+  WorkflowModeloEtapa,
+  WorkflowModeloFormDraft,
+  WorkflowModeloStatus,
+} from "@/types/workflow-modelo";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -1034,8 +1042,6 @@ export async function restaurarFornecedorReal(fornecedorId: string): Promise<For
 // arquivado, o 409 traz `projetoArquivadoId` para a UI oferecer restaurar
 // (ProjetoArquivadoConflictError abaixo) — mesmo contrato de Usuário e Grupo de Cliente.
 //
-// Não há `listDiretorioProjetos` aqui: o endpoint existe no backend, mas nenhuma tela o
-// consome ainda. Quando Demanda migrar, entra junto com o consumidor.
 // =====================================================================================
 
 type ProjetoReadApi = {
@@ -1110,6 +1116,22 @@ function projetoDraftParaPayload(draft: ProjetoFormDraft) {
   };
 }
 
+/** Projeção mínima pra seleção operacional (Nova Tarefa). Inclui todos os status — igual ao
+ * diretório de Departamento/Cliente, resolve referência histórica de projetos já concluídos
+ * ou arquivados que uma Demanda antiga ainda aponte. */
+export type ProjetoDiretorioItem = {
+  id: string;
+  codigoReferencia: string;
+  sequencialReferencia: number;
+  nome: string;
+  status: ProjetoStatus;
+  clienteId: string | null;
+};
+
+export async function listDiretorioProjetos(): Promise<ProjetoDiretorioItem[]> {
+  return request<ProjetoDiretorioItem[]>("/projetos/diretorio");
+}
+
 export async function listProjetosReais(params?: {
   status?: string;
   search?: string;
@@ -1172,6 +1194,18 @@ export async function restaurarProjetoReal(projetoId: string): Promise<Projeto> 
 
 export type DemandaEscopo = "meus" | "meu-departamento" | "atendimento";
 
+type DemandaWorkflowEtapaReadApi = {
+  id: string;
+  ordem: number;
+  nome: string;
+  tipo: DemandaWorkflowEtapa["tipo"];
+  quantidadeAntesDeadline: number;
+  unidadePrazo: DemandaWorkflowEtapa["unidadePrazo"];
+  status: DemandaWorkflowEtapaStatus;
+  usuarioResponsavelIds: string[];
+  departamentoResponsavelIds: string[];
+};
+
 type DemandaReadApi = {
   id: string;
   empresaId: string;
@@ -1189,6 +1223,9 @@ type DemandaReadApi = {
   clienteId: string | null;
   projetoId: string | null;
   criadoPorUsuarioId: string | null;
+  workflowModeloId: string | null;
+  workflowEtapas: DemandaWorkflowEtapaReadApi[];
+  etapaAtualId: string | null;
   dataInicio: string | null;
   dataFimPrevista: string | null;
   prazoEtapaAtual: string | null;
@@ -1209,8 +1246,10 @@ type DemandaReadApi = {
   statusAnteriorArquivamento: DemandaStatus | null;
 };
 
-// As cinco coleções e `etapaAtualId` são fixadas vazias aqui porque não há tabela nenhuma por
-// trás delas nesta fase. Vazio é a verdade, não um placeholder à espera de conteúdo.
+// `workflowEtapas`/`etapaAtualId` já são reais (Fase 2E.2) — materializados a partir de um
+// WorkflowModelo na criação, `etapaAtualId` derivado no servidor. As quatro coleções restantes
+// (checklist/arquivos/comentarios/historico) continuam fixadas vazias: não há tabela por trás
+// delas ainda nesta fase.
 function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
   return {
     id: data.id,
@@ -1229,6 +1268,7 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
     clienteId: data.clienteId,
     projetoId: data.projetoId,
     criadoPorUsuarioId: data.criadoPorUsuarioId,
+    workflowModeloId: data.workflowModeloId,
     dataInicio: data.dataInicio,
     dataFimPrevista: data.dataFimPrevista,
     prazoEtapaAtual: data.prazoEtapaAtual,
@@ -1247,8 +1287,18 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
     restauradoAt: data.restauradoAt,
     restauradoPorUsuarioId: data.restauradoPorUsuarioId,
     statusAnteriorArquivamento: data.statusAnteriorArquivamento,
-    workflowEtapas: [],
-    etapaAtualId: null,
+    workflowEtapas: data.workflowEtapas.map((etapa) => ({
+      id: etapa.id,
+      nome: etapa.nome,
+      ordem: etapa.ordem,
+      tipo: etapa.tipo,
+      quantidadeAntesDeadline: etapa.quantidadeAntesDeadline,
+      unidadePrazo: etapa.unidadePrazo,
+      status: etapa.status,
+      usuarioResponsavelIds: etapa.usuarioResponsavelIds,
+      departamentoResponsavelIds: etapa.departamentoResponsavelIds,
+    })),
+    etapaAtualId: data.etapaAtualId,
     checklist: [],
     arquivos: [],
     comentarios: [],
@@ -1256,8 +1306,10 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
   };
 }
 
-// `workflowEtapas` e `etapaAtualId` NÃO entram no payload: não há tabela, e enviá-los
-// devolveria 422 por `extra="forbid"`. É recusa explícita, não descarte silencioso.
+// `workflowEtapas`/`etapaAtualId` nunca entram no payload — não há endpoint de transição de
+// etapa nesta fase, e enviá-los devolveria 422 por `extra="forbid"`. `workflowModeloId` só é
+// aceito na CRIAÇÃO (materializa as etapas do template) — ver `criarDemandaReal`, que o
+// adiciona por fora deste payload base pra não vazar pro PATCH de edição, que rejeitaria.
 function demandaDraftParaPayload(draft: DemandaFormDraft) {
   return {
     nome: draft.nome,
@@ -1301,9 +1353,13 @@ export async function listDiretorioDemandas(): Promise<DemandaDiretorio[]> {
 }
 
 export async function criarDemandaReal(draft: DemandaFormDraft): Promise<Demanda> {
+  const payload = {
+    ...demandaDraftParaPayload(draft),
+    ...(draft.workflowModeloId ? { workflowModeloId: draft.workflowModeloId } : {}),
+  };
   const criada = await request<DemandaReadApi>("/demandas", {
     method: "POST",
-    body: JSON.stringify(demandaDraftParaPayload(draft)),
+    body: JSON.stringify(payload),
   });
   return mapDemandaReadToDemanda(criada);
 }
@@ -1381,6 +1437,7 @@ type WorkflowModeloEtapaReadApi = {
   quantidadeAntesDeadline: number;
   unidadePrazo: WorkflowModeloEtapa["unidadePrazo"];
   usuarioResponsavelIds: string[];
+  departamentoResponsavelIds: string[];
 };
 
 type WorkflowModeloReadApi = {
@@ -1414,6 +1471,7 @@ function mapWorkflowModeloReadToWorkflowModelo(data: WorkflowModeloReadApi): Wor
       quantidadeAntesDeadline: etapa.quantidadeAntesDeadline,
       unidadePrazo: etapa.unidadePrazo,
       usuarioResponsavelIds: etapa.usuarioResponsavelIds,
+      departamentoResponsavelIds: etapa.departamentoResponsavelIds,
     })),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
@@ -1429,8 +1487,29 @@ function workflowModeloDraftParaPayload(draft: WorkflowModeloFormDraft) {
       quantidadeAntesDeadline: etapa.quantidadeAntesDeadline,
       unidadePrazo: etapa.unidadePrazo,
       usuarioResponsavelIds: etapa.usuarioResponsavelIds,
+      departamentoResponsavelIds: etapa.departamentoResponsavelIds,
     })),
   };
+}
+
+/** Projeção mínima pra seleção operacional — ver WorkflowModeloDiretorioItem. */
+type WorkflowModeloDiretorioApi = {
+  id: string;
+  codigoReferencia: string;
+  nome: string;
+};
+
+export async function listDiretorioWorkflowModelos(): Promise<WorkflowModeloDiretorioItem[]> {
+  return request<WorkflowModeloDiretorioApi[]>("/workflow-modelos/diretorio");
+}
+
+// Detalhe completo (com etapas) — aberto a qualquer autenticado, não só admin/gestor: quem
+// pode criar Demanda precisa ver as etapas do workflow escolhido antes de aplicar. Usado pela
+// prévia da Nova Tarefa depois de escolher um item do diretório.
+export async function obterWorkflowModeloReal(workflowModeloId: string): Promise<WorkflowModelo> {
+  return mapWorkflowModeloReadToWorkflowModelo(
+    await request<WorkflowModeloReadApi>(`/workflow-modelos/${workflowModeloId}`),
+  );
 }
 
 export async function listWorkflowModelosReais(params?: { status?: string; search?: string }): Promise<WorkflowModelo[]> {

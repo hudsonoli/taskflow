@@ -17,15 +17,23 @@ export type DemandaPrioridade = "baixa" | "media" | "alta";
 
 export type DemandaWorkflowEtapaStatus = "pendente" | "em_execucao" | "pausada" | "concluida";
 
+/**
+ * Etapa de workflow materializada na Demanda (Fase 2E.2) — snapshot aplicado a partir de um
+ * `WorkflowModelo` no momento da criação, não uma referência viva a ele. Editar ou arquivar
+ * o template depois não altera etapas já materializadas.
+ *
+ * Sem endpoint de transição nesta fase: `status` só é lido, nunca escrito diretamente pela
+ * interface (ver `WorkflowDemandaSection`, só leitura).
+ */
 export type DemandaWorkflowEtapa = {
   id: string;
   nome: string;
   ordem: number;
-  // Execução (azul) ou aprovação/gate (âmbar) — opcional: etapas criadas manualmente não têm tipo definido.
-  tipo?: "execucao" | "aprovacao";
+  tipo: "execucao" | "aprovacao";
+  quantidadeAntesDeadline: number;
+  unidadePrazo: "dias_corridos" | "dias_uteis" | "horas";
   usuarioResponsavelIds: string[];
   departamentoResponsavelIds: string[];
-  prazoHoras: number;
   status: DemandaWorkflowEtapaStatus;
 };
 
@@ -78,13 +86,19 @@ export type DemandaHistoricoEvento = {
  *
  * Não derivam um do outro: a primeira demanda é `T26000001` **e** `#2063` ao mesmo tempo.
  *
- * ## Campos ainda sem persistência (Fase 2E.1)
+ * ## Workflow (Fase 2E.2)
  *
- * `workflowEtapas`, `etapaAtualId`, `checklist`, `arquivos`, `comentarios` e `historico`
- * entram em 2E.2–2E.4. A API os devolve **vazios** para os componentes não quebrarem, e
- * recusa (**422**) qualquer tentativa de enviá-los. A interface não exibe controle de escrita
- * para nenhum deles — affordance ausente com explicação, não campo desabilitado com valor
- * fantasma.
+ * `workflowEtapas` são materializadas a partir de um `WorkflowModelo` no momento da criação
+ * (ver `workflowModeloId`) — snapshot, não referência viva: editar/arquivar o template depois
+ * não muda nada aqui. `etapaAtualId` é derivado no servidor (menor `ordem` com
+ * `status != "concluida"`), nunca uma escrita direta.
+ *
+ * ## Campos ainda sem persistência (Fase 2E.3/2E.4)
+ *
+ * `checklist`, `arquivos`, `comentarios` e `historico`. A API os devolve **vazios** para os
+ * componentes não quebrarem, e recusa (**422**) qualquer tentativa de enviá-los. A interface
+ * não exibe controle de escrita para nenhum deles — affordance ausente com explicação, não
+ * campo desabilitado com valor fantasma.
  */
 export type Demanda = {
   id: string;
@@ -96,6 +110,8 @@ export type Demanda = {
   projetoId: string | null;
   clienteId: string | null;
   criadoPorUsuarioId: string | null;
+  /** Qual WorkflowModelo originou `workflowEtapas` — só informativo (ver docstring acima). */
+  workflowModeloId: string | null;
   nome: string;
   pit?: string | null;
   briefing: string | null;
@@ -127,7 +143,7 @@ export type Demanda = {
   restauradoPorUsuarioId?: string | null;
   statusAnteriorArquivamento?: DemandaStatus | null;
 
-  // --- sem persistência nesta fase: sempre vazios, nunca editáveis ---
+  // --- workflow materializado (2E.2) e coleções ainda sem persistência (2E.3/2E.4) ---
   workflowEtapas: DemandaWorkflowEtapa[];
   etapaAtualId: string | null;
   checklist: DemandaChecklistItem[];
@@ -148,8 +164,10 @@ export type DemandaDiretorio = {
 };
 
 /**
- * O que o formulário envia. `workflowEtapas` e `etapaAtualId` saíram: não há tabela para
- * gravá-las, e mandá-las devolveria 422.
+ * O que o formulário envia. `workflowEtapas` e `etapaAtualId` continuam fora: não há
+ * endpoint de transição de etapa nesta fase, só `workflowModeloId` na criação (materializa
+ * as etapas do template — ver docstring de `Demanda`). Mandar `workflowEtapas`/`etapaAtualId`
+ * direto devolveria 422.
  */
 export type DemandaFormDraft = {
   nome: string;
@@ -162,4 +180,7 @@ export type DemandaFormDraft = {
   usuarioResponsavelIds: string[];
   departamentoResponsavelIds: string[];
   dataFimPrevista: string | null;
+  /** Só tem efeito na criação (materializa as etapas do template). Editar depois não
+   * reaplica nem troca o workflow já materializado nesta fase. */
+  workflowModeloId?: string | null;
 };

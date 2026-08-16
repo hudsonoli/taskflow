@@ -31,16 +31,24 @@ DemandaStatusEditavel = Literal[
 ]
 DemandaPrioridade = Literal["baixa", "media", "alta"]
 
-# Campos que a interface conhece mas que ainda NÃO têm tabela — entram em 2E.2/2E.3/2E.4.
+# Campos que a interface conhece mas que ainda NÃO têm tabela — entram em 2E.3/2E.4.
 # Enviá-los devolve 422 por `extra="forbid"`, nunca aceite-e-descarte silencioso.
 CAMPOS_SEM_PERSISTENCIA = (
-    "workflowEtapas",
-    "etapaAtualId",
     "checklist",
     "arquivos",
     "comentarios",
     "historico",
 )
+
+# `workflowEtapas`/`etapaAtualId` saíram de CAMPOS_SEM_PERSISTENCIA na Fase 2E.2: agora têm
+# tabela (`demanda_workflow_etapas`) e aparecem de verdade em DemandaRead. Continuam **não
+# aceitos em Create/Update** — não porque faltem persistência, mas porque não há endpoint de
+# transição de etapa nesta fase (ver DemandaWorkflowEtapaWrite ausente de propósito). O único
+# jeito de uma Demanda ganhar etapas é `workflowModeloId` na criação, que as materializa a
+# partir do template.
+WorkflowEtapaTipo = Literal["execucao", "aprovacao"]
+WorkflowUnidadePrazo = Literal["dias_corridos", "dias_uteis", "horas"]
+DemandaWorkflowEtapaStatus = Literal["pendente", "em_execucao", "pausada", "concluida"]
 
 
 def ensure_timezone_aware(value: datetime | None) -> datetime | None:
@@ -89,6 +97,11 @@ class DemandaCreate(_DemandaCamposComuns):
     status: DemandaStatusEditavel = "rascunho"
     # Obrigatório quando `status == "bloqueada"` — validado abaixo.
     motivo_bloqueio: str | None = Field(default=None, alias="motivoBloqueio", max_length=500)
+    # Aplica um WorkflowModelo no momento da criação: materializa as etapas do template como
+    # `demanda_workflow_etapas` — snapshot, não referência viva (ver docstring do model). Só
+    # aceito na criação; não existe endpoint pra trocar o workflow de uma Demanda já criada
+    # nesta fase.
+    workflow_modelo_id: UUID | None = Field(default=None, alias="workflowModeloId")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -137,6 +150,23 @@ class DemandaArquivar(BaseModel):
         return limpo
 
 
+class DemandaWorkflowEtapaRead(BaseModel):
+    """Etapa de workflow materializada — snapshot, não referência ao WorkflowModelo (ver
+    docstring de app/models/demanda_workflow_etapa.py)."""
+
+    id: UUID
+    ordem: int
+    nome: str
+    tipo: WorkflowEtapaTipo
+    quantidade_antes_deadline: int = Field(alias="quantidadeAntesDeadline")
+    unidade_prazo: WorkflowUnidadePrazo = Field(alias="unidadePrazo")
+    status: DemandaWorkflowEtapaStatus
+    usuario_responsavel_ids: list[UUID] = Field(alias="usuarioResponsavelIds")
+    departamento_responsavel_ids: list[UUID] = Field(alias="departamentoResponsavelIds")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
 class DemandaDiretorioRead(BaseModel):
     """Forma enxuta para seletores — `TrafegoIniciarSessao` escolhe uma demanda, e as telas de
     sessão resolvem `demandaId` → nome.
@@ -175,6 +205,9 @@ class DemandaRead(BaseModel):
     cliente_id: UUID | None = Field(default=None, alias="clienteId")
     projeto_id: UUID | None = Field(default=None, alias="projetoId")
     criado_por_usuario_id: UUID | None = Field(default=None, alias="criadoPorUsuarioId")
+    # Qual WorkflowModelo originou as etapas abaixo — só informativo (ver docstring do
+    # model). Editar/arquivar o modelo depois não muda nada aqui.
+    workflow_modelo_id: UUID | None = Field(default=None, alias="workflowModeloId")
     data_inicio: date | None = Field(default=None, alias="dataInicio")
     data_fim_prevista: date | None = Field(default=None, alias="dataFimPrevista")
     prazo_etapa_atual: datetime | None = Field(default=None, alias="prazoEtapaAtual")
@@ -198,11 +231,15 @@ class DemandaRead(BaseModel):
         default=None, alias="statusAnteriorArquivamento"
     )
 
-    # Coleções que ainda não têm tabela. Devolvidas VAZIAS para os componentes não quebrarem —
-    # não para simular conteúdo. Vazio é a verdade: não há linha em tabela nenhuma. A escrita
-    # é recusada com 422 (ver CAMPOS_SEM_PERSISTENCIA).
-    workflow_etapas: list = Field(default_factory=list, alias="workflowEtapas")
-    etapa_atual_id: None = Field(default=None, alias="etapaAtualId")
+    # Etapas de workflow materializadas (Fase 2E.2) — lista real, ordenada por `ordem`.
+    # `etapa_atual_id` é DERIVADO em runtime (menor `ordem` com `status != 'concluida'`),
+    # nunca uma coluna: evita ciclo de FK com `demanda_workflow_etapas` e uma segunda fonte
+    # de verdade. Sem etapas, ou todas concluídas, é `None`.
+    workflow_etapas: list[DemandaWorkflowEtapaRead] = Field(default_factory=list, alias="workflowEtapas")
+    etapa_atual_id: UUID | None = Field(default=None, alias="etapaAtualId")
+    # Coleções que ainda não têm tabela (Fase 2E.3/2E.4). Devolvidas VAZIAS para os
+    # componentes não quebrarem — não para simular conteúdo. A escrita é recusada com 422
+    # (ver CAMPOS_SEM_PERSISTENCIA).
     checklist: list = Field(default_factory=list)
     arquivos: list = Field(default_factory=list)
     comentarios: list = Field(default_factory=list)

@@ -99,6 +99,7 @@ class Demanda(Base):
         Index("ix_demandas_cliente_id", "cliente_id"),
         Index("ix_demandas_projeto_id", "projeto_id"),
         Index("ix_demandas_criado_por_usuario_id", "criado_por_usuario_id"),
+        Index("ix_demandas_workflow_modelo_id", "workflow_modelo_id"),
         # A Pauta ordena por este campo — índice evita sort em memória a cada abertura.
         Index("ix_demandas_prazo_etapa_atual", "prazo_etapa_atual"),
     )
@@ -138,6 +139,13 @@ class Demanda(Base):
     # consulta teria de varrer `eventos` a cada listagem — caro e frágil.
     criado_por_usuario_id: Mapped[str | None] = mapped_column(
         ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    # Qual WorkflowModelo originou as etapas desta Demanda (ver demanda_workflow_etapas) —
+    # só informativo: editar/arquivar o modelo depois nunca altera a Demanda já criada
+    # (etapas são materializadas, não lidas do template). SET NULL porque WorkflowModelo
+    # nunca é apagado fisicamente, só arquivado, e arquivar não pode derrubar a Demanda.
+    workflow_modelo_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workflow_modelos.id", ondelete="SET NULL"), nullable=True
     )
 
     # --- prazos -------------------------------------------------------------------

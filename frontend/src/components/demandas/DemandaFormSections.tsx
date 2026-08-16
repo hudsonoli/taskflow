@@ -8,23 +8,14 @@ import { Input } from "@/components/ui/Input";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
-import {
-  departamentosProjetoDisponiveis,
-  normalizarUsuarioId,
-  prioridadeDemandaLabels,
-  resolveDepartamentosProjetoNomes,
-  resolveResponsaveisDemandaNomes,
-  statusDemandaLabels,
-} from "@/lib/demandas";
-import { useAppData } from "@/lib/AppDataContext";
+import { prioridadeDemandaLabels, resolveResponsaveisDemandaNomes, statusDemandaLabels } from "@/lib/demandas";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { resolverDepartamentoNome } from "@/lib/referencias";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { normalizarReferenciasParaCodigoInterno } from "@/lib/referencias";
+import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
 import type { Demanda, DemandaPrioridade, DemandaStatus } from "@/types/demanda";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { DemandaArquivosCard } from "./DemandaArquivosCard";
-import { RecursoIndisponivel } from "./RecursoIndisponivel";
 import { DemandaChecklistCard } from "./DemandaChecklistCard";
 import { EnvioClienteCard } from "./EnvioClienteCard";
 import { RegistrarAjusteCard } from "./RegistrarAjusteCard";
@@ -75,7 +66,7 @@ function updateDemanda(demanda: Demanda, patch: Partial<Demanda>, onChange: (dem
 }
 
 export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) {
-  const { projetos } = useAppData();
+  const { projetos } = useDiretorioProjetos();
   const { clientes } = useDiretorioClientes();
 
   function handleProjetoChange(projetoId: string) {
@@ -158,18 +149,87 @@ export function BriefingDemandaSection({ demanda, onChange }: DemandaSectionProp
   );
 }
 
+const workflowEtapaStatusTone = {
+  pendente: "neutral",
+  em_execucao: "green",
+  pausada: "amber",
+  concluida: "green",
+} as const;
+
+const workflowEtapaStatusLabel = {
+  pendente: "Pendente",
+  em_execucao: "Em execução",
+  pausada: "Pausada",
+  concluida: "Concluída",
+} as const;
+
 /**
- * O `WorkflowEtapasEditor` deixou de ser renderizado na Fase 2E.1.
- *
- * Ele montava etapas a partir do modelo de workflow e as gravava em `demanda.workflowEtapas`
- * — campo que não tem tabela nesta fase. Mantido o editor, a pessoa preencheria as etapas, a
- * tela mostraria salvo e nada existiria no banco. O componente segue no repositório, intacto,
- * para voltar em 2E.2.
+ * Etapas materializadas na criação (Fase 2E.2) — leitura, não edição. Não há endpoint de
+ * transição de etapa nesta fase (ver docstring de `DemandaWorkflowEtapa`), então esta seção
+ * mostra o snapshot aplicado, sem controle de escrita — mesmo raciocínio de "affordance
+ * ausente com explicação" que o contrato transitório já usava aqui.
  */
-export function WorkflowDemandaSection() {
+export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
+  const { usuarios } = useDiretorioUsuarios();
+  const { departamentos } = useDiretorioDepartamentos();
+
+  if (demanda.workflowEtapas.length === 0) {
+    return (
+      <SectionShell title="Workflow" description="Etapas do fluxo de execução da tarefa." icon={<GitBranch className="h-5 w-5" />}>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Esta tarefa não foi criada a partir de um modelo de workflow.
+        </p>
+      </SectionShell>
+    );
+  }
+
   return (
-    <SectionShell title="Workflow" description="Etapas do fluxo de execução da tarefa." icon={<GitBranch className="h-5 w-5" />}>
-      <RecursoIndisponivel recurso="Etapas de workflow" fase="Fase 2E.2" />
+    <SectionShell
+      title="Workflow"
+      description="Etapas aplicadas na criação — modelo de origem não pode mais ser trocado."
+      icon={<GitBranch className="h-5 w-5" />}
+    >
+      <div className="flex flex-col gap-3">
+        {[...demanda.workflowEtapas]
+          .sort((a, b) => a.ordem - b.ordem)
+          .map((etapa) => {
+            const atual = etapa.id === demanda.etapaAtualId;
+            const responsaveis = etapa.usuarioResponsavelIds
+              .map((id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? id)
+              .join(", ");
+            const departamentosNomes = etapa.departamentoResponsavelIds
+              .map((id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id)
+              .join(", ");
+
+            return (
+              <div
+                key={etapa.id}
+                className={`rounded-2xl border p-3.5 ${
+                  atual
+                    ? "border-indigo-200 bg-indigo-50/40 dark:border-indigo-500/30 dark:bg-indigo-500/5"
+                    : "border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-950/30"
+                }`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={workflowEtapaStatusTone[etapa.status]}>Etapa {etapa.ordem}</Badge>
+                  {atual && <Badge tone="blue">Etapa atual</Badge>}
+                  <Badge tone={etapa.tipo === "aprovacao" ? "amber" : "blue"}>
+                    {workflowEtapaTipoLabels[etapa.tipo]}
+                  </Badge>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {workflowEtapaStatusLabel[etapa.status]}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{etapa.nome}</p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  {responsaveis || departamentosNomes
+                    ? [responsaveis, departamentosNomes].filter(Boolean).join(" · ")
+                    : "Sem responsável definido"}
+                </p>
+              </div>
+            );
+          })}
+      </div>
     </SectionShell>
   );
 }
@@ -181,20 +241,22 @@ export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSection
   const diretorio = useDiretorioUsuarios().usuarios;
   const usuariosAtivos = diretorio.filter((usuario) => usuario.status === "ativo");
 
+  const departamentosNomes = demanda.departamentoResponsavelIds
+    .map((id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id)
+    .join(", ") || "-";
+
   return (
     <SectionShell title="Responsáveis" description="Responsáveis principais por ID." icon={<UsersRound className="h-5 w-5" />}>
       <div className="grid gap-3 md:grid-cols-2">
         <MemberSelector
           label="Usuários responsáveis"
-          values={normalizarReferenciasParaCodigoInterno(demanda.usuarioResponsavelIds.map(normalizarUsuarioId), diretorio)}
+          values={demanda.usuarioResponsavelIds}
           onChange={(values) => updateDemanda(demanda, { usuarioResponsavelIds: values }, onChange)}
           placeholder="Selecionar responsáveis…"
           options={usuariosAtivos.map((usuario) => ({
-            // Enquanto Demanda continuar mock, o valor gravado é o codigoInterno — ver
-            // docs/padrao-arquivamento.md.
-            id: usuario.codigoInterno,
+            id: usuario.id,
             nome: usuario.nome,
-            subtitulo: resolverDepartamentoNome(usuario.departamentoId ?? "", departamentos),
+            subtitulo: departamentos.find((departamento) => departamento.id === usuario.departamentoId)?.nome,
             corIdentificacao: usuario.corIdentificacao,
             fotoUrl: usuario.fotoUrl,
           }))}
@@ -203,13 +265,15 @@ export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSection
           label="Departamentos responsáveis"
           values={demanda.departamentoResponsavelIds}
           onChange={(values) => updateDemanda(demanda, { departamentoResponsavelIds: values }, onChange)}
-          options={departamentosProjetoDisponiveis.map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
+          options={departamentos
+            .filter((departamento) => departamento.status === "ativo")
+            .map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
         />
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <Input label="Usuários selecionados" value={resolveResponsaveisDemandaNomes(demanda.usuarioResponsavelIds, diretorio)} disabled />
-        <Input label="Departamentos selecionados" value={resolveDepartamentosProjetoNomes(demanda.departamentoResponsavelIds)} disabled />
+        <Input label="Departamentos selecionados" value={departamentosNomes} disabled />
       </div>
     </SectionShell>
   );
