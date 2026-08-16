@@ -37,17 +37,36 @@ export type DemandaWorkflowEtapa = {
   status: DemandaWorkflowEtapaStatus;
 };
 
+/**
+ * Item de checklist (Fase 2E.3) — tabela própria, endpoint dedicado
+ * (`/demandas/{id}/checklist`), fora do payload de `Demanda` (ver docstring do tipo abaixo).
+ */
 export type DemandaChecklistItem = {
   id: string;
+  demandaId: string;
   texto: string;
+  ordem: number;
   concluido: boolean;
+  concluidoEm: string | null;
+  concluidoPorUsuarioId: string | null;
+  criadoPorUsuarioId: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
+/**
+ * Metadado de arquivo (Fase 2E.3) — sem `url`: baixar exige o endpoint autenticado
+ * (`/demandas/{id}/arquivos/{id}/download`), nunca um caminho estático (ver
+ * docs/pendencias-arquiteturais.md item 9, resolvido nesta fase).
+ */
 export type DemandaArquivo = {
-  nome: string;
-  url: string;
+  id: string;
+  demandaId: string;
+  nomeOriginal: string;
+  contentType: string | null;
   tamanhoBytes: number;
-  finalDoCliente: boolean;
+  enviadoPorUsuarioId: string | null;
+  createdAt: string;
 };
 
 export type DemandaComentario = {
@@ -93,12 +112,19 @@ export type DemandaHistoricoEvento = {
  * não muda nada aqui. `etapaAtualId` é derivado no servidor (menor `ordem` com
  * `status != "concluida"`), nunca uma escrita direta.
  *
- * ## Campos ainda sem persistência (Fase 2E.3/2E.4)
+ * ## Checklist e arquivos (Fase 2E.3)
  *
- * `checklist`, `arquivos`, `comentarios` e `historico`. A API os devolve **vazios** para os
- * componentes não quebrarem, e recusa (**422**) qualquer tentativa de enviá-los. A interface
- * não exibe controle de escrita para nenhum deles — affordance ausente com explicação, não
- * campo desabilitado com valor fantasma.
+ * Têm tabela e endpoint dedicado agora (`/demandas/{id}/checklist`, `/demandas/{id}/arquivos`)
+ * — **não** fazem parte deste tipo. Buscados sob demanda ao abrir a Demanda (ver
+ * `DemandaChecklistCard`/`DemandaArquivosCard`), para não inflar toda listagem com dado que
+ * só é necessário no detalhe.
+ *
+ * ## Campos ainda sem persistência (Fase 2E.4)
+ *
+ * `comentarios` e `historico`. A API os devolve **vazios** para os componentes não quebrarem,
+ * e recusa (**422**) qualquer tentativa de enviá-los. A interface não exibe controle de
+ * escrita para nenhum deles — affordance ausente com explicação, não campo desabilitado com
+ * valor fantasma.
  */
 export type Demanda = {
   id: string;
@@ -143,11 +169,9 @@ export type Demanda = {
   restauradoPorUsuarioId?: string | null;
   statusAnteriorArquivamento?: DemandaStatus | null;
 
-  // --- workflow materializado (2E.2) e coleções ainda sem persistência (2E.3/2E.4) ---
+  // --- workflow materializado (2E.2) e coleções ainda sem persistência (2E.4) ---
   workflowEtapas: DemandaWorkflowEtapa[];
   etapaAtualId: string | null;
-  checklist: DemandaChecklistItem[];
-  arquivos: DemandaArquivo[];
   comentarios: DemandaComentario[];
   historico: DemandaHistoricoEvento[];
 };

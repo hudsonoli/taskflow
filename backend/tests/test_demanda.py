@@ -327,9 +327,14 @@ def test_campo_sem_persistencia_e_recusado_na_edicao(client_admin: TestClient) -
 
 def test_leitura_devolve_colecoes_vazias_e_etapa_nula(client_admin: TestClient) -> None:
     """Vazio é a verdade: não há linha em tabela nenhuma. Devolvido só para os componentes não
-    quebrarem — não para simular conteúdo."""
+    quebrarem — não para simular conteúdo.
+
+    `checklist`/`arquivos` NÃO entram neste loop (Fase 2E.3): saíram de `DemandaRead`, têm
+    endpoint dedicado agora — ver test_demanda_checklist.py / test_demanda_arquivos.py."""
     criada = _criar(client_admin)
-    for campo in ("workflowEtapas", "checklist", "arquivos", "comentarios", "historico"):
+    assert "checklist" not in criada
+    assert "arquivos" not in criada
+    for campo in ("workflowEtapas", "comentarios", "historico"):
         assert criada[campo] == [], campo
     assert criada["etapaAtualId"] is None
 

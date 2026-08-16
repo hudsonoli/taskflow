@@ -40,7 +40,15 @@ async function proxy(request: NextRequest, path: string[]) {
 
   const contentType = backendResponse.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
-    return new NextResponse(await backendResponse.text(), { status: backendResponse.status });
+    // `.text()` decodifica como UTF-8 — corrompe binário (PDF, imagem) exatamente como
+    // `.text()` do lado do upload corromperia multipart. Download de arquivo de Demanda
+    // (Fase 2E.3) passa por aqui, então o corpo tem de ser bytes crus.
+    const buffer = await backendResponse.arrayBuffer();
+    const headers = new Headers();
+    headers.set("content-type", contentType || "application/octet-stream");
+    const contentDisposition = backendResponse.headers.get("content-disposition");
+    if (contentDisposition) headers.set("content-disposition", contentDisposition);
+    return new NextResponse(buffer, { status: backendResponse.status, headers });
   }
 
   const data = await backendResponse.json().catch(() => null);

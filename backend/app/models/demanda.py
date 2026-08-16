@@ -65,9 +65,13 @@ class Demanda(Base):
 
     ## O que ainda não existe
 
-    `workflowEtapas`, `etapaAtualId`, `checklist`, `arquivos`, `comentarios` e `historico`
-    entram em 2E.2–2E.4. Nesta fase **não são aceitos na escrita** (422) nem simulados na
-    leitura: a API devolve coleções vazias e a interface não oferece controle de edição.
+    `comentarios` e `historico` ainda não têm tabela (entram em 2E.4) — não são aceitos na
+    escrita (422) nem simulados na leitura: a API devolve coleções vazias e a interface não
+    oferece controle de edição. `workflowEtapas`/`etapaAtualId` (2E.2) e
+    `checklist`/`arquivos` (2E.3, tabelas `demanda_checklist_itens`/`demanda_arquivos`) já
+    são reais — os dois primeiros aparecem em `DemandaRead`; os dois últimos têm endpoint
+    dedicado (`/demandas/{id}/checklist`, `/demandas/{id}/arquivos`), fora do payload de
+    Demanda para não inflar toda listagem.
 
     `prazo_etapa_atual` **é campo manual e independente** — não deriva de `prazoHoras` das
     etapas, e nunca derivou. A Pauta ordena por ele.

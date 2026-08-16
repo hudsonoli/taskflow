@@ -564,9 +564,10 @@ class DemandaService:
 
     @staticmethod
     def _campos_base(demanda: Demanda) -> dict:
-        # As quatro coleções sem tabela (checklist/arquivos/comentarios/historico) NÃO
-        # aparecem aqui: os defaults do DemandaRead já as devolvem vazias. Repeti-las daria a
-        # impressão de que há algo de onde vieram.
+        # `comentarios`/`historico` (ainda sem tabela) NÃO aparecem aqui: os defaults do
+        # DemandaRead já os devolvem vazios. Repeti-los daria a impressão de que há algo de
+        # onde vieram. `checklist`/`arquivos` saíram de DemandaRead na Fase 2E.3 — têm
+        # endpoint próprio agora, não fazem mais parte deste payload.
         return {
             "id": demanda.id,
             "empresaId": demanda.empresa_id,

@@ -20,6 +20,15 @@ dependência nenhuma, e o controle vivia só no componente React que os consumia
 Um teste por método, sem token, exigindo 401 — porque o buraco era por ROUTER, não por rota.
 Mais os recortes de perfil e de empresa, que impedem a correção de virar "autenticado é
 suficiente".
+
+## Fase 2E.3 — uploads virou arquivos, e ganhou checklist
+
+`demanda_arquivos.py` substituiu `uploads.py`: o mesmo escopo-por-Demanda continua, mas o
+endereçamento saiu de `codigo_referencia` (curto, sequencial, adivinhável) para `demanda_id`
+(UUID tipado — string malformada nem chega a resolver escopo, falha na validação do parâmetro
+antes disso). `demanda_checklist.py` é router novo da mesma fase, sem consumidor anterior;
+entra na mesma matriz de "sem token" por nascer com o mesmo `Depends` de todos os outros —
+não há motivo para checar separado.
 """
 
 from __future__ import annotations
@@ -50,8 +59,12 @@ ROTAS_PROTEGIDAS = [
     ("get", f"/sessoes-trabalho/{uuid.uuid4()}", None),
     ("post", "/sessoes-trabalho/abrir", {"empresaId": "x", "demandaId": "1"}),
     ("post", f"/sessoes-trabalho/{uuid.uuid4()}/fechar", {"motivoEncerramento": "conclusao"}),
-    ("get", "/demandas/T26000001/uploads", None),
-    ("delete", "/demandas/T26000001/uploads/arquivo.pdf", None),
+    ("get", f"/demandas/{uuid.uuid4()}/arquivos", None),
+    ("delete", f"/demandas/{uuid.uuid4()}/arquivos/{uuid.uuid4()}", None),
+    ("get", f"/demandas/{uuid.uuid4()}/arquivos/{uuid.uuid4()}/download", None),
+    ("get", f"/demandas/{uuid.uuid4()}/checklist", None),
+    ("post", f"/demandas/{uuid.uuid4()}/checklist", {"texto": "item"}),
+    ("delete", f"/demandas/{uuid.uuid4()}/checklist/{uuid.uuid4()}", None),
 ]
 
 
@@ -171,7 +184,7 @@ def test_sessoes_de_outra_empresa_recusadas_no_parametro(client_admin: TestClien
 
 
 # --------------------------------------------------------------------------------------
-# uploads — escopo da própria Demanda
+# arquivos de Demanda — escopo da própria Demanda (Fase 2E.3)
 # --------------------------------------------------------------------------------------
 
 def _criar_demanda(client: TestClient) -> dict:
@@ -180,21 +193,24 @@ def _criar_demanda(client: TestClient) -> dict:
     return resposta.json()
 
 
-def test_upload_de_demanda_fora_do_escopo_devolve_404(
+def test_uploads_estatico_nao_existe_mais(client: TestClient) -> None:
+    """O mount `/uploads/**` (StaticFiles, sem autenticação nenhuma) foi removido na Fase
+    2E.3 — não há mais caminho estático para conteúdo de Demanda. `client` aqui é sem token
+    de propósito: o ponto é que nem autenticado alcançaria algo, porque a rota não existe."""
+    assert client.get("/uploads/qualquer-coisa.pdf").status_code == 404
+
+
+def test_arquivo_de_demanda_fora_do_escopo_devolve_404(
     client_admin: TestClient, client_operador: TestClient
 ) -> None:
-    """O código (`T26000001`) é curto, sequencial e adivinhável — não pode ser a única chave.
-
-    404 e não 403, igual ao acesso por UUID: 403 confirmaria que a demanda existe.
-    """
+    """404 e não 403, igual ao acesso por UUID de Demanda: 403 confirmaria que ela existe."""
     alheia = _criar_demanda(client_admin)
-    codigo = alheia["codigoReferencia"]
 
-    assert client_operador.get(f"/demandas/{codigo}/uploads").status_code == 404
-    assert client_operador.delete(f"/demandas/{codigo}/uploads/x.pdf").status_code == 404
+    assert client_operador.get(f"/demandas/{alheia['id']}/arquivos").status_code == 404
+    assert client_operador.delete(f"/demandas/{alheia['id']}/arquivos/{uuid.uuid4()}").status_code == 404
 
 
-def test_upload_de_demanda_no_escopo_e_permitido(
+def test_arquivo_de_demanda_no_escopo_e_permitido(
     client_admin: TestClient, client_operador: TestClient, db_session: Session, usuario_operador: Usuario
 ) -> None:
     minha = _criar_demanda(client_admin)
@@ -207,20 +223,20 @@ def test_upload_de_demanda_no_escopo_e_permitido(
     )
     db_session.flush()
 
-    resposta = client_operador.get(f"/demandas/{minha['codigoReferencia']}/uploads")
+    resposta = client_operador.get(f"/demandas/{minha['id']}/arquivos")
     assert resposta.status_code == 200
-    # Sem tabela de arquivos nesta fase — lista vazia é a verdade.
     assert resposta.json() == []
 
 
-def test_codigo_inexistente_devolve_404(client_admin: TestClient) -> None:
-    assert client_admin.get("/demandas/T99999999/uploads").status_code == 404
+def test_demanda_id_inexistente_devolve_404(client_admin: TestClient) -> None:
+    assert client_admin.get(f"/demandas/{uuid.uuid4()}/arquivos").status_code == 404
 
 
-def test_codigo_com_travessia_de_caminho_devolve_404(client_admin: TestClient) -> None:
-    """`..%2F..` não resolve para demanda nenhuma, então morre na checagem de escopo — antes
-    de chegar ao sistema de arquivos."""
-    assert client_admin.get("/demandas/..%2F..%2Fetc/uploads").status_code == 404
+def test_demanda_id_malformado_e_rejeitado(client_admin: TestClient) -> None:
+    """`..%2F..%2Fetc` nunca chega a resolver escopo nenhum: o cliente HTTP normaliza `..` na
+    própria URL antes do pedido sair, então a rota resultante simplesmente não existe (404) —
+    mesmo resultado seguro de antes, por um mecanismo mais forte que checagem de aplicação."""
+    assert client_admin.get("/demandas/..%2F..%2Fetc/arquivos").status_code == 404
 
 
 def test_demanda_de_outra_empresa_nao_da_acesso_aos_arquivos(
@@ -255,4 +271,4 @@ def test_demanda_de_outra_empresa_nao_da_acesso_aos_arquivos(
     db_session.add(intrusa)
     db_session.flush()
 
-    assert client_admin.get(f"/demandas/{intrusa.codigo_referencia}/uploads").status_code == 404
+    assert client_admin.get(f"/demandas/{intrusa.id}/arquivos").status_code == 404

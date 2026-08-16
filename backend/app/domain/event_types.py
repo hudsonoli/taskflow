@@ -74,6 +74,16 @@ class DomainEventType(StrEnum):
     DEMANDA_ARQUIVADA = "demanda.arquivada"
     DEMANDA_RESTAURADA = "demanda.restaurada"
 
+    # Checklist e arquivos (Fase 2E.3) — mesma entidade_tipo/entidade_id da Demanda-mãe, para
+    # que a futura tela de Histórico (2E.4) leia tudo com uma única consulta por Demanda.
+    DEMANDA_CHECKLIST_ITEM_CRIADO = "demanda.checklist_item_criado"
+    DEMANDA_CHECKLIST_ITEM_ALTERADO = "demanda.checklist_item_alterado"
+    DEMANDA_CHECKLIST_ITEM_CONCLUIDO = "demanda.checklist_item_concluido"
+    DEMANDA_CHECKLIST_ITEM_REABERTO = "demanda.checklist_item_reaberto"
+    DEMANDA_CHECKLIST_ITEM_EXCLUIDO = "demanda.checklist_item_excluido"
+    DEMANDA_ARQUIVO_ENVIADO = "demanda.arquivo_enviado"
+    DEMANDA_ARQUIVO_REMOVIDO = "demanda.arquivo_removido"
+
     # WorkflowModelo não tem tabela de histórico: estes eventos SÃO o histórico.
     WORKFLOW_MODELO_CRIADO = "workflow_modelo.criado"
     WORKFLOW_MODELO_ALTERADO = "workflow_modelo.alterado"

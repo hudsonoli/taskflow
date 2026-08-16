@@ -142,8 +142,8 @@ export function BriefingDemandaSection({ demanda, onChange }: DemandaSectionProp
       />
 
       <div className="mt-4 flex flex-col gap-3">
-        <DemandaChecklistCard />
-        <DemandaArquivosCard />
+        <DemandaChecklistCard demandaId={demanda.id} />
+        <DemandaArquivosCard demandaId={demanda.id} />
       </div>
     </SectionShell>
   );

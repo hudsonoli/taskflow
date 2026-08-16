@@ -25,6 +25,8 @@ import type {
 } from "@/types/projeto";
 import type {
   Demanda,
+  DemandaArquivo,
+  DemandaChecklistItem,
   DemandaDiretorio,
   DemandaFormDraft,
   DemandaPrioridade,
@@ -1247,9 +1249,10 @@ type DemandaReadApi = {
 };
 
 // `workflowEtapas`/`etapaAtualId` já são reais (Fase 2E.2) — materializados a partir de um
-// WorkflowModelo na criação, `etapaAtualId` derivado no servidor. As quatro coleções restantes
-// (checklist/arquivos/comentarios/historico) continuam fixadas vazias: não há tabela por trás
-// delas ainda nesta fase.
+// WorkflowModelo na criação, `etapaAtualId` derivado no servidor. `checklist`/`arquivos`
+// (Fase 2E.3) saíram deste payload — têm endpoint dedicado agora (ver
+// listChecklistDemanda/listArquivosDemanda abaixo), buscados sob demanda ao abrir a Demanda.
+// `comentarios`/`historico` continuam fixados vazios: não há tabela por trás deles ainda.
 function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
   return {
     id: data.id,
@@ -1299,8 +1302,6 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       departamentoResponsavelIds: etapa.departamentoResponsavelIds,
     })),
     etapaAtualId: data.etapaAtualId,
-    checklist: [],
-    arquivos: [],
     comentarios: [],
     historico: [],
   };
@@ -1423,6 +1424,131 @@ export async function arquivarDemandaReal(demandaId: string, motivoArquivamento:
 export async function restaurarDemandaReal(demandaId: string): Promise<Demanda> {
   const restaurada = await request<DemandaReadApi>(`/demandas/${demandaId}/restaurar`, { method: "POST" });
   return mapDemandaReadToDemanda(restaurada);
+}
+
+// ---------------------------------------------------------------------------------------
+// Checklist de Demanda (Fase 2E.3) — endpoint dedicado, fora do payload de Demanda (ver
+// mapDemandaReadToDemanda). Buscado sob demanda por DemandaChecklistCard ao abrir a Demanda.
+// ---------------------------------------------------------------------------------------
+
+export type DemandaChecklistItemReadApi = {
+  id: string;
+  demandaId: string;
+  texto: string;
+  ordem: number;
+  concluido: boolean;
+  concluidoEm: string | null;
+  concluidoPorUsuarioId: string | null;
+  criadoPorUsuarioId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function mapChecklistItemReadToItem(data: DemandaChecklistItemReadApi): DemandaChecklistItem {
+  return { ...data };
+}
+
+export async function listChecklistDemanda(demandaId: string): Promise<DemandaChecklistItem[]> {
+  const itens = await request<DemandaChecklistItemReadApi[]>(`/demandas/${demandaId}/checklist`);
+  return itens.map(mapChecklistItemReadToItem);
+}
+
+export async function criarItemChecklist(demandaId: string, texto: string): Promise<DemandaChecklistItem> {
+  const item = await request<DemandaChecklistItemReadApi>(`/demandas/${demandaId}/checklist`, {
+    method: "POST",
+    body: JSON.stringify({ texto }),
+  });
+  return mapChecklistItemReadToItem(item);
+}
+
+export async function editarTextoItemChecklist(
+  demandaId: string,
+  itemId: string,
+  texto: string,
+): Promise<DemandaChecklistItem> {
+  const item = await request<DemandaChecklistItemReadApi>(`/demandas/${demandaId}/checklist/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ texto }),
+  });
+  return mapChecklistItemReadToItem(item);
+}
+
+export async function alternarConclusaoItemChecklist(
+  demandaId: string,
+  itemId: string,
+  concluido: boolean,
+): Promise<DemandaChecklistItem> {
+  const item = await request<DemandaChecklistItemReadApi>(`/demandas/${demandaId}/checklist/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ concluido }),
+  });
+  return mapChecklistItemReadToItem(item);
+}
+
+export async function reordenarChecklist(demandaId: string, itemIds: string[]): Promise<DemandaChecklistItem[]> {
+  const itens = await request<DemandaChecklistItemReadApi[]>(`/demandas/${demandaId}/checklist/reordenar`, {
+    method: "PUT",
+    body: JSON.stringify({ itemIds }),
+  });
+  return itens.map(mapChecklistItemReadToItem);
+}
+
+export async function excluirItemChecklist(demandaId: string, itemId: string): Promise<void> {
+  await request<null>(`/demandas/${demandaId}/checklist/${itemId}`, { method: "DELETE" });
+}
+
+// ---------------------------------------------------------------------------------------
+// Arquivos de Demanda (Fase 2E.3) — metadado por endpoint dedicado; conteúdo só por download
+// autenticado, nunca por URL estática (ver docs/pendencias-arquiteturais.md, item 9).
+// ---------------------------------------------------------------------------------------
+
+export type DemandaArquivoReadApi = {
+  id: string;
+  demandaId: string;
+  nomeOriginal: string;
+  contentType: string | null;
+  tamanhoBytes: number;
+  enviadoPorUsuarioId: string | null;
+  createdAt: string;
+};
+
+function mapArquivoReadToArquivo(data: DemandaArquivoReadApi): DemandaArquivo {
+  return { ...data };
+}
+
+export async function listArquivosDemanda(demandaId: string): Promise<DemandaArquivo[]> {
+  const arquivos = await request<DemandaArquivoReadApi[]>(`/demandas/${demandaId}/arquivos`);
+  return arquivos.map(mapArquivoReadToArquivo);
+}
+
+// Upload é multipart — `request()` força `Content-Type: application/json`, o que destruiria
+// o boundary do FormData (mesma razão documentada no proxy, ver
+// src/app/api/backend/[...path]/route.ts). Por isso fala com `fetch` diretamente.
+export async function uploadArquivoDemanda(demandaId: string, file: File): Promise<DemandaArquivo> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`/api/backend/demandas/${demandaId}/arquivos`, {
+    method: "POST",
+    body: formData,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    const detail = data?.detail;
+    const message = typeof detail === "string" ? detail : (detail?.message ?? data?.message);
+    throw new Error(message ?? `Erro ${response.status}`);
+  }
+  return mapArquivoReadToArquivo(await response.json());
+}
+
+export async function excluirArquivoDemanda(demandaId: string, arquivoId: string): Promise<void> {
+  await request<null>(`/demandas/${demandaId}/arquivos/${arquivoId}`, { method: "DELETE" });
+}
+
+// Usada direto num `<a href>` — o proxy lê o cookie de sessão, então o navegador autentica
+// a navegação normalmente, sem JS extra. Nunca aponta pro FastAPI direto.
+export function urlDownloadArquivoDemanda(demandaId: string, arquivoId: string): string {
+  return `/api/backend/demandas/${demandaId}/arquivos/${arquivoId}/download`;
 }
 
 // ---------------------------------------------------------------------------------------

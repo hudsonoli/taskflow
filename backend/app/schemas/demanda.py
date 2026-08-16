@@ -31,11 +31,14 @@ DemandaStatusEditavel = Literal[
 ]
 DemandaPrioridade = Literal["baixa", "media", "alta"]
 
-# Campos que a interface conhece mas que ainda NÃO têm tabela — entram em 2E.3/2E.4.
-# Enviá-los devolve 422 por `extra="forbid"`, nunca aceite-e-descarte silencioso.
+# Campos que a interface conhece mas que ainda NÃO têm tabela — entram em 2E.4. Enviá-los
+# devolve 422 por `extra="forbid"`, nunca aceite-e-descarte silencioso.
+#
+# `checklist`/`arquivos` saíram daqui na Fase 2E.3: agora têm tabela própria
+# (`demanda_checklist_itens`/`demanda_arquivos`) e endpoints dedicados
+# (`/demandas/{id}/checklist`, `/demandas/{id}/arquivos`) — não fazem mais parte do payload
+# de Demanda nem para leitura nem para escrita (ver DemandaRead, que não os declara mais).
 CAMPOS_SEM_PERSISTENCIA = (
-    "checklist",
-    "arquivos",
     "comentarios",
     "historico",
 )
@@ -237,11 +240,13 @@ class DemandaRead(BaseModel):
     # de verdade. Sem etapas, ou todas concluídas, é `None`.
     workflow_etapas: list[DemandaWorkflowEtapaRead] = Field(default_factory=list, alias="workflowEtapas")
     etapa_atual_id: UUID | None = Field(default=None, alias="etapaAtualId")
-    # Coleções que ainda não têm tabela (Fase 2E.3/2E.4). Devolvidas VAZIAS para os
-    # componentes não quebrarem — não para simular conteúdo. A escrita é recusada com 422
-    # (ver CAMPOS_SEM_PERSISTENCIA).
-    checklist: list = Field(default_factory=list)
-    arquivos: list = Field(default_factory=list)
+    # Coleções que ainda não têm tabela (Fase 2E.4). Devolvidas VAZIAS para os componentes
+    # não quebrarem — não para simular conteúdo. A escrita é recusada com 422 (ver
+    # CAMPOS_SEM_PERSISTENCIA). `checklist`/`arquivos` NÃO aparecem mais aqui (Fase 2E.3) —
+    # têm tabela e endpoint dedicado agora; embuti-los de novo aqui infligiria em toda
+    # listagem de Demandas um dado que só é necessário ao abrir uma Demanda específica (ver
+    # item 12
+    # da instrução da fase — evitar N+1/payload pesado na listagem).
     comentarios: list = Field(default_factory=list)
     historico: list = Field(default_factory=list)
 

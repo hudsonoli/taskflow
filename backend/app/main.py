@@ -1,12 +1,11 @@
-from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
     clientes,
     auth,
+    demanda_arquivos,
+    demanda_checklist,
     demandas,
     departamentos,
     empresas,
@@ -18,7 +17,6 @@ from app.api.routes import (
     projetos,
     root,
     sessoes_trabalho,
-    uploads,
     usuarios,
     workflow_modelos,
 )
@@ -35,9 +33,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOADS_ROOT = Path("uploads")
-UPLOADS_ROOT.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOADS_ROOT), name="uploads")
+# Não há mais mount estático de /uploads (ver docs/pendencias-arquiteturais.md, item 9,
+# resolvido na Fase 2E.3): conteúdo de arquivo de Demanda só é servido por
+# demanda_arquivos.router, autenticado e escopado por Demanda.
 
 app.include_router(root.router)
 app.include_router(health.router)
@@ -50,8 +48,9 @@ app.include_router(clientes.router)
 app.include_router(fornecedores.router)
 app.include_router(projetos.router)
 app.include_router(demandas.router)
+app.include_router(demanda_checklist.router)
+app.include_router(demanda_arquivos.router)
 app.include_router(departamentos.router)
 app.include_router(equipes.router)
 app.include_router(workflow_modelos.router)
 app.include_router(auth.router)
-app.include_router(uploads.router)
