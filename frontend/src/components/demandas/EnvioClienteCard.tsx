@@ -5,7 +5,8 @@ import { CheckCircle2, Clock, Send } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { formatPrazo, generateId } from "@/lib/demandas";
+import { patchDemandaReal } from "@/lib/api-backend";
+import { formatPrazo } from "@/lib/demandas";
 import type { Demanda } from "@/types/demanda";
 
 function defaultPrazoRetorno(): string {
@@ -14,55 +15,53 @@ function defaultPrazoRetorno(): string {
   return date.toISOString().slice(0, 16);
 }
 
-function registrarHistorico(demanda: Demanda, acao: string): Demanda {
-  const now = new Date().toISOString();
-  return {
-    ...demanda,
-    updatedAt: now,
-    historico: [
-      {
-        id: generateId("hist-demanda"),
-        usuarioId: "user-1",
-        usuario: "Você",
-        acao,
-        dataHora: new Date().toLocaleString("pt-BR"),
-        ip: "127.0.0.1",
-        dispositivo: "Workspace local",
-      },
-      ...demanda.historico,
-    ],
-  };
-}
-
+/**
+ * Envio ao cliente (Fase 2E.4) — `status`/`enviadoClienteEm`/`prazoRetornoCliente`/
+ * `retornoRecebidoEm` já eram campos reais e persistidos (`DemandaUpdate`), mas até esta
+ * fase só chegavam a `setDemandas(...)` local — nunca ao `PATCH /demandas/{id}` real.
+ * Sobrevivia até o próximo F5, quando revertia sem aviso (ver instrução da fase, item 1).
+ *
+ * Sem endpoint dedicado: é PATCH comum. "Enviar" já gera `demanda.status_alterado`
+ * automaticamente; "Registrar retorno" publica `demanda.retorno_cliente_registrado` (ver
+ * DemandaService.update_demanda) — os dois já aparecem na timeline sem nada extra aqui.
+ */
 export function EnvioClienteCard({ demanda, onChange }: { demanda: Demanda; onChange: (demanda: Demanda) => void }) {
   const [prazoRetorno, setPrazoRetorno] = useState(defaultPrazoRetorno());
+  const [processando, setProcessando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const aguardandoCliente =
     demanda.status === "aguardando_cliente" && Boolean(demanda.enviadoClienteEm) && !demanda.retornoRecebidoEm;
 
-  function enviarParaCliente() {
-    const now = new Date().toISOString();
-    onChange(
-      registrarHistorico(
-        {
-          ...demanda,
-          status: "aguardando_cliente",
-          enviadoClienteEm: now,
-          prazoRetornoCliente: prazoRetorno,
-          retornoRecebidoEm: undefined,
-        },
-        `Enviado para aprovação do cliente — retorno até ${formatPrazo(prazoRetorno)}`,
-      ),
-    );
+  async function enviarParaCliente() {
+    setProcessando(true);
+    setErro(null);
+    try {
+      const atualizada = await patchDemandaReal(demanda.id, {
+        status: "aguardando_cliente",
+        enviadoClienteEm: new Date().toISOString(),
+        prazoRetornoCliente: prazoRetorno,
+      });
+      onChange(atualizada);
+    } catch {
+      setErro("Não foi possível enviar para o cliente.");
+    } finally {
+      setProcessando(false);
+    }
   }
 
-  function marcarRetornoRecebido() {
-    const now = new Date().toISOString();
-    onChange(
-      registrarHistorico(
-        { ...demanda, retornoRecebidoEm: now, prazoRetornoCliente: undefined },
-        "Retorno do cliente registrado",
-      ),
-    );
+  async function marcarRetornoRecebido() {
+    setProcessando(true);
+    setErro(null);
+    try {
+      const atualizada = await patchDemandaReal(demanda.id, {
+        retornoRecebidoEm: new Date().toISOString(),
+      });
+      onChange(atualizada);
+    } catch {
+      setErro("Não foi possível registrar o retorno do cliente.");
+    } finally {
+      setProcessando(false);
+    }
   }
 
   if (aguardandoCliente) {
@@ -81,11 +80,18 @@ export function EnvioClienteCard({ demanda, onChange }: { demanda: Demanda; onCh
               </p>
             </div>
           </div>
-          <Button type="button" variant="secondary" onClick={marcarRetornoRecebido} className="px-3 py-1.5 text-xs">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void marcarRetornoRecebido()}
+            disabled={processando}
+            className="px-3 py-1.5 text-xs"
+          >
             <CheckCircle2 className="h-3.5 w-3.5" />
             Registrar retorno
           </Button>
         </div>
+        {erro && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{erro}</p>}
       </div>
     );
   }
@@ -105,12 +111,13 @@ export function EnvioClienteCard({ demanda, onChange }: { demanda: Demanda; onCh
             onChange={(event) => setPrazoRetorno(event.target.value)}
             className="w-56"
           />
-          <Button type="button" onClick={enviarParaCliente} className="px-3 py-2.5 text-xs">
+          <Button type="button" onClick={() => void enviarParaCliente()} disabled={processando} className="px-3 py-2.5 text-xs">
             <Send className="h-3.5 w-3.5" />
             Enviar
           </Button>
         </div>
       </div>
+      {erro && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{erro}</p>}
       {demanda.status === "aguardando_cliente" && !demanda.enviadoClienteEm && (
         <Badge tone="amber">Status já está como aguardando cliente</Badge>
       )}

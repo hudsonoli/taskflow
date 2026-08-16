@@ -21,7 +21,8 @@ import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverDepartamentoNome } from "@/lib/referencias";
-import { formatPrazo, generateId, resolveProjetoDemandaNome, statusDemandaLabels } from "@/lib/demandas";
+import { formatPrazo, resolveProjetoDemandaNome, statusDemandaLabels } from "@/lib/demandas";
+import { patchDemandaReal } from "@/lib/api-backend";
 import { classificarTarefa, inicioDaSemana, mesmoDia, tarefasDoUsuario } from "@/lib/escopo-operacional";
 import { podeCriarDemanda } from "@/types/usuario";
 import type { Demanda } from "@/types/demanda";
@@ -97,31 +98,18 @@ export function DashboardView() {
     [minhasTarefas],
   );
 
-  function alternarSinalizada(demanda: Demanda) {
+  // Até a Fase 2E.4 isto só chamava `setDemandas(...)` local — `sinalizada` é campo real e
+  // persistido (ver DemandaUpdate), mas nunca ia ao servidor: a marcação sumia no próximo
+  // refresh. `demanda.alterada` (publicado automaticamente pelo PATCH) já cobre isto na
+  // timeline — sem evento dedicado necessário.
+  async function alternarSinalizada(demanda: Demanda) {
     if (!podeSinalizar) return;
-    setDemandas((current) =>
-      current.map((item) => {
-        if (item.id !== demanda.id) return item;
-        const novaSinalizada = !item.sinalizada;
-        return {
-          ...item,
-          sinalizada: novaSinalizada,
-          updatedAt: new Date().toISOString(),
-          historico: [
-            {
-              id: generateId("hist-demanda"),
-              usuarioId: usuarioAtual?.id ?? "user-1",
-              usuario: usuarioAtual?.nome ?? "Você",
-              acao: novaSinalizada ? "Marcada como prioritária" : "Sinalização de prioridade removida",
-              dataHora: new Date().toLocaleString("pt-BR"),
-              ip: "127.0.0.1",
-              dispositivo: "Workspace local",
-            },
-            ...item.historico,
-          ],
-        };
-      }),
-    );
+    try {
+      const atualizada = await patchDemandaReal(demanda.id, { sinalizada: !demanda.sinalizada });
+      setDemandas((current) => current.map((item) => (item.id === demanda.id ? atualizada : item)));
+    } catch (error) {
+      console.error("Não foi possível atualizar a sinalização da tarefa", error);
+    }
   }
 
   return (

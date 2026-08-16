@@ -17,6 +17,7 @@ from app.models import (  # noqa: E402,F401
     demanda,
     demanda_arquivo,
     demanda_checklist_item,
+    demanda_comentario,
     demanda_departamento,
     demanda_responsavel,
     demanda_workflow_etapa,

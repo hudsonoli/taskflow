@@ -6,6 +6,8 @@ from app.api.routes import (
     auth,
     demanda_arquivos,
     demanda_checklist,
+    demanda_comentarios,
+    demanda_historico,
     demandas,
     departamentos,
     empresas,
@@ -50,6 +52,8 @@ app.include_router(projetos.router)
 app.include_router(demandas.router)
 app.include_router(demanda_checklist.router)
 app.include_router(demanda_arquivos.router)
+app.include_router(demanda_comentarios.router)
+app.include_router(demanda_historico.router)
 app.include_router(departamentos.router)
 app.include_router(equipes.router)
 app.include_router(workflow_modelos.router)

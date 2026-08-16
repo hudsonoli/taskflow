@@ -69,27 +69,41 @@ export type DemandaArquivo = {
   createdAt: string;
 };
 
+/**
+ * Comentário de Demanda (Fase 2E.4) — tabela própria, endpoint dedicado
+ * (`/demandas/{id}/comentarios`), fora do payload de `Demanda` (mesmo padrão de
+ * checklist/arquivos). Sem anexo, @mention, reação ou thread nesta fase.
+ *
+ * `autorUsuarioId` é a única fonte de autoria — o nome é resolvido no render via
+ * `useDiretorioUsuarios()` (ver `AtividadeDemandaSection`), nunca guardado aqui. Isso também
+ * cobre autor removido/inativado: o diretório inclui todos os status, só não oferece
+ * inativo/arquivado como opção de novo vínculo em outros pickers.
+ */
 export type DemandaComentario = {
   id: string;
-  usuarioId: string;
-  usuario: string;
+  demandaId: string;
+  autorUsuarioId: string | null;
   texto: string;
-  dataHora: string;
-  // IDs de usuários citados via @Nome no texto — usado para notificar menções.
-  mencoes: string[];
+  createdAt: string;
+  updatedAt: string;
+  editadoEm: string | null;
 };
 
-export type DemandaHistoricoTipo = "ajuste_interno" | "ajuste_cliente" | "refacao" | "outro";
-
+/**
+ * Entrada da timeline (Fase 2E.4) — vem de `/demandas/{id}/historico`, que lê eventos de
+ * domínio reais (ver `DemandaHistoricoService` no backend). `tipo` é o tipo do evento
+ * (`"demanda.status_alterado"`, `"demanda.checklist_item_criado"`, ...); `dados` é o payload
+ * já sem os campos internos de auditoria (correlationId/causationId/metadata) — a UI resolve
+ * um rótulo legível por `tipo` (ver `historicoEventoLabel`), nunca exibe `dados` cru.
+ *
+ * Sem IP/dispositivo: nunca existiram no evento real (o mock inventava no navegador).
+ */
 export type DemandaHistoricoEvento = {
   id: string;
-  usuarioId: string;
-  usuario: string;
-  acao: string;
-  tipo?: DemandaHistoricoTipo;
-  dataHora: string;
-  ip: string;
-  dispositivo: string;
+  tipo: string;
+  usuarioId: string | null;
+  occurredAt: string;
+  dados: Record<string, unknown>;
 };
 
 /**
@@ -112,19 +126,13 @@ export type DemandaHistoricoEvento = {
  * não muda nada aqui. `etapaAtualId` é derivado no servidor (menor `ordem` com
  * `status != "concluida"`), nunca uma escrita direta.
  *
- * ## Checklist e arquivos (Fase 2E.3)
+ * ## Checklist, arquivos, comentários e histórico (Fase 2E.3/2E.4)
  *
- * Têm tabela e endpoint dedicado agora (`/demandas/{id}/checklist`, `/demandas/{id}/arquivos`)
- * — **não** fazem parte deste tipo. Buscados sob demanda ao abrir a Demanda (ver
- * `DemandaChecklistCard`/`DemandaArquivosCard`), para não inflar toda listagem com dado que
- * só é necessário no detalhe.
- *
- * ## Campos ainda sem persistência (Fase 2E.4)
- *
- * `comentarios` e `historico`. A API os devolve **vazios** para os componentes não quebrarem,
- * e recusa (**422**) qualquer tentativa de enviá-los. A interface não exibe controle de
- * escrita para nenhum deles — affordance ausente com explicação, não campo desabilitado com
- * valor fantasma.
+ * Todos têm tabela e endpoint dedicado agora (`/demandas/{id}/checklist`, `/arquivos`,
+ * `/comentarios`, `/historico`) — **nenhum** faz parte deste tipo. Buscados sob demanda ao
+ * abrir a Demanda (ver `DemandaChecklistCard`/`DemandaArquivosCard`/
+ * `AtividadeDemandaSection`/`HistoricoDemandaSection`), para não inflar toda listagem com
+ * dado que só é necessário no detalhe.
  */
 export type Demanda = {
   id: string;
@@ -169,11 +177,9 @@ export type Demanda = {
   restauradoPorUsuarioId?: string | null;
   statusAnteriorArquivamento?: DemandaStatus | null;
 
-  // --- workflow materializado (2E.2) e coleções ainda sem persistência (2E.4) ---
+  // --- workflow materializado (2E.2) ---
   workflowEtapas: DemandaWorkflowEtapa[];
   etapaAtualId: string | null;
-  comentarios: DemandaComentario[];
-  historico: DemandaHistoricoEvento[];
 };
 
 /** Forma enxuta para seletores (`TrafegoIniciarSessao`) — também escopada no servidor. */

@@ -329,13 +329,13 @@ def test_leitura_devolve_colecoes_vazias_e_etapa_nula(client_admin: TestClient) 
     """Vazio é a verdade: não há linha em tabela nenhuma. Devolvido só para os componentes não
     quebrarem — não para simular conteúdo.
 
-    `checklist`/`arquivos` NÃO entram neste loop (Fase 2E.3): saíram de `DemandaRead`, têm
-    endpoint dedicado agora — ver test_demanda_checklist.py / test_demanda_arquivos.py."""
+    `checklist`/`arquivos` (2E.3) e `comentarios`/`historico` (2E.4) NÃO entram neste loop:
+    saíram de `DemandaRead`, têm endpoint dedicado agora — ver test_demanda_checklist.py,
+    test_demanda_arquivos.py, test_demanda_comentario.py, test_demanda_historico.py."""
     criada = _criar(client_admin)
-    assert "checklist" not in criada
-    assert "arquivos" not in criada
-    for campo in ("workflowEtapas", "comentarios", "historico"):
-        assert criada[campo] == [], campo
+    for campo in ("checklist", "arquivos", "comentarios", "historico"):
+        assert campo not in criada
+    assert criada["workflowEtapas"] == []
     assert criada["etapaAtualId"] is None
 
 
@@ -889,6 +889,75 @@ def test_sincronizar_responsaveis_adiciona_e_remove(
         f"/demandas/{criada['id']}", json={"usuarioResponsavelIds": [str(usuario_gestor.id)]}
     ).json()
     assert atualizada["usuarioResponsavelIds"] == [str(usuario_gestor.id)]
+
+
+def test_sincronizar_departamentos_responsaveis_adiciona_e_remove(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    """Regressão do bug de persistência da edição inline do drawer (Fase 2E.4):
+    `ResponsaveisDemandaSection` monta o payload de `departamentoResponsavelIds` a partir do
+    `id` real do diretório (nunca `codigoInterno`, eliminado na 2E.2) — o teste prova que o
+    valor sobrevive a uma NOVA consulta ao servidor, não só ao retorno imediato do PATCH."""
+    dep_a = _departamento(db_session, empresa)
+    dep_b = _departamento(db_session, empresa)
+    criada = _criar(client_admin, departamentoResponsavelIds=[str(dep_a.id)])
+
+    atualizada = client_admin.patch(
+        f"/demandas/{criada['id']}", json={"departamentoResponsavelIds": [str(dep_b.id)]}
+    ).json()
+    assert atualizada["departamentoResponsavelIds"] == [str(dep_b.id)]
+
+    relida = client_admin.get(f"/demandas/{criada['id']}").json()
+    assert relida["departamentoResponsavelIds"] == [str(dep_b.id)]
+
+
+def test_departamento_responsavel_com_id_nao_uuid_e_recusado(client_admin: TestClient) -> None:
+    """Trava a ponte legada (`codigoInterno` como FK, eliminada na Fase 2E.2) não voltar a
+    entrar por aqui — um id no formato antigo (`dep-atendimento`) tem de falhar a validação
+    de tipo antes de chegar a qualquer verificação de existência."""
+    criada = _criar(client_admin)
+    resposta = client_admin.patch(
+        f"/demandas/{criada['id']}", json={"departamentoResponsavelIds": ["dep-atendimento"]}
+    )
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_patch_persiste_campos_simples_em_nova_consulta(client_admin: TestClient) -> None:
+    """Regressão do bug de persistência da edição inline do drawer (Fase 2E.4):
+    `DadosDemandaSection`/`BriefingDemandaSection` só chamavam `setDemandas(...)` local — o
+    valor "salvo" na tela nunca chegava ao servidor e sumia no próximo carregamento. O teste
+    teria passado mesmo com o bug se só checasse a resposta do PATCH (que sempre veio do
+    servidor); a prova real é uma consulta NOVA e independente."""
+    criada = _criar(client_admin)
+    resposta = client_admin.patch(
+        f"/demandas/{criada['id']}",
+        json={
+            "pit": "C3A-0008/26",
+            "prioridade": "alta",
+            "briefing": "<p>Texto do briefing</p>",
+            "prazoEtapaAtual": "2026-08-20T12:00:00+00:00",
+        },
+    )
+    assert resposta.status_code == 200, resposta.text
+
+    relida = client_admin.get(f"/demandas/{criada['id']}").json()
+    assert relida["pit"] == "C3A-0008/26"
+    assert relida["prioridade"] == "alta"
+    assert relida["briefing"] == "<p>Texto do briefing</p>"
+    assert relida["prazoEtapaAtual"] is not None
+
+
+def test_patch_persiste_projeto_e_cliente_em_nova_consulta(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    cliente = _cliente(db_session, empresa)
+    criada = _criar(client_admin)
+
+    resposta = client_admin.patch(f"/demandas/{criada['id']}", json={"clienteId": str(cliente.id)})
+    assert resposta.status_code == 200, resposta.text
+
+    relida = client_admin.get(f"/demandas/{criada['id']}").json()
+    assert relida["clienteId"] == str(cliente.id)
 
 
 def test_responsavel_de_outra_empresa_e_recusado(client_admin: TestClient) -> None:

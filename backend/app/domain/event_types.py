@@ -84,6 +84,21 @@ class DomainEventType(StrEnum):
     DEMANDA_ARQUIVO_ENVIADO = "demanda.arquivo_enviado"
     DEMANDA_ARQUIVO_REMOVIDO = "demanda.arquivo_removido"
 
+    # Comentários (Fase 2E.4) — mesma entidade_tipo/entidade_id da Demanda-mãe.
+    DEMANDA_COMENTARIO_CRIADO = "demanda.comentario_criado"
+    DEMANDA_COMENTARIO_EDITADO = "demanda.comentario_editado"
+    DEMANDA_COMENTARIO_REMOVIDO = "demanda.comentario_removido"
+
+    # Completa a timeline com marcos que já existiam como campo/ação mas nunca viravam
+    # evento (Fase 2E.4).
+    DEMANDA_WORKFLOW_APLICADO = "demanda.workflow_aplicado"
+    DEMANDA_AJUSTE_INTERNO_REGISTRADO = "demanda.ajuste_interno_registrado"
+    DEMANDA_AJUSTE_CLIENTE_REGISTRADO = "demanda.ajuste_cliente_registrado"
+    DEMANDA_REFACAO_REGISTRADA = "demanda.refacao_registrada"
+    DEMANDA_EMAIL_CONCLUSAO_ENVIADO = "demanda.email_conclusao_enviado"
+    DEMANDA_EMAIL_CONCLUSAO_DISPENSADO = "demanda.email_conclusao_dispensado"
+    DEMANDA_RETORNO_CLIENTE_REGISTRADO = "demanda.retorno_cliente_registrado"
+
     # WorkflowModelo não tem tabela de histórico: estes eventos SÃO o histórico.
     WORKFLOW_MODELO_CRIADO = "workflow_modelo.criado"
     WORKFLOW_MODELO_ALTERADO = "workflow_modelo.alterado"

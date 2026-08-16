@@ -31,17 +31,18 @@ DemandaStatusEditavel = Literal[
 ]
 DemandaPrioridade = Literal["baixa", "media", "alta"]
 
-# Campos que a interface conhece mas que ainda NÃO têm tabela — entram em 2E.4. Enviá-los
-# devolve 422 por `extra="forbid"`, nunca aceite-e-descarte silencioso.
+# Campos que a interface conhecia mas ainda não tinham tabela. A tupla existe vazia de
+# propósito — não removida — para o histórico ficar rastreável: quem chegar aqui e for
+# adicionar um campo novo por simetria com Demanda deve perguntar primeiro se ele tem
+# persistência real, e não presumir que Demanda ainda tolera campo "de fachada".
 #
-# `checklist`/`arquivos` saíram daqui na Fase 2E.3: agora têm tabela própria
-# (`demanda_checklist_itens`/`demanda_arquivos`) e endpoints dedicados
-# (`/demandas/{id}/checklist`, `/demandas/{id}/arquivos`) — não fazem mais parte do payload
-# de Demanda nem para leitura nem para escrita (ver DemandaRead, que não os declara mais).
-CAMPOS_SEM_PERSISTENCIA = (
-    "comentarios",
-    "historico",
-)
+# `checklist`/`arquivos` saíram na Fase 2E.3; `comentarios`/`historico` saíram na Fase 2E.4.
+# Todos os quatro têm tabela própria e endpoint dedicado agora — nenhum faz parte do payload
+# de Demanda nem para leitura nem para escrita (ver DemandaRead, que não declara nenhum
+# deles). Enviar qualquer um dos quatro em `DemandaCreate`/`DemandaUpdate` continua sendo
+# 422 por `extra="forbid"` — não porque a tupla abaixo os liste, mas porque eles nunca foram
+# declarados como campo de `_DemandaCamposComuns`.
+CAMPOS_SEM_PERSISTENCIA: tuple[str, ...] = ()
 
 # `workflowEtapas`/`etapaAtualId` saíram de CAMPOS_SEM_PERSISTENCIA na Fase 2E.2: agora têm
 # tabela (`demanda_workflow_etapas`) e aparecem de verdade em DemandaRead. Continuam **não
@@ -153,6 +154,30 @@ class DemandaArquivar(BaseModel):
         return limpo
 
 
+TipoAjuste = Literal["ajuste_interno", "ajuste_cliente", "refacao"]
+
+
+class DemandaAjusteRegistrar(BaseModel):
+    """Registra que um ajuste aconteceu — não muda nenhum campo da Demanda, só produz um
+    evento na timeline (ver DemandaService.registrar_ajuste). Os três tipos vêm direto da UI
+    existente (RegistrarAjusteCard) — mantidos diferenciados a pedido explícito."""
+
+    tipo: TipoAjuste
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class DemandaConclusaoEmailRegistrar(BaseModel):
+    """`enviado=true`: e-mail de conclusão foi enviado ao cliente. `enviado=false`: usuário
+    dispensou o aviso sem enviar. As duas ações gravam os MESMOS campos reais
+    (`emailConclusaoEnviado`/`emailConclusaoData`) — só o evento de domínio publicado muda,
+    porque é o único jeito de diferenciar as duas intenções na timeline depois."""
+
+    enviado: bool
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
 class DemandaWorkflowEtapaRead(BaseModel):
     """Etapa de workflow materializada — snapshot, não referência ao WorkflowModelo (ver
     docstring de app/models/demanda_workflow_etapa.py)."""
@@ -240,15 +265,11 @@ class DemandaRead(BaseModel):
     # de verdade. Sem etapas, ou todas concluídas, é `None`.
     workflow_etapas: list[DemandaWorkflowEtapaRead] = Field(default_factory=list, alias="workflowEtapas")
     etapa_atual_id: UUID | None = Field(default=None, alias="etapaAtualId")
-    # Coleções que ainda não têm tabela (Fase 2E.4). Devolvidas VAZIAS para os componentes
-    # não quebrarem — não para simular conteúdo. A escrita é recusada com 422 (ver
-    # CAMPOS_SEM_PERSISTENCIA). `checklist`/`arquivos` NÃO aparecem mais aqui (Fase 2E.3) —
-    # têm tabela e endpoint dedicado agora; embuti-los de novo aqui infligiria em toda
-    # listagem de Demandas um dado que só é necessário ao abrir uma Demanda específica (ver
-    # item 12
-    # da instrução da fase — evitar N+1/payload pesado na listagem).
-    comentarios: list = Field(default_factory=list)
-    historico: list = Field(default_factory=list)
+    # `checklist`/`arquivos` (2E.3) e `comentarios`/`historico` (2E.4) NÃO aparecem mais
+    # aqui — todos têm tabela e endpoint dedicado agora (`/demandas/{id}/checklist`,
+    # `/arquivos`, `/comentarios`, `/historico`). Embuti-los de novo infligiria em toda
+    # listagem de Demandas um dado que só é necessário ao abrir uma Demanda específica —
+    # evita N+1/payload pesado na listagem.
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

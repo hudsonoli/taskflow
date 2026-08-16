@@ -105,10 +105,14 @@ export function classificarTarefa(demanda: Demanda, agora: Date = new Date()): C
   };
 }
 
-/** Usuário que registrou a criação da tarefa (primeiro evento de histórico com "criada" na ação). */
+/**
+ * Usuário que criou a tarefa. Até a Fase 2E.4 isto era resolvido varrendo `historico[]` por
+ * um evento com "criada" na ação — `criadoPorUsuarioId` já é a mesma informação, real e
+ * direta no próprio objeto, sem precisar do histórico (que agora é buscado à parte, por
+ * Demanda, não mais embutido em toda listagem — ver DemandaHistoricoEvento).
+ */
 export function autorDemanda(demanda: Demanda): string | undefined {
-  const evento = demanda.historico.find((item) => item.acao.toLowerCase().includes("criada"));
-  return evento ? normalizarUsuarioId(evento.usuarioId) : undefined;
+  return demanda.criadoPorUsuarioId ?? undefined;
 }
 
 // ---------------------------------------------------------------------------------

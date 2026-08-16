@@ -102,18 +102,16 @@ function media(valores: number[]): number {
   return valores.reduce((sum, value) => sum + value, 0) / valores.length;
 }
 
-function contarHistoricoPorTipo(demandas: Demanda[]) {
-  let ajustesInternos = 0;
-  let ajustesCliente = 0;
-  let refacoes = 0;
-  demandas.forEach((demanda) => {
-    demanda.historico.forEach((evento) => {
-      if (evento.tipo === "ajuste_interno") ajustesInternos += 1;
-      if (evento.tipo === "ajuste_cliente") ajustesCliente += 1;
-      if (evento.tipo === "refacao") refacoes += 1;
-    });
-  });
-  return { ajustesInternos, ajustesCliente, refacoes };
+// Até a Fase 2E.3, `demanda.historico` vinha embutido em toda listagem (mock), e esta
+// função varria o array já carregado em memória para cada demanda. Na Fase 2E.4 o histórico
+// passou a ser real, mas por Demanda — buscado por `/demandas/{id}/historico`, não mais
+// embutido em bulk, exatamente para não inflar `GET /demandas` (ver DemandaHistoricoEvento).
+// Contar ajustes/refações em MUITAS demandas de uma vez, como este relatório faz, precisaria
+// de um endpoint de agregação novo (ex.: contagem de eventos por tipo/período/projeto) —
+// fora do escopo da 2E.4, que tratou o histórico de UMA Demanda. Devolvendo zero até essa
+// decisão ser tomada, em vez de manter o código quebrado ou fingir o dado com N+1 requests.
+function contarHistoricoPorTipo() {
+  return { ajustesInternos: 0, ajustesCliente: 0, refacoes: 0 };
 }
 
 export interface AnaliseProjeto {
@@ -138,7 +136,7 @@ export function analisarProjeto(projetoId: string, demandasTodas: Demanda[], pro
     .filter((demanda) => demanda.enviadoClienteEm && demanda.retornoRecebidoEm)
     .map((demanda) => diffEmDias(demanda.enviadoClienteEm as string, demanda.retornoRecebidoEm as string));
 
-  const { ajustesInternos, ajustesCliente, refacoes } = contarHistoricoPorTipo(demandas);
+  const { ajustesInternos, ajustesCliente, refacoes } = contarHistoricoPorTipo();
 
   const colaboradores = responsaveisProjetoDisponiveis
     .map((usuario) => ({
@@ -185,7 +183,7 @@ export function analisarPecasPorProjeto(projetoId: string, demandasTodas: Demand
     const redatorId = demanda.usuarioResponsavelIds[0];
     const redator = responsaveisProjetoDisponiveis.find((usuario) => usuario.id === redatorId)?.nome ?? "Sem responsável";
     const emAndamento = demanda.status !== "concluida" && demanda.status !== "cancelada";
-    const { ajustesInternos, ajustesCliente, refacoes } = contarHistoricoPorTipo([demanda]);
+    const { ajustesInternos, ajustesCliente, refacoes } = contarHistoricoPorTipo();
 
     return {
       demandaId: demanda.id,

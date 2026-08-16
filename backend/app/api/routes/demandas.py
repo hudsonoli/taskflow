@@ -14,12 +14,16 @@ from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import require_profiles
 from app.models.usuario import Usuario
 from app.schemas.demanda import (
+    DemandaAjusteRegistrar,
     DemandaArquivar,
+    DemandaConclusaoEmailRegistrar,
     DemandaCreate,
     DemandaDiretorioRead,
     DemandaRead,
     DemandaUpdate,
 )
+from app.schemas.demanda_historico import DemandaHistoricoEventoRead
+from app.services.demanda_historico_service import DemandaHistoricoService
 from app.services.demanda_service import (
     DemandaClienteInvalidoError,
     DemandaDepartamentoInvalidoError,
@@ -39,6 +43,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user_password_ready)],
 )
 demanda_service = DemandaService()
+historico_service = DemandaHistoricoService()
 
 # Demanda é o primeiro domínio OPERACIONAL: ao contrário de Cliente, Projeto e Fornecedor,
 # ler/criar/editar é aberto a qualquer autenticado — sempre dentro do escopo resolvido.
@@ -224,5 +229,51 @@ def restaurar_demanda(
             db, demanda, actor_usuario_id=current_user.id
         )
         return demanda_service.to_read(db, restaurada)
+    except Exception as exc:
+        handle_demanda_error(exc)
+
+
+# Ajuste e conclusão-por-e-mail (Fase 2E.4) são operacionais como checklist/arquivos/
+# comentários (ver instrução da fase, item 13 da 2E.3, reaplicado aqui): qualquer
+# autenticado com escopo sobre a Demanda aciona, sem gate de perfil — ao contrário de
+# arquivar/restaurar, que seguem admin/gestor.
+
+
+@router.post(
+    "/{demanda_id}/ajustes", response_model=DemandaHistoricoEventoRead, status_code=status.HTTP_201_CREATED
+)
+def registrar_ajuste(
+    demanda_id: UUID,
+    payload: DemandaAjusteRegistrar,
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Não muda nenhum campo da Demanda — só produz uma entrada na timeline (ver
+    DemandaService.registrar_ajuste)."""
+    try:
+        escopo = _escopo(db, current_user)
+        demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
+        evento = demanda_service.registrar_ajuste(
+            db, demanda, payload.tipo, actor_usuario_id=current_user.id
+        )
+        return historico_service.to_read(evento)
+    except Exception as exc:
+        handle_demanda_error(exc)
+
+
+@router.post("/{demanda_id}/conclusao-email", response_model=DemandaRead)
+def registrar_conclusao_email(
+    demanda_id: UUID,
+    payload: DemandaConclusaoEmailRegistrar,
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    try:
+        escopo = _escopo(db, current_user)
+        demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
+        atualizada = demanda_service.registrar_conclusao_email(
+            db, demanda, enviado=payload.enviado, actor_usuario_id=current_user.id
+        )
+        return demanda_service.to_read(db, atualizada)
     except Exception as exc:
         handle_demanda_error(exc)

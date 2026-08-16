@@ -18,6 +18,7 @@ from app.models.demanda_workflow_etapa_departamento_responsavel import (
     DemandaWorkflowEtapaDepartamentoResponsavel,
 )
 from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaResponsavel
+from app.models.evento import Evento
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.demanda_repository import DemandaRepository
 from app.repositories.departamento_repository import DepartamentoRepository
@@ -38,6 +39,7 @@ STATUS_ARQUIVADA = "arquivada"
 STATUS_PADRAO = "rascunho"
 STATUS_EM_EXECUCAO = "em_execucao"
 STATUS_BLOQUEADA = "bloqueada"
+STATUS_CONCLUIDA = "concluida"
 
 # Mesma regra de Cliente, Projeto e Departamento: um usuário nestes estados não pode ser
 # DEFINIDO como responsável novo. Vínculo histórico continua valendo.
@@ -217,6 +219,17 @@ class DemandaService:
                 )
 
             self._publish_event(db, demanda, DomainEventType.DEMANDA_CRIADA, actor_usuario_id, occurred_at=now)
+            if workflow_modelo_id is not None:
+                # Completa a timeline com o marco que só existia como coluna
+                # (`demandas.workflow_modelo_id`) até a Fase 2E.4 — payload minimal de
+                # propósito: buscar nome/código do WorkflowModelo aqui duplicaria a consulta
+                # que `_ensure_workflow_modelo_valido` já fez, só para um dado que a UI
+                # consegue resolver localmente a partir do id (mesmo padrão usado para
+                # usuarioId/departamentoId nos outros eventos desta função).
+                self._publish_event(
+                    db, demanda, DomainEventType.DEMANDA_WORKFLOW_APLICADO, actor_usuario_id,
+                    extra_payload={"workflowModeloId": workflow_modelo_id}, occurred_at=now,
+                )
             if status == STATUS_BLOQUEADA:
                 self._publish_event(
                     db, demanda, DomainEventType.DEMANDA_BLOQUEADA, actor_usuario_id,
@@ -383,12 +396,23 @@ class DemandaService:
                     demanda.projeto_id = projeto_final
                     campos_alterados.append("projetoId")
 
+            # Capturado ANTES do loop genérico sobrescrever o campo — é a única forma de
+            # detectar a transição None -> valor (cliente respondeu) depois.
+            retorno_recebido_em_anterior = demanda.retorno_recebido_em
+
             for campo in _CAMPOS_SIMPLES:
                 if campo not in updates:
                     continue
                 if updates[campo] != getattr(demanda, campo):
                     setattr(demanda, campo, updates[campo])
                     campos_alterados.append(campo)
+
+            if retorno_recebido_em_anterior is None and demanda.retorno_recebido_em is not None:
+                # Marco sem ambiguidade — só existe UM motivo real para este campo sair de
+                # None (cliente respondeu), ao contrário do par enviado/dispensado de e-mail
+                # de conclusão (mesmo estado final, duas intenções — por isso aquele tem
+                # ação dedicada em vez de detecção por diff, ver registrar_conclusao_email).
+                eventos.append((DomainEventType.DEMANDA_RETORNO_CLIENTE_REGISTRADO, {}))
 
             if "responsavel_ids" in updates:
                 eventos += self._sincronizar_responsaveis(
@@ -490,6 +514,66 @@ class DemandaService:
             raise
 
     # ----------------------------------------------------------------------------------
+    # Ações que só publicam evento — sem tabela própria (Fase 2E.4)
+    # ----------------------------------------------------------------------------------
+
+    _EVENTO_POR_TIPO_AJUSTE: dict[str, DomainEventType] = {
+        "ajuste_interno": DomainEventType.DEMANDA_AJUSTE_INTERNO_REGISTRADO,
+        "ajuste_cliente": DomainEventType.DEMANDA_AJUSTE_CLIENTE_REGISTRADO,
+        "refacao": DomainEventType.DEMANDA_REFACAO_REGISTRADA,
+    }
+
+    def registrar_ajuste(
+        self, db: Session, demanda: Demanda, tipo: str, *, actor_usuario_id: str | None = None
+    ) -> Evento:
+        """Não muda nenhum campo da Demanda — só produz um evento na timeline. Os três tipos
+        (`ajuste_interno`/`ajuste_cliente`/`refacao`) vêm da UI existente (RegistrarAjusteCard),
+        mantidos diferenciados a pedido explícito em vez de um único evento genérico."""
+        try:
+            now = agora_utc()
+            evento = self._publish_event(
+                db, demanda, self._EVENTO_POR_TIPO_AJUSTE[tipo], actor_usuario_id, occurred_at=now
+            )
+            db.commit()
+            return evento
+        except Exception:
+            db.rollback()
+            raise
+
+    def registrar_conclusao_email(
+        self, db: Session, demanda: Demanda, *, enviado: bool, actor_usuario_id: str | None = None
+    ) -> Demanda:
+        """`enviado=True`: e-mail de conclusão foi enviado ao cliente. `enviado=False`:
+        usuário dispensou o aviso. As duas ações gravam os MESMOS campos reais — só o evento
+        publicado muda, porque é o único jeito de diferenciar as duas intenções depois (ver
+        docstring de DemandaConclusaoEmailRegistrar)."""
+        try:
+            if demanda.status != STATUS_CONCLUIDA:
+                raise DemandaInvalidTransitionError(
+                    "Aviso de conclusão só se aplica a demanda com status 'concluida'"
+                )
+
+            now = agora_utc()
+            demanda.email_conclusao_enviado = True
+            demanda.email_conclusao_data = now
+            demanda.updated_at = now
+            self.repository.update(db, demanda)
+
+            tipo_evento = (
+                DomainEventType.DEMANDA_EMAIL_CONCLUSAO_ENVIADO
+                if enviado
+                else DomainEventType.DEMANDA_EMAIL_CONCLUSAO_DISPENSADO
+            )
+            self._publish_event(db, demanda, tipo_evento, actor_usuario_id, occurred_at=now)
+
+            db.commit()
+            db.refresh(demanda)
+            return demanda
+        except Exception:
+            db.rollback()
+            raise
+
+    # ----------------------------------------------------------------------------------
     # Serialização
     # ----------------------------------------------------------------------------------
 
@@ -564,10 +648,10 @@ class DemandaService:
 
     @staticmethod
     def _campos_base(demanda: Demanda) -> dict:
-        # `comentarios`/`historico` (ainda sem tabela) NÃO aparecem aqui: os defaults do
-        # DemandaRead já os devolvem vazios. Repeti-los daria a impressão de que há algo de
-        # onde vieram. `checklist`/`arquivos` saíram de DemandaRead na Fase 2E.3 — têm
-        # endpoint próprio agora, não fazem mais parte deste payload.
+        # `checklist`/`arquivos` (2E.3) e `comentarios`/`historico` (2E.4) NÃO aparecem
+        # aqui: todos têm tabela e endpoint dedicado agora, fora do payload de Demanda —
+        # embuti-los de novo infligiria em toda listagem um dado que só é necessário ao
+        # abrir uma Demanda específica.
         return {
             "id": demanda.id,
             "empresaId": demanda.empresa_id,
@@ -811,7 +895,7 @@ class DemandaService:
         *,
         extra_payload: dict | None = None,
         occurred_at: datetime | None = None,
-    ) -> None:
+    ) -> Evento:
         timestamp = occurred_at or agora_utc()
         payload = {
             "empresa_id": demanda.empresa_id,
@@ -826,7 +910,7 @@ class DemandaService:
         if extra_payload:
             payload.update(extra_payload)
 
-        self.event_publisher.publish(
+        return self.event_publisher.publish(
             db,
             tipo=tipo,
             empresa_id=demanda.empresa_id,

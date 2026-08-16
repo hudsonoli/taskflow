@@ -27,8 +27,10 @@ import type {
   Demanda,
   DemandaArquivo,
   DemandaChecklistItem,
+  DemandaComentario,
   DemandaDiretorio,
   DemandaFormDraft,
+  DemandaHistoricoEvento,
   DemandaPrioridade,
   DemandaStatus,
   DemandaStatusEditavel,
@@ -1302,8 +1304,6 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       departamentoResponsavelIds: etapa.departamentoResponsavelIds,
     })),
     etapaAtualId: data.etapaAtualId,
-    comentarios: [],
-    historico: [],
   };
 }
 
@@ -1380,30 +1380,32 @@ export async function atualizarDemandaReal(demandaId: string, draft: DemandaForm
  * servidor ao sair do bloqueio. Entrar em `em_execucao` fora do expediente levanta
  * `ForaDeExpedienteError`, que carrega a janela vigente.
  */
-export async function patchDemandaReal(
-  demandaId: string,
-  campos: Partial<{
-    nome: string;
-    status: DemandaStatusEditavel;
-    prioridade: DemandaPrioridade;
-    sinalizada: boolean;
-    motivoBloqueio: string | null;
-    briefing: string | null;
-    pit: string | null;
-    clienteId: string | null;
-    projetoId: string | null;
-    dataInicio: string | null;
-    dataFimPrevista: string | null;
-    prazoEtapaAtual: string | null;
-    enviadoClienteEm: string | null;
-    prazoRetornoCliente: string | null;
-    retornoRecebidoEm: string | null;
-    emailConclusaoEnviado: boolean;
-    emailConclusaoData: string | null;
-    usuarioResponsavelIds: string[];
-    departamentoResponsavelIds: string[];
-  }>,
-): Promise<Demanda> {
+// Nomeado (não anônimo) para ser reaproveitado por quem monta patch parcial fora deste
+// arquivo — ver DemandaFormSections.tsx, que centraliza a edição inline do drawer aqui em
+// vez de duplicar a forma do payload (ver instrução da Fase 2E.4 sobre o bug do drawer).
+export type DemandaPatchCampos = Partial<{
+  nome: string;
+  status: DemandaStatusEditavel;
+  prioridade: DemandaPrioridade;
+  sinalizada: boolean;
+  motivoBloqueio: string | null;
+  briefing: string | null;
+  pit: string | null;
+  clienteId: string | null;
+  projetoId: string | null;
+  dataInicio: string | null;
+  dataFimPrevista: string | null;
+  prazoEtapaAtual: string | null;
+  enviadoClienteEm: string | null;
+  prazoRetornoCliente: string | null;
+  retornoRecebidoEm: string | null;
+  emailConclusaoEnviado: boolean;
+  emailConclusaoData: string | null;
+  usuarioResponsavelIds: string[];
+  departamentoResponsavelIds: string[];
+}>;
+
+export async function patchDemandaReal(demandaId: string, campos: DemandaPatchCampos): Promise<Demanda> {
   const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}`, {
     method: "PATCH",
     body: JSON.stringify(campos),
@@ -1549,6 +1551,105 @@ export async function excluirArquivoDemanda(demandaId: string, arquivoId: string
 // a navegação normalmente, sem JS extra. Nunca aponta pro FastAPI direto.
 export function urlDownloadArquivoDemanda(demandaId: string, arquivoId: string): string {
   return `/api/backend/demandas/${demandaId}/arquivos/${arquivoId}/download`;
+}
+
+// ---------------------------------------------------------------------------------------
+// Comentários de Demanda (Fase 2E.4) — endpoint dedicado, fora do payload de Demanda.
+// Autoria é decidida no backend: editar só o autor; excluir autor OU admin/gestor. O
+// frontend só reflete (esconde/desabilita ação) — nunca é a barreira real.
+// ---------------------------------------------------------------------------------------
+
+export type DemandaComentarioReadApi = {
+  id: string;
+  demandaId: string;
+  autorUsuarioId: string | null;
+  texto: string;
+  createdAt: string;
+  updatedAt: string;
+  editadoEm: string | null;
+};
+
+function mapComentarioReadToComentario(data: DemandaComentarioReadApi): DemandaComentario {
+  return { ...data };
+}
+
+export async function listComentariosDemanda(demandaId: string): Promise<DemandaComentario[]> {
+  const comentarios = await request<DemandaComentarioReadApi[]>(`/demandas/${demandaId}/comentarios`);
+  return comentarios.map(mapComentarioReadToComentario);
+}
+
+export async function criarComentarioDemanda(demandaId: string, texto: string): Promise<DemandaComentario> {
+  const comentario = await request<DemandaComentarioReadApi>(`/demandas/${demandaId}/comentarios`, {
+    method: "POST",
+    body: JSON.stringify({ texto }),
+  });
+  return mapComentarioReadToComentario(comentario);
+}
+
+export async function editarComentarioDemanda(
+  demandaId: string,
+  comentarioId: string,
+  texto: string,
+): Promise<DemandaComentario> {
+  const comentario = await request<DemandaComentarioReadApi>(
+    `/demandas/${demandaId}/comentarios/${comentarioId}`,
+    { method: "PATCH", body: JSON.stringify({ texto }) },
+  );
+  return mapComentarioReadToComentario(comentario);
+}
+
+export async function excluirComentarioDemanda(demandaId: string, comentarioId: string): Promise<void> {
+  await request<null>(`/demandas/${demandaId}/comentarios/${comentarioId}`, { method: "DELETE" });
+}
+
+// ---------------------------------------------------------------------------------------
+// Histórico de Demanda (Fase 2E.4) — leitura de eventos reais, escopada pela Demanda. Nunca
+// é `GET /eventos` (auditoria administrativa global, admin/gestor-only).
+// ---------------------------------------------------------------------------------------
+
+export type DemandaHistoricoEventoReadApi = {
+  id: string;
+  tipo: string;
+  usuarioId: string | null;
+  occurredAt: string;
+  dados: Record<string, unknown>;
+};
+
+function mapHistoricoEventoReadToEvento(data: DemandaHistoricoEventoReadApi): DemandaHistoricoEvento {
+  return { ...data };
+}
+
+export async function listHistoricoDemanda(demandaId: string): Promise<DemandaHistoricoEvento[]> {
+  const eventos = await request<DemandaHistoricoEventoReadApi[]>(`/demandas/${demandaId}/historico`);
+  return eventos.map(mapHistoricoEventoReadToEvento);
+}
+
+// ---------------------------------------------------------------------------------------
+// Ajuste e conclusão por e-mail (Fase 2E.4) — ações que só publicam evento de domínio na
+// timeline da Demanda (ver DemandaService.registrar_ajuste/registrar_conclusao_email).
+// ---------------------------------------------------------------------------------------
+
+export type TipoAjusteDemanda = "ajuste_interno" | "ajuste_cliente" | "refacao";
+
+export async function registrarAjusteDemanda(
+  demandaId: string,
+  tipo: TipoAjusteDemanda,
+): Promise<DemandaHistoricoEvento> {
+  const evento = await request<DemandaHistoricoEventoReadApi>(`/demandas/${demandaId}/ajustes`, {
+    method: "POST",
+    body: JSON.stringify({ tipo }),
+  });
+  return mapHistoricoEventoReadToEvento(evento);
+}
+
+// `enviado=true`: e-mail de conclusão foi enviado ao cliente. `enviado=false`: usuário
+// dispensou o aviso. Mesmos campos reais nos dois casos — só o evento publicado muda.
+export async function registrarConclusaoEmailDemanda(demandaId: string, enviado: boolean): Promise<Demanda> {
+  const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}/conclusao-email`, {
+    method: "POST",
+    body: JSON.stringify({ enviado }),
+  });
+  return mapDemandaReadToDemanda(atualizada);
 }
 
 // ---------------------------------------------------------------------------------------

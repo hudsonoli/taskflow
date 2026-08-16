@@ -1,12 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { CheckCircle2, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { generateId } from "@/lib/demandas";
+import { registrarConclusaoEmailDemanda } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { resolverClientePorReferencia } from "@/lib/referencias";
 
+/**
+ * Aviso de conclusão (Fase 2E.4) — `emailConclusaoEnviado`/`emailConclusaoData` já eram
+ * campos reais, mas até esta fase só chegavam a `setDemandas(...)` local (ver instrução da
+ * fase, item 1). Agora vai por `POST /demandas/{id}/conclusao-email`: enviar e dispensar
+ * gravam os MESMOS campos reais, só o evento de domínio publicado muda — é o único jeito de
+ * diferenciar as duas intenções na timeline depois (ver DemandaConclusaoEmailRegistrar).
+ */
 export function DemandaConclusaoBanner({
   demanda,
   onChange,
@@ -16,6 +24,8 @@ export function DemandaConclusaoBanner({
 }) {
   const { clientes } = useDiretorioClientes();
   const cliente = resolverClientePorReferencia(demanda.clienteId, clientes);
+  const [processando, setProcessando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
   if (demanda.status !== "concluida" || demanda.emailConclusaoEnviado) return null;
   if (!cliente || !cliente.avisarConclusaoPorEmail) return null;
@@ -23,34 +33,25 @@ export function DemandaConclusaoBanner({
   const destinatarios = cliente.contatos.filter((contato) => contato.recebeEntregas).map((contato) => contato.email);
   const destinatariosFinais = destinatarios.length > 0 ? destinatarios : cliente.email ? [cliente.email] : [];
 
-  function registrarHistorico(acao: string) {
-    onChange({
-      ...demanda,
-      emailConclusaoEnviado: true,
-      emailConclusaoData: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      historico: [
-        {
-          id: generateId("hist-demanda"),
-          usuarioId: "user-1",
-          usuario: "Você",
-          acao,
-          dataHora: new Date().toLocaleString("pt-BR"),
-          ip: "127.0.0.1",
-          dispositivo: "Workspace local",
-        },
-        ...demanda.historico,
-      ],
-    });
+  async function registrar(enviado: boolean) {
+    setProcessando(true);
+    setErro(null);
+    try {
+      const atualizada = await registrarConclusaoEmailDemanda(demanda.id, enviado);
+      onChange(atualizada);
+    } catch {
+      setErro("Não foi possível registrar a conclusão.");
+    } finally {
+      setProcessando(false);
+    }
   }
 
   function handleEnviar() {
-    const destino = destinatariosFinais.length > 0 ? destinatariosFinais.join(", ") : "sem contato cadastrado";
-    registrarHistorico(`E-mail de conclusão enviado para o cliente (simulado — sem integração real): ${destino}`);
+    void registrar(true);
   }
 
   function handleDispensar() {
-    registrarHistorico("Aviso de conclusão dispensado — e-mail não enviado ao cliente");
+    void registrar(false);
   }
 
   return (
@@ -73,16 +74,22 @@ export function DemandaConclusaoBanner({
           </div>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Button type="button" variant="secondary" onClick={handleDispensar} className="px-3 py-1.5 text-xs">
+          <Button type="button" variant="secondary" onClick={handleDispensar} disabled={processando} className="px-3 py-1.5 text-xs">
             <X className="h-3.5 w-3.5" />
             Agora não
           </Button>
-          <Button type="button" onClick={handleEnviar} className="px-3 py-1.5 text-xs" disabled={destinatariosFinais.length === 0}>
+          <Button
+            type="button"
+            onClick={handleEnviar}
+            className="px-3 py-1.5 text-xs"
+            disabled={processando || destinatariosFinais.length === 0}
+          >
             <Mail className="h-3.5 w-3.5" />
             Enviar e-mail
           </Button>
         </div>
       </div>
+      {erro && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{erro}</p>}
     </div>
   );
 }
