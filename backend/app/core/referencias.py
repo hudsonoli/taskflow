@@ -35,6 +35,7 @@ PREFIXOS_REFERENCIA: dict[str, str] = {
     "fornecedor": "F",
     "projeto": "P",
     "tarefa": "T",
+    "workflow_modelo": "W",
 }
 
 SEQUENCIAL_DIGITOS = 6

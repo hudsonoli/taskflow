@@ -1,61 +1,92 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Workflow as WorkflowIcon } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { EMPRESA_PADRAO_ID, generateId } from "@/lib/workflow-modelos-mock";
-import { useAppData } from "@/lib/AppDataContext";
+import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
+import { EstadoErro } from "@/components/operacional/EstadoErro";
+import {
+  atualizarWorkflowModeloReal,
+  criarWorkflowModeloReal,
+  listWorkflowModelosReais,
+  restaurarWorkflowModeloReal,
+  WorkflowModeloArquivadoConflictError,
+} from "@/lib/api-backend";
 import type { WorkflowModelo, WorkflowModeloFormDraft } from "@/types/workflow-modelo";
 import { WorkflowModeloFormModal } from "./WorkflowModeloFormModal";
 import { WorkflowsGrid } from "./WorkflowsGrid";
 import { WorkflowsStats } from "./WorkflowsStats";
 import { WorkflowsToolbar } from "./WorkflowsToolbar";
 
-function normalize(value: string) {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
-
-function matchesModelo(modelo: WorkflowModelo, query: string) {
-  return normalize(modelo.nome).includes(normalize(query));
-}
-
-function createModeloFromDraft(draft: WorkflowModeloFormDraft): WorkflowModelo {
-  const now = new Date().toISOString();
-  return {
-    id: generateId("workflow-modelo"),
-    empresaId: EMPRESA_PADRAO_ID,
-    ...draft,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-function updateModeloFromDraft(modelo: WorkflowModelo, draft: WorkflowModeloFormDraft): WorkflowModelo {
-  return { ...modelo, ...draft, updatedAt: new Date().toISOString() };
-}
-
 export function WorkflowsView() {
-  const { workflowModelos, setWorkflowModelos } = useAppData();
+  const [workflowModelos, setWorkflowModelos] = useState<WorkflowModelo[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
 
   const editingModelo = workflowModelos.find((modelo) => modelo.id === editingId);
 
-  const filteredModelos = useMemo(
-    () => workflowModelos.filter((modelo) => (query.trim() ? matchesModelo(modelo, query) : true)),
-    [workflowModelos, query],
-  );
-
-  function handleSave(draft: WorkflowModeloFormDraft, modeloId?: string) {
-    if (!modeloId) {
-      setWorkflowModelos((current) => [createModeloFromDraft(draft), ...current]);
-    } else {
-      setWorkflowModelos((current) => current.map((modelo) => (modelo.id === modeloId ? updateModeloFromDraft(modelo, draft) : modelo)));
+  // A busca vai para o backend: assim `codigoReferencia` (W26000001) também é pesquisável,
+  // não só o que está carregado na tela.
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const data = await listWorkflowModelosReais({ search: query.trim() || undefined });
+      setWorkflowModelos(data);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível carregar os workflows.");
+    } finally {
+      setCarregando(false);
     }
-    setCreating(false);
-    setEditingId(null);
+  }, [query]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void carregar();
+    }, 250); // debounce da busca
+    return () => clearTimeout(timeout);
+  }, [carregar]);
+
+  async function handleSave(draft: WorkflowModeloFormDraft, modeloId?: string) {
+    setSalvando(true);
+    setErro(null);
+    try {
+      if (!modeloId) {
+        await criarWorkflowModeloReal(draft);
+      } else {
+        await atualizarWorkflowModeloReal(modeloId, draft);
+      }
+      await carregar();
+      setCreating(false);
+      setEditingId(null);
+    } catch (error) {
+      if (error instanceof WorkflowModeloArquivadoConflictError) {
+        const restaurar = window.confirm(
+          "Já existe um modelo de workflow arquivado com este nome. Deseja restaurá-lo em vez de criar um novo?",
+        );
+        if (restaurar) {
+          try {
+            await restaurarWorkflowModeloReal(error.workflowModeloArquivadoId);
+            await carregar();
+            setCreating(false);
+            setEditingId(null);
+          } catch (restoreError) {
+            setErro(
+              restoreError instanceof Error ? restoreError.message : "Não foi possível restaurar o workflow.",
+            );
+          }
+        }
+      } else {
+        setErro(error instanceof Error ? error.message : "Não foi possível salvar o workflow.");
+      }
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -78,23 +109,38 @@ export function WorkflowsView() {
               </p>
             </div>
           </div>
-          <Badge tone="blue">Dados locais</Badge>
+          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
+
+      {erro && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          {erro}
+        </div>
+      )}
 
       <WorkflowsStats workflowModelos={workflowModelos} />
 
       <WorkflowsToolbar query={query} onQueryChange={setQuery} onNewWorkflow={() => setCreating(true)} />
 
-      <WorkflowsGrid workflowModelos={filteredModelos} onEdit={setEditingId} />
+      {carregando ? (
+        <EstadoCarregando />
+      ) : erro && workflowModelos.length === 0 ? (
+        <EstadoErro mensagem={erro} onRetry={carregar} />
+      ) : (
+        <WorkflowsGrid workflowModelos={workflowModelos} onEdit={setEditingId} />
+      )}
 
-      {creating && <WorkflowModeloFormModal open onClose={() => setCreating(false)} onSave={handleSave} />}
+      {creating && (
+        <WorkflowModeloFormModal open salvando={salvando} onClose={() => setCreating(false)} onSave={handleSave} />
+      )}
 
       {editingModelo && (
         <WorkflowModeloFormModal
           key={editingModelo.id}
           open
           modelo={editingModelo}
+          salvando={salvando}
           onClose={() => setEditingId(null)}
           onSave={handleSave}
         />

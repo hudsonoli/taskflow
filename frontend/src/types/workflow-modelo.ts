@@ -13,6 +13,8 @@ export const workflowUnidadePrazoLabels: Record<WorkflowUnidadePrazo, string> = 
   horas: "Horas",
 };
 
+export type WorkflowModeloStatus = "ativo" | "inativo" | "arquivado";
+
 export type WorkflowModeloEtapa = {
   id: string;
   nome: string;
@@ -24,13 +26,25 @@ export type WorkflowModeloEtapa = {
 };
 
 export type WorkflowModelo = {
+  /** UUID técnico — usado em relações e rotas. Nunca exibido na interface. */
   id: string;
   empresaId: string;
+  /** Ponte transitória de importação — Workflow está na lista de domínios com XLSX
+   * planejado (ver docs/pendencias-arquiteturais.md). Sai quando a importação existir. */
+  codigoInterno: string;
+  codigoReferencia: string;
+  anoReferencia: number;
+  sequencialReferencia: number;
   nome: string;
-  ativo: boolean;
+  status: WorkflowModeloStatus;
   etapas: WorkflowModeloEtapa[];
   createdAt: string;
   updatedAt: string;
 };
 
-export type WorkflowModeloFormDraft = Pick<WorkflowModelo, "nome" | "ativo" | "etapas">;
+/** Campos que o formulário edita — os códigos e a empresa são responsabilidade do backend. */
+export type WorkflowModeloFormDraft = {
+  nome: string;
+  status: Exclude<WorkflowModeloStatus, "arquivado">;
+  etapas: WorkflowModeloEtapa[];
+};

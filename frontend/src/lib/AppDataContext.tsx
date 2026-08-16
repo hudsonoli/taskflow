@@ -6,12 +6,10 @@ import { pecasMock } from "@/lib/pecas-mock";
 import { regraExpedienteMock } from "@/lib/regra-expediente-mock";
 import { configuracaoEmailMock } from "@/lib/configuracao-email-mock";
 import { configuracaoNumeracaoTarefaMock } from "@/lib/configuracao-numeracao-tarefa-mock";
-import { workflowModelosMock } from "@/lib/workflow-modelos-mock";
 import { slaRegrasMock } from "@/lib/sla-mock";
 import { fetchSessao, fetchUsuarioAtualCompleto, logout as logoutRequest } from "@/lib/auth";
 import { listDemandasReais } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
-import type { WorkflowModelo } from "@/types/workflow-modelo";
 import type { SlaRegra } from "@/types/sla";
 import type { Peca } from "@/types/peca";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
@@ -44,8 +42,6 @@ interface AppDataContextValue {
   projetos: ProjetoLegado[];
   pecas: Peca[];
   setPecas: Dispatch<SetStateAction<Peca[]>>;
-  workflowModelos: WorkflowModelo[];
-  setWorkflowModelos: Dispatch<SetStateAction<WorkflowModelo[]>>;
   slaRegras: SlaRegra[];
   setSlaRegras: Dispatch<SetStateAction<SlaRegra[]>>;
   regraExpediente: RegraExpediente;
@@ -76,7 +72,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandasCarregando, setDemandasCarregando] = useState(true);
   const projetos = projetosLegado;
   const [pecas, setPecas] = useState<Peca[]>(pecasMock);
-  const [workflowModelos, setWorkflowModelos] = useState<WorkflowModelo[]>(workflowModelosMock);
   const [slaRegras, setSlaRegras] = useState<SlaRegra[]>(slaRegrasMock);
   const [regraExpediente, setRegraExpediente] = useState<RegraExpediente>(regraExpedienteMock);
   const [configuracaoEmail, setConfiguracaoEmail] = useState<ConfiguracaoEmail>(configuracaoEmailMock);
@@ -176,8 +171,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         projetos,
         pecas,
         setPecas,
-        workflowModelos,
-        setWorkflowModelos,
         slaRegras,
         setSlaRegras,
         regraExpediente,

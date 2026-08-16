@@ -3,7 +3,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
 
 export function WorkflowsStats({ workflowModelos }: { workflowModelos: WorkflowModelo[] }) {
-  const ativos = workflowModelos.filter((modelo) => modelo.ativo).length;
+  const ativos = workflowModelos.filter((modelo) => modelo.status === "ativo").length;
   const totalEtapas = workflowModelos.reduce((total, modelo) => total + modelo.etapas.length, 0);
   const mediaEtapas = workflowModelos.length ? Math.round(totalEtapas / workflowModelos.length) : 0;
 

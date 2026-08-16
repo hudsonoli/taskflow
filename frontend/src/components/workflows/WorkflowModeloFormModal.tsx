@@ -8,9 +8,8 @@ import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
-import { generateId } from "@/lib/workflow-modelos-mock";
+import { generateId } from "@/lib/ids";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { normalizarReferenciasParaCodigoInterno } from "@/lib/referencias";
 import {
   workflowEtapaTipoLabels,
   workflowUnidadePrazoLabels,
@@ -35,7 +34,7 @@ function createEtapa(): WorkflowModeloEtapa {
 function createInitialDraft(modelo?: WorkflowModelo): WorkflowModeloFormDraft {
   return {
     nome: modelo?.nome ?? "",
-    ativo: modelo?.ativo ?? true,
+    status: modelo?.status === "inativo" ? "inativo" : "ativo",
     etapas: modelo?.etapas ?? [createEtapa()],
   };
 }
@@ -45,11 +44,13 @@ export function WorkflowModeloFormModal({
   modelo,
   onClose,
   onSave,
+  salvando,
 }: {
   open: boolean;
   modelo?: WorkflowModelo;
   onClose: () => void;
   onSave: (draft: WorkflowModeloFormDraft, modeloId?: string) => void;
+  salvando?: boolean;
 }) {
   const { usuarios } = useDiretorioUsuarios();
   const [draft, setDraft] = useState<WorkflowModeloFormDraft>(() => createInitialDraft(modelo));
@@ -59,12 +60,11 @@ export function WorkflowModeloFormModal({
   const canSave = draft.nome.trim().length > 0 && draft.etapas.length > 0;
   const todasExpandidas = draft.etapas.length > 0 && draft.etapas.every((etapa) => expandedIds.has(etapa.id));
 
-  // Picker só oferece usuário ativo; grava codigoInterno enquanto Workflow continuar mock —
-  // ver docs/padrao-arquivamento.md / lib/referencias.ts.
+  // Picker só oferece usuário ativo — grava usuario.id real (UUID), sem ponte de codigoInterno.
   const memberOptions = usuarios
     .filter((usuario) => usuario.status === "ativo")
     .map((usuario) => ({
-      id: usuario.codigoInterno,
+      id: usuario.id,
       nome: usuario.nome,
       corIdentificacao: usuario.corIdentificacao,
       fotoUrl: usuario.fotoUrl,
@@ -139,7 +139,12 @@ export function WorkflowModeloFormModal({
         <Input label="Nome do modelo de workflow" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
 
         <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
-          <Switch checked={draft.ativo} onChange={(checked) => updateDraft({ ativo: checked })} label={draft.ativo ? "Ativo" : "Inativo"} description="Modelos inativos não aparecem no cadastro de tarefas." />
+          <Switch
+            checked={draft.status === "ativo"}
+            onChange={(checked) => updateDraft({ status: checked ? "ativo" : "inativo" })}
+            label={draft.status === "ativo" ? "Ativo" : "Inativo"}
+            description="Modelos inativos não aparecem no cadastro de tarefas."
+          />
         </div>
 
         <div className="flex items-center justify-between">
@@ -156,8 +161,9 @@ export function WorkflowModeloFormModal({
         <div className="space-y-3">
           {draft.etapas.map((etapa, index) => {
             const expanded = expandedIds.has(etapa.id);
-            const etapaResponsaveisNormalizados = normalizarReferenciasParaCodigoInterno(etapa.usuarioResponsavelIds, usuarios);
-            const responsaveisSelecionados = memberOptions.filter((option) => etapaResponsaveisNormalizados.includes(option.id));
+            const responsaveisSelecionados = memberOptions.filter((option) =>
+              etapa.usuarioResponsavelIds.includes(option.id),
+            );
             const tone = etapa.tipo === "aprovacao" ? "amber" : "indigo";
 
             return (
@@ -256,7 +262,7 @@ export function WorkflowModeloFormModal({
 
                     <MemberSelector
                       label="Responsáveis padrão"
-                      values={normalizarReferenciasParaCodigoInterno(etapa.usuarioResponsavelIds, usuarios)}
+                      values={etapa.usuarioResponsavelIds}
                       onChange={(values) => updateEtapa(etapa.id, { usuarioResponsavelIds: values })}
                       placeholder="Selecionar responsáveis…"
                       options={memberOptions}
@@ -286,8 +292,8 @@ export function WorkflowModeloFormModal({
         <Button type="button" variant="secondary" onClick={onClose}>
           Cancelar
         </Button>
-        <Button type="button" disabled={!canSave} onClick={() => onSave(draft, modelo?.id)}>
-          Salvar
+        <Button type="button" disabled={!canSave || salvando} onClick={() => onSave(draft, modelo?.id)}>
+          {salvando ? "Salvando…" : "Salvar"}
         </Button>
       </div>
     </Modal>

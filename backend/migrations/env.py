@@ -33,6 +33,9 @@ from app.models import (  # noqa: E402,F401
     sessao_trabalho,
     usuario,
     usuario_credencial,
+    workflow_modelo,
+    workflow_modelo_etapa,
+    workflow_modelo_etapa_responsavel,
 )
 
 # this is the Alembic Config object, which provides

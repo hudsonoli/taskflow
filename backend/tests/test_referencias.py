@@ -43,7 +43,8 @@ def test_lista_executavel_cobre_apenas_dominios_ja_migrados() -> None:
     """A lista é FECHADA: cada domínio entra junto da própria migração, nunca antes.
 
     departamento e equipe entraram na Fase 2A; cliente na 2B; fornecedor na 2C; projeto na
-    2D; tarefa (Demanda) na 2E.1. `usuario` entra na fase correspondente.
+    2D; tarefa (Demanda) na 2E.1; workflow_modelo entrou na migração do módulo Workflow.
+    `usuario` entra na fase correspondente.
 
     O código de tarefa é `T26000001` e reinicia por ano, como todos os outros. A continuidade
     com a numeração do iClips é responsabilidade de um contador SEPARADO e contínuo —
@@ -56,6 +57,7 @@ def test_lista_executavel_cobre_apenas_dominios_ja_migrados() -> None:
         "fornecedor": "F",
         "projeto": "P",
         "tarefa": "T",
+        "workflow_modelo": "W",
     }
 
 

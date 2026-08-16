@@ -31,6 +31,7 @@ import type {
   DemandaStatus,
   DemandaStatusEditavel,
 } from "@/types/demanda";
+import type { WorkflowModelo, WorkflowModeloEtapa, WorkflowModeloFormDraft, WorkflowModeloStatus } from "@/types/workflow-modelo";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -62,6 +63,16 @@ export class DepartamentoArquivadoConflictError extends Error {
     super(message);
     this.name = "DepartamentoArquivadoConflictError";
     this.departamentoArquivadoId = departamentoArquivadoId;
+  }
+}
+
+export class WorkflowModeloArquivadoConflictError extends Error {
+  workflowModeloArquivadoId: string;
+
+  constructor(message: string, workflowModeloArquivadoId: string) {
+    super(message);
+    this.name = "WorkflowModeloArquivadoConflictError";
+    this.workflowModeloArquivadoId = workflowModeloArquivadoId;
   }
 }
 
@@ -132,6 +143,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new ProjetoArquivadoConflictError(
         message ?? "Projeto arquivado já existe",
         detail.projetoArquivadoId,
+      );
+    }
+    if (detail && typeof detail === "object" && detail.code === "WORKFLOW_MODELO_ARQUIVADO_EXISTENTE") {
+      throw new WorkflowModeloArquivadoConflictError(
+        message ?? "Modelo de workflow arquivado já existe",
+        detail.workflowModeloArquivadoId,
       );
     }
     if (detail && typeof detail === "object" && detail.code === "FORA_DE_EXPEDIENTE") {
@@ -1350,4 +1367,118 @@ export async function arquivarDemandaReal(demandaId: string, motivoArquivamento:
 export async function restaurarDemandaReal(demandaId: string): Promise<Demanda> {
   const restaurada = await request<DemandaReadApi>(`/demandas/${demandaId}/restaurar`, { method: "POST" });
   return mapDemandaReadToDemanda(restaurada);
+}
+
+// ---------------------------------------------------------------------------------------
+// WorkflowModelo
+// ---------------------------------------------------------------------------------------
+
+type WorkflowModeloEtapaReadApi = {
+  id: string;
+  ordem: number;
+  nome: string;
+  tipo: WorkflowModeloEtapa["tipo"];
+  quantidadeAntesDeadline: number;
+  unidadePrazo: WorkflowModeloEtapa["unidadePrazo"];
+  usuarioResponsavelIds: string[];
+};
+
+type WorkflowModeloReadApi = {
+  id: string;
+  empresaId: string;
+  codigoInterno: string;
+  codigoReferencia: string;
+  anoReferencia: number;
+  sequencialReferencia: number;
+  nome: string;
+  status: WorkflowModeloStatus;
+  etapas: WorkflowModeloEtapaReadApi[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+function mapWorkflowModeloReadToWorkflowModelo(data: WorkflowModeloReadApi): WorkflowModelo {
+  return {
+    id: data.id,
+    empresaId: data.empresaId,
+    codigoInterno: data.codigoInterno,
+    codigoReferencia: data.codigoReferencia,
+    anoReferencia: data.anoReferencia,
+    sequencialReferencia: data.sequencialReferencia,
+    nome: data.nome,
+    status: data.status,
+    etapas: data.etapas.map((etapa) => ({
+      id: etapa.id,
+      nome: etapa.nome,
+      tipo: etapa.tipo,
+      quantidadeAntesDeadline: etapa.quantidadeAntesDeadline,
+      unidadePrazo: etapa.unidadePrazo,
+      usuarioResponsavelIds: etapa.usuarioResponsavelIds,
+    })),
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  };
+}
+
+function workflowModeloDraftParaPayload(draft: WorkflowModeloFormDraft) {
+  return {
+    nome: draft.nome,
+    etapas: draft.etapas.map((etapa) => ({
+      nome: etapa.nome,
+      tipo: etapa.tipo,
+      quantidadeAntesDeadline: etapa.quantidadeAntesDeadline,
+      unidadePrazo: etapa.unidadePrazo,
+      usuarioResponsavelIds: etapa.usuarioResponsavelIds,
+    })),
+  };
+}
+
+export async function listWorkflowModelosReais(params?: { status?: string; search?: string }): Promise<WorkflowModelo[]> {
+  const query = new URLSearchParams({ limit: "200" });
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  const data = await request<WorkflowModeloReadApi[]>(`/workflow-modelos?${query.toString()}`);
+  return data.map(mapWorkflowModeloReadToWorkflowModelo);
+}
+
+export async function criarWorkflowModeloReal(draft: WorkflowModeloFormDraft): Promise<WorkflowModelo> {
+  const criado = await request<WorkflowModeloReadApi>("/workflow-modelos", {
+    method: "POST",
+    body: JSON.stringify(workflowModeloDraftParaPayload(draft)),
+  });
+  // status só é aceito no PATCH — criar sempre nasce ativo.
+  if (draft.status === "inativo") {
+    return atualizarWorkflowModeloReal(criado.id, draft);
+  }
+  return mapWorkflowModeloReadToWorkflowModelo(criado);
+}
+
+export async function atualizarWorkflowModeloReal(
+  workflowModeloId: string,
+  draft: WorkflowModeloFormDraft,
+): Promise<WorkflowModelo> {
+  const atualizado = await request<WorkflowModeloReadApi>(`/workflow-modelos/${workflowModeloId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...workflowModeloDraftParaPayload(draft), status: draft.status }),
+  });
+  return mapWorkflowModeloReadToWorkflowModelo(atualizado);
+}
+
+// "Excluir" = arquivar (soft-delete permanente) — ver docs/padrao-arquivamento.md.
+export async function arquivarWorkflowModeloReal(
+  workflowModeloId: string,
+  motivoArquivamento: string,
+): Promise<WorkflowModelo> {
+  const arquivado = await request<WorkflowModeloReadApi>(`/workflow-modelos/${workflowModeloId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+  return mapWorkflowModeloReadToWorkflowModelo(arquivado);
+}
+
+export async function restaurarWorkflowModeloReal(workflowModeloId: string): Promise<WorkflowModelo> {
+  const restaurado = await request<WorkflowModeloReadApi>(`/workflow-modelos/${workflowModeloId}/restaurar`, {
+    method: "POST",
+  });
+  return mapWorkflowModeloReadToWorkflowModelo(restaurado);
 }

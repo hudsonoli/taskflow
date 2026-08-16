@@ -2,7 +2,7 @@ import { Pencil, Workflow as WorkflowIcon } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { contarEtapasPorTipo } from "@/lib/workflow-modelos-mock";
+import { contarEtapasPorTipo } from "@/lib/workflow-modelo";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
 
 export function WorkflowsGrid({
@@ -24,7 +24,7 @@ export function WorkflowsGrid({
         return (
           <div
             key={modelo.id}
-            className={`flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${modelo.ativo ? "" : "opacity-60"}`}
+            className={`flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${modelo.status === "ativo" ? "" : "opacity-60"}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -36,7 +36,7 @@ export function WorkflowsGrid({
                   <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{modelo.etapas.length} etapa(s)</p>
                 </div>
               </div>
-              {modelo.ativo ? <Badge tone="green">Ativo</Badge> : <Badge tone="neutral">Inativo</Badge>}
+              {modelo.status === "ativo" ? <Badge tone="green">Ativo</Badge> : <Badge tone="neutral">Inativo</Badge>}
             </div>
 
             <div className="flex flex-wrap gap-1.5">

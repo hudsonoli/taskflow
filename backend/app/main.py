@@ -20,6 +20,7 @@ from app.api.routes import (
     sessoes_trabalho,
     uploads,
     usuarios,
+    workflow_modelos,
 )
 from app.core.config import get_settings
 
@@ -51,5 +52,6 @@ app.include_router(projetos.router)
 app.include_router(demandas.router)
 app.include_router(departamentos.router)
 app.include_router(equipes.router)
+app.include_router(workflow_modelos.router)
 app.include_router(auth.router)
 app.include_router(uploads.router)

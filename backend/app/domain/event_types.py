@@ -74,6 +74,12 @@ class DomainEventType(StrEnum):
     DEMANDA_ARQUIVADA = "demanda.arquivada"
     DEMANDA_RESTAURADA = "demanda.restaurada"
 
+    # WorkflowModelo não tem tabela de histórico: estes eventos SÃO o histórico.
+    WORKFLOW_MODELO_CRIADO = "workflow_modelo.criado"
+    WORKFLOW_MODELO_ALTERADO = "workflow_modelo.alterado"
+    WORKFLOW_MODELO_ARQUIVADO = "workflow_modelo.arquivado"
+    WORKFLOW_MODELO_RESTAURADO = "workflow_modelo.restaurado"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"
