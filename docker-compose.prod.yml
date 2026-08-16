@@ -28,6 +28,13 @@ services:
     depends_on:
       taskfloww_db:
         condition: service_healthy
+    volumes:
+      # Conteúdo físico de DemandaArquivoService (Fase 2E.3) — UPLOADS_ROOT resolve para
+      # /app/uploads (WORKDIR do Dockerfile + Path("uploads") relativo). Sem este volume, a
+      # camada gravável do container é apagada a cada recreate/rebuild, levando junto todo
+      # arquivo enviado por usuário. Metadado (Postgres) já era persistente; isto cobre o lado
+      # do filesystem que faltava.
+      - taskfloww_uploads:/app/uploads
     networks:
       - taskfloww_net
     healthcheck:
@@ -62,3 +69,4 @@ networks:
 
 volumes:
   taskfloww_db_data:
+  taskfloww_uploads:
