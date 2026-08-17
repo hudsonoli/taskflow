@@ -4,13 +4,13 @@ import { Eye } from "lucide-react";
 import { AvatarStack } from "@/components/ui/AvatarStack";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
 import {
   compararPorAgenda,
   normalizarUsuarioId,
-  resolveProjetoDemandaNome,
   statusDemandaLabels,
   statusDemandaTone,
 } from "@/lib/demandas";
@@ -34,6 +34,7 @@ function tituloDoGrupo(chave: string): string {
 
 export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; onOpenDetails: (demandaId: string) => void }) {
   const { usuarios } = useDiretorioUsuarios();
+  const { projetos } = useDiretorioProjetos();
 
   if (demandas.length === 0) {
     return <EmptyState title="Nenhuma tarefa na pauta" description="Ajuste a busca ou os filtros para visualizar as tarefas do período." />;
@@ -80,7 +81,7 @@ export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; o
                       {demanda.nome}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-zinc-400">
-                      {rotuloDemanda(demanda)} · {resolveProjetoDemandaNome(demanda.projetoId)}
+                      {rotuloDemanda(demanda)} · {resolverProjetoNome(demanda.projetoId, projetos)}
                     </span>
                   </button>
 

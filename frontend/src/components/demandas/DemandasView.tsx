@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   resolveClienteProjetoNome,
-  resolveProjetoDemandaNome,
   resolveResponsaveisDemandaNomes,
 } from "@/lib/demandas";
 import {
@@ -18,9 +17,10 @@ import {
 } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { resolverDepartamentoNome } from "@/lib/referencias";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { resolverDepartamentoNome, resolverProjetoNome } from "@/lib/referencias";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import type { DepartamentoDiretorioItem, ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
 import { podeCriarDemanda } from "@/types/usuario";
 import type { Demanda, DemandaFormDraft, DemandaStatusEditavel } from "@/types/demanda";
@@ -53,12 +53,13 @@ function matchesDemanda(
   query: string,
   usuarios: UsuarioDiretorioItem[],
   departamentos: DepartamentoDiretorioItem[],
+  projetos: ProjetoDiretorioItem[],
 ) {
   const haystack = [
     demanda.nome,
     rotuloDemanda(demanda),
     demanda.pit ?? "",
-    resolveProjetoDemandaNome(demanda.projetoId),
+    resolverProjetoNome(demanda.projetoId, projetos),
     resolveClienteProjetoNome(demanda.clienteId),
     resolveResponsaveisDemandaNomes(demanda.usuarioResponsavelIds, usuarios),
     demanda.departamentoResponsavelIds.map((id) => resolverDepartamentoNome(id, departamentos)).join(" "),
@@ -84,6 +85,7 @@ export function DemandasView() {
   const { demandas, setDemandas, usuarioAtual, demandaParaAbrir, setDemandaParaAbrir } = useAppData();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios } = useDiretorioUsuarios();
+  const { projetos } = useDiretorioProjetos();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<DemandaStatusFiltro>("todos");
   const [viewMode, setViewMode] = useState<DemandasViewMode>("lista");
@@ -115,10 +117,10 @@ export function DemandasView() {
   const filteredDemands = useMemo(
     () =>
       demandas.filter((demanda) => {
-        const queryMatches = query.trim() ? matchesDemanda(demanda, query, usuarios, departamentos) : true;
+        const queryMatches = query.trim() ? matchesDemanda(demanda, query, usuarios, departamentos, projetos) : true;
         return statusMatchesFilter(demanda, statusFilter) && queryMatches;
       }),
-    [demandas, query, statusFilter, usuarios, departamentos],
+    [demandas, query, statusFilter, usuarios, departamentos, projetos],
   );
 
   async function upsertDemand(draft: DemandaFormDraft, demandaId?: string): Promise<string | null> {

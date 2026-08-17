@@ -4,7 +4,9 @@ import { motion } from "framer-motion";
 import clsx from "clsx";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { BadgeTone } from "@/components/ui/Badge";
-import { compararPorAgenda, resolveProjetoDemandaNome, statusDemandaTone } from "@/lib/demandas";
+import { compararPorAgenda, statusDemandaTone } from "@/lib/demandas";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { resolverProjetoNome } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
 
 const toneClassNames: Record<BadgeTone, string> = {
@@ -53,6 +55,8 @@ export function PautaGantt({
   periodoFim: Date;
   onOpenDetails: (demandaId: string) => void;
 }) {
+  const { projetos } = useDiretorioProjetos();
+
   if (demandas.length === 0) {
     return <EmptyState title="Nenhuma tarefa na pauta" description="Ajuste a busca ou os filtros para visualizar as tarefas do período." />;
   }
@@ -103,7 +107,7 @@ export function PautaGantt({
                     <span className="block truncate text-sm font-semibold text-zinc-950 transition hover:text-indigo-600 dark:text-zinc-50 dark:hover:text-indigo-400">
                       {demanda.nome}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-zinc-400">{resolveProjetoDemandaNome(demanda.projetoId)}</span>
+                    <span className="mt-0.5 block truncate text-xs text-zinc-400">{resolverProjetoNome(demanda.projetoId, projetos)}</span>
                   </button>
 
                   <div

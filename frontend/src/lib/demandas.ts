@@ -5,16 +5,16 @@
  * arquivo antigo misturava dados falsos com funções de apresentação legítimas. Aqui ficou só
  * o que é apresentação — não há dado de demanda neste módulo.
  *
- * As referências a **projeto** ainda resolvem pela projeção legada
- * (`lib/legacy-referencias-mock.ts`) porque Demanda guarda `projetoId` de projetos reais mas
- * as telas ainda exibem nomes da lista legada. Some quando as telas operacionais migrarem
- * (Fase 2E.5).
+ * Projeto resolve pelo diretório real (`useDiretorioProjetos`, `lib/referencias.ts::resolverProjetoNome`)
+ * desde a Fase 2E.5A — nada aqui importa mais `legacy-referencias-mock`. As referências a
+ * **Cliente/Departamento/Usuário-de-projeto** (`resolveClienteProjetoNome`,
+ * `departamentosProjetoDisponiveis`, `responsaveisProjetoDisponiveis`) ainda vêm da projeção
+ * legada — ficam para a Fase 2E.5C/D.
  */
 
 import { AGENCIA_PADRAO_ID, EMPRESA_PADRAO_ID, generateCodigoInterno, generateId } from "@/lib/ids";
 import {
   departamentosProjetoDisponiveis,
-  projetosLegado,
   resolveClienteProjetoNome,
   resolveDepartamentosProjetoNomes,
   resolveResponsaveisProjetoNomes,
@@ -40,12 +40,6 @@ export {
   resolveResponsaveisProjetoNomes,
   responsaveisProjetoDisponiveis,
 };
-
-export const projetosDemandaDisponiveis = projetosLegado.map((projeto) => ({
-  id: projeto.id,
-  nome: projeto.nome,
-  clienteId: projeto.clienteId,
-}));
 
 export const statusDemandaLabels: Record<DemandaStatus, string> = {
   rascunho: "Rascunho",
@@ -98,16 +92,6 @@ export const workflowEtapaStatusLabels: Record<DemandaWorkflowEtapaStatus, strin
   concluida: "Concluída",
 };
 
-export function resolveProjetoDemandaNome(projetoId: string | null | undefined): string {
-  if (!projetoId) return "Sem projeto";
-  return projetosDemandaDisponiveis.find((projeto) => projeto.id === projetoId)?.nome ?? projetoId;
-}
-
-export function resolveClienteIdByProjetoId(projetoId: string | null | undefined): string {
-  if (!projetoId) return "";
-  return projetosDemandaDisponiveis.find((projeto) => projeto.id === projetoId)?.clienteId ?? "";
-}
-
 // Compatibilidade entre a lista mock legada de responsáveis (ids "user-N") e o cadastro real de
 // usuários (ids "usuario-N") — normaliza até os dois cadastros serem unificados.
 export function normalizarUsuarioId(id: string): string {
@@ -134,16 +118,6 @@ export function resolveResponsaveisDemandaNomes(ids: string[], usuarios: Usuario
   return ids
     .map((id) => resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios)?.nome ?? id)
     .join(", ");
-}
-
-export function resolveProjetoResumo(projetoId: string | null | undefined): string {
-  if (!projetoId) return "";
-  return projetosLegado.find((projeto) => projeto.id === projetoId)?.resumo ?? "";
-}
-
-export function resolveModeloCampanhaPorProjeto(projetoId: string | null | undefined) {
-  if (!projetoId) return [];
-  return projetosLegado.find((projeto) => projeto.id === projetoId)?.modeloCampanha ?? [];
 }
 
 export function formatPrazo(value: string | null | undefined): string {

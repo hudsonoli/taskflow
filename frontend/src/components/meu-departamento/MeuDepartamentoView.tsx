@@ -23,6 +23,7 @@ import { TarefasLista } from "@/components/operacional/TarefasLista";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { getHorasDepartamento } from "@/lib/api";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { demandaTemResponsavel, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels } from "@/lib/demandas";
@@ -45,11 +46,12 @@ type OrigemFiltro = "todos" | "interna" | "cliente";
 const DIAS_UTEIS_SEMANA = 5;
 
 export function MeuDepartamentoView() {
-  const { demandas, projetos, regraExpediente, usuarioAtual } = useAppData();
+  const { demandas, regraExpediente, usuarioAtual } = useAppData();
   const { clientes } = useDiretorioClientes();
   const { equipes } = useDiretorioEquipes();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios } = useDiretorioUsuarios();
+  const { projetos } = useDiretorioProjetos();
 
   const [colaboradorId, setColaboradorId] = useState("");
   const [equipeId, setEquipeId] = useState("");

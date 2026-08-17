@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, ClipboardList, FileText, FolderKanban } from "lucide-react";
+import { CalendarDays, ClipboardList, FolderKanban } from "lucide-react";
 import { AvatarStack } from "@/components/ui/AvatarStack";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DetailsModal } from "@/components/ui/DetailsModal";
 import { Tabs } from "@/components/ui/Tabs";
-import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, resolveProjetoDemandaNome, resolveProjetoResumo, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
+import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 import { AtividadeDemandaSection } from "./AtividadeDemandaSection";
@@ -53,6 +54,7 @@ export function DemandaDetailsDrawer({
 }) {
   const [activeTab, setActiveTab] = useState(initialTab ?? "dados");
   const { usuarios } = useDiretorioUsuarios();
+  const { projetos } = useDiretorioProjetos();
 
   return (
     <DetailsModal
@@ -61,7 +63,7 @@ export function DemandaDetailsDrawer({
       onEdit={demanda ? () => onEdit(demanda.id) : undefined}
       editLabel="Editar tarefa"
       title={demanda?.nome ?? "Tarefa"}
-      description={demanda ? `${rotuloDemanda(demanda)} · ${resolveProjetoDemandaNome(demanda.projetoId)}` : undefined}
+      description={demanda ? `${rotuloDemanda(demanda)} · ${resolverProjetoNome(demanda.projetoId, projetos)}` : undefined}
       footer={
         <div className="flex justify-end">
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -85,7 +87,7 @@ export function DemandaDetailsDrawer({
                   <h3 className="mt-1 text-lg font-semibold text-zinc-950 dark:text-zinc-50">{demanda.nome}</h3>
                   <p className="mt-1 flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
                     <FolderKanban className="h-4 w-4" />
-                    {resolveProjetoDemandaNome(demanda.projetoId)}
+                    {resolverProjetoNome(demanda.projetoId, projetos)}
                   </p>
                 </div>
               </div>
@@ -124,23 +126,14 @@ export function DemandaDetailsDrawer({
             </div>
           </div>
 
-          {resolveProjetoResumo(demanda.projetoId) && (
-            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 ring-1 ring-indigo-100 dark:bg-zinc-900 dark:text-indigo-400 dark:ring-indigo-500/20">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-500 dark:text-indigo-400">
-                    Resumo do projeto
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
-                    {resolveProjetoResumo(demanda.projetoId)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/*
+            "Resumo do projeto" saiu na Fase 2E.5A: usava a projeção mock (`resolveProjetoResumo`).
+            `Projeto.resumo` real só existe em `GET /projetos/{id}` (gestor/admin — `require_admin_or_gestor`),
+            rota que este drawer não pode chamar pra qualquer usuário que veja uma Demanda.
+            `GET /projetos/diretorio` (todo autenticado) não carrega `resumo` de propósito — não é pra
+            engordar com esse payload. Reintroduzir isto exige decisão de autorização/endpoint, não feita
+            nesta rodada — ver relatório da Fase 2E.5A.
+          */}
 
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 

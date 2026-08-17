@@ -6,6 +6,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { ClipboardList, RotateCcw, Timer, UserCog, Users } from "lucide-react";
 import { analisarProjeto } from "@/lib/relatorios";
 import { useAppData } from "@/lib/AppDataContext";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 
 function formatDias(dias: number): string {
   if (dias < 1) return `${Math.round(dias * 24)}h`;
@@ -13,7 +14,8 @@ function formatDias(dias: number): string {
 }
 
 export function AnaliseProjetoReport() {
-  const { demandas, projetos } = useAppData();
+  const { demandas } = useAppData();
+  const { projetos } = useDiretorioProjetos();
   const [projetoId, setProjetoId] = useState(projetos[0]?.id ?? "");
   const analise = useMemo(() => analisarProjeto(projetoId, demandas, projetos), [projetoId, demandas, projetos]);
 

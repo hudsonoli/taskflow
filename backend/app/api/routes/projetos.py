@@ -96,8 +96,9 @@ def list_projetos(
     return projeto_service.to_read_lote(db, projetos)
 
 
-# Só ativos — arquivado nunca é oferecido como opção de vínculo novo. Quem precisa vê-los
-# usa GET /projetos com `status=arquivado`.
+# Inclui arquivados (Fase 2E.5A/B) — precisa resolver o nome de Projeto de Demandas antigas
+# mesmo depois do arquivamento. `status` vai junto: quem monta seletor de vínculo NOVO filtra
+# `status !== "arquivado"` no consumidor, mesmo padrão de Cliente/Departamento/Usuário/Equipe.
 @router.get("/diretorio", response_model=list[ProjetoDiretorioRead])
 def list_diretorio(
     current_user: Usuario = Depends(get_current_user_password_ready),

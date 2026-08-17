@@ -101,11 +101,16 @@ class ProjetoRepository:
         return list(db.scalars(statement).all())
 
     def list_diretorio(self, db: Session, *, empresa_id: str) -> list[Projeto]:
-        """**Exclui arquivados** — mesmo critério de Fornecedor: o diretório serve para
-        oferecer opções de vínculo novo, e arquivado nunca é uma opção nova."""
+        """**Inclui arquivados** (Fase 2E.5A/B) — o diretório serve dois usos distintos:
+        resolver o nome de um Projeto já vinculado a uma Demanda (precisa achar arquivado
+        também, senão a referência histórica vira UUID cru na tela) e oferecer opções de
+        vínculo NOVO (que não deve incluir arquivado). A diferença mora no `status` que vai
+        junto de cada item — quem monta um seletor de vínculo novo filtra no consumidor,
+        mesmo padrão de Cliente/Departamento/Usuário/Equipe. Diverge de Fornecedor de
+        propósito: lá não existe essa necessidade de resolução histórica ainda."""
         statement = (
             select(Projeto)
-            .where(Projeto.empresa_id == empresa_id, Projeto.status != STATUS_ARQUIVADO)
+            .where(Projeto.empresa_id == empresa_id)
             .order_by(Projeto.nome.asc())
         )
         return list(db.scalars(statement).all())

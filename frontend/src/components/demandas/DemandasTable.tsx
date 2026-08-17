@@ -5,9 +5,10 @@ import { AvatarStack } from "@/components/ui/AvatarStack";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, resolveProjetoDemandaNome, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
+import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 
@@ -28,6 +29,7 @@ export function DemandasTable({
   onEdit: (demandaId: string) => void;
 }) {
   const { usuarios } = useDiretorioUsuarios();
+  const { projetos } = useDiretorioProjetos();
 
   if (demandas.length === 0) {
     return <EmptyState title="Nenhuma tarefa encontrada" description="Ajuste a busca ou os filtros." />;
@@ -76,7 +78,7 @@ export function DemandasTable({
                     </button>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-400">{demanda.pit ?? "—"}</td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{resolveProjetoDemandaNome(demanda.projetoId)}</td>
+                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{resolverProjetoNome(demanda.projetoId, projetos)}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${prioridadeClassName[demanda.prioridade]}`}>
                       {prioridadeDemandaLabels[demanda.prioridade]}

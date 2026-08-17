@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { projetosLegado, type ProjetoLegado } from "@/lib/legacy-referencias-mock";
 import { pecasMock } from "@/lib/pecas-mock";
 import { regraExpedienteMock } from "@/lib/regra-expediente-mock";
 import { configuracaoEmailMock } from "@/lib/configuracao-email-mock";
@@ -33,13 +32,6 @@ interface AppDataContextValue {
   setDemandas: Dispatch<SetStateAction<Demanda[]>>;
   demandasCarregando: boolean;
   recarregarDemandas: () => Promise<void>;
-  /**
-   * Projeção LEGADA, não Projeto real. Projeto migrou na Fase 2D e `ProjetosView` fala
-   * direto com a API. Isto existe só para Demandas, Relatórios e Meu Departamento, que
-   * ainda são mock e referenciam `projeto-1/2/3` — ver lib/legacy-referencias-mock.ts.
-   * Somente leitura: não há `setProjetos`.
-   */
-  projetos: ProjetoLegado[];
   pecas: Peca[];
   setPecas: Dispatch<SetStateAction<Peca[]>>;
   slaRegras: SlaRegra[];
@@ -70,7 +62,6 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [demandasCarregando, setDemandasCarregando] = useState(true);
-  const projetos = projetosLegado;
   const [pecas, setPecas] = useState<Peca[]>(pecasMock);
   const [slaRegras, setSlaRegras] = useState<SlaRegra[]>(slaRegrasMock);
   const [regraExpediente, setRegraExpediente] = useState<RegraExpediente>(regraExpedienteMock);
@@ -168,7 +159,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setDemandas,
         demandasCarregando,
         recarregarDemandas,
-        projetos,
         pecas,
         setPecas,
         slaRegras,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClipboardPlus, GitBranch, Sparkles, X } from "lucide-react";
+import { ClipboardPlus, GitBranch, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Combobox } from "@/components/ui/Combobox";
@@ -13,7 +13,6 @@ import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { Select } from "@/components/ui/Select";
 import {
   prioridadeDemandaLabels,
-  resolveModeloCampanhaPorProjeto,
   statusDemandaEditaveis,
   statusDemandaLabels,
 } from "@/lib/demandas";
@@ -65,14 +64,18 @@ export function NovaDemandaModal({
   // resolvendo em outros lugares via resolverUsuarioPorReferencia).
   const usuarios = diretorio.filter((usuario) => usuario.status === "ativo");
   const [draft, setDraft] = useState<DemandaFormDraft>(() => createInitialDraft(demanda));
-  const [briefingRevision, setBriefingRevision] = useState(0);
+  // Vínculo novo não pode ser um Projeto arquivado (mesma regra do backend, ver
+  // `_ensure_projeto_valido`) — mas o Projeto já vinculado à Demanda continua aparecendo,
+  // senão o campo mostraria vazio ao editar uma Demanda cujo Projeto foi arquivado depois.
+  const projetosSelecionaveis = projetos.filter(
+    (projeto) => projeto.status !== "arquivado" || projeto.id === draft.projetoId,
+  );
   const [workflowPreview, setWorkflowPreview] = useState<WorkflowModelo | null>(null);
   const previewAtual = draft.workflowModeloId && workflowPreview?.id === draft.workflowModeloId ? workflowPreview : null;
   const carregandoWorkflow = Boolean(draft.workflowModeloId) && previewAtual === null;
 
   const editing = demanda !== undefined;
   const canSave = draft.nome.trim().length > 0;
-  const modeloCampanha = resolveModeloCampanhaPorProjeto(draft.projetoId);
 
   function updateDraft(patch: Partial<DemandaFormDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -81,18 +84,6 @@ export function NovaDemandaModal({
   function handleProjectChange(projectId: string) {
     const projeto = projetos.find((item) => item.id === projectId);
     updateDraft({ projetoId: projectId, clienteId: projeto?.clienteId ?? draft.clienteId });
-  }
-
-  function usarModeloCampanha(itemId: string) {
-    const item = modeloCampanha.find((modelo) => modelo.id === itemId);
-    if (!item) return;
-    updateDraft({
-      nome: item.nomeDemanda,
-      briefing: item.briefingBase,
-      prioridade: item.prioridadePadrao,
-      departamentoResponsavelIds: [item.responsavelOuSetorSugeridoId],
-    });
-    setBriefingRevision((revision) => revision + 1);
   }
 
   useEffect(() => {
@@ -139,30 +130,14 @@ export function NovaDemandaModal({
         </button>
       </div>
 
-      {!editing && modeloCampanha.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-indigo-500" />
-            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Backlog do projeto</p>
-          </div>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Este projeto tem demandas padrão no modelo de campanha — use uma para já sair com nome, briefing e prioridade preenchidos.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {modeloCampanha.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => usarModeloCampanha(item.id)}
-                className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-zinc-900 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
-              >
-                {item.nomeDemanda}
-                <Badge tone="blue">{item.tipoTarefaNome}</Badge>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/*
+        "Backlog do projeto" (modelo de campanha) saiu na Fase 2E.5A: usava a projeção mock
+        (`resolveModeloCampanhaPorProjeto`). `Projeto.modeloCampanha` real só existe em
+        `GET /projetos/{id}` (gestor/admin — `require_admin_or_gestor`), e este modal é usado
+        por qualquer perfil que possa criar demanda (Atendimento, heads e gestão — ver
+        `podeCriarDemanda`), não só gestor/admin. Reintroduzir isto exige decisão de
+        autorização/endpoint, não feita nesta rodada — ver relatório da Fase 2E.5A.
+      */}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <Input label="Nome" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
@@ -176,7 +151,10 @@ export function NovaDemandaModal({
           label="Projeto (opcional)"
           value={draft.projetoId ?? ""}
           onChange={handleProjectChange}
-          options={projetos.map((projeto) => ({ value: projeto.id, label: projeto.nome }))}
+          options={projetosSelecionaveis.map((projeto) => ({
+            value: projeto.id,
+            label: projeto.status === "arquivado" ? `${projeto.nome} (arquivado)` : projeto.nome,
+          }))}
           placeholder="Buscar projeto…"
           emptyLabel="Nenhum projeto encontrado"
         />
@@ -237,7 +215,7 @@ export function NovaDemandaModal({
 
       <div className="mt-4">
         <span className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Briefing</span>
-        <RichTextEditor key={briefingRevision} value={draft.briefing ?? ""} onChange={(html) => updateDraft({ briefing: html })} />
+        <RichTextEditor value={draft.briefing ?? ""} onChange={(html) => updateDraft({ briefing: html })} />
       </div>
 
       {!editing ? (

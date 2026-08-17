@@ -6,9 +6,10 @@ import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { useAppData } from "@/lib/AppDataContext";
-import { resolveProjetoDemandaNome } from "@/lib/demandas";
-import { rotuloDemanda } from "@/lib/referencias";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { resolverProjetoNome, rotuloDemanda } from "@/lib/referencias";
 import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer";
+import type { ProjetoDiretorioItem } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import { PautaGantt } from "./PautaGantt";
 import { PautaLista } from "./PautaLista";
@@ -18,9 +19,9 @@ function normalize(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-function matchesQuery(demanda: Demanda, query: string) {
+function matchesQuery(demanda: Demanda, query: string, projetos: ProjetoDiretorioItem[]) {
   if (!query.trim()) return true;
-  const haystack = [demanda.nome, rotuloDemanda(demanda), demanda.pit ?? "", resolveProjetoDemandaNome(demanda.projetoId)].join(" ");
+  const haystack = [demanda.nome, rotuloDemanda(demanda), demanda.pit ?? "", resolverProjetoNome(demanda.projetoId, projetos)].join(" ");
   return normalize(haystack).includes(normalize(query));
 }
 
@@ -39,6 +40,7 @@ function periodoParaIntervalo(periodo: PautaPeriodoFiltro): { inicio: Date; fim:
 export function PautaView() {
   const router = useRouter();
   const { demandas, setDemandas, usuarioAtual, setDemandaParaAbrir } = useAppData();
+  const { projetos } = useDiretorioProjetos();
   const [query, setQuery] = useState("");
   const [departamentoIds, setDepartamentoIds] = useState<string[]>([]);
   const [periodo, setPeriodo] = useState<PautaPeriodoFiltro>("7d");
@@ -53,9 +55,9 @@ export function PautaView() {
       const dentroDoPeriodo = !Number.isNaN(prazo.getTime()) && prazo >= periodoInicio && prazo <= periodoFim;
       const departamentoMatches =
         departamentoIds.length === 0 || demanda.departamentoResponsavelIds.some((id) => departamentoIds.includes(id));
-      return dentroDoPeriodo && departamentoMatches && matchesQuery(demanda, query);
+      return dentroDoPeriodo && departamentoMatches && matchesQuery(demanda, query, projetos);
     });
-  }, [demandas, periodoInicio, periodoFim, departamentoIds, query]);
+  }, [demandas, periodoInicio, periodoFim, departamentoIds, query, projetos]);
 
   const selectedDemand = demandas.find((demanda) => demanda.id === selectedDemandId);
 

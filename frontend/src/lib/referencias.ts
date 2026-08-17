@@ -3,6 +3,7 @@ import type {
   DepartamentoDiretorioItem,
   EquipeDiretorioItem,
   GrupoClienteDiretorioItem,
+  ProjetoDiretorioItem,
   UsuarioDiretorioItem,
 } from "@/lib/api-backend";
 
@@ -168,6 +169,39 @@ export function resolverGrupoClienteNomes(referencias: string[], diretorio: Grup
       return grupo.status === "arquivado" ? `${grupo.nome} (arquivado)` : grupo.nome;
     })
     .join(", ");
+}
+
+/**
+ * Projeto: **sem** o padrão id-ou-codigoInterno acima — `Projeto` nunca teve `codigoInterno`
+ * (ver docs/pendencias-arquiteturais.md item 4), e `Demanda.projetoId` grava direto o UUID
+ * real do diretório (`useDiretorioProjetos`, Fase 2E.5A). Resolve só por `id`.
+ *
+ * `GET /projetos/diretorio` **inclui** arquivados desde a Fase 2E.5A/B (mesmo padrão de
+ * Cliente/Departamento/Equipe) — é o que permite uma Demanda antiga continuar mostrando o
+ * nome do Projeto depois dele ser arquivado. Quem monta um SELETOR DE VÍNCULO NOVO (Nova
+ * Tarefa, edição de Projeto de uma Demanda) precisa filtrar `status !== "arquivado"` no
+ * próprio consumidor — este resolver não filtra nada, porque resolve referência histórica,
+ * não oferece opção nova.
+ */
+export function resolverProjetoPorReferencia(
+  referencia: string | null | undefined,
+  diretorio: ProjetoDiretorioItem[],
+): ProjetoDiretorioItem | undefined {
+  if (!referencia) return undefined;
+  return diretorio.find((projeto) => projeto.id === referencia);
+}
+
+/**
+ * Projeto é exibido **somente pelo nome**, com sufixo "(arquivado)" quando aplicável — mesmo
+ * padrão de `resolverClienteNome`/`resolverDepartamentoNome`. Não encontrado no diretório
+ * (referência realmente inválida: id trocado, empresa errada etc.) devolve um rótulo seguro
+ * fixo — nunca o UUID cru.
+ */
+export function resolverProjetoNome(referencia: string | null | undefined, diretorio: ProjetoDiretorioItem[]): string {
+  if (!referencia) return "Sem projeto";
+  const projeto = resolverProjetoPorReferencia(referencia, diretorio);
+  if (!projeto) return "Projeto arquivado ou indisponível";
+  return projeto.status === "arquivado" ? `${projeto.nome} (arquivado)` : projeto.nome;
 }
 
 /**

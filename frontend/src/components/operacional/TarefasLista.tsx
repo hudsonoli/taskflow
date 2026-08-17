@@ -8,12 +8,12 @@ import {
   formatPrazo,
   normalizarUsuarioId,
   prioridadeDemandaLabels,
-  resolveProjetoDemandaNome,
   statusDemandaLabels,
   statusDemandaTone,
 } from "@/lib/demandas";
 import { classificarTarefa } from "@/lib/escopo-operacional";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { ClienteDiretorioItem } from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
@@ -41,6 +41,8 @@ export function TarefasLista({
   emptyTitle?: string;
   emptyDescription?: string;
 }) {
+  const { projetos } = useDiretorioProjetos();
+
   if (demandas.length === 0) {
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
   }
@@ -81,7 +83,7 @@ export function TarefasLista({
                   </td>
                   <td className="max-w-[160px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">{cliente?.nome ?? "Sem cliente"}</td>
                   <td className="max-w-[160px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                    {resolveProjetoDemandaNome(demanda.projetoId)}
+                    {resolverProjetoNome(demanda.projetoId, projetos)}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${prioridadeClassName[demanda.prioridade]}`}>

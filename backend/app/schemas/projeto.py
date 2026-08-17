@@ -167,9 +167,10 @@ class ProjetoRead(BaseModel):
         return ensure_timezone_aware(value)
 
 
-# Projeção para seletores de vínculo. **Exclui arquivados**, mesmo critério de Fornecedor:
-# arquivado nunca é oferecido como opção nova. Quem precisa ver arquivados usa
-# GET /projetos com `status=arquivado`.
+# Projeção mínima de Projeto — serve dois usos: resolver o nome de um Projeto já vinculado
+# a uma Demanda (por isso INCLUI arquivado — ver ProjetoRepository.list_diretorio) e montar
+# seletor de vínculo novo, que filtra `status !== "arquivado"` no consumidor. `status` vai
+# junto exatamente para permitir essa distinção sem outra chamada.
 class ProjetoDiretorioRead(BaseModel):
     id: UUID
     codigo_referencia: str = Field(alias="codigoReferencia")

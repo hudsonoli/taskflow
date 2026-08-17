@@ -19,9 +19,10 @@ import { Badge } from "@/components/ui/Badge";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverDepartamentoNome } from "@/lib/referencias";
-import { formatPrazo, resolveProjetoDemandaNome, statusDemandaLabels } from "@/lib/demandas";
+import { resolverDepartamentoNome, resolverProjetoNome } from "@/lib/referencias";
+import { formatPrazo, statusDemandaLabels } from "@/lib/demandas";
 import { patchDemandaReal } from "@/lib/api-backend";
 import { classificarTarefa, inicioDaSemana, mesmoDia, tarefasDoUsuario } from "@/lib/escopo-operacional";
 import { podeCriarDemanda } from "@/types/usuario";
@@ -35,6 +36,7 @@ export function DashboardView() {
   const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios: diretorio } = useDiretorioUsuarios();
+  const { projetos } = useDiretorioProjetos();
 
   const departamentoAtualNome = usuarioAtual ? resolverDepartamentoNome(usuarioAtual.departamentoId, departamentos) : "";
   const podeSinalizar = usuarioAtual ? podeCriarDemanda(usuarioAtual, departamentoAtualNome) : false;
@@ -173,7 +175,7 @@ export function DashboardView() {
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
                       <span>{cliente?.nome ?? "Sem cliente"}</span>
                       <span>·</span>
-                      <span>{resolveProjetoDemandaNome(demanda.projetoId)}</span>
+                      <span>{resolverProjetoNome(demanda.projetoId, projetos)}</span>
                       <span>·</span>
                       <span>{statusDemandaLabels[demanda.status]}</span>
                       {demanda.status === "bloqueada" && (

@@ -8,6 +8,7 @@ import { ChartCard } from "@/components/ui/ChartCard";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { useAppData } from "@/lib/AppDataContext";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { demandasAbertasPorProjeto, resolveClientesComProjeto, volumePorProjetoEColaborador, volumeSemanal } from "@/lib/relatorios";
 import { AnalisePecasReport } from "./AnalisePecasReport";
 import { AnaliseProjetoReport } from "./AnaliseProjetoReport";
@@ -22,7 +23,8 @@ const SECOES = [
 ];
 
 export function RelatoriosView() {
-  const { demandas, projetos } = useAppData();
+  const { demandas } = useAppData();
+  const { projetos } = useDiretorioProjetos();
   const clientesComProjeto = useMemo(() => resolveClientesComProjeto(projetos), [projetos]);
   const [secao, setSecao] = useState("graficos");
   const [clienteId, setClienteId] = useState(clientesComProjeto[0]?.id ?? "");

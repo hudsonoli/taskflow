@@ -548,15 +548,57 @@ def test_cliente_de_outra_empresa_recusado(
 # Diretório
 # ======================================================================================
 
-def test_diretorio_nao_inclui_arquivados(client_admin: TestClient) -> None:
+def test_diretorio_inclui_arquivados(client_admin: TestClient) -> None:
+    """Referência histórica de uma Demanda precisa continuar resolvendo o nome mesmo depois
+    do Projeto ser arquivado (Fase 2E.5A/B). Mesmo padrão de /clientes/diretorio — diverge
+    do critério antigo (que seguia Fornecedor) porque só Cliente/Departamento/Usuário/Equipe
+    e agora Projeto têm domínio (Demanda) que referencia o id depois do fato."""
     criado = _criar(client_admin)
     client_admin.post(f"/projetos/{criado['id']}/arquivar", json={"motivoArquivamento": "x"})
-    ids = [p["id"] for p in client_admin.get("/projetos/diretorio").json()]
-    assert criado["id"] not in ids
+
+    diretorio = client_admin.get("/projetos/diretorio").json()
+    encontrado = next((p for p in diretorio if p["id"] == criado["id"]), None)
+    assert encontrado is not None
+    assert encontrado["status"] == "arquivado"
+    assert encontrado["nome"] == criado["nome"]
 
 
 def test_diretorio_e_acessivel_a_operador(client_operador: TestClient) -> None:
     assert client_operador.get("/projetos/diretorio").status_code == 200
+
+
+def test_diretorio_nao_expoe_dados_administrativos(client_admin: TestClient) -> None:
+    """Projeção mínima — resumo, modeloCampanha, equipe etc. não vazam para quem só está
+    resolvendo referência histórica ou montando um seletor de vínculo novo."""
+    _criar(client_admin, campanha="Marca 2026", descricao="Reposicionamento", resumo="Sigiloso")
+    item = client_admin.get("/projetos/diretorio").json()[0]
+    assert set(item) == {"id", "codigoReferencia", "sequencialReferencia", "nome", "status", "clienteId"}
+
+
+def test_diretorio_isola_por_empresa(
+    client_admin: TestClient, db_session: Session, outra_empresa: Empresa
+) -> None:
+    alheio_id = str(uuid.uuid4())
+    agora = datetime.now(timezone.utc)
+    db_session.execute(
+        text(
+            """
+            INSERT INTO projetos (
+                id, empresa_id, codigo_referencia, ano_referencia,
+                sequencial_referencia, nome, nome_normalizado, status, prioridade,
+                created_at, updated_at
+            ) VALUES (
+                :id, :emp, 'P26088888', 26, 88888, 'Alheio Diretorio', 'alheio diretorio',
+                'ativo', 'media', :a, :a
+            )
+            """
+        ),
+        {"id": alheio_id, "emp": outra_empresa.id, "a": agora},
+    )
+    db_session.flush()
+
+    ids = [p["id"] for p in client_admin.get("/projetos/diretorio").json()]
+    assert alheio_id not in ids
 
 
 # ======================================================================================

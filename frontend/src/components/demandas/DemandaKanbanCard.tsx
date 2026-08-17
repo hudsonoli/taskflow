@@ -5,9 +5,10 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
 import { AvatarStack } from "@/components/ui/AvatarStack";
-import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, resolveProjetoDemandaNome } from "@/lib/demandas";
+import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels } from "@/lib/demandas";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 
@@ -26,6 +27,7 @@ const prioridadeBorderClassNames: Record<DemandaPrioridade, string> = {
 
 function CardContent({ demanda }: { demanda: Demanda }) {
   const { usuarios } = useDiretorioUsuarios();
+  const { projetos } = useDiretorioProjetos();
   const responsaveis = demanda.usuarioResponsavelIds
     .map((id) => resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios))
     .filter((usuario): usuario is (typeof usuarios)[number] => Boolean(usuario));
@@ -47,7 +49,7 @@ function CardContent({ demanda }: { demanda: Demanda }) {
       </div>
 
       <p className="mt-2 truncate text-xs font-medium text-zinc-500 dark:text-zinc-400">
-        {resolveProjetoDemandaNome(demanda.projetoId)}
+        {resolverProjetoNome(demanda.projetoId, projetos)}
       </p>
 
       <div className="mt-3 flex items-center justify-between gap-2">

@@ -117,6 +117,13 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
   const [pit, setPit] = useState(demanda.pit ?? "");
   const [prazo, setPrazo] = useState(demanda.prazoEtapaAtual ?? "");
 
+  // Vínculo novo não pode ser um Projeto arquivado (mesma regra do backend, ver
+  // `_ensure_projeto_valido`) — mas o Projeto já vinculado a esta Demanda continua na lista,
+  // senão o campo mostraria vazio ao abrir uma Demanda cujo Projeto foi arquivado depois.
+  const projetosSelecionaveis = projetos.filter(
+    (projeto) => projeto.status !== "arquivado" || projeto.id === demanda.projetoId,
+  );
+
   async function handleProjetoChange(projetoId: string) {
     const projeto = projetos.find((item) => item.id === projetoId);
     await salvarCampo(demanda, { projetoId, clienteId: projeto?.clienteId ?? demanda.clienteId }, onChange, setErro);
@@ -156,7 +163,10 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
           label="Projeto"
           value={demanda.projetoId ?? ""}
           onChange={(projetoId) => void handleProjetoChange(projetoId)}
-          options={projetos.map((projeto) => ({ value: projeto.id, label: projeto.nome }))}
+          options={projetosSelecionaveis.map((projeto) => ({
+            value: projeto.id,
+            label: projeto.status === "arquivado" ? `${projeto.nome} (arquivado)` : projeto.nome,
+          }))}
           placeholder="Buscar projeto…"
           emptyLabel="Nenhum projeto encontrado"
         />

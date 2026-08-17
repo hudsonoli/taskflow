@@ -5,9 +5,11 @@ import { Select } from "@/components/ui/Select";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { analisarPecasPorProjeto } from "@/lib/relatorios";
 import { useAppData } from "@/lib/AppDataContext";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 
 export function AnalisePecasReport() {
-  const { demandas, projetos } = useAppData();
+  const { demandas } = useAppData();
+  const { projetos } = useDiretorioProjetos();
   const [projetoId, setProjetoId] = useState(projetos[0]?.id ?? "");
   const pecas = useMemo(() => analisarPecasPorProjeto(projetoId, demandas), [projetoId, demandas]);
 

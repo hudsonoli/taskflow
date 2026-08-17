@@ -1,7 +1,12 @@
 import { clientesProjetoDisponiveis, responsaveisProjetoDisponiveis } from "@/lib/legacy-referencias-mock";
-import type { ProjetoLegado } from "@/lib/legacy-referencias-mock";
+import type { ProjetoDiretorioItem } from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
+
+// `clientesProjetoDisponiveis` e `responsaveisProjetoDisponiveis` (acima) seguem mock — ficam
+// para a Fase 2E.5C/D. `projetos` abaixo já é o diretório real (`useDiretorioProjetos`),
+// migrado na Fase 2E.5A/B — não confundir: só a metade Cliente/Colaborador destes relatórios
+// segue com dado de demonstração.
 
 
 const STATUS_ABERTOS = new Set(["rascunho", "planejada", "em_execucao", "pausada", "bloqueada", "aguardando_cliente"]);
@@ -16,7 +21,7 @@ export interface FatiaPizza {
   value: number;
 }
 
-export function demandasAbertasPorProjeto(clienteId: string, demandas: Demanda[], projetos: ProjetoLegado[]): FatiaPizza[] {
+export function demandasAbertasPorProjeto(clienteId: string, demandas: Demanda[], projetos: ProjetoDiretorioItem[]): FatiaPizza[] {
   const projetosDoCliente = projetos.filter((projeto) => projeto.clienteId === clienteId);
   return projetosDoCliente
     .map((projeto) => ({
@@ -33,7 +38,7 @@ export interface SerieBarraEmpilhada {
   segmentos: { seriesId: string; label: string; value: number }[];
 }
 
-export function volumePorProjetoEColaborador(demandas: Demanda[], projetos: ProjetoLegado[]): SerieBarraEmpilhada[] {
+export function volumePorProjetoEColaborador(demandas: Demanda[], projetos: ProjetoDiretorioItem[]): SerieBarraEmpilhada[] {
   return projetos.map((projeto) => {
     const demandasDoProjeto = demandas.filter((demanda) => demanda.projetoId === projeto.id);
     const segmentos = responsaveisProjetoDisponiveis
@@ -88,7 +93,7 @@ export function volumeSemanal(referenceDate: Date, demandas: Demanda[], semanas 
   return buckets;
 }
 
-export function resolveClientesComProjeto(projetos: ProjetoLegado[]) {
+export function resolveClientesComProjeto(projetos: ProjetoDiretorioItem[]) {
   return clientesProjetoDisponiveis.filter((cliente) => projetos.some((projeto) => projeto.clienteId === cliente.id));
 }
 
@@ -127,7 +132,7 @@ export interface AnaliseProjeto {
   colaboradores: { id: string; nome: string; demandas: number }[];
 }
 
-export function analisarProjeto(projetoId: string, demandasTodas: Demanda[], projetos: ProjetoLegado[]): AnaliseProjeto {
+export function analisarProjeto(projetoId: string, demandasTodas: Demanda[], projetos: ProjetoDiretorioItem[]): AnaliseProjeto {
   const projeto = projetos.find((item) => item.id === projetoId);
   const demandas = demandasTodas.filter((demanda) => demanda.projetoId === projetoId);
 
