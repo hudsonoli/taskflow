@@ -5,14 +5,26 @@ import { CheckCircle2, ClipboardCheck, Clock3 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Select } from "@/components/ui/Select";
 import { analisarPerformanceColaborador } from "@/lib/relatorios";
-import { responsaveisProjetoDisponiveis } from "@/lib/demandas";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { useAppData } from "@/lib/AppDataContext";
 import { DemandasPorProjetoDonut } from "./DemandasPorProjetoDonut";
 
 export function PerformanceColaboradorReport() {
   const { demandas } = useAppData();
-  const [colaboradorId, setColaboradorId] = useState(responsaveisProjetoDisponiveis[0]?.id ?? "");
-  const performance = useMemo(() => analisarPerformanceColaborador(colaboradorId, demandas), [colaboradorId, demandas]);
+  // Consulta histórica, não seleção de vínculo novo — inclui inativo/bloqueado (o diretório já
+  // exclui só arquivado por padrão, ver `usuario_repository.list_diretorio`), pra não esconder
+  // colaborador com Demandas passadas só porque ele não está mais ativo hoje.
+  const { usuarios } = useDiretorioUsuarios();
+  const [colaboradorIdSelecionado, setColaboradorIdSelecionado] = useState("");
+  // O diretório carrega assíncrono (cache remoto): antes de resolver, `usuarios` está vazio, e
+  // capturar o primeiro id num `useState` inicial ficaria travado em "". Deriva o efetivo a
+  // cada render em vez disso — sem `useEffect`, sem setState em cascata.
+  const colaboradorId = colaboradorIdSelecionado || usuarios[0]?.id || "";
+
+  const performance = useMemo(
+    () => analisarPerformanceColaborador(colaboradorId, demandas, usuarios),
+    [colaboradorId, demandas, usuarios],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -20,8 +32,8 @@ export function PerformanceColaboradorReport() {
         <Select
           label="Colaborador"
           value={colaboradorId}
-          onChange={(event) => setColaboradorId(event.target.value)}
-          options={responsaveisProjetoDisponiveis.map((usuario) => ({ value: usuario.id, label: usuario.nome }))}
+          onChange={(event) => setColaboradorIdSelecionado(event.target.value)}
+          options={usuarios.map((usuario) => ({ value: usuario.id, label: usuario.nome }))}
         />
       </div>
 

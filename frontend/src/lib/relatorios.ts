@@ -1,12 +1,13 @@
 import { clientesProjetoDisponiveis, responsaveisProjetoDisponiveis } from "@/lib/legacy-referencias-mock";
-import type { ProjetoDiretorioItem } from "@/lib/api-backend";
+import type { ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
 
-// `clientesProjetoDisponiveis` e `responsaveisProjetoDisponiveis` (acima) seguem mock — ficam
-// para a Fase 2E.5C/D. `projetos` abaixo já é o diretório real (`useDiretorioProjetos`),
-// migrado na Fase 2E.5A/B — não confundir: só a metade Cliente/Colaborador destes relatórios
-// segue com dado de demonstração.
+// `clientesProjetoDisponiveis` segue mock — fica para a Fase 2E.5D. `responsaveisProjetoDisponiveis`
+// (acima) ainda serve `volumePorProjetoEColaborador`, `analisarProjeto` e `analisarPecasPorProjeto`
+// (fora do escopo da 2E.5C, que migrou só `analisarPerformanceColaborador` — consumida por
+// PerformanceColaboradorReport.tsx, agora com diretório real de usuários). `projetos` abaixo já é
+// o diretório real (`useDiretorioProjetos`), migrado na Fase 2E.5A/B.
 
 
 const STATUS_ABERTOS = new Set(["rascunho", "planejada", "em_execucao", "pausada", "bloqueada", "aguardando_cliente"]);
@@ -213,8 +214,17 @@ export interface PerformanceColaborador {
   participacaoPorEtapa: FatiaPizza[];
 }
 
-export function analisarPerformanceColaborador(colaboradorId: string, demandasTodas: Demanda[]): PerformanceColaborador {
-  const colaborador = responsaveisProjetoDisponiveis.find((usuario) => usuario.id === colaboradorId);
+/**
+ * `usuarioResponsavelIds` é `list[UUID]` no schema do backend (ver `schemas/demanda.py`) —
+ * Demanda nasceu com seed vazio na Fase 2E.1, então não existe (e não pode existir) demanda
+ * carregando o formato antigo `user-N`. Comparação direta por UUID, sem `normalizarUsuarioId`.
+ */
+export function analisarPerformanceColaborador(
+  colaboradorId: string,
+  demandasTodas: Demanda[],
+  usuarios: UsuarioDiretorioItem[],
+): PerformanceColaborador {
+  const colaborador = usuarios.find((usuario) => usuario.id === colaboradorId);
   const demandasDoColaborador = demandasTodas.filter((demanda) => demanda.usuarioResponsavelIds.includes(colaboradorId));
   const entregues = demandasDoColaborador.filter((demanda) => demanda.status === "concluida");
 

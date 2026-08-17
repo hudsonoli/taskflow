@@ -3,7 +3,7 @@
 import { CalendarRange, List, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { MultiSelect } from "@/components/ui/MultiSelect";
-import { departamentosProjetoDisponiveis } from "@/lib/demandas";
+import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 
 export type PautaViewMode = "lista" | "gantt";
 export type PautaPeriodoFiltro = "hoje" | "7d" | "30d";
@@ -27,6 +27,8 @@ export function PautaToolbar({
   viewMode: PautaViewMode;
   onViewModeChange: (value: PautaViewMode) => void;
 }) {
+  const { departamentos } = useDiretorioDepartamentos();
+
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -68,7 +70,13 @@ export function PautaToolbar({
             label="Departamento"
             values={departamentoIds}
             onChange={onDepartamentoIdsChange}
-            options={departamentosProjetoDisponiveis.map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
+            // Filtro sobre Demandas existentes, não seleção de vínculo novo — inclui
+            // departamento arquivado de propósito, senão um departamento descontinuado
+            // ficaria impossível de filtrar nas demandas antigas que ainda o referenciam.
+            options={departamentos.map((departamento) => ({
+              value: departamento.id,
+              label: departamento.status === "arquivado" ? `${departamento.nome} (arquivado)` : departamento.nome,
+            }))}
           />
         </div>
 

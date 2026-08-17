@@ -14,11 +14,10 @@ import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { resolverDepartamentoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import {
   formatPrazo,
   normalizarUsuarioId,
-  resolveDepartamentosProjetoNomes,
   statusDemandaLabels,
   statusDemandaTone,
 } from "@/lib/demandas";
@@ -158,7 +157,11 @@ export function MinhasDemandasView() {
                       </td>
                       <td className="max-w-[140px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">{cliente?.nome ?? "Sem cliente"}</td>
                       <td className="max-w-[160px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                        {resolveDepartamentosProjetoNomes(demanda.departamentoResponsavelIds)}
+                        {demanda.departamentoResponsavelIds.length === 0
+                          ? "-"
+                          : demanda.departamentoResponsavelIds
+                              .map((id) => resolverDepartamentoNome(id, departamentos))
+                              .join(", ")}
                       </td>
                       <td className="px-4 py-3">
                         <AvatarStack pessoas={responsaveis} max={2} size="h-7 w-7" />
