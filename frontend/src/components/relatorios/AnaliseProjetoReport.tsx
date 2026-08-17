@@ -7,6 +7,7 @@ import { ClipboardList, RotateCcw, Timer, UserCog, Users } from "lucide-react";
 import { analisarProjeto } from "@/lib/relatorios";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 
 function formatDias(dias: number): string {
   if (dias < 1) return `${Math.round(dias * 24)}h`;
@@ -16,8 +17,15 @@ function formatDias(dias: number): string {
 export function AnaliseProjetoReport() {
   const { demandas } = useAppData();
   const { projetos } = useDiretorioProjetos();
-  const [projetoId, setProjetoId] = useState(projetos[0]?.id ?? "");
-  const analise = useMemo(() => analisarProjeto(projetoId, demandas, projetos), [projetoId, demandas, projetos]);
+  const { usuarios } = useDiretorioUsuarios();
+  const [projetoIdSelecionado, setProjetoIdSelecionado] = useState("");
+  // Diretório carrega assíncrono: `useState(projetos[0]?.id)` capturaria sempre "" no mount.
+  // Mesmo padrão derivado de RelatoriosView/PerformanceColaboradorReport.
+  const projetoId = projetoIdSelecionado || projetos[0]?.id || "";
+  const analise = useMemo(
+    () => analisarProjeto(projetoId, demandas, projetos, usuarios),
+    [projetoId, demandas, projetos, usuarios],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -25,7 +33,7 @@ export function AnaliseProjetoReport() {
         <Select
           label="Projeto"
           value={projetoId}
-          onChange={(event) => setProjetoId(event.target.value)}
+          onChange={(event) => setProjetoIdSelecionado(event.target.value)}
           options={projetos.map((projeto) => ({ value: projeto.id, label: projeto.nome }))}
         />
       </div>

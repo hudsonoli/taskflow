@@ -8,7 +8,9 @@ import { ChartCard } from "@/components/ui/ChartCard";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { useAppData } from "@/lib/AppDataContext";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { demandasAbertasPorProjeto, resolveClientesComProjeto, volumePorProjetoEColaborador, volumeSemanal } from "@/lib/relatorios";
 import { AnalisePecasReport } from "./AnalisePecasReport";
 import { AnaliseProjetoReport } from "./AnaliseProjetoReport";
@@ -25,12 +27,21 @@ const SECOES = [
 export function RelatoriosView() {
   const { demandas } = useAppData();
   const { projetos } = useDiretorioProjetos();
-  const clientesComProjeto = useMemo(() => resolveClientesComProjeto(projetos), [projetos]);
+  const { clientes } = useDiretorioClientes();
+  const { usuarios } = useDiretorioUsuarios();
+  const clientesComProjeto = useMemo(() => resolveClientesComProjeto(projetos, clientes), [projetos, clientes]);
   const [secao, setSecao] = useState("graficos");
-  const [clienteId, setClienteId] = useState(clientesComProjeto[0]?.id ?? "");
+  const [clienteIdSelecionado, setClienteIdSelecionado] = useState("");
+  // Mesmo padrão de PerformanceColaboradorReport: o diretório carrega assíncrono, então
+  // `useState(clientesComProjeto[0]?.id)` capturaria sempre "" no mount. Deriva o efetivo a
+  // cada render em vez de sincronizar com `useEffect` + `setState`.
+  const clienteId = clienteIdSelecionado || clientesComProjeto[0]?.id || "";
 
   const fatiasPizza = useMemo(() => demandasAbertasPorProjeto(clienteId, demandas, projetos), [clienteId, demandas, projetos]);
-  const seriesColaborador = useMemo(() => volumePorProjetoEColaborador(demandas, projetos), [demandas, projetos]);
+  const seriesColaborador = useMemo(
+    () => volumePorProjetoEColaborador(demandas, projetos, usuarios),
+    [demandas, projetos, usuarios],
+  );
   const pontosSemanais = useMemo(() => volumeSemanal(new Date("2026-08-01"), demandas), [demandas]);
 
   return (
@@ -70,8 +81,11 @@ export function RelatoriosView() {
                   <Select
                     label="Cliente"
                     value={clienteId}
-                    onChange={(event) => setClienteId(event.target.value)}
-                    options={clientesComProjeto.map((cliente) => ({ value: cliente.id, label: cliente.nome }))}
+                    onChange={(event) => setClienteIdSelecionado(event.target.value)}
+                    options={clientesComProjeto.map((cliente) => ({
+                      value: cliente.id,
+                      label: cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome,
+                    }))}
                   />
                 </div>
                 <DemandasPorProjetoDonut fatias={fatiasPizza} />
@@ -83,8 +97,11 @@ export function RelatoriosView() {
                   <Select
                     label="Cliente"
                     value={clienteId}
-                    onChange={(event) => setClienteId(event.target.value)}
-                    options={clientesComProjeto.map((cliente) => ({ value: cliente.id, label: cliente.nome }))}
+                    onChange={(event) => setClienteIdSelecionado(event.target.value)}
+                    options={clientesComProjeto.map((cliente) => ({
+                      value: cliente.id,
+                      label: cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome,
+                    }))}
                   />
                 </div>
                 <DemandasPorProjetoTable fatias={fatiasPizza} />

@@ -6,12 +6,20 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { analisarPecasPorProjeto } from "@/lib/relatorios";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 
 export function AnalisePecasReport() {
   const { demandas } = useAppData();
   const { projetos } = useDiretorioProjetos();
-  const [projetoId, setProjetoId] = useState(projetos[0]?.id ?? "");
-  const pecas = useMemo(() => analisarPecasPorProjeto(projetoId, demandas), [projetoId, demandas]);
+  const { usuarios } = useDiretorioUsuarios();
+  const [projetoIdSelecionado, setProjetoIdSelecionado] = useState("");
+  // Diretório carrega assíncrono: `useState(projetos[0]?.id)` capturaria sempre "" no mount.
+  // Mesmo padrão derivado de RelatoriosView/AnaliseProjetoReport/PerformanceColaboradorReport.
+  const projetoId = projetoIdSelecionado || projetos[0]?.id || "";
+  const pecas = useMemo(
+    () => analisarPecasPorProjeto(projetoId, demandas, usuarios),
+    [projetoId, demandas, usuarios],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -19,7 +27,7 @@ export function AnalisePecasReport() {
         <Select
           label="Projeto"
           value={projetoId}
-          onChange={(event) => setProjetoId(event.target.value)}
+          onChange={(event) => setProjetoIdSelecionado(event.target.value)}
           options={projetos.map((projeto) => ({ value: projeto.id, label: projeto.nome }))}
         />
       </div>

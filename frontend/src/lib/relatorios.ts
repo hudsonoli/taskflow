@@ -1,13 +1,11 @@
-import { clientesProjetoDisponiveis, responsaveisProjetoDisponiveis } from "@/lib/legacy-referencias-mock";
-import type { ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import type { ClienteDiretorioItem, ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
 
-// `clientesProjetoDisponiveis` segue mock — fica para a Fase 2E.5D. `responsaveisProjetoDisponiveis`
-// (acima) ainda serve `volumePorProjetoEColaborador`, `analisarProjeto` e `analisarPecasPorProjeto`
-// (fora do escopo da 2E.5C, que migrou só `analisarPerformanceColaborador` — consumida por
-// PerformanceColaboradorReport.tsx, agora com diretório real de usuários). `projetos` abaixo já é
-// o diretório real (`useDiretorioProjetos`), migrado na Fase 2E.5A/B.
+// Todos os helpers deste módulo recebem o diretório real como argumento (Cliente/Usuário/
+// Projeto) — nenhum importa mock nem hook React, mesmo padrão de `resolverProjetoNome` em
+// lib/referencias.ts. `clientesProjetoDisponiveis`/`responsaveisProjetoDisponiveis` saíram
+// na Fase 2E.5D (o segundo já não tinha mais consumidor aqui desde a 2E.5C).
 
 
 const STATUS_ABERTOS = new Set(["rascunho", "planejada", "em_execucao", "pausada", "bloqueada", "aguardando_cliente"]);
@@ -39,10 +37,14 @@ export interface SerieBarraEmpilhada {
   segmentos: { seriesId: string; label: string; value: number }[];
 }
 
-export function volumePorProjetoEColaborador(demandas: Demanda[], projetos: ProjetoDiretorioItem[]): SerieBarraEmpilhada[] {
+export function volumePorProjetoEColaborador(
+  demandas: Demanda[],
+  projetos: ProjetoDiretorioItem[],
+  usuarios: UsuarioDiretorioItem[],
+): SerieBarraEmpilhada[] {
   return projetos.map((projeto) => {
     const demandasDoProjeto = demandas.filter((demanda) => demanda.projetoId === projeto.id);
-    const segmentos = responsaveisProjetoDisponiveis
+    const segmentos = usuarios
       .map((usuario) => ({
         seriesId: usuario.id,
         label: usuario.nome,
@@ -94,8 +96,14 @@ export function volumeSemanal(referenceDate: Date, demandas: Demanda[], semanas 
   return buckets;
 }
 
-export function resolveClientesComProjeto(projetos: ProjetoDiretorioItem[]) {
-  return clientesProjetoDisponiveis.filter((cliente) => projetos.some((projeto) => projeto.clienteId === cliente.id));
+/**
+ * Consulta histórica, não seleção de vínculo novo — não filtra `status`. O diretório de
+ * Cliente já inclui arquivado por padrão (`ClienteRepository.list_diretorio`), então um
+ * cliente descontinuado com Demandas antigas continua aparecendo aqui em vez de sumir do
+ * relatório.
+ */
+export function resolveClientesComProjeto(projetos: ProjetoDiretorioItem[], clientes: ClienteDiretorioItem[]) {
+  return clientes.filter((cliente) => projetos.some((projeto) => projeto.clienteId === cliente.id));
 }
 
 function diffEmDias(inicioIso: string, fimIso: string): number {
@@ -133,7 +141,12 @@ export interface AnaliseProjeto {
   colaboradores: { id: string; nome: string; demandas: number }[];
 }
 
-export function analisarProjeto(projetoId: string, demandasTodas: Demanda[], projetos: ProjetoDiretorioItem[]): AnaliseProjeto {
+export function analisarProjeto(
+  projetoId: string,
+  demandasTodas: Demanda[],
+  projetos: ProjetoDiretorioItem[],
+  usuarios: UsuarioDiretorioItem[],
+): AnaliseProjeto {
   const projeto = projetos.find((item) => item.id === projetoId);
   const demandas = demandasTodas.filter((demanda) => demanda.projetoId === projetoId);
 
@@ -144,7 +157,7 @@ export function analisarProjeto(projetoId: string, demandasTodas: Demanda[], pro
 
   const { ajustesInternos, ajustesCliente, refacoes } = contarHistoricoPorTipo();
 
-  const colaboradores = responsaveisProjetoDisponiveis
+  const colaboradores = usuarios
     .map((usuario) => ({
       id: usuario.id,
       nome: usuario.nome,
@@ -182,12 +195,16 @@ export interface AnalisePeca {
   refacoes: number;
 }
 
-export function analisarPecasPorProjeto(projetoId: string, demandasTodas: Demanda[]): AnalisePeca[] {
+export function analisarPecasPorProjeto(
+  projetoId: string,
+  demandasTodas: Demanda[],
+  usuarios: UsuarioDiretorioItem[],
+): AnalisePeca[] {
   const demandas = demandasTodas.filter((demanda) => demanda.projetoId === projetoId);
 
   return demandas.map((demanda) => {
     const redatorId = demanda.usuarioResponsavelIds[0];
-    const redator = responsaveisProjetoDisponiveis.find((usuario) => usuario.id === redatorId)?.nome ?? "Sem responsável";
+    const redator = usuarios.find((usuario) => usuario.id === redatorId)?.nome ?? "Sem responsável";
     const emAndamento = demanda.status !== "concluida" && demanda.status !== "cancelada";
     const { ajustesInternos, ajustesCliente, refacoes } = contarHistoricoPorTipo();
 
