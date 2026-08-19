@@ -129,7 +129,7 @@ export function DashboardView() {
             </h1>
             <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{mensagemMotivacional}</p>
           </div>
-          <Badge tone="blue">Dados locais</Badge>
+          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

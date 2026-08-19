@@ -5,21 +5,11 @@
  * arquivo antigo misturava dados falsos com funções de apresentação legítimas. Aqui ficou só
  * o que é apresentação — não há dado de demanda neste módulo.
  *
- * Projeto resolve pelo diretório real (`useDiretorioProjetos`, `lib/referencias.ts::resolverProjetoNome`)
- * desde a Fase 2E.5A — nada aqui importa mais `legacy-referencias-mock`. As referências a
- * **Cliente/Departamento/Usuário-de-projeto** (`resolveClienteProjetoNome`,
- * `departamentosProjetoDisponiveis`, `responsaveisProjetoDisponiveis`) ainda vêm da projeção
- * legada — ficam para a Fase 2E.5C/D.
+ * Projeto/Cliente/Departamento/Usuário resolvem todos pelo diretório real
+ * (`lib/referencias.ts`) desde a Fase 2E.5 — nada aqui importa mais `legacy-referencias-mock`.
  */
 
 import { AGENCIA_PADRAO_ID, EMPRESA_PADRAO_ID, generateCodigoInterno, generateId } from "@/lib/ids";
-import {
-  departamentosProjetoDisponiveis,
-  resolveClienteProjetoNome,
-  resolveDepartamentosProjetoNomes,
-  resolveResponsaveisProjetoNomes,
-  responsaveisProjetoDisponiveis,
-} from "@/lib/legacy-referencias-mock";
 import type {
   Demanda,
   DemandaPrioridade,
@@ -29,17 +19,7 @@ import type {
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
 import { correspondeUsuario, resolverUsuarioPorReferencia } from "@/lib/referencias";
 
-export {
-  AGENCIA_PADRAO_ID,
-  EMPRESA_PADRAO_ID,
-  departamentosProjetoDisponiveis,
-  generateCodigoInterno,
-  generateId,
-  resolveClienteProjetoNome,
-  resolveDepartamentosProjetoNomes,
-  resolveResponsaveisProjetoNomes,
-  responsaveisProjetoDisponiveis,
-};
+export { AGENCIA_PADRAO_ID, EMPRESA_PADRAO_ID, generateCodigoInterno, generateId };
 
 export const statusDemandaLabels: Record<DemandaStatus, string> = {
   rascunho: "Rascunho",

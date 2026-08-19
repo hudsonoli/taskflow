@@ -123,6 +123,13 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
   const projetosSelecionaveis = projetos.filter(
     (projeto) => projeto.status !== "arquivado" || projeto.id === demanda.projetoId,
   );
+  // Mesma regra para Cliente (`_ensure_cliente_valido` no backend): só `arquivado` é
+  // recusado como vínculo novo — `suspenso`/`inativo` continuam aceitos. O Cliente já
+  // vinculado continua na lista mesmo arquivado, senão o campo mostraria vazio ao abrir uma
+  // Demanda cujo Cliente foi arquivado depois.
+  const clientesSelecionaveis = clientes.filter(
+    (cliente) => cliente.status !== "arquivado" || cliente.id === demanda.clienteId,
+  );
 
   async function handleProjetoChange(projetoId: string) {
     const projeto = projetos.find((item) => item.id === projetoId);
@@ -174,7 +181,10 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
           label="Cliente"
           value={demanda.clienteId ?? ""}
           onChange={(clienteId) => void salvarCampo(demanda, { clienteId }, onChange, setErro)}
-          options={clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))}
+          options={clientesSelecionaveis.map((cliente) => ({
+            value: cliente.id,
+            label: cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome,
+          }))}
           placeholder="Buscar cliente…"
           emptyLabel="Nenhum cliente encontrado"
         />

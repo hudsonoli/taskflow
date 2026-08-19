@@ -15,9 +15,8 @@ import type { DemandaChecklistItem } from "@/types/demanda";
 /**
  * Checklist de Demanda — primeira versão (Fase 2E.3). Sem responsável, departamento, prazo
  * ou dependência entre itens: essas regras não estão definidas ainda (ver instrução da fase).
- *
- * Substitui o placeholder `RecursoIndisponivel` — checklist agora tem tabela e endpoint
- * dedicado (`/demandas/{id}/checklist`), buscado ao montar este card.
+ * Checklist tem tabela e endpoint dedicado (`/demandas/{id}/checklist`), buscado ao montar
+ * este card.
  */
 export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
   const [itens, setItens] = useState<DemandaChecklistItem[]>([]);

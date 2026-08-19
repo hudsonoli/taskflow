@@ -13,12 +13,12 @@ import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { generateId } from "@/lib/ids";
-// TipoTarefa e Workflow ainda não migraram — estas duas listas continuam vindo do módulo
-// de legado e saem quando esses domínios ganharem tabela.
+// TipoTarefa e Workflow ainda não migraram — estas duas listas continuam mock e saem quando
+// esses domínios ganharem tabela (ver docstring de projeto-modelo-campanha-mock.ts).
 import {
   tiposTarefaProjetoDisponiveis,
   workflowsProjetoDisponiveis,
-} from "@/lib/legacy-referencias-mock";
+} from "@/lib/projeto-modelo-campanha-mock";
 import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type {
   Projeto,

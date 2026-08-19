@@ -5,10 +5,7 @@ import { motion } from "framer-motion";
 import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import {
-  resolveClienteProjetoNome,
-  resolveResponsaveisDemandaNomes,
-} from "@/lib/demandas";
+import { resolveResponsaveisDemandaNomes } from "@/lib/demandas";
 import {
   atualizarDemandaReal,
   criarDemandaReal,
@@ -16,11 +13,17 @@ import {
   patchDemandaReal,
 } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { resolverDepartamentoNome, resolverProjetoNome } from "@/lib/referencias";
+import { resolverClienteNome, resolverDepartamentoNome, resolverProjetoNome } from "@/lib/referencias";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import type { DepartamentoDiretorioItem, ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import type {
+  ClienteDiretorioItem,
+  DepartamentoDiretorioItem,
+  ProjetoDiretorioItem,
+  UsuarioDiretorioItem,
+} from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
 import { podeCriarDemanda } from "@/types/usuario";
 import type { Demanda, DemandaFormDraft, DemandaStatusEditavel } from "@/types/demanda";
@@ -54,13 +57,14 @@ function matchesDemanda(
   usuarios: UsuarioDiretorioItem[],
   departamentos: DepartamentoDiretorioItem[],
   projetos: ProjetoDiretorioItem[],
+  clientes: ClienteDiretorioItem[],
 ) {
   const haystack = [
     demanda.nome,
     rotuloDemanda(demanda),
     demanda.pit ?? "",
     resolverProjetoNome(demanda.projetoId, projetos),
-    resolveClienteProjetoNome(demanda.clienteId),
+    resolverClienteNome(demanda.clienteId ?? "", clientes),
     resolveResponsaveisDemandaNomes(demanda.usuarioResponsavelIds, usuarios),
     demanda.departamentoResponsavelIds.map((id) => resolverDepartamentoNome(id, departamentos)).join(" "),
   ].join(" ");
@@ -86,6 +90,7 @@ export function DemandasView() {
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios } = useDiretorioUsuarios();
   const { projetos } = useDiretorioProjetos();
+  const { clientes } = useDiretorioClientes();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<DemandaStatusFiltro>("todos");
   const [viewMode, setViewMode] = useState<DemandasViewMode>("lista");
@@ -117,10 +122,10 @@ export function DemandasView() {
   const filteredDemands = useMemo(
     () =>
       demandas.filter((demanda) => {
-        const queryMatches = query.trim() ? matchesDemanda(demanda, query, usuarios, departamentos, projetos) : true;
+        const queryMatches = query.trim() ? matchesDemanda(demanda, query, usuarios, departamentos, projetos, clientes) : true;
         return statusMatchesFilter(demanda, statusFilter) && queryMatches;
       }),
-    [demandas, query, statusFilter, usuarios, departamentos, projetos],
+    [demandas, query, statusFilter, usuarios, departamentos, projetos, clientes],
   );
 
   async function upsertDemand(draft: DemandaFormDraft, demandaId?: string): Promise<string | null> {

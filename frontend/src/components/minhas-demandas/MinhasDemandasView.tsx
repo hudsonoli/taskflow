@@ -235,7 +235,7 @@ function Cabecalho() {
             </p>
           </div>
         </div>
-        <Badge tone="blue">Dados locais</Badge>
+        <Badge tone="green">Banco real</Badge>
       </div>
     </motion.div>
   );

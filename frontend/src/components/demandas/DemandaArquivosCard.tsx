@@ -29,10 +29,9 @@ function IconeArquivo({ contentType }: { contentType: string | null }) {
 }
 
 /**
- * Arquivos de Demanda — primeira versão real (Fase 2E.3). Substitui o placeholder
- * `RecursoIndisponivel`: metadado tem tabela própria e endpoint dedicado
- * (`/demandas/{id}/arquivos`); download exige o endpoint autenticado — nunca URL estática
- * (ver docs/pendencias-arquiteturais.md, item 9, resolvido nesta fase).
+ * Arquivos de Demanda — primeira versão real (Fase 2E.3). Metadado tem tabela própria e
+ * endpoint dedicado (`/demandas/{id}/arquivos`); download exige o endpoint autenticado —
+ * nunca URL estática (ver docs/pendencias-arquiteturais.md, item 9, resolvido nesta fase).
  */
 export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
   const [arquivos, setArquivos] = useState<DemandaArquivo[]>([]);

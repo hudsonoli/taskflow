@@ -70,6 +70,12 @@ export function NovaDemandaModal({
   const projetosSelecionaveis = projetos.filter(
     (projeto) => projeto.status !== "arquivado" || projeto.id === draft.projetoId,
   );
+  // Mesma regra para Cliente (`_ensure_cliente_valido` no backend): só `arquivado` é
+  // recusado como vínculo novo — `suspenso`/`inativo` continuam aceitos, não é "só ativo".
+  // O Cliente já vinculado continua na lista mesmo arquivado, pelo mesmo motivo do Projeto.
+  const clientesSelecionaveis = clientes.filter(
+    (cliente) => cliente.status !== "arquivado" || cliente.id === draft.clienteId,
+  );
   const [workflowPreview, setWorkflowPreview] = useState<WorkflowModelo | null>(null);
   const previewAtual = draft.workflowModeloId && workflowPreview?.id === draft.workflowModeloId ? workflowPreview : null;
   const carregandoWorkflow = Boolean(draft.workflowModeloId) && previewAtual === null;
@@ -162,7 +168,10 @@ export function NovaDemandaModal({
           label="Cliente"
           value={draft.clienteId ?? ""}
           onChange={(clienteId) => updateDraft({ clienteId })}
-          options={clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))}
+          options={clientesSelecionaveis.map((cliente) => ({
+            value: cliente.id,
+            label: cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome,
+          }))}
           placeholder="Buscar cliente…"
           emptyLabel="Nenhum cliente encontrado"
         />
