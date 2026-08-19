@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { compararPorAgenda, statusDemandaTone } from "@/lib/demandas";
+import { parseDataLocal } from "@/lib/data-local";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { resolverProjetoNome } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
@@ -89,8 +90,16 @@ export function PautaGantt({
 
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {ordenadas.map((demanda) => {
-              const inicio = new Date(demanda.dataInicio ?? "");
-              const fim = new Date(demanda.dataFimPrevista || demanda.prazoEtapaAtual || "");
+              // `dataInicio`/`dataFimPrevista` são data pura (sem hora) — passam por
+              // `parseDataLocal`, nunca por `new Date(string)` direto (ver lib/data-local.ts).
+              // `prazoEtapaAtual`, usado como fallback quando não há `dataFimPrevista`, já é
+              // timestamp real com fuso — esse continua com `new Date(string)` normal.
+              const inicio = parseDataLocal(demanda.dataInicio) ?? new Date(NaN);
+              const fim = demanda.dataFimPrevista
+                ? parseDataLocal(demanda.dataFimPrevista) ?? new Date(NaN)
+                : demanda.prazoEtapaAtual
+                  ? new Date(demanda.prazoEtapaAtual)
+                  : new Date(NaN);
               const inicioValido = !Number.isNaN(inicio.getTime());
               const fimValido = !Number.isNaN(fim.getTime());
 

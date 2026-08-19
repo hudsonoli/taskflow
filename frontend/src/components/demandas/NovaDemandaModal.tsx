@@ -176,8 +176,8 @@ export function NovaDemandaModal({
           emptyLabel="Nenhum cliente encontrado"
         />
         <Input
-          label="Prazo (data e horário)"
-          type="datetime-local"
+          label="Prazo previsto"
+          type="date"
           value={draft.dataFimPrevista ?? ""}
           onChange={(event) => updateDraft({ dataFimPrevista: event.target.value })}
         />

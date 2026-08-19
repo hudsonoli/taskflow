@@ -10,6 +10,7 @@
  */
 
 import { AGENCIA_PADRAO_ID, EMPRESA_PADRAO_ID, generateCodigoInterno, generateId } from "@/lib/ids";
+import { parseDataLocal } from "@/lib/data-local";
 import type {
   Demanda,
   DemandaPrioridade,
@@ -100,12 +101,19 @@ export function resolveResponsaveisDemandaNomes(ids: string[], usuarios: Usuario
     .join(", ");
 }
 
+/**
+ * `value` pode ser data pura (`dataFimPrevista`/`dataInicio`, sem "T") ou timestamp real
+ * (`prazoEtapaAtual` etc., com "T"). Data pura passa por `parseDataLocal` — nunca por
+ * `new Date(string)` direto, que interpretaria como UTC e pode deslocar pro dia anterior no
+ * fuso local (ver lib/data-local.ts). Timestamp real já carrega instante e fuso, então segue
+ * com `new Date(string)` normal.
+ */
 export function formatPrazo(value: string | null | undefined): string {
   if (!value) return "Sem prazo";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
   const hasTime = value.includes("T");
+  const date = hasTime ? new Date(value) : parseDataLocal(value);
+  if (!date || Number.isNaN(date.getTime())) return value;
+
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",

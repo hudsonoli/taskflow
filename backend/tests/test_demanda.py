@@ -378,6 +378,17 @@ def test_criar_com_todos_os_campos_validos_nao_perde_nada(
     assert criada["prazoEtapaAtual"] is not None
 
 
+def test_data_fim_prevista_e_data_pura(client_admin: TestClient) -> None:
+    """Documenta o contrato pós Fase 2F.1: `dataFimPrevista` é `DATE`, não timestamp —
+    diferente de `prazoEtapaAtual` (datetime com fuso, ver teste acima). Hora não-zero é
+    422 (`date_from_datetime_inexact`); ausência é aceita e devolvida como `None`."""
+    resposta = client_admin.post("/demandas", json=_payload(dataFimPrevista="2026-08-20T14:30:00"))
+    assert resposta.status_code == 422, resposta.text
+
+    criada = _criar(client_admin)
+    assert criada["dataFimPrevista"] is None
+
+
 # --------------------------------------------------------------------------------------
 # Escopo — listagem
 # --------------------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import type { ClienteDiretorioItem, ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import { fimDaDataLocal } from "@/lib/data-local";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
 
@@ -245,7 +246,17 @@ export function analisarPerformanceColaborador(
   const demandasDoColaborador = demandasTodas.filter((demanda) => demanda.usuarioResponsavelIds.includes(colaboradorId));
   const entregues = demandasDoColaborador.filter((demanda) => demanda.status === "concluida");
 
-  const entreguesNoPrazo = entregues.filter((demanda) => new Date(demanda.updatedAt) <= new Date(demanda.dataFimPrevista ?? "")).length;
+  // `dataFimPrevista` é data pura (sem hora) — o prazo dela só se esgota ao FIM do dia
+  // previsto, não à meia-noite que abre esse dia. Comparar `updatedAt` (timestamp real)
+  // contra `parseDataLocal` classificaria como atrasada uma entrega feita de manhã no
+  // próprio dia previsto — por isso a comparação é contra `fimDaDataLocal` (23:59:59.999
+  // local do dia previsto), não contra o início dele. Sem `dataFimPrevista`, não há prazo
+  // para comparar: a demanda cai no bucket de atraso, mesmo comportamento de antes desta
+  // correção (a comparação anterior com `new Date("")` também nunca contava como "no prazo").
+  const entreguesNoPrazo = entregues.filter((demanda) => {
+    const fimPrazo = fimDaDataLocal(demanda.dataFimPrevista);
+    return fimPrazo !== null && new Date(demanda.updatedAt) <= fimPrazo;
+  }).length;
   const entreguesEmAtraso = entregues.length - entreguesNoPrazo;
 
   const etapaContagem = new Map<string, number>();
