@@ -25,7 +25,10 @@ export function VolumeColaboradorBars({ series }: { series: SerieBarraEmpilhada[
     return <EmptyState title="Sem demandas cadastradas" description="Nenhum projeto tem demandas vinculadas a colaboradores ainda." />;
   }
 
-  const yTicks = [0, Math.ceil(maxTotal / 2), maxTotal];
+  // `Set` remove duplicata quando `maxTotal === 1` (`Math.ceil(1 / 2)` também é `1`, gerando
+  // `[0, 1, 1]`) — sem isso, dois `<g key={tick}>` com o mesmo valor colidiam (React warning
+  // "duplicate key") e desenhavam a mesma grade/label sobrepostos.
+  const yTicks = Array.from(new Set([0, Math.ceil(maxTotal / 2), maxTotal]));
 
   return (
     <div className="viz-root">

@@ -25,7 +25,11 @@ export function VolumeSemanalLine({ pontos }: { pontos: PontoLinha[] }) {
   const linePath = pontos.map((ponto, index) => `${index === 0 ? "M" : "L"} ${xFor(index)} ${yFor(ponto.value)}`).join(" ");
   const areaPath = `${linePath} L ${xFor(pontos.length - 1)} ${PADDING_TOP + plotHeight} L ${xFor(0)} ${PADDING_TOP + plotHeight} Z`;
 
-  const yTicks = [0, Math.ceil(maxValue / 2), maxValue];
+  // `Set` remove duplicata quando `maxValue === 1` (`Math.ceil(1 / 2)` também é `1`, gerando
+  // `[0, 1, 1]`) — sem isso, dois `<g key={tick}>` com o mesmo valor colidiam (React warning
+  // "duplicate key") e desenhavam a mesma grade/label sobrepostos. Mesmo padrão de
+  // VolumeColaboradorBars.tsx.
+  const yTicks = Array.from(new Set([0, Math.ceil(maxValue / 2), maxValue]));
   const lastIndex = pontos.length - 1;
 
   return (
