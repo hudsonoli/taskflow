@@ -1,5 +1,5 @@
 import type { ClienteDiretorioItem, ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
-import { fimDaDataLocal } from "@/lib/data-local";
+import { fimDaDataLocal, parseDataLocal } from "@/lib/data-local";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
 
@@ -107,9 +107,12 @@ export function resolveClientesComProjeto(projetos: ProjetoDiretorioItem[], clie
   return clientes.filter((cliente) => projetos.some((projeto) => projeto.clienteId === cliente.id));
 }
 
+function diffEmDiasEntreDatas(inicio: Date, fim: Date): number {
+  return (fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24);
+}
+
 function diffEmDias(inicioIso: string, fimIso: string): number {
-  const ms = new Date(fimIso).getTime() - new Date(inicioIso).getTime();
-  return ms / (1000 * 60 * 60 * 24);
+  return diffEmDiasEntreDatas(new Date(inicioIso), new Date(fimIso));
 }
 
 function media(valores: number[]): number {
@@ -134,7 +137,7 @@ export interface AnaliseProjeto {
   projetoNome: string;
   totalDemandas: number;
   prioridade: { baixa: number; media: number; alta: number };
-  tempoMedioAberturaAteInicioDias: number;
+  tempoMedioAberturaAteInicioDias: number | null;
   tempoMedioRetornoClienteDias: number | null;
   ajustesInternos: number;
   ajustesCliente: number;
@@ -151,7 +154,18 @@ export function analisarProjeto(
   const projeto = projetos.find((item) => item.id === projetoId);
   const demandas = demandasTodas.filter((demanda) => demanda.projetoId === projetoId);
 
-  const tempoAbertura = demandas.map((demanda) => diffEmDias(demanda.createdAt, demanda.dataInicio ?? ""));
+  // `dataInicio` é data pura (`DATE`, sem hora) e pode ser `null` — hoje nenhuma UI escreve
+  // nele, então normalmente está ausente. `demanda.dataInicio ?? ""` alimentava `new
+  // Date("")` (Invalid Date), e um único NaN nesse array contaminava `media()` inteira (soma
+  // via reduce), estourando "NaNd" em Análise de Projeto mesmo com outras demandas válidas.
+  // Demandas sem `dataInicio` ficam de fora do cálculo — mesmo padrão já usado abaixo para
+  // `temposRetorno` — em vez de forçar 0d ou quebrar a média de todo o projeto.
+  const temposAbertura = demandas
+    .map((demanda) => {
+      const inicio = parseDataLocal(demanda.dataInicio);
+      return inicio ? diffEmDiasEntreDatas(new Date(demanda.createdAt), inicio) : null;
+    })
+    .filter((valor): valor is number => valor !== null);
   const temposRetorno = demandas
     .filter((demanda) => demanda.enviadoClienteEm && demanda.retornoRecebidoEm)
     .map((demanda) => diffEmDias(demanda.enviadoClienteEm as string, demanda.retornoRecebidoEm as string));
@@ -175,7 +189,7 @@ export function analisarProjeto(
       media: demandas.filter((demanda) => demanda.prioridade === "media").length,
       alta: demandas.filter((demanda) => demanda.prioridade === "alta").length,
     },
-    tempoMedioAberturaAteInicioDias: media(tempoAbertura),
+    tempoMedioAberturaAteInicioDias: temposAbertura.length > 0 ? media(temposAbertura) : null,
     tempoMedioRetornoClienteDias: temposRetorno.length > 0 ? media(temposRetorno) : null,
     ajustesInternos,
     ajustesCliente,

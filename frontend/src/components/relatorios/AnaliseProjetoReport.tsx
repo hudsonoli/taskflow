@@ -43,7 +43,7 @@ export function AnaliseProjetoReport() {
         <MetricCard
           index={1}
           title="Criação → início"
-          value={formatDias(analise.tempoMedioAberturaAteInicioDias)}
+          value={analise.tempoMedioAberturaAteInicioDias !== null ? formatDias(analise.tempoMedioAberturaAteInicioDias) : "—"}
           description="Tempo médio até cair no atendimento"
           tone="neutral"
           icon={<Timer size={16} />}
