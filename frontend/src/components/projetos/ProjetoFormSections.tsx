@@ -11,13 +11,10 @@ import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { useDiretorioTiposTarefa } from "@/lib/diretorioTiposTarefa";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { useDiretorioWorkflowModelos } from "@/lib/diretorioWorkflowModelos";
 import { generateId } from "@/lib/ids";
-// TipoTarefa ainda não migrou — esta lista continua mock e sai quando o domínio ganhar
-// tabela (ver docstring de projeto-modelo-campanha-mock.ts). Workflow já migrou na Fase
-// 2G.1 — `workflowsProjetoDisponiveis` saiu, ver useDiretorioWorkflowModelos abaixo.
-import { tiposTarefaProjetoDisponiveis } from "@/lib/projeto-modelo-campanha-mock";
 import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type {
   Projeto,
@@ -26,7 +23,6 @@ import type {
   ProjetoPrioridade,
   ProjetoStatusEditavel,
 } from "@/types/projeto";
-import type { WorkflowModeloDiretorioItem } from "@/types/workflow-modelo";
 
 /**
  * Hoje todas as seções são consumidas apenas pelo painel de leitura (ProjetoDetailsDrawer).
@@ -210,14 +206,16 @@ export function ResumoProjetoSection({ projeto, onChange, somenteLeitura }: Proj
 function createModeloCampanhaItem(
   departamentoId: string,
   departamentoNome: string,
+  tipoTarefaId: string,
+  tipoTarefaNome: string,
   workflowId: string,
   workflowNome: string,
 ): ProjetoModeloCampanhaItem {
   return {
     id: generateId("modelo-item"),
     nomeDemanda: "Nova demanda padrão",
-    tipoTarefaId: tiposTarefaProjetoDisponiveis[0].id,
-    tipoTarefaNome: tiposTarefaProjetoDisponiveis[0].nome,
+    tipoTarefaId,
+    tipoTarefaNome,
     briefingBase: "",
     prioridadePadrao: "media",
     workflowSugeridoId: workflowId,
@@ -228,34 +226,37 @@ function createModeloCampanhaItem(
 }
 
 /**
- * `GET /workflow-modelos/diretorio` só traz `ativo` — sem resolução histórica, diferente do
- * diretório de Cliente/Projeto (ver docstring de diretorioWorkflowModelos.ts). Se o item já
- * referencia um Workflow que saiu dessa lista (arquivado, ou — durante a transição desta fase
- * — um id do antigo mock), a opção é reconstruída a partir do nome já salvo no próprio item,
+ * Opções de um `<Select>` de item de Modelo de Campanha a partir de um diretório real
+ * ativo-only (Workflow ou Tipo de Tarefa, mesma forma `{id, nome}` — ver docstring de
+ * diretorioWorkflowModelos.ts/diretorioTiposTarefa.ts). Sem resolução histórica no backend:
+ * se o valor atual do item saiu da lista (arquivado, ou — durante a transição desta fase —
+ * um id do antigo mock), a opção é reconstruída a partir do nome já salvo no próprio item,
  * sem precisar de um segundo endpoint: nunca oferecida para NOVO vínculo (só aparece quando é
  * o valor já selecionado), e nunca sobrescreve o id/nome guardados.
  */
-function workflowOptionsPara(
-  item: ProjetoModeloCampanhaItem,
-  workflowModelos: WorkflowModeloDiretorioItem[],
+function opcoesComFallbackHistorico(
+  valorAtual: string,
+  nomeAtual: string,
+  itens: { id: string; nome: string }[],
   carregando: boolean,
   erro: string | null,
+  rotuloRecurso: string,
 ): { value: string; label: string }[] {
   if (carregando) {
-    return item.workflowSugeridoId
-      ? [{ value: item.workflowSugeridoId, label: `${item.workflowSugeridoNome} (carregando…)` }]
+    return valorAtual
+      ? [{ value: valorAtual, label: `${nomeAtual} (carregando…)` }]
       : [{ value: "", label: "Carregando…" }];
   }
   if (erro) {
-    return item.workflowSugeridoId
-      ? [{ value: item.workflowSugeridoId, label: `${item.workflowSugeridoNome} (falha ao carregar workflows)` }]
-      : [{ value: "", label: "Falha ao carregar workflows" }];
+    return valorAtual
+      ? [{ value: valorAtual, label: `${nomeAtual} (falha ao carregar ${rotuloRecurso})` }]
+      : [{ value: "", label: `Falha ao carregar ${rotuloRecurso}` }];
   }
 
-  const options = workflowModelos.map((workflow) => ({ value: workflow.id, label: workflow.nome }));
-  const atualNaLista = workflowModelos.some((workflow) => workflow.id === item.workflowSugeridoId);
-  if (item.workflowSugeridoId && !atualNaLista) {
-    return [{ value: item.workflowSugeridoId, label: `${item.workflowSugeridoNome} (indisponível)` }, ...options];
+  const options = itens.map((item) => ({ value: item.id, label: item.nome }));
+  const atualNaLista = itens.some((item) => item.id === valorAtual);
+  if (valorAtual && !atualNaLista) {
+    return [{ value: valorAtual, label: `${nomeAtual} (indisponível)` }, ...options];
   }
   return options;
 }
@@ -263,6 +264,7 @@ function workflowOptionsPara(
 export function ModeloCampanhaSection({ projeto, onChange, somenteLeitura }: ProjetoSectionProps) {
   const { departamentos } = useDiretorioDepartamentos();
   const { workflowModelos, carregando: carregandoWorkflows, erro: erroWorkflows } = useDiretorioWorkflowModelos();
+  const { tiposTarefa, carregando: carregandoTiposTarefa, erro: erroTiposTarefa } = useDiretorioTiposTarefa();
   const ativos = departamentos.filter((departamento) => departamento.status === "ativo");
 
   function updateItem(itemId: string, patch: Partial<ProjetoModeloCampanhaItem>) {
@@ -285,14 +287,30 @@ export function ModeloCampanhaSection({ projeto, onChange, somenteLeitura }: Pro
       action={
         <Button
           type="button"
-          disabled={somenteLeitura || ativos.length === 0 || carregandoWorkflows || Boolean(erroWorkflows) || workflowModelos.length === 0}
+          disabled={
+            somenteLeitura ||
+            ativos.length === 0 ||
+            carregandoWorkflows ||
+            Boolean(erroWorkflows) ||
+            workflowModelos.length === 0 ||
+            carregandoTiposTarefa ||
+            Boolean(erroTiposTarefa) ||
+            tiposTarefa.length === 0
+          }
           onClick={() =>
             updateProjeto(
               projeto,
               {
                 modeloCampanha: [
                   ...projeto.modeloCampanha,
-                  createModeloCampanhaItem(ativos[0].id, ativos[0].nome, workflowModelos[0].id, workflowModelos[0].nome),
+                  createModeloCampanhaItem(
+                    ativos[0].id,
+                    ativos[0].nome,
+                    tiposTarefa[0].id,
+                    tiposTarefa[0].nome,
+                    workflowModelos[0].id,
+                    workflowModelos[0].nome,
+                  ),
                 ],
               },
               onChange,
@@ -307,6 +325,9 @@ export function ModeloCampanhaSection({ projeto, onChange, somenteLeitura }: Pro
     >
       {erroWorkflows && (
         <p className="mb-3 text-xs text-red-600 dark:text-red-400">Não foi possível carregar os workflows: {erroWorkflows}</p>
+      )}
+      {erroTiposTarefa && (
+        <p className="mb-3 text-xs text-red-600 dark:text-red-400">Não foi possível carregar os tipos de tarefa: {erroTiposTarefa}</p>
       )}
 
       {projeto.modeloCampanha.length === 0 ? (
@@ -330,11 +351,19 @@ export function ModeloCampanhaSection({ projeto, onChange, somenteLeitura }: Pro
                 <Select
                   label="Tipo de tarefa"
                   value={item.tipoTarefaId}
+                  disabled={somenteLeitura || carregandoTiposTarefa || Boolean(erroTiposTarefa)}
                   onChange={(event) => {
-                    const selected = tiposTarefaProjetoDisponiveis.find((tipo) => tipo.id === event.target.value);
+                    const selected = tiposTarefa.find((tipo) => tipo.id === event.target.value);
                     updateItem(item.id, { tipoTarefaId: event.target.value, tipoTarefaNome: selected?.nome ?? event.target.value });
                   }}
-                  options={tiposTarefaProjetoDisponiveis.map((tipo) => ({ value: tipo.id, label: tipo.nome }))}
+                  options={opcoesComFallbackHistorico(
+                    item.tipoTarefaId,
+                    item.tipoTarefaNome,
+                    tiposTarefa,
+                    carregandoTiposTarefa,
+                    erroTiposTarefa,
+                    "tipos de tarefa",
+                  )}
                 />
                 <Select
                   label="Prioridade padrão"
@@ -350,7 +379,14 @@ export function ModeloCampanhaSection({ projeto, onChange, somenteLeitura }: Pro
                     const selected = workflowModelos.find((workflow) => workflow.id === event.target.value);
                     updateItem(item.id, { workflowSugeridoId: event.target.value, workflowSugeridoNome: selected?.nome ?? event.target.value });
                   }}
-                  options={workflowOptionsPara(item, workflowModelos, carregandoWorkflows, erroWorkflows)}
+                  options={opcoesComFallbackHistorico(
+                    item.workflowSugeridoId,
+                    item.workflowSugeridoNome,
+                    workflowModelos,
+                    carregandoWorkflows,
+                    erroWorkflows,
+                    "workflows",
+                  )}
                 />
                 <Select
                   label="Responsável/setor sugerido"

@@ -105,6 +105,12 @@ class DomainEventType(StrEnum):
     WORKFLOW_MODELO_ARQUIVADO = "workflow_modelo.arquivado"
     WORKFLOW_MODELO_RESTAURADO = "workflow_modelo.restaurado"
 
+    # TipoTarefa (Fase 2G.2) não tem tabela de histórico: estes eventos SÃO o histórico.
+    TIPO_TAREFA_CRIADO = "tipo_tarefa.criado"
+    TIPO_TAREFA_ALTERADO = "tipo_tarefa.alterado"
+    TIPO_TAREFA_ARQUIVADO = "tipo_tarefa.arquivado"
+    TIPO_TAREFA_RESTAURADO = "tipo_tarefa.restaurado"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

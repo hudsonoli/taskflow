@@ -37,6 +37,7 @@ from app.models import (  # noqa: E402,F401
     sequencia_operacional,
     sequencia_referencia,
     sessao_trabalho,
+    tipo_tarefa,
     usuario,
     usuario_credencial,
     workflow_modelo,

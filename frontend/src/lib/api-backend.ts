@@ -44,6 +44,7 @@ import type {
   WorkflowModeloFormDraft,
   WorkflowModeloStatus,
 } from "@/types/workflow-modelo";
+import type { TipoTarefaDiretorioItem } from "@/types/tipo-tarefa";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -1728,6 +1729,16 @@ type WorkflowModeloDiretorioApi = {
 
 export async function listDiretorioWorkflowModelos(): Promise<WorkflowModeloDiretorioItem[]> {
   return request<WorkflowModeloDiretorioApi[]>("/workflow-modelos/diretorio");
+}
+
+/** Projeção mínima pra seleção operacional — ver TipoTarefaDiretorioItem. */
+type TipoTarefaDiretorioApi = {
+  id: string;
+  nome: string;
+};
+
+export async function listDiretorioTiposTarefa(): Promise<TipoTarefaDiretorioItem[]> {
+  return request<TipoTarefaDiretorioApi[]>("/tipos-tarefa/diretorio");
 }
 
 // Detalhe completo (com etapas) — aberto a qualquer autenticado, não só admin/gestor: quem

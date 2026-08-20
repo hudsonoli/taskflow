@@ -20,6 +20,7 @@ from app.api.routes import (
     relatorios,
     root,
     sessoes_trabalho,
+    tipos_tarefa,
     usuarios,
     workflow_modelos,
 )
@@ -59,4 +60,5 @@ app.include_router(demanda_historico.router)
 app.include_router(departamentos.router)
 app.include_router(equipes.router)
 app.include_router(workflow_modelos.router)
+app.include_router(tipos_tarefa.router)
 app.include_router(auth.router)
