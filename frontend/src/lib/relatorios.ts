@@ -120,18 +120,6 @@ function media(valores: number[]): number {
   return valores.reduce((sum, value) => sum + value, 0) / valores.length;
 }
 
-// Até a Fase 2E.3, `demanda.historico` vinha embutido em toda listagem (mock), e esta
-// função varria o array já carregado em memória para cada demanda. Na Fase 2E.4 o histórico
-// passou a ser real, mas por Demanda — buscado por `/demandas/{id}/historico`, não mais
-// embutido em bulk, exatamente para não inflar `GET /demandas` (ver DemandaHistoricoEvento).
-// Contar ajustes/refações em MUITAS demandas de uma vez, como este relatório faz, precisaria
-// de um endpoint de agregação novo (ex.: contagem de eventos por tipo/período/projeto) —
-// fora do escopo da 2E.4, que tratou o histórico de UMA Demanda. Devolvendo zero até essa
-// decisão ser tomada, em vez de manter o código quebrado ou fingir o dado com N+1 requests.
-function contarHistoricoPorTipo() {
-  return { ajustesInternos: 0, ajustesCliente: 0, refacoes: 0 };
-}
-
 export interface AnaliseProjeto {
   projetoId: string;
   projetoNome: string;
@@ -139,9 +127,6 @@ export interface AnaliseProjeto {
   prioridade: { baixa: number; media: number; alta: number };
   tempoMedioAberturaAteInicioDias: number | null;
   tempoMedioRetornoClienteDias: number | null;
-  ajustesInternos: number;
-  ajustesCliente: number;
-  refacoes: number;
   colaboradores: { id: string; nome: string; demandas: number }[];
 }
 
@@ -170,8 +155,6 @@ export function analisarProjeto(
     .filter((demanda) => demanda.enviadoClienteEm && demanda.retornoRecebidoEm)
     .map((demanda) => diffEmDias(demanda.enviadoClienteEm as string, demanda.retornoRecebidoEm as string));
 
-  const { ajustesInternos, ajustesCliente, refacoes } = contarHistoricoPorTipo();
-
   const colaboradores = usuarios
     .map((usuario) => ({
       id: usuario.id,
@@ -191,9 +174,6 @@ export function analisarProjeto(
     },
     tempoMedioAberturaAteInicioDias: temposAbertura.length > 0 ? media(temposAbertura) : null,
     tempoMedioRetornoClienteDias: temposRetorno.length > 0 ? media(temposRetorno) : null,
-    ajustesInternos,
-    ajustesCliente,
-    refacoes,
     colaboradores,
   };
 }
@@ -205,9 +185,6 @@ export interface AnalisePeca {
   redator: string;
   tempoEmPautaDias: number | null;
   emAndamento: boolean;
-  ajustesInternos: number;
-  ajustesCliente: number;
-  refacoes: number;
 }
 
 export function analisarPecasPorProjeto(
@@ -221,7 +198,6 @@ export function analisarPecasPorProjeto(
     const redatorId = demanda.usuarioResponsavelIds[0];
     const redator = usuarios.find((usuario) => usuario.id === redatorId)?.nome ?? "Sem responsável";
     const emAndamento = demanda.status !== "concluida" && demanda.status !== "cancelada";
-    const { ajustesInternos, ajustesCliente, refacoes } = contarHistoricoPorTipo();
 
     return {
       demandaId: demanda.id,
@@ -230,9 +206,6 @@ export function analisarPecasPorProjeto(
       redator,
       tempoEmPautaDias: emAndamento ? null : diffEmDias(demanda.createdAt, demanda.updatedAt),
       emAndamento,
-      ajustesInternos,
-      ajustesCliente,
-      refacoes,
     };
   });
 }

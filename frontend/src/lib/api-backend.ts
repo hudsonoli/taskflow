@@ -1788,3 +1788,27 @@ export async function restaurarWorkflowModeloReal(workflowModeloId: string): Pro
   });
   return mapWorkflowModeloReadToWorkflowModelo(restaurado);
 }
+
+// ---------------------------------------------------------------------------------
+// Relatórios — agregação de eventos (Fase 2F.4)
+// ---------------------------------------------------------------------------------
+
+export type ContagemAjustes = {
+  ajustesInternos: number;
+  ajustesCliente: number;
+  refacoes: number;
+};
+
+export type RelatorioAjustesProjeto = {
+  total: ContagemAjustes;
+  porDemanda: Record<string, ContagemAjustes>;
+};
+
+/** `GET /relatorios/demandas/ajustes` já devolve exatamente este formato (camelCase via
+ * alias do schema Pydantic) — sem mapeamento snake_case aqui, diferente da maioria das
+ * outras entidades deste módulo. `projetoId` inexistente ou de outra empresa vira 404, que
+ * `request()` propaga como erro (ver `ProjetoArquivadoConflictError` e afins acima) — quem
+ * chama trata como qualquer outra falha, não como "zero real". */
+export async function getRelatorioAjustesPorProjeto(projetoId: string): Promise<RelatorioAjustesProjeto> {
+  return request<RelatorioAjustesProjeto>(`/relatorios/demandas/ajustes?projetoId=${encodeURIComponent(projetoId)}`);
+}

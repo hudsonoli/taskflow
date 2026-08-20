@@ -134,6 +134,17 @@ class DemandaRepository:
             statement = statement.where(predicado)
         return db.scalars(statement).first()
 
+    def listar_ids_por_projeto(self, db: Session, *, empresa_id: str, projeto_id: str) -> list[str]:
+        """Só os IDs — usado pela agregação de eventos em Relatórios (Fase 2F.4), que precisa
+        da lista de Demandas de um Projeto para filtrar `eventos.entidade_id`, nunca das
+        entidades completas. Sem `escopo`: quem chama (`/relatorios`) já é admin/gestor
+        gated na rota, mesma fronteira de confiança de `/eventos`.
+        """
+        statement = select(Demanda.id).where(
+            Demanda.empresa_id == empresa_id, Demanda.projeto_id == projeto_id
+        )
+        return list(db.scalars(statement).all())
+
     # ----------------------------------------------------------------------------------
     # Listagem
     # ----------------------------------------------------------------------------------

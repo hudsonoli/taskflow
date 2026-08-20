@@ -17,6 +17,7 @@ from app.api.routes import (
     grupos_cliente,
     health,
     projetos,
+    relatorios,
     root,
     sessoes_trabalho,
     usuarios,
@@ -49,6 +50,7 @@ app.include_router(grupos_cliente.router)
 app.include_router(clientes.router)
 app.include_router(fornecedores.router)
 app.include_router(projetos.router)
+app.include_router(relatorios.router)
 app.include_router(demandas.router)
 app.include_router(demanda_checklist.router)
 app.include_router(demanda_arquivos.router)
