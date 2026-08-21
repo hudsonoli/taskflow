@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.expediente import RegraExpediente, esta_dentro_expediente
+from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente
 from app.models.cliente import Cliente
 from app.models.demanda import Demanda
 from app.models.departamento import Departamento
@@ -97,23 +97,35 @@ def _criar(client: TestClient, **extra) -> dict:
     return resposta.json()
 
 
+def _regra_todos_os_dias(
+    *, manha_inicio: str, manha_fim: str, tarde_inicio: str, tarde_fim: str, tolerancia_retomada_minutos: int = 0
+) -> RegraExpediente:
+    """Mesma janela nos 7 dias — usado pelos overrides de teste (`dentro_do_expediente`/
+    `fora_do_expediente`), que precisam funcionar não importa em qual dia da semana a suíte
+    rodar (ver docstring de `dentro_do_expediente`)."""
+    janela = JanelaDia(
+        ativo=True, manha_inicio=manha_inicio, manha_fim=manha_fim, tarde_inicio=tarde_inicio, tarde_fim=tarde_fim
+    )
+    return RegraExpediente(
+        ativo=True,
+        tolerancia_retomada_minutos=tolerancia_retomada_minutos,
+        dias={dia: janela for dia in range(7)},
+    )
+
+
 @pytest.fixture()
 def dentro_do_expediente(app):
-    """Fixa uma janela 00:00–23:59 para o teste não depender da hora da máquina.
+    """Fixa uma janela 00:00–23:59 nos 7 dias para o teste não depender da hora (nem do dia
+    da semana) da máquina.
 
-    Sem isto, a suíte passaria de manhã e falharia às 20h — e o motivo da falha não teria
-    relação nenhuma com o que o teste afirma.
+    Sem isto, a suíte passaria de manhã e falharia às 20h (ou num sábado) — e o motivo da
+    falha não teria relação nenhuma com o que o teste afirma.
     """
     from app.api.routes import demandas as rotas
 
     original = rotas.demanda_service.regra_expediente
-    rotas.demanda_service.regra_expediente = RegraExpediente(
-        ativo=True,
-        manha_inicio="00:00",
-        manha_fim="12:00",
-        tarde_inicio="12:00",
-        tarde_fim="23:59",
-        tolerancia_retomada_minutos=0,
+    rotas.demanda_service.regra_expediente = _regra_todos_os_dias(
+        manha_inicio="00:00", manha_fim="12:00", tarde_inicio="12:00", tarde_fim="23:59"
     )
     yield
     rotas.demanda_service.regra_expediente = original
@@ -121,17 +133,12 @@ def dentro_do_expediente(app):
 
 @pytest.fixture()
 def fora_do_expediente(app):
-    """Janela impossível de estar dentro — qualquer hora do dia fica fora."""
+    """Janela impossível de estar dentro em nenhum dos 7 dias — qualquer hora fica fora."""
     from app.api.routes import demandas as rotas
 
     original = rotas.demanda_service.regra_expediente
-    rotas.demanda_service.regra_expediente = RegraExpediente(
-        ativo=True,
-        manha_inicio="00:00",
-        manha_fim="00:00",
-        tarde_inicio="00:00",
-        tarde_fim="00:00",
-        tolerancia_retomada_minutos=0,
+    rotas.demanda_service.regra_expediente = _regra_todos_os_dias(
+        manha_inicio="00:00", manha_fim="00:00", tarde_inicio="00:00", tarde_fim="00:00"
     )
     yield
     rotas.demanda_service.regra_expediente = original
@@ -722,31 +729,38 @@ def test_expediente_nao_barra_criacao_nem_outros_status(
 
 
 def test_regra_de_expediente_desativada_libera_qualquer_hora() -> None:
-    desativada = RegraExpediente(
-        ativo=False,
-        manha_inicio="09:00",
-        manha_fim="12:00",
-        tarde_inicio="14:00",
-        tarde_fim="19:00",
-        tolerancia_retomada_minutos=30,
+    ativa = _regra_todos_os_dias(
+        manha_inicio="09:00", manha_fim="12:00", tarde_inicio="14:00", tarde_fim="19:00", tolerancia_retomada_minutos=30
     )
+    desativada = RegraExpediente(ativo=False, tolerancia_retomada_minutos=30, dias=ativa.dias)
     meia_noite = datetime.combine(datetime.now().date(), time(3, 0))
-    assert esta_dentro_expediente(meia_noite, desativada) is True
+    assert esta_dentro_expediente(meia_noite, regra=desativada) is True
 
 
 def test_tolerancia_de_retomada_e_respeitada() -> None:
     """13h30 está fora da tarde (14h) mas dentro da tolerância de 30 minutos."""
-    regra = RegraExpediente(
-        ativo=True,
-        manha_inicio="09:00",
-        manha_fim="12:00",
-        tarde_inicio="14:00",
-        tarde_fim="19:00",
-        tolerancia_retomada_minutos=30,
+    regra = _regra_todos_os_dias(
+        manha_inicio="09:00", manha_fim="12:00", tarde_inicio="14:00", tarde_fim="19:00", tolerancia_retomada_minutos=30
     )
     hoje = datetime.now().date()
-    assert esta_dentro_expediente(datetime.combine(hoje, time(13, 30)), regra) is True
-    assert esta_dentro_expediente(datetime.combine(hoje, time(13, 0)), regra) is False
+    assert esta_dentro_expediente(datetime.combine(hoje, time(13, 30)), regra=regra) is True
+    assert esta_dentro_expediente(datetime.combine(hoje, time(13, 0)), regra=regra) is False
+
+
+def test_dia_inativo_fica_fora_mesmo_com_hora_dentro_da_janela() -> None:
+    """Prova a falha que a Fase 2G.3 corrigiu: sábado às 10h não pode contar como expediente
+    só porque a hora bate com a janela da manhã de um dia útil."""
+    domingo_janela_util = JanelaDia(ativo=True, manha_inicio="09:00", manha_fim="12:00", tarde_inicio="14:00", tarde_fim="19:00")
+    dia_inativo = JanelaDia(ativo=False)
+    regra = RegraExpediente(
+        ativo=True,
+        tolerancia_retomada_minutos=0,
+        dias={dia: domingo_janela_util for dia in range(6)} | {6: dia_inativo},  # 6 = domingo
+    )
+    # Um domingo qualquer, 10h — dentro da janela "da manhã", mas domingo está inativo.
+    domingo = datetime(2026, 8, 23, 10, 0)  # 2026-08-23 é domingo
+    assert domingo.weekday() == 6
+    assert esta_dentro_expediente(domingo, regra=regra) is False
 
 
 # --------------------------------------------------------------------------------------

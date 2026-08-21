@@ -13,10 +13,12 @@ from app.api.routes import (
     empresas,
     equipes,
     eventos,
+    expediente,
     fornecedores,
     grupos_cliente,
     health,
     projetos,
+    regra_expediente,
     relatorios,
     root,
     sessoes_trabalho,
@@ -61,4 +63,6 @@ app.include_router(departamentos.router)
 app.include_router(equipes.router)
 app.include_router(workflow_modelos.router)
 app.include_router(tipos_tarefa.router)
+app.include_router(regra_expediente.router)
+app.include_router(expediente.router)
 app.include_router(auth.router)

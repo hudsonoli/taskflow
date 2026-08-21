@@ -21,6 +21,7 @@ import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { IndicadoresGrid, type IndicadorItem } from "@/components/operacional/IndicadoresGrid";
 import { TarefasLista } from "@/components/operacional/TarefasLista";
 import { useAppData } from "@/lib/AppDataContext";
+import { useEstadoExpediente } from "@/lib/estadoExpediente";
 import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
@@ -46,7 +47,8 @@ type OrigemFiltro = "todos" | "interna" | "cliente";
 const DIAS_UTEIS_SEMANA = 5;
 
 export function MeuDepartamentoView() {
-  const { demandas, regraExpediente, usuarioAtual } = useAppData();
+  const { demandas, usuarioAtual } = useAppData();
+  const { estado: estadoExpediente } = useEstadoExpediente();
   const { clientes } = useDiretorioClientes();
   const { equipes } = useDiretorioEquipes();
   const { departamentos } = useDiretorioDepartamentos();
@@ -150,15 +152,18 @@ export function MeuDepartamentoView() {
   const atrasadas = classificacoesDept.filter((c) => c.atrasada).length;
   const concluidas = classificacoesDept.filter((c) => c.concluida).length;
 
+  // `null` (não `0`) enquanto o estado ainda não chegou — `0` é um valor real (hoje não é
+  // dia útil) e não pode ser confundido com "sem dado ainda" (ver capacidadeAproximada).
+  const horasUteisHoje = estadoExpediente?.horasUteisHoje ?? null;
   const horasEstimadasTotal = tarefasDoDept.reduce((total, demanda) => total + horasEstimadasDemanda(demanda), 0);
-  const capacidadeTotal = capacidadeAproximada(regraExpediente, colaboradoresOptions.length, DIAS_UTEIS_SEMANA);
+  const capacidadeTotal = capacidadeAproximada(horasUteisHoje, colaboradoresOptions.length, DIAS_UTEIS_SEMANA);
   const capacidadeDisponivel = Math.max(0, capacidadeTotal - horasConsumidas);
 
   const colaboradoresSobrecarregados = colaboradoresOptions.filter((colaborador) => {
     const estimadoColaborador = tarefasDoDept
       .filter((demanda) => demandaTemResponsavel(demanda, colaborador.id, usuarios))
       .reduce((total, demanda) => total + horasEstimadasDemanda(demanda), 0);
-    const capacidadeIndividual = capacidadeAproximada(regraExpediente, 1, DIAS_UTEIS_SEMANA);
+    const capacidadeIndividual = capacidadeAproximada(horasUteisHoje, 1, DIAS_UTEIS_SEMANA);
     return detectarSobrecargaEstimada(estimadoColaborador, capacidadeIndividual).sobrecarregado;
   }).length;
 

@@ -67,11 +67,13 @@ def handle_demanda_error(exc: Exception) -> None:
                 "code": "FORA_DE_EXPEDIENTE",
                 "message": str(exc),
                 "expediente": {
-                    "manhaInicio": exc.regra.manha_inicio,
-                    "manhaFim": exc.regra.manha_fim,
-                    "tardeInicio": exc.regra.tarde_inicio,
-                    "tardeFim": exc.regra.tarde_fim,
-                    "toleranciaRetomadaMinutos": exc.regra.tolerancia_retomada_minutos,
+                    # Janela de HOJE — pode vir tudo `None` quando o dia não é útil (ver
+                    # docstring de DemandaForaDeExpedienteError, Fase 2G.3).
+                    "manhaInicio": exc.dia_hoje.manha_inicio,
+                    "manhaFim": exc.dia_hoje.manha_fim,
+                    "tardeInicio": exc.dia_hoje.tarde_inicio,
+                    "tardeFim": exc.dia_hoje.tarde_fim,
+                    "toleranciaRetomadaMinutos": exc.tolerancia_retomada_minutos,
                 },
             },
         ) from exc

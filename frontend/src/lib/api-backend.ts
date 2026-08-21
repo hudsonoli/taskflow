@@ -45,6 +45,7 @@ import type {
   WorkflowModeloStatus,
 } from "@/types/workflow-modelo";
 import type { TipoTarefaDiretorioItem } from "@/types/tipo-tarefa";
+import type { EstadoExpediente, RegraExpediente, RegraExpedienteUpdateDraft } from "@/types/regra-expediente";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -99,11 +100,13 @@ export class ProjetoArquivadoConflictError extends Error {
   }
 }
 
+// Janela de HOJE (não a regra inteira, que agora é por dia da semana — Fase 2G.3). `null` nos
+// quatro horários quando hoje não é dia útil (ver DemandaForaDeExpedienteError no backend).
 export type JanelaExpediente = {
-  manhaInicio: string;
-  manhaFim: string;
-  tardeInicio: string;
-  tardeFim: string;
+  manhaInicio: string | null;
+  manhaFim: string | null;
+  tardeInicio: string | null;
+  tardeFim: string | null;
   toleranciaRetomadaMinutos: number;
 };
 
@@ -1822,4 +1825,31 @@ export type RelatorioAjustesProjeto = {
  * chama trata como qualquer outra falha, não como "zero real". */
 export async function getRelatorioAjustesPorProjeto(projetoId: string): Promise<RelatorioAjustesProjeto> {
   return request<RelatorioAjustesProjeto>(`/relatorios/demandas/ajustes?projetoId=${encodeURIComponent(projetoId)}`);
+}
+
+// ---------------------------------------------------------------------------------
+// Regra de Expediente — singleton por Empresa (Fase 2G.3)
+// ---------------------------------------------------------------------------------
+//
+// `RegraExpedienteRead`/`JanelaDiaRead`/`EstadoExpedienteRead` do backend já devolvem
+// exatamente o formato de `RegraExpediente`/`JanelaDia`/`EstadoExpediente` (camelCase via
+// alias Pydantic) — mesmo caso de `RelatorioAjustesProjeto` acima, sem mapeamento aqui.
+
+export async function getRegraExpedienteReal(): Promise<RegraExpediente> {
+  return request<RegraExpediente>("/regra-expediente");
+}
+
+export async function atualizarRegraExpedienteReal(
+  draft: RegraExpedienteUpdateDraft,
+): Promise<RegraExpediente> {
+  return request<RegraExpediente>("/regra-expediente", {
+    method: "PATCH",
+    body: JSON.stringify(draft),
+  });
+}
+
+// Leitura operacional enxuta — Kanban, capacidade de Meu Departamento. Nunca baixa a regra
+// inteira: ver docstring de app/api/routes/expediente.py.
+export async function getEstadoExpedienteReal(): Promise<EstadoExpediente> {
+  return request<EstadoExpediente>("/expediente/estado");
 }

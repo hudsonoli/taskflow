@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { Clock, Lock } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { avaliarExpedienteOperacional, MOTIVO_INICIAR_FORA_EXPEDIENTE } from "@/lib/escopo-operacional";
-import { useAppData } from "@/lib/AppDataContext";
+import { useEstadoExpediente } from "@/lib/estadoExpediente";
 import type { Demanda, DemandaStatus, DemandaStatusEditavel } from "@/types/demanda";
 import { DemandaKanbanCardOverlay } from "./DemandaKanbanCard";
 import { DemandaKanbanColumn } from "./DemandaKanbanColumn";
@@ -36,26 +36,16 @@ export function DemandasKanban({
   onOpenDetails: (demandaId: string) => void;
   onMoveDemanda: (demandaId: string, novoStatus: DemandaStatusEditavel) => void;
 }) {
-  const { regraExpediente } = useAppData();
+  const { estado } = useEstadoExpediente();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [agora, setAgora] = useState<Date | null>(null);
   const [avisoBloqueio, setAvisoBloqueio] = useState<string | null>(null);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => setAgora(new Date()), 0);
-    const intervalId = setInterval(() => setAgora(new Date()), 30000);
-    return () => {
-      clearTimeout(timeoutId);
-      clearInterval(intervalId);
-    };
-  }, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  // Enquanto `agora` não resolveu (primeiro render no servidor/hidratação) tratamos como
-  // fora do expediente: é o lado seguro — não libera arrastar antes de saber a hora.
-  const expediente = agora
-    ? avaliarExpedienteOperacional(regraExpediente, agora)
+  // Enquanto `estado` não chegou (primeira busca a GET /expediente/estado) tratamos como
+  // fora do expediente: é o lado seguro — não libera arrastar antes de saber o estado real.
+  const expediente = estado
+    ? avaliarExpedienteOperacional(estado.dentroExpediente)
     : { dentroExpediente: false, podeArrastar: false, podeIniciar: false, motivoBloqueio: undefined };
 
   const groupedDemands = useMemo(
@@ -108,7 +98,7 @@ export function DemandasKanban({
           <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">Fluxo por status</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Arraste um card para mudar o status, ou clique para abrir os detalhes.</p>
         </div>
-        {regraExpediente.ativo && agora && (
+        {estado?.ativo && (
           <Badge tone={expediente.dentroExpediente ? "green" : "amber"}>
             <Clock className="mr-1 h-3 w-3" />
             {expediente.dentroExpediente ? "Dentro do expediente" : "Fora do expediente — quadro bloqueado"}
@@ -116,7 +106,7 @@ export function DemandasKanban({
         )}
       </div>
 
-      {!expediente.podeArrastar && agora && (
+      {!expediente.podeArrastar && estado && (
         <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
           <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <p>

@@ -111,6 +111,10 @@ class DomainEventType(StrEnum):
     TIPO_TAREFA_ARQUIVADO = "tipo_tarefa.arquivado"
     TIPO_TAREFA_RESTAURADO = "tipo_tarefa.restaurado"
 
+    # RegraExpediente (Fase 2G.3) é singleton por Empresa — sem criado/arquivado/restaurado,
+    # só alterado (a criação automática do padrão inicial não é ação do usuário).
+    REGRA_EXPEDIENTE_ALTERADA = "regra_expediente.alterada"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

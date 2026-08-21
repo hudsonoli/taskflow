@@ -5,9 +5,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.escopo import EscopoDemanda
-from app.core.expediente import REGRA_PADRAO, RegraExpediente, esta_dentro_expediente
+from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente
 from app.core.referencias import gerar_proxima_referencia
-from app.core.relogio import agora_utc
+from app.core.relogio import agora_local, agora_utc
 from app.core.sequencias_operacionais import reservar_proximo_operacional
 from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
@@ -27,6 +27,7 @@ from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead
 from app.services.domain_event_publisher import DomainEventPublisher
+from app.services.regra_expediente_service import RegraExpedienteService
 
 # `tarefa` no gerador de referência (prefixo T) e `demanda` no contador operacional: são
 # vocabulários de sistemas diferentes e ambos estão certos. A interface chama de Tarefa, o
@@ -86,13 +87,17 @@ class DemandaMotivoBloqueioObrigatorioError(ValueError):
 class DemandaForaDeExpedienteError(ValueError):
     """Tentativa de entrar em execução fora do expediente. Vira 409 estruturado.
 
-    Carrega a janela vigente para a interface conseguir dizer *quando* poderá — sem repetir
-    a regra no cliente.
+    Carrega a janela de HOJE (não a regra inteira — a Fase 2G.3 tornou a regra por dia da
+    semana, e o que a interface precisa pra dizer "quando poderá" é só o dia corrente) para
+    a interface conseguir dizer *quando* poderá — sem repetir a regra no cliente. `dia_hoje`
+    pode estar com as quatro janelas em `None` quando o dia não é útil (ex.: fim de semana no
+    padrão inicial).
     """
 
-    def __init__(self, message: str, *, regra: RegraExpediente) -> None:
+    def __init__(self, message: str, *, dia_hoje: JanelaDia, tolerancia_retomada_minutos: int) -> None:
         super().__init__(message)
-        self.regra = regra
+        self.dia_hoje = dia_hoje
+        self.tolerancia_retomada_minutos = tolerancia_retomada_minutos
 
 
 class DemandaClienteInvalidoError(ValueError):
@@ -125,6 +130,7 @@ class DemandaService:
         departamento_repository: DepartamentoRepository | None = None,
         workflow_modelo_repository: WorkflowModeloRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
+        regra_expediente_service: RegraExpedienteService | None = None,
         regra_expediente: RegraExpediente | None = None,
     ) -> None:
         self.repository = repository or DemandaRepository()
@@ -134,8 +140,12 @@ class DemandaService:
         self.departamento_repository = departamento_repository or DepartamentoRepository()
         self.workflow_modelo_repository = workflow_modelo_repository or WorkflowModeloRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
-        # Injetável para o teste conseguir fixar a janela sem depender do relógio da máquina.
-        self.regra_expediente = regra_expediente or REGRA_PADRAO
+        self.regra_expediente_service = regra_expediente_service or RegraExpedienteService()
+        # Override injetável só para teste fixar a janela sem depender do relógio da máquina
+        # nem de regra persistida (ver fixtures dentro_do_expediente/fora_do_expediente em
+        # tests/test_demanda.py). `None` (padrão) faz `_ensure_dentro_expediente` carregar a
+        # regra REAL da Empresa da Demanda — Fase 2G.3, era `REGRA_PADRAO` fixo antes.
+        self.regra_expediente = regra_expediente
 
     # ----------------------------------------------------------------------------------
     # Criação
@@ -339,7 +349,7 @@ class DemandaService:
                 # concluir e cancelar seguem livres a qualquer hora — o que a regra protege é
                 # o início do trabalho, não o registro dele.
                 if status_final == STATUS_EM_EXECUCAO:
-                    self._ensure_dentro_expediente()
+                    self._ensure_dentro_expediente(db, demanda.empresa_id)
 
                 demanda.status = status_final
                 campos_alterados.append("status")
@@ -704,14 +714,27 @@ class DemandaService:
                 "motivoBloqueio é obrigatório para status 'bloqueada'"
             )
 
-    def _ensure_dentro_expediente(self) -> None:
-        if esta_dentro_expediente(regra=self.regra_expediente):
+    def _ensure_dentro_expediente(self, db: Session, empresa_id: str) -> None:
+        # Override do teste (fixtures dentro_do_expediente/fora_do_expediente) tem
+        # prioridade; sem ele, carrega a regra REAL da Empresa — Fase 2G.3.
+        regra = self.regra_expediente or self.regra_expediente_service.get_regra_calculo(
+            db, empresa_id=empresa_id
+        )
+        agora = agora_local()
+        if esta_dentro_expediente(agora, regra=regra):
             return
-        regra = self.regra_expediente
+
+        dia_hoje = regra.dias.get(agora.weekday(), JanelaDia(ativo=False))
+        if not dia_hoje.ativo:
+            mensagem = "Fora do expediente: hoje não é dia útil"
+        else:
+            mensagem = (
+                "Fora do expediente: execução permitida das "
+                f"{dia_hoje.manha_inicio} às {dia_hoje.manha_fim} e das "
+                f"{dia_hoje.tarde_inicio} às {dia_hoje.tarde_fim}"
+            )
         raise DemandaForaDeExpedienteError(
-            "Fora do expediente: execução permitida das "
-            f"{regra.manha_inicio} às {regra.manha_fim} e das {regra.tarde_inicio} às {regra.tarde_fim}",
-            regra=regra,
+            mensagem, dia_hoje=dia_hoje, tolerancia_retomada_minutos=regra.tolerancia_retomada_minutos
         )
 
     def _ensure_cliente_valido(self, db: Session, empresa_id: str, cliente_id: str) -> None:

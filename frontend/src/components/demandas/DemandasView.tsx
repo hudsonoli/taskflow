@@ -42,6 +42,11 @@ import { NovaDemandaModal } from "./NovaDemandaModal";
 function mensagemDeErro(error: unknown): string {
   if (error instanceof ForaDeExpedienteError) {
     const { manhaInicio, manhaFim, tardeInicio, tardeFim } = error.expediente;
+    // Hoje pode não ser dia útil — os quatro horários vêm `null` nesse caso, e a mensagem já
+    // diz isso sozinha ("hoje não é dia útil"), sem janela para completar entre parênteses.
+    if (manhaInicio === null || manhaFim === null || tardeInicio === null || tardeFim === null) {
+      return error.message;
+    }
     return `${error.message} (${manhaInicio}–${manhaFim} e ${tardeInicio}–${tardeFim})`;
   }
   return error instanceof Error ? error.message : "Não foi possível salvar a tarefa.";

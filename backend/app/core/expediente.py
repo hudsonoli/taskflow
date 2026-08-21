@@ -1,24 +1,27 @@
-"""Regra de expediente — agora aplicada no servidor.
+"""Regra de expediente — cálculo puro, independente de SQLAlchemy.
 
-## Por que este módulo existe
+## Estado atual (Fase 2G.3)
 
-Até a Fase 2E a regra vivia só em `frontend/src/lib/regra-expediente-mock.ts` e era
-verificada em `DemandasKanban.tsx`. O próprio `escopo-operacional.ts` avisava que isso *"não
-é segurança"*: qualquer `curl` iniciava uma tarefa fora do horário. Com Demanda persistida de
-verdade, uma regra que só existe na interface é decorativa.
+`RegraExpediente`/`JanelaDia` são DTOs puros — só dataclasses. A persistência real vive em
+`app/models/regra_expediente.py` (`RegraExpediente`/`RegraExpedienteDia`, tabelas
+`regra_expediente`/`regra_expediente_dias`) e a leitura/inicialização em
+`app/services/regra_expediente_service.py`. Este módulo não importa nenhum dos dois — não faz
+query, não conhece `Session`, só recebe a regra já resolvida e calcula.
 
-## Estado transitório da configuração
+`REGRA_PADRAO` deixou de ser a fonte executada em paralelo ao banco: agora só inicializa o
+registro persistido de uma Empresa que ainda não tem regra (ver
+`RegraExpedienteService.get_ou_criar`). Nenhum código de produção deve importar
+`REGRA_PADRAO` para USAR como regra corrente — só para SEMEAR uma.
 
-`RegraExpediente` **ainda não é domínio migrado** — não há tabela `regras_expediente`. Os
-valores abaixo reproduzem exatamente o mock que a operação usa hoje, e ficam aqui como
-constante até o domínio ganhar tabela própria.
+## Por que dias da semana
 
-Isso é deliberado e tem custo conhecido: **a regra não é editável pela interface enquanto
-estiver aqui**. A alternativa seria criar a tabela agora, o que arrastaria um domínio inteiro
-para dentro da Fase 2E sem mandato.
+Até esta fase, `esta_dentro_expediente` considerava só o horário: sábado às 10h caía dentro da
+janela da manhã só porque a hora batia, mesmo sem nenhum dia da semana marcado como útil. Cada
+dia agora tem seu próprio `ativo`/janelas — dia inativo é sempre fora, independente da hora.
 
-A troca depois é barata porque a assinatura já recebe a regra como argumento: quando existir
-tabela, muda quem produz `REGRA_PADRAO`, não quem a consome.
+Convenção de dia da semana: `datetime.weekday()` nativo do Python — `0` = segunda,
+`6` = domingo. Sem tradução própria, para não haver um segundo mapeamento a manter igual ao
+do banco (`regra_expediente_dias.dia_semana` usa a mesma convenção).
 """
 
 from dataclasses import dataclass
@@ -26,27 +29,53 @@ from datetime import datetime
 
 from app.core.relogio import agora_local
 
+SEGUNDA, TERCA, QUARTA, QUINTA, SEXTA, SABADO, DOMINGO = range(7)
+
+
+@dataclass(frozen=True)
+class JanelaDia:
+    """Um dia da semana. `ativo=False` → dia inteiro fora do expediente, independente dos
+    horários (que ficam `None` nesse caso — dia inativo não carrega janela)."""
+
+    ativo: bool
+    manha_inicio: str | None = None
+    manha_fim: str | None = None
+    tarde_inicio: str | None = None
+    tarde_fim: str | None = None
+
 
 @dataclass(frozen=True)
 class RegraExpediente:
     ativo: bool
-    manha_inicio: str
-    manha_fim: str
-    tarde_inicio: str
-    tarde_fim: str
-    # Minutos antes de `tarde_inicio` em que a retomada já é permitida.
+    # Minutos antes de `tarde_inicio` (do dia em questão) em que a retomada já é permitida.
     tolerancia_retomada_minutos: int
+    dias: dict[int, JanelaDia]  # chave: 0 (segunda) .. 6 (domingo)
 
 
-# Espelha `regraExpedienteMock` do frontend. Ao migrar RegraExpediente, isto vira leitura de
-# tabela e a constante some.
+def _dia_util_padrao() -> JanelaDia:
+    return JanelaDia(ativo=True, manha_inicio="09:00", manha_fim="12:00", tarde_inicio="14:00", tarde_fim="19:00")
+
+
+def _dia_folga_padrao() -> JanelaDia:
+    return JanelaDia(ativo=False)
+
+
+# Usado SÓ para inicializar o registro persistido de uma Empresa sem regra ainda — ver
+# docstring do módulo. Espelha o padrão que `regraExpedienteMock` usava no frontend antes da
+# migração (mesmos horários), agora com segunda–sexta explicitamente úteis e fim de semana
+# explicitamente de folga.
 REGRA_PADRAO = RegraExpediente(
     ativo=True,
-    manha_inicio="09:00",
-    manha_fim="12:00",
-    tarde_inicio="14:00",
-    tarde_fim="19:00",
     tolerancia_retomada_minutos=30,
+    dias={
+        SEGUNDA: _dia_util_padrao(),
+        TERCA: _dia_util_padrao(),
+        QUARTA: _dia_util_padrao(),
+        QUINTA: _dia_util_padrao(),
+        SEXTA: _dia_util_padrao(),
+        SABADO: _dia_folga_padrao(),
+        DOMINGO: _dia_folga_padrao(),
+    },
 )
 
 
@@ -55,22 +84,58 @@ def _para_minutos(hora_minuto: str) -> int:
     return horas * 60 + minutos
 
 
-def esta_dentro_expediente(
-    agora: datetime | None = None, regra: RegraExpediente = REGRA_PADRAO
-) -> bool:
-    """Mesma lógica de `isDentroExpediente` no frontend, incluindo a tolerância de retomada.
+def esta_dentro_expediente(agora: datetime | None = None, *, regra: RegraExpediente) -> bool:
+    """`agora` sem valor usa o **fuso da aplicação**, não UTC: expediente é decisão de
+    calendário local, e às 22h em São Paulo já é o dia seguinte em UTC — inclusive pra decidir
+    QUAL dia da semana está em curso.
 
-    `agora` sem valor usa o **fuso da aplicação**, não UTC: expediente é decisão de
-    calendário local, e às 22h em São Paulo já é o dia seguinte em UTC.
+    `regra` é **obrigatório e sem default** de propósito: antes desta fase o default era
+    `REGRA_PADRAO`, o que deixava aberto um caminho de um caller esquecer de passar a regra
+    real e cair silenciosamente no template em vez de errar alto. `REGRA_PADRAO` só serve para
+    semear o registro persistido de uma Empresa nova (`RegraExpedienteService._criar_padrao`)
+    — nunca para ser usado como regra corrente de cálculo.
+
+    Regra com `ativo=False` libera qualquer hora (mesmo comportamento de antes desta fase).
+    Dia da semana com `ativo=False` (ex.: fim de semana no padrão inicial) é sempre fora,
+    mesmo que a hora coincida com alguma janela de outro dia.
     """
     if not regra.ativo:
         return True
 
     momento = agora or agora_local()
+    dia = regra.dias.get(momento.weekday())
+    if dia is None or not dia.ativo:
+        return False
+
     minutos = momento.hour * 60 + momento.minute
 
-    dentro_manha = _para_minutos(regra.manha_inicio) <= minutos < _para_minutos(regra.manha_fim)
-    inicio_tarde = _para_minutos(regra.tarde_inicio) - regra.tolerancia_retomada_minutos
-    dentro_tarde = inicio_tarde <= minutos < _para_minutos(regra.tarde_fim)
+    dentro_manha = (
+        dia.manha_inicio is not None
+        and dia.manha_fim is not None
+        and _para_minutos(dia.manha_inicio) <= minutos < _para_minutos(dia.manha_fim)
+    )
+
+    inicio_tarde_tolerado = (
+        _para_minutos(dia.tarde_inicio) - regra.tolerancia_retomada_minutos
+        if dia.tarde_inicio is not None
+        else None
+    )
+    dentro_tarde = (
+        inicio_tarde_tolerado is not None
+        and dia.tarde_fim is not None
+        and inicio_tarde_tolerado <= minutos < _para_minutos(dia.tarde_fim)
+    )
 
     return dentro_manha or dentro_tarde
+
+
+def duracao_horas_dia(dia: JanelaDia) -> float:
+    """Duração total (manhã + tarde) em horas de um dia — `0.0` se ele for inativo ou tiver
+    janela incompleta. Existe só para a estimativa de capacidade operacional (campo
+    `horasUteisHoje` de `GET /expediente/estado`) — nunca para decidir dentro/fora de
+    expediente, que é sempre `esta_dentro_expediente`."""
+    if not dia.ativo or None in (dia.manha_inicio, dia.manha_fim, dia.tarde_inicio, dia.tarde_fim):
+        return 0.0
+    minutos_manha = _para_minutos(dia.manha_fim) - _para_minutos(dia.manha_inicio)
+    minutos_tarde = _para_minutos(dia.tarde_fim) - _para_minutos(dia.tarde_inicio)
+    return (minutos_manha + minutos_tarde) / 60

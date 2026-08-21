@@ -14,14 +14,12 @@
 
 import { elapsedSeconds } from "@/lib/trafego";
 import { demandaTemResponsavel, normalizarUsuarioId } from "@/lib/demandas";
-import { isDentroExpediente } from "@/lib/regra-expediente-mock";
 import { correspondeDepartamento, resolverDepartamentoPorReferencia } from "@/lib/referencias";
 import { converterQuantidadeEmHoras } from "@/lib/workflow-modelo";
 import { perfisComAcessoAdministrativo, perfisComAcessoFinanceiro } from "@/types/usuario";
 import { PERFIL_PARA_PERFIL_BASE } from "@/lib/api-backend";
 import type { ClienteDiretorioItem, DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
-import type { RegraExpediente } from "@/types/regra-expediente";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import type { Usuario } from "@/types/usuario";
 
@@ -236,11 +234,12 @@ export type PermissoesExpediente = {
  *   Atendimento, heads e gestão (ver `podeCriarDemanda` em types/usuario.ts). Criar não é
  *   iniciar: a tarefa entra como rascunho/planejada e só roda no próximo turno.
  *
- * Mesma ressalva do topo do arquivo: nesta fase isto é UX/estado local. A regra definitiva
- * precisa ser reaplicada no backend quando Tarefa virar domínio real.
+ * `dentroExpediente` vem de `GET /expediente/estado` (ver lib/estadoExpediente.ts) — desde a
+ * Fase 2G.3 o cálculo é sempre do servidor, nunca do relógio do navegador nem de uma regra
+ * baixada aqui. O gate real (que de fato bloqueia `em_execucao`) já é aplicado no backend em
+ * `DemandaService._ensure_dentro_expediente`; esta função só espelha esse resultado pra UX.
  */
-export function avaliarExpedienteOperacional(regra: RegraExpediente, agora: Date): PermissoesExpediente {
-  const dentroExpediente = isDentroExpediente(agora, regra);
+export function avaliarExpedienteOperacional(dentroExpediente: boolean): PermissoesExpediente {
   return {
     dentroExpediente,
     podeArrastar: dentroExpediente,
@@ -324,24 +323,22 @@ export function horasExecutadasPorEscopo(sessoes: SessaoTrabalho[], escopo: Esco
 
 const HORAS_PADRAO_SEM_REGRA_EXPEDIENTE = 8;
 
-function paraMinutos(horaMinuto: string): number {
-  const [horas, minutos] = horaMinuto.split(":").map(Number);
-  return horas * 60 + minutos;
-}
-
 /**
- * Capacidade aproximada (horas) = duração dos turnos de `RegraExpediente` (única regra de
- * horário hoje, por empresa — não por pessoa) × número de pessoas × dias do período. Se a
- * regra estiver desativada, assume um padrão comercial de 8h/dia como aproximação — rotular
- * sempre como "capacidade aproximada" na UI, nunca como dado oficial.
+ * Capacidade aproximada (horas) = duração do dia de hoje (`horasUteisHoje`, vindo de
+ * `GET /expediente/estado` — ver lib/estadoExpediente.ts) × número de pessoas × dias do
+ * período. Mesma aproximação de antes da Fase 2G.3 (assume a duração de hoje repetida pros
+ * outros dias do período, não soma dia a dia da semana real).
+ *
+ * `horasUteisHoje: null` **não é o mesmo que `0`** — `null` é "ainda não chegou dado do
+ * servidor" (estado carregando ou erro), único caso em que cai no padrão comercial de 8h/dia;
+ * `0` é um valor real (hoje não é dia útil, com o controle de expediente ativo) e precisa
+ * refletir capacidade zero, não 8h — daí `??` (nullish) e nunca `||`/`> 0`, que trocaria o
+ * `0` legítimo pelo fallback. Quem chama decide o que passar quando o estado ainda não
+ * carregou (`estadoExpediente?.horasUteisHoje ?? null`, nunca `?? 0`).
  */
-export function capacidadeAproximada(regraExpediente: RegraExpediente, pessoas: number, dias = 1): number {
+export function capacidadeAproximada(horasUteisHoje: number | null, pessoas: number, dias = 1): number {
   if (pessoas <= 0 || dias <= 0) return 0;
-  if (!regraExpediente.ativo) return HORAS_PADRAO_SEM_REGRA_EXPEDIENTE * pessoas * dias;
-
-  const minutosManha = Math.max(0, paraMinutos(regraExpediente.manhaFim) - paraMinutos(regraExpediente.manhaInicio));
-  const minutosTarde = Math.max(0, paraMinutos(regraExpediente.tardeFim) - paraMinutos(regraExpediente.tardeInicio));
-  const horasDiaPorPessoa = (minutosManha + minutosTarde) / 60;
+  const horasDiaPorPessoa = horasUteisHoje ?? HORAS_PADRAO_SEM_REGRA_EXPEDIENTE;
   return horasDiaPorPessoa * pessoas * dias;
 }
 
