@@ -46,6 +46,8 @@ import type {
 } from "@/types/workflow-modelo";
 import type { TipoTarefaDiretorioItem } from "@/types/tipo-tarefa";
 import type { EstadoExpediente, RegraExpediente, RegraExpedienteUpdateDraft } from "@/types/regra-expediente";
+import type { CategoriaPeca, CategoriaPecaDiretorioItem, CategoriaPecaFormDraft } from "@/types/categoria-peca";
+import type { Peca, PecaDiretorioItem, PecaFormDraft } from "@/types/peca";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -87,6 +89,16 @@ export class WorkflowModeloArquivadoConflictError extends Error {
     super(message);
     this.name = "WorkflowModeloArquivadoConflictError";
     this.workflowModeloArquivadoId = workflowModeloArquivadoId;
+  }
+}
+
+export class CategoriaPecaArquivadaConflictError extends Error {
+  categoriaPecaArquivadaId: string;
+
+  constructor(message: string, categoriaPecaArquivadaId: string) {
+    super(message);
+    this.name = "CategoriaPecaArquivadaConflictError";
+    this.categoriaPecaArquivadaId = categoriaPecaArquivadaId;
   }
 }
 
@@ -165,6 +177,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new WorkflowModeloArquivadoConflictError(
         message ?? "Modelo de workflow arquivado já existe",
         detail.workflowModeloArquivadoId,
+      );
+    }
+    if (detail && typeof detail === "object" && detail.code === "CATEGORIA_PECA_ARQUIVADA_EXISTENTE") {
+      throw new CategoriaPecaArquivadaConflictError(
+        message ?? "Categoria de peça arquivada já existe",
+        detail.categoriaPecaArquivadaId,
       );
     }
     if (detail && typeof detail === "object" && detail.code === "FORA_DE_EXPEDIENTE") {
@@ -1852,4 +1870,106 @@ export async function atualizarRegraExpedienteReal(
 // inteira: ver docstring de app/api/routes/expediente.py.
 export async function getEstadoExpedienteReal(): Promise<EstadoExpediente> {
   return request<EstadoExpediente>("/expediente/estado");
+}
+
+// ---------------------------------------------------------------------------------
+// Categoria de Peça e Peça — catálogo real (Fase 2G.4)
+// ---------------------------------------------------------------------------------
+//
+// `CategoriaPecaRead`/`PecaRead` do backend já devolvem exatamente o formato de
+// `CategoriaPeca`/`Peca` (camelCase via alias Pydantic) — mesmo caso de RegraExpediente,
+// sem mapeamento aqui.
+
+function categoriaPecaDraftParaPayload(draft: CategoriaPecaFormDraft) {
+  return { nome: draft.nome, ...(draft.ordem !== undefined ? { ordem: draft.ordem } : {}) };
+}
+
+export async function listCategoriasPecaReais(params?: { search?: string }): Promise<CategoriaPeca[]> {
+  const query = new URLSearchParams();
+  if (params?.search) query.set("search", params.search);
+  return request<CategoriaPeca[]>(`/categorias-peca?${query.toString()}`);
+}
+
+export async function listDiretorioCategoriasPeca(): Promise<CategoriaPecaDiretorioItem[]> {
+  return request<CategoriaPecaDiretorioItem[]>("/categorias-peca/diretorio");
+}
+
+export async function criarCategoriaPecaReal(draft: CategoriaPecaFormDraft): Promise<CategoriaPeca> {
+  return request<CategoriaPeca>("/categorias-peca", {
+    method: "POST",
+    body: JSON.stringify(categoriaPecaDraftParaPayload(draft)),
+  });
+}
+
+export async function atualizarCategoriaPecaReal(
+  categoriaId: string,
+  draft: CategoriaPecaFormDraft,
+): Promise<CategoriaPeca> {
+  return request<CategoriaPeca>(`/categorias-peca/${categoriaId}`, {
+    method: "PATCH",
+    body: JSON.stringify(categoriaPecaDraftParaPayload(draft)),
+  });
+}
+
+export async function arquivarCategoriaPecaReal(categoriaId: string, motivoArquivamento: string): Promise<CategoriaPeca> {
+  return request<CategoriaPeca>(`/categorias-peca/${categoriaId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+}
+
+export async function restaurarCategoriaPecaReal(categoriaId: string): Promise<CategoriaPeca> {
+  return request<CategoriaPeca>(`/categorias-peca/${categoriaId}/restaurar`, { method: "POST" });
+}
+
+function pecaDraftParaPayload(draft: PecaFormDraft) {
+  return {
+    nome: draft.nome,
+    categoriaId: draft.categoriaId,
+    tempoEstimadoMinutos: draft.tempoEstimadoMinutos,
+    tempoMedioMinutos: draft.tempoMedioMinutos,
+    valorTabelaCentavos: draft.valorTabelaCentavos,
+    sindicatoAtivo: draft.sindicatoAtivo,
+    valorSindicatoCriacaoCentavos: draft.valorSindicatoCriacaoCentavos,
+    valorSindicatoAdaptacaoCentavos: draft.valorSindicatoAdaptacaoCentavos,
+    valorSindicatoFinalizacaoCentavos: draft.valorSindicatoFinalizacaoCentavos,
+    briefingPadrao: draft.briefingPadrao,
+  };
+}
+
+export async function listPecasReais(params?: { search?: string; categoriaId?: string }): Promise<Peca[]> {
+  const query = new URLSearchParams();
+  if (params?.search) query.set("search", params.search);
+  if (params?.categoriaId) query.set("categoriaId", params.categoriaId);
+  return request<Peca[]>(`/pecas?${query.toString()}`);
+}
+
+export async function listDiretorioPecas(): Promise<PecaDiretorioItem[]> {
+  return request<PecaDiretorioItem[]>("/pecas/diretorio");
+}
+
+export async function criarPecaReal(draft: PecaFormDraft): Promise<Peca> {
+  const criada = await request<Peca>("/pecas", { method: "POST", body: JSON.stringify(pecaDraftParaPayload(draft)) });
+  if (draft.status !== "ativo") {
+    return atualizarPecaReal(criada.id, draft);
+  }
+  return criada;
+}
+
+export async function atualizarPecaReal(pecaId: string, draft: PecaFormDraft): Promise<Peca> {
+  return request<Peca>(`/pecas/${pecaId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...pecaDraftParaPayload(draft), status: draft.status === "arquivado" ? undefined : draft.status }),
+  });
+}
+
+export async function arquivarPecaReal(pecaId: string, motivoArquivamento: string): Promise<Peca> {
+  return request<Peca>(`/pecas/${pecaId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+}
+
+export async function restaurarPecaReal(pecaId: string): Promise<Peca> {
+  return request<Peca>(`/pecas/${pecaId}/restaurar`, { method: "POST" });
 }

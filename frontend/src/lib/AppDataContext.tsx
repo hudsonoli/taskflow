@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { pecasMock } from "@/lib/pecas-mock";
 import { configuracaoEmailMock } from "@/lib/configuracao-email-mock";
 import { configuracaoNumeracaoTarefaMock } from "@/lib/configuracao-numeracao-tarefa-mock";
 import { slaRegrasMock } from "@/lib/sla-mock";
@@ -9,7 +8,6 @@ import { fetchSessao, fetchUsuarioAtualCompleto, logout as logoutRequest } from 
 import { listDemandasReais } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import type { SlaRegra } from "@/types/sla";
-import type { Peca } from "@/types/peca";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
 import type { ConfiguracaoEmail } from "@/types/configuracao-email";
 import type { ConfiguracaoNumeracaoTarefa } from "@/types/configuracao-numeracao-tarefa";
@@ -30,8 +28,6 @@ interface AppDataContextValue {
   setDemandas: Dispatch<SetStateAction<Demanda[]>>;
   demandasCarregando: boolean;
   recarregarDemandas: () => Promise<void>;
-  pecas: Peca[];
-  setPecas: Dispatch<SetStateAction<Peca[]>>;
   slaRegras: SlaRegra[];
   setSlaRegras: Dispatch<SetStateAction<SlaRegra[]>>;
   configuracaoEmail: ConfiguracaoEmail;
@@ -58,7 +54,6 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [demandasCarregando, setDemandasCarregando] = useState(true);
-  const [pecas, setPecas] = useState<Peca[]>(pecasMock);
   const [slaRegras, setSlaRegras] = useState<SlaRegra[]>(slaRegrasMock);
   const [configuracaoEmail, setConfiguracaoEmail] = useState<ConfiguracaoEmail>(configuracaoEmailMock);
   const [configuracaoNumeracaoTarefa, setConfiguracaoNumeracaoTarefa] = useState<ConfiguracaoNumeracaoTarefa>(
@@ -154,8 +149,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setDemandas,
         demandasCarregando,
         recarregarDemandas,
-        pecas,
-        setPecas,
         slaRegras,
         setSlaRegras,
         configuracaoEmail,

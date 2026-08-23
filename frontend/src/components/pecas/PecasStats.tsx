@@ -1,11 +1,11 @@
 import { CheckCircle2, Clock3, Layers3, Tag } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { formatHoursMinutes } from "@/lib/pecas-mock";
+import { formatHoursMinutes } from "@/lib/pecas";
 import type { Peca } from "@/types/peca";
 
 export function PecasStats({ pecas }: { pecas: Peca[] }) {
-  const ativas = pecas.filter((peca) => peca.ativa).length;
-  const categorias = new Set(pecas.map((peca) => peca.categoria).filter(Boolean)).size;
+  const ativas = pecas.filter((peca) => peca.status === "ativo").length;
+  const categorias = new Set(pecas.map((peca) => peca.categoriaId).filter(Boolean)).size;
   const comTempo = pecas.filter((peca) => peca.tempoEstimadoMinutos);
   const tempoMedio = comTempo.length
     ? comTempo.reduce((total, peca) => total + (peca.tempoEstimadoMinutos ?? 0), 0) / comTempo.length

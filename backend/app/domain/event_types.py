@@ -115,6 +115,18 @@ class DomainEventType(StrEnum):
     # só alterado (a criação automática do padrão inicial não é ação do usuário).
     REGRA_EXPEDIENTE_ALTERADA = "regra_expediente.alterada"
 
+    # CategoriaPeca e Peca (Fase 2G.4) não têm tabela de histórico: estes eventos SÃO o
+    # histórico — mesmo padrão de TipoTarefa/WorkflowModelo.
+    CATEGORIA_PECA_CRIADA = "categoria_peca.criada"
+    CATEGORIA_PECA_ALTERADA = "categoria_peca.alterada"
+    CATEGORIA_PECA_ARQUIVADA = "categoria_peca.arquivada"
+    CATEGORIA_PECA_RESTAURADA = "categoria_peca.restaurada"
+
+    PECA_CRIADA = "peca.criada"
+    PECA_ALTERADA = "peca.alterada"
+    PECA_ARQUIVADA = "peca.arquivada"
+    PECA_RESTAURADA = "peca.restaurada"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

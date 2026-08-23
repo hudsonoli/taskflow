@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.config import get_settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.models import (  # noqa: E402,F401
+    categoria_peca,
     cliente,
     cliente_grupo,
     demanda,
@@ -30,6 +31,7 @@ from app.models import (  # noqa: E402,F401
     evento,
     fornecedor,
     grupo_cliente,
+    peca,
     projeto,
     projeto_departamento,
     projeto_equipe_membro,

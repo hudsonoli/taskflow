@@ -2,7 +2,7 @@ import { Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatBRL, formatHoursMinutes, valorSindicatoTotalCentavos } from "@/lib/pecas-mock";
+import { formatBRL, formatHoursMinutes, valorSindicatoTotalCentavos } from "@/lib/pecas";
 import type { Peca } from "@/types/peca";
 
 export function PecasTable({
@@ -47,11 +47,11 @@ export function PecasTable({
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {pecas.map((peca) => (
-              <tr key={peca.id} className={`group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 ${peca.ativa ? "" : "opacity-60"}`}>
+              <tr key={peca.id} className={`group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 ${peca.status === "ativo" ? "" : "opacity-60"}`}>
                 <td className="max-w-64 truncate px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100" title={peca.nome}>
                   {peca.nome}
                 </td>
-                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{peca.categoria || "-"}</td>
+                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{peca.categoriaNome || "-"}</td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums text-zinc-600 dark:text-zinc-400">
                   {peca.tempoEstimadoMinutos ? `${formatHoursMinutes(peca.tempoEstimadoMinutos)}h` : "-"}
                 </td>
@@ -77,7 +77,13 @@ export function PecasTable({
                   </td>
                 )}
                 <td className="px-4 py-3">
-                  {peca.ativa ? <Badge tone="green">Ativa</Badge> : <Badge tone="neutral">Inativa</Badge>}
+                  {peca.status === "ativo" ? (
+                    <Badge tone="green">Ativa</Badge>
+                  ) : peca.status === "inativo" ? (
+                    <Badge tone="neutral">Inativa</Badge>
+                  ) : (
+                    <Badge tone="neutral">Arquivada</Badge>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <Button variant="secondary" onClick={() => onEdit(peca.id)} className="px-3 py-1.5 text-xs">

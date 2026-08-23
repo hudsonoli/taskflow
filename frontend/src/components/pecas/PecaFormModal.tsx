@@ -1,21 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { Layers3, X } from "lucide-react";
+import { Layers3, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { Tabs } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
-import { categoriasPecaDisponiveis, formatHoursMinutes, formatValorInput, parseHoursInput, parseValorInput } from "@/lib/pecas-mock";
+import { formatHoursMinutes, formatValorInput, parseHoursInput, parseValorInput } from "@/lib/pecas";
+import { useDiretorioCategoriasPeca } from "@/lib/diretorioCategoriasPeca";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeVerDadosFinanceiros } from "@/types/usuario";
 import type { Peca, PecaFormDraft } from "@/types/peca";
 
 type FormState = {
   nome: string;
-  categoria: string;
+  categoriaId: string;
   tempoEstimado: string;
   tempoMedio: string;
   valor: string;
@@ -36,7 +38,7 @@ const tabs = [
 function createInitialForm(peca?: Peca): FormState {
   return {
     nome: peca?.nome ?? "",
-    categoria: peca?.categoria ?? "",
+    categoriaId: peca?.categoriaId ?? "",
     tempoEstimado: formatHoursMinutes(peca?.tempoEstimadoMinutos ?? null),
     tempoMedio: formatHoursMinutes(peca?.tempoMedioMinutos ?? null),
     valor: formatValorInput(peca?.valorTabelaCentavos ?? null),
@@ -45,28 +47,46 @@ function createInitialForm(peca?: Peca): FormState {
     valorSindicatoAdaptacao: formatValorInput(peca?.valorSindicatoAdaptacaoCentavos ?? null),
     valorSindicatoFinalizacao: formatValorInput(peca?.valorSindicatoFinalizacaoCentavos ?? null),
     briefingPadrao: peca?.briefingPadrao ?? "",
-    ativa: peca?.ativa ?? true,
+    ativa: (peca?.status ?? "ativo") === "ativo",
   };
 }
 
 export function PecaFormModal({
   open,
   peca,
+  salvando = false,
   onClose,
   onSave,
 }: {
   open: boolean;
   peca?: Peca;
+  salvando?: boolean;
   onClose: () => void;
   onSave: (draft: PecaFormDraft, pecaId?: string) => void;
 }) {
   const { perfilAtual } = useAppData();
+  const { categorias } = useDiretorioCategoriasPeca();
   const [form, setForm] = useState<FormState>(() => createInitialForm(peca));
   const [activeTab, setActiveTab] = useState("dados");
 
   const editing = peca !== undefined;
-  const canSave = form.nome.trim().length > 0;
+  const canSave = form.nome.trim().length > 0 && !salvando;
   const podeVerValor = podeVerDadosFinanceiros(perfilAtual);
+
+  // Referência histórica: se a Peça já aponta pra uma Categoria que não está mais no
+  // diretório (arquivada), preserva a opção na lista em vez de esvaziar o campo — ver item
+  // 22 da instrução da Fase 2G.4 ("referência arquivada, se existir em edição, preservada").
+  const categoriaAtualForaDoDiretorio =
+    peca?.categoriaId && !categorias.some((categoria) => categoria.id === peca.categoriaId)
+      ? { id: peca.categoriaId, nome: `${peca.categoriaNome ?? "Categoria"} (arquivada)` }
+      : null;
+  const opcoesCategoria = [
+    { value: "", label: "Sem categoria" },
+    ...(categoriaAtualForaDoDiretorio
+      ? [{ value: categoriaAtualForaDoDiretorio.id, label: categoriaAtualForaDoDiretorio.nome }]
+      : []),
+    ...categorias.map((categoria) => ({ value: categoria.id, label: categoria.nome })),
+  ];
 
   function updateForm(patch: Partial<FormState>) {
     setForm((current) => ({ ...current, ...patch }));
@@ -75,10 +95,9 @@ export function PecaFormModal({
   function handleSave() {
     const draft: PecaFormDraft = {
       nome: form.nome,
-      categoria: form.categoria,
+      categoriaId: form.categoriaId || null,
       tempoEstimadoMinutos: form.tempoEstimado.trim() === "" ? null : parseHoursInput(form.tempoEstimado),
       tempoMedioMinutos: form.tempoMedio.trim() === "" ? null : parseHoursInput(form.tempoMedio),
-      tempoCalculadoExecucaoMinutos: peca?.tempoCalculadoExecucaoMinutos ?? null,
       valorTabelaCentavos: podeVerValor ? (form.valor.trim() === "" ? null : parseValorInput(form.valor)) : (peca?.valorTabelaCentavos ?? null),
       sindicatoAtivo: podeVerValor ? form.sindicatoAtivo : (peca?.sindicatoAtivo ?? false),
       valorSindicatoCriacaoCentavos: podeVerValor
@@ -91,7 +110,7 @@ export function PecaFormModal({
         ? (form.valorSindicatoFinalizacao.trim() === "" ? null : parseValorInput(form.valorSindicatoFinalizacao))
         : (peca?.valorSindicatoFinalizacaoCentavos ?? null),
       briefingPadrao: form.briefingPadrao,
-      ativa: form.ativa,
+      status: form.ativa ? "ativo" : "inativo",
     };
     onSave(draft, peca?.id);
   }
@@ -136,20 +155,12 @@ export function PecaFormModal({
               placeholder="ex.: Post feed, Outdoor 9x3, VT 30s"
             />
 
-            <div>
-              <Input
-                label="Categoria"
-                value={form.categoria}
-                onChange={(event) => updateForm({ categoria: event.target.value })}
-                list="pecas-categorias"
-                placeholder="ex.: Digital, Impresso, Vídeo"
-              />
-              <datalist id="pecas-categorias">
-                {categoriasPecaDisponiveis.map((categoria) => (
-                  <option key={categoria} value={categoria} />
-                ))}
-              </datalist>
-            </div>
+            <Select
+              label="Categoria"
+              value={form.categoriaId}
+              onChange={(event) => updateForm({ categoriaId: event.target.value })}
+              options={opcoesCategoria}
+            />
 
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
@@ -266,10 +277,11 @@ export function PecaFormModal({
       </div>
 
       <div className="mt-6 flex flex-col justify-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800 sm:flex-row">
-        <Button type="button" variant="secondary" onClick={onClose}>
+        <Button type="button" variant="secondary" onClick={onClose} disabled={salvando}>
           Cancelar
         </Button>
         <Button type="button" disabled={!canSave} onClick={handleSave}>
+          {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           {editing ? "Salvar alterações" : "Adicionar ao catálogo"}
         </Button>
       </div>

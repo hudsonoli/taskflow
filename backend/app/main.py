@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    categorias_peca,
     clientes,
     auth,
     demanda_arquivos,
@@ -17,6 +18,7 @@ from app.api.routes import (
     fornecedores,
     grupos_cliente,
     health,
+    pecas,
     projetos,
     regra_expediente,
     relatorios,
@@ -45,6 +47,8 @@ app.add_middleware(
 
 app.include_router(root.router)
 app.include_router(health.router)
+app.include_router(categorias_peca.router)
+app.include_router(pecas.router)
 app.include_router(eventos.router)
 app.include_router(sessoes_trabalho.router)
 app.include_router(empresas.router)

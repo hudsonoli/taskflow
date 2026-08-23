@@ -1,8 +1,12 @@
+export type PecaStatus = "ativo" | "inativo" | "arquivado";
+
 export type Peca = {
   id: string;
   empresaId: string;
   nome: string;
-  categoria: string;
+  categoriaId: string | null;
+  // Resolvido pelo backend via join — nunca calculado no cliente (ver PecaService.to_read).
+  categoriaNome: string | null;
   tempoEstimadoMinutos: number | null;
   // Tempo médio de referência (histórico/importado) para este tipo de peça.
   tempoMedioMinutos: number | null;
@@ -19,9 +23,35 @@ export type Peca = {
   valorSindicatoAdaptacaoCentavos: number | null;
   valorSindicatoFinalizacaoCentavos: number | null;
   briefingPadrao: string;
-  ativa: boolean;
+  status: PecaStatus;
   createdAt: string;
   updatedAt: string;
+  arquivadoAt: string | null;
+  arquivadoPorUsuarioId: string | null;
+  motivoArquivamento: string | null;
+  restauradoAt: string | null;
+  restauradoPorUsuarioId: string | null;
 };
 
-export type PecaFormDraft = Omit<Peca, "id" | "empresaId" | "createdAt" | "updatedAt">;
+// Full-replace parcial (PATCH aceita subconjunto) — o form sempre manda os campos que edita;
+// `categoriaId` pode ser `null` (sem categoria) ou omitido (não mexe).
+export type PecaFormDraft = {
+  nome: string;
+  categoriaId: string | null;
+  tempoEstimadoMinutos: number | null;
+  tempoMedioMinutos: number | null;
+  valorTabelaCentavos: number | null;
+  sindicatoAtivo: boolean;
+  valorSindicatoCriacaoCentavos: number | null;
+  valorSindicatoAdaptacaoCentavos: number | null;
+  valorSindicatoFinalizacaoCentavos: number | null;
+  briefingPadrao: string;
+  status: PecaStatus;
+};
+
+// Projeção mínima do diretório (GET /pecas/diretorio) — contrato pronto pra um futuro
+// consumidor operacional, ainda sem uso nesta fase.
+export type PecaDiretorioItem = {
+  id: string;
+  nome: string;
+};
