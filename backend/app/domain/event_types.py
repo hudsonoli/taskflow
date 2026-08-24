@@ -127,6 +127,13 @@ class DomainEventType(StrEnum):
     PECA_ARQUIVADA = "peca.arquivada"
     PECA_RESTAURADA = "peca.restaurada"
 
+    # ModeloCampanha (Fase 2G.5A) — só a biblioteca; sem evento por item, mesmo padrão de
+    # WorkflowModelo (mudança em itens entra em "alterado", via camposAlterados).
+    MODELO_CAMPANHA_CRIADO = "modelo_campanha.criado"
+    MODELO_CAMPANHA_ALTERADO = "modelo_campanha.alterado"
+    MODELO_CAMPANHA_ARQUIVADO = "modelo_campanha.arquivado"
+    MODELO_CAMPANHA_RESTAURADO = "modelo_campanha.restaurado"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

@@ -31,6 +31,7 @@ from app.models import (  # noqa: E402,F401
     evento,
     fornecedor,
     grupo_cliente,
+    modelo_campanha,
     peca,
     projeto,
     projeto_departamento,
