@@ -6,14 +6,21 @@ import { Badge } from "@/components/ui/Badge";
 import { Layers3 } from "lucide-react";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
+import { Tabs } from "@/components/ui/Tabs";
 import { atualizarPecaReal, criarPecaReal, listPecasReais } from "@/lib/api-backend";
 import { podeVerDadosFinanceiros } from "@/types/usuario";
 import { useAppData } from "@/lib/AppDataContext";
 import type { Peca, PecaFormDraft } from "@/types/peca";
+import { CategoriasPecaView } from "./CategoriasPecaView";
 import { PecaFormModal } from "./PecaFormModal";
 import { PecasStats } from "./PecasStats";
 import { PecasTable } from "./PecasTable";
 import { PecasToolbar } from "./PecasToolbar";
+
+const abas = [
+  { id: "pecas", label: "Peças" },
+  { id: "categorias", label: "Categorias" },
+];
 
 function normalize(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -35,6 +42,7 @@ export function PecasView() {
   const [onlyActive, setOnlyActive] = useState(true);
   const [creatingPeca, setCreatingPeca] = useState(false);
   const [editingPecaId, setEditingPecaId] = useState<string | null>(null);
+  const [abaAtiva, setAbaAtiva] = useState("pecas");
 
   const editingPeca = pecas.find((peca) => peca.id === editingPecaId);
   const podeVerValor = podeVerDadosFinanceiros(perfilAtual);
@@ -124,32 +132,40 @@ export function PecasView() {
         </div>
       </motion.div>
 
-      {erro && pecas.length > 0 && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-          {erro}
-        </div>
-      )}
+      <Tabs tabs={abas} activeTab={abaAtiva} onChange={setAbaAtiva} />
 
-      {carregando ? (
-        <EstadoCarregando />
-      ) : erro && pecas.length === 0 ? (
-        <EstadoErro mensagem={erro} onRetry={carregar} />
+      {abaAtiva === "categorias" ? (
+        <CategoriasPecaView />
       ) : (
         <>
-          <PecasStats pecas={pecas} />
+          {erro && pecas.length > 0 && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+              {erro}
+            </div>
+          )}
 
-          <PecasToolbar
-            query={query}
-            onQueryChange={setQuery}
-            categoria={categoria}
-            onCategoriaChange={setCategoria}
-            categorias={categorias}
-            onlyActive={onlyActive}
-            onToggleOnlyActive={() => setOnlyActive((current) => !current)}
-            onNewPeca={() => setCreatingPeca(true)}
-          />
+          {carregando ? (
+            <EstadoCarregando />
+          ) : erro && pecas.length === 0 ? (
+            <EstadoErro mensagem={erro} onRetry={carregar} />
+          ) : (
+            <>
+              <PecasStats pecas={pecas} />
 
-          <PecasTable pecas={filteredPecas} podeVerValor={podeVerValor} onEdit={setEditingPecaId} />
+              <PecasToolbar
+                query={query}
+                onQueryChange={setQuery}
+                categoria={categoria}
+                onCategoriaChange={setCategoria}
+                categorias={categorias}
+                onlyActive={onlyActive}
+                onToggleOnlyActive={() => setOnlyActive((current) => !current)}
+                onNewPeca={() => setCreatingPeca(true)}
+              />
+
+              <PecasTable pecas={filteredPecas} podeVerValor={podeVerValor} onEdit={setEditingPecaId} />
+            </>
+          )}
         </>
       )}
 

@@ -1884,9 +1884,13 @@ function categoriaPecaDraftParaPayload(draft: CategoriaPecaFormDraft) {
   return { nome: draft.nome, ...(draft.ordem !== undefined ? { ordem: draft.ordem } : {}) };
 }
 
-export async function listCategoriasPecaReais(params?: { search?: string }): Promise<CategoriaPeca[]> {
+export async function listCategoriasPecaReais(params?: {
+  search?: string;
+  status?: "ativo" | "arquivado";
+}): Promise<CategoriaPeca[]> {
   const query = new URLSearchParams();
   if (params?.search) query.set("search", params.search);
+  if (params?.status) query.set("status", params.status);
   return request<CategoriaPeca[]>(`/categorias-peca?${query.toString()}`);
 }
 
