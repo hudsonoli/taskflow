@@ -134,6 +134,13 @@ class DomainEventType(StrEnum):
     MODELO_CAMPANHA_ARQUIVADO = "modelo_campanha.arquivado"
     MODELO_CAMPANHA_RESTAURADO = "modelo_campanha.restaurado"
 
+    # Snapshot de Modelo de Campanha em Projeto (Fase 2G.5C2) — "aplicado" cobre tanto a
+    # primeira aplicação quanto uma reaplicação/substituição (distinguidas pelo payload via
+    # `modeloCampanhaOrigemAnteriorId`, preenchido só na reaplicação). Edição pontual dos
+    # itens do snapshot (sem reaplicar) reaproveita PROJETO_ALTERADO com
+    # camposAlterados=["modeloCampanhaSnapshot"] — não duplica evento aqui.
+    PROJETO_MODELO_CAMPANHA_APLICADO = "projeto.modelo_campanha_aplicado"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"

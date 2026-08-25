@@ -20,6 +20,7 @@ from app.api.routes import (
     health,
     modelos_campanha,
     pecas,
+    projeto_modelo_campanha,
     projetos,
     regra_expediente,
     relatorios,
@@ -59,6 +60,7 @@ app.include_router(grupos_cliente.router)
 app.include_router(clientes.router)
 app.include_router(fornecedores.router)
 app.include_router(projetos.router)
+app.include_router(projeto_modelo_campanha.router)
 app.include_router(relatorios.router)
 app.include_router(demandas.router)
 app.include_router(demanda_checklist.router)
