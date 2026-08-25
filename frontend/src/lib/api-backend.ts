@@ -48,6 +48,7 @@ import type { TipoTarefaDiretorioItem } from "@/types/tipo-tarefa";
 import type { EstadoExpediente, RegraExpediente, RegraExpedienteUpdateDraft } from "@/types/regra-expediente";
 import type { CategoriaPeca, CategoriaPecaDiretorioItem, CategoriaPecaFormDraft } from "@/types/categoria-peca";
 import type { Peca, PecaDiretorioItem, PecaFormDraft } from "@/types/peca";
+import type { ModeloCampanha, ModeloCampanhaFormDraft } from "@/types/modelo-campanha";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -109,6 +110,16 @@ export class ProjetoArquivadoConflictError extends Error {
     super(message);
     this.name = "ProjetoArquivadoConflictError";
     this.projetoArquivadoId = projetoArquivadoId;
+  }
+}
+
+export class ModeloCampanhaArquivadoConflictError extends Error {
+  modeloCampanhaArquivadoId: string;
+
+  constructor(message: string, modeloCampanhaArquivadoId: string) {
+    super(message);
+    this.name = "ModeloCampanhaArquivadoConflictError";
+    this.modeloCampanhaArquivadoId = modeloCampanhaArquivadoId;
   }
 }
 
@@ -183,6 +194,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new CategoriaPecaArquivadaConflictError(
         message ?? "Categoria de peça arquivada já existe",
         detail.categoriaPecaArquivadaId,
+      );
+    }
+    if (detail && typeof detail === "object" && detail.code === "MODELO_CAMPANHA_ARQUIVADO_EXISTENTE") {
+      throw new ModeloCampanhaArquivadoConflictError(
+        message ?? "Modelo de campanha arquivado já existe",
+        detail.modeloCampanhaArquivadoId,
       );
     }
     if (detail && typeof detail === "object" && detail.code === "FORA_DE_EXPEDIENTE") {
@@ -1976,4 +1993,85 @@ export async function arquivarPecaReal(pecaId: string, motivoArquivamento: strin
 
 export async function restaurarPecaReal(pecaId: string): Promise<Peca> {
   return request<Peca>(`/pecas/${pecaId}/restaurar`, { method: "POST" });
+}
+
+// ---------------------------------------------------------------------------------
+// Modelo de Campanha — biblioteca reutilizável (Fase 2G.5A backend / 2G.5B UI)
+// ---------------------------------------------------------------------------------
+//
+// `ModeloCampanhaRead` do backend já devolve exatamente o formato de `ModeloCampanha`
+// (camelCase via alias Pydantic), mesmo caso de CategoriaPeca/Peca — sem mapeamento aqui.
+// Itens são sempre o agregado inteiro (sem endpoint próprio) — ver docstring de
+// ModeloCampanhaService no backend.
+
+function modeloCampanhaItemDraftParaPayload(item: ModeloCampanhaFormDraft["itens"][number]) {
+  return {
+    // `id` só quando o item já existia — item novo nunca manda id (o servidor gera). Nomes
+    // resolvidos (`pecaNome` etc.) são só exibição local, nunca fazem parte do payload —
+    // o schema de entrada do backend usa `extra="forbid"` e não os conhece.
+    ...(item.id ? { id: item.id } : {}),
+    nome: item.nome,
+    briefingPadrao: item.briefingPadrao.trim() || null,
+    prioridadePadrao: item.prioridadePadrao,
+    pecaId: item.pecaId,
+    tipoTarefaId: item.tipoTarefaId,
+    workflowModeloId: item.workflowModeloId,
+    responsavelUsuarioId: item.responsavelUsuarioId,
+    responsavelDepartamentoId: item.responsavelDepartamentoId,
+  };
+}
+
+function modeloCampanhaDraftParaPayload(draft: ModeloCampanhaFormDraft) {
+  return {
+    nome: draft.nome,
+    descricao: draft.descricao.trim() || null,
+    itens: draft.itens.map(modeloCampanhaItemDraftParaPayload),
+  };
+}
+
+export async function listModelosCampanhaReais(params?: {
+  status?: "ativo" | "inativo" | "arquivado";
+  search?: string;
+}): Promise<ModeloCampanha[]> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  return request<ModeloCampanha[]>(`/modelos-campanha?${query.toString()}`);
+}
+
+export async function criarModeloCampanhaReal(draft: ModeloCampanhaFormDraft): Promise<ModeloCampanha> {
+  const criado = await request<ModeloCampanha>("/modelos-campanha", {
+    method: "POST",
+    body: JSON.stringify(modeloCampanhaDraftParaPayload(draft)),
+  });
+  // Criar sempre nasce ativo (ModeloCampanhaCreate não aceita status) — mesmo padrão de
+  // Peça/WorkflowModelo: status só é assumido via PATCH em seguida.
+  if (draft.status !== "ativo") {
+    return atualizarModeloCampanhaReal(criado.id, draft);
+  }
+  return criado;
+}
+
+export async function atualizarModeloCampanhaReal(
+  modeloCampanhaId: string,
+  draft: ModeloCampanhaFormDraft,
+): Promise<ModeloCampanha> {
+  return request<ModeloCampanha>(`/modelos-campanha/${modeloCampanhaId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...modeloCampanhaDraftParaPayload(draft), status: draft.status }),
+  });
+}
+
+export async function arquivarModeloCampanhaReal(
+  modeloCampanhaId: string,
+  motivoArquivamento: string,
+): Promise<ModeloCampanha> {
+  return request<ModeloCampanha>(`/modelos-campanha/${modeloCampanhaId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+}
+
+export async function restaurarModeloCampanhaReal(modeloCampanhaId: string): Promise<ModeloCampanha> {
+  return request<ModeloCampanha>(`/modelos-campanha/${modeloCampanhaId}/restaurar`, { method: "POST" });
 }
