@@ -36,6 +36,7 @@ from app.models import (  # noqa: E402,F401
     projeto,
     projeto_departamento,
     projeto_equipe_membro,
+    projeto_modelo_campanha,
     projeto_responsavel,
     regra_expediente,
     sequencia_operacional,
