@@ -12,27 +12,6 @@ export type ProjetoStatusEditavel = Exclude<ProjetoStatus, "arquivado">;
 export type ProjetoPrioridade = "baixa" | "media" | "alta";
 
 /**
- * Item do modelo de campanha — value object, vive dentro do projeto.
- *
- * `tipoTarefaId`, `workflowSugeridoId` e `responsavelOuSetorSugeridoId` são ids **legados
- * em texto**, sem relação real: TipoTarefa e Workflow ainda não migraram. Os nomes vêm
- * junto porque hoje não há de onde resolvê-los. Viram relação de verdade quando esses
- * domínios migrarem.
- */
-export type ProjetoModeloCampanhaItem = {
-  id: string;
-  nomeDemanda: string;
-  tipoTarefaId: string;
-  tipoTarefaNome: string;
-  briefingBase: string;
-  prioridadePadrao: ProjetoPrioridade;
-  workflowSugeridoId: string;
-  workflowSugeridoNome: string;
-  responsavelOuSetorSugeridoId: string;
-  responsavelOuSetorSugeridoNome: string;
-};
-
-/**
  * Pessoa alocada ao projeto. `funcao` é atributo do **vínculo**, não da pessoa — a mesma
  * pessoa pode ser direção de arte num projeto e revisora em outro.
  *
@@ -63,8 +42,6 @@ export type Projeto = {
   clienteId: string;
   dataInicio: string;
   dataFimPrevista: string;
-  modeloCampanhaId: string;
-  modeloCampanha: ProjetoModeloCampanhaItem[];
   responsavelIds: string[];
   departamentoResponsavelIds: string[];
   equipe: ProjetoEquipeMembro[];
@@ -95,5 +72,4 @@ export type ProjetoFormDraft = Pick<
   | "responsavelIds"
   | "departamentoResponsavelIds"
   | "equipe"
-  | "modeloCampanha"
 > & { status: ProjetoStatusEditavel };

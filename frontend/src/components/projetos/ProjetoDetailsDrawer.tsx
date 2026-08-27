@@ -16,9 +16,9 @@ import {
   DadosProjetoSection,
   EquipeProjetoSection,
   HistoricoProjetoSection,
-  ModeloCampanhaSection,
   ResumoProjetoSection,
 } from "./ProjetoFormSections";
+import { ModeloCampanhaSection } from "./ModeloCampanhaSection";
 import { ProjetoDemandasSection } from "./ProjetoDemandasSection";
 
 const tabs = [
@@ -138,7 +138,13 @@ export function ProjetoDetailsDrawer({
           {activeTab === "dados" && <DadosProjetoSection projeto={projeto} somenteLeitura />}
           {activeTab === "demandas" && <ProjetoDemandasSection projetoId={projeto.id} />}
           {activeTab === "resumo" && <ResumoProjetoSection projeto={projeto} somenteLeitura />}
-          {activeTab === "modelo" && <ModeloCampanhaSection projeto={projeto} somenteLeitura />}
+          {/* Diferente das outras seções deste drawer: ModeloCampanhaSection nunca participa
+              do rascunho em lote de NovoProjetoModal — cada ação (aplicar/substituir/salvar
+              itens) já é um POST/PATCH explícito e imediato contra seu próprio endpoint, sem
+              nenhum "PATCH por tecla digitada". A regra de "drawer só inspeciona" (ver
+              docstring acima) existe pra evitar exatamente isso nas OUTRAS seções — aqui não
+              se aplica, então fica interativa mesmo dentro do painel de inspeção. */}
+          {activeTab === "modelo" && <ModeloCampanhaSection projeto={projeto} />}
           {activeTab === "equipe" && <EquipeProjetoSection projeto={projeto} somenteLeitura />}
           {activeTab === "arquivos" && <ArquivosProjetoSection />}
           {activeTab === "historico" && <HistoricoProjetoSection />}

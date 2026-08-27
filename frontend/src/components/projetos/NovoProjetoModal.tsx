@@ -36,7 +36,6 @@ function createInitialDraft(projeto?: Projeto): ProjetoFormDraft {
     descricao: projeto?.descricao ?? "",
     resumo: projeto?.resumo ?? "",
     equipe: projeto?.equipe ?? [],
-    modeloCampanha: projeto?.modeloCampanha ?? [],
   };
 }
 

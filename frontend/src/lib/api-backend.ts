@@ -16,13 +16,11 @@ import type {
   FornecedorStatus,
   PossivelDuplicidadeFornecedor,
 } from "@/types/fornecedor";
+import type { Projeto, ProjetoFormDraft, ProjetoPrioridade, ProjetoStatus } from "@/types/projeto";
 import type {
-  Projeto,
-  ProjetoFormDraft,
-  ProjetoModeloCampanhaItem,
-  ProjetoPrioridade,
-  ProjetoStatus,
-} from "@/types/projeto";
+  ProjetoModeloCampanhaSnapshot,
+  ProjetoModeloCampanhaUpdateDraft,
+} from "@/types/projeto-modelo-campanha";
 import type {
   Demanda,
   DemandaArquivo,
@@ -48,7 +46,8 @@ import type { TipoTarefaDiretorioItem } from "@/types/tipo-tarefa";
 import type { EstadoExpediente, RegraExpediente, RegraExpedienteUpdateDraft } from "@/types/regra-expediente";
 import type { CategoriaPeca, CategoriaPecaDiretorioItem, CategoriaPecaFormDraft } from "@/types/categoria-peca";
 import type { Peca, PecaDiretorioItem, PecaFormDraft } from "@/types/peca";
-import type { ModeloCampanha, ModeloCampanhaFormDraft } from "@/types/modelo-campanha";
+import type { ModeloCampanha, ModeloCampanhaDiretorioItem, ModeloCampanhaFormDraft } from "@/types/modelo-campanha";
+import { itemModeloCampanhaDraftParaPayload } from "@/lib/modeloCampanhaItens";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -1102,8 +1101,10 @@ type ProjetoReadApi = {
   clienteId: string | null;
   dataInicio: string | null;
   dataFimPrevista: string | null;
-  modeloCampanhaId: string | null;
-  modeloCampanha: ProjetoModeloCampanhaItem[];
+  // O backend ainda devolve `modeloCampanhaId`/`modeloCampanha` (JSONB legado, ver
+  // types/projeto.ts) — deliberadamente omitidos aqui a partir da Fase 2G.5C3: a UI nova lê o
+  // snapshot relacional via `getProjetoModeloCampanhaSnapshot`, nunca este campo. TypeScript
+  // ignora chaves extras do JSON real sem problema.
   responsavelIds: string[];
   departamentoResponsavelIds: string[];
   equipe: { usuarioId: string; funcao: string | null }[];
@@ -1129,8 +1130,6 @@ function mapProjetoReadToProjeto(data: ProjetoReadApi): Projeto {
     clienteId: data.clienteId ?? "",
     dataInicio: data.dataInicio ?? "",
     dataFimPrevista: data.dataFimPrevista ?? "",
-    modeloCampanhaId: data.modeloCampanhaId ?? "",
-    modeloCampanha: data.modeloCampanha ?? [],
     responsavelIds: data.responsavelIds ?? [],
     departamentoResponsavelIds: data.departamentoResponsavelIds ?? [],
     equipe: (data.equipe ?? []).map((m) => ({ usuarioId: m.usuarioId, funcao: m.funcao ?? "" })),
@@ -1152,7 +1151,9 @@ function projetoDraftParaPayload(draft: ProjetoFormDraft) {
     clienteId: draft.clienteId || null,
     dataInicio: draft.dataInicio || null,
     dataFimPrevista: draft.dataFimPrevista || null,
-    modeloCampanha: draft.modeloCampanha,
+    // `modeloCampanha`/`modeloCampanhaId` deliberadamente fora do payload novo — ver
+    // types/projeto.ts. Nunca mandar `[]`/`null` "pra limpar": o campo simplesmente não existe
+    // mais no draft.
     responsavelIds: draft.responsavelIds,
     departamentoResponsavelIds: draft.departamentoResponsavelIds,
     equipe: draft.equipe.map((m) => ({ usuarioId: m.usuarioId, funcao: m.funcao || null })),
@@ -2004,28 +2005,11 @@ export async function restaurarPecaReal(pecaId: string): Promise<Peca> {
 // Itens são sempre o agregado inteiro (sem endpoint próprio) — ver docstring de
 // ModeloCampanhaService no backend.
 
-function modeloCampanhaItemDraftParaPayload(item: ModeloCampanhaFormDraft["itens"][number]) {
-  return {
-    // `id` só quando o item já existia — item novo nunca manda id (o servidor gera). Nomes
-    // resolvidos (`pecaNome` etc.) são só exibição local, nunca fazem parte do payload —
-    // o schema de entrada do backend usa `extra="forbid"` e não os conhece.
-    ...(item.id ? { id: item.id } : {}),
-    nome: item.nome,
-    briefingPadrao: item.briefingPadrao.trim() || null,
-    prioridadePadrao: item.prioridadePadrao,
-    pecaId: item.pecaId,
-    tipoTarefaId: item.tipoTarefaId,
-    workflowModeloId: item.workflowModeloId,
-    responsavelUsuarioId: item.responsavelUsuarioId,
-    responsavelDepartamentoId: item.responsavelDepartamentoId,
-  };
-}
-
 function modeloCampanhaDraftParaPayload(draft: ModeloCampanhaFormDraft) {
   return {
     nome: draft.nome,
     descricao: draft.descricao.trim() || null,
-    itens: draft.itens.map(modeloCampanhaItemDraftParaPayload),
+    itens: draft.itens.map(itemModeloCampanhaDraftParaPayload),
   };
 }
 
@@ -2074,4 +2058,45 @@ export async function arquivarModeloCampanhaReal(
 
 export async function restaurarModeloCampanhaReal(modeloCampanhaId: string): Promise<ModeloCampanha> {
   return request<ModeloCampanha>(`/modelos-campanha/${modeloCampanhaId}/restaurar`, { method: "POST" });
+}
+
+export async function listDiretorioModelosCampanha(): Promise<ModeloCampanhaDiretorioItem[]> {
+  return request<ModeloCampanhaDiretorioItem[]>("/modelos-campanha/diretorio");
+}
+
+// ---------------------------------------------------------------------------------
+// Snapshot de Modelo de Campanha em Projeto (Fase 2G.5C3)
+// ---------------------------------------------------------------------------------
+//
+// `ProjetoModeloCampanhaSnapshotRead` do backend já devolve exatamente este formato
+// (camelCase via alias Pydantic), mesmo caso de ModeloCampanha — sem mapeamento aqui. GET
+// devolve `null` (200) quando o Projeto ainda não tem Modelo aplicado — nunca 404 só por
+// isso (404 fica reservado a Projeto inexistente/cross-tenant, tratado pelo `request()`).
+
+export async function getProjetoModeloCampanhaSnapshot(
+  projetoId: string,
+): Promise<ProjetoModeloCampanhaSnapshot | null> {
+  return request<ProjetoModeloCampanhaSnapshot | null>(`/projetos/${projetoId}/modelo-campanha`);
+}
+
+export async function aplicarModeloCampanhaAoProjetoReal(
+  projetoId: string,
+  modeloCampanhaId: string,
+): Promise<ProjetoModeloCampanhaSnapshot> {
+  return request<ProjetoModeloCampanhaSnapshot>(`/projetos/${projetoId}/modelo-campanha/aplicar`, {
+    method: "POST",
+    body: JSON.stringify({ modeloCampanhaId }),
+  });
+}
+
+// Só os itens — proveniência/metadados (origem, nome do Modelo, aplicadoAt/Por) são
+// controlados exclusivamente pelo backend via /aplicar, nunca por este PATCH.
+export async function atualizarProjetoModeloCampanhaSnapshotReal(
+  projetoId: string,
+  draft: ProjetoModeloCampanhaUpdateDraft,
+): Promise<ProjetoModeloCampanhaSnapshot> {
+  return request<ProjetoModeloCampanhaSnapshot>(`/projetos/${projetoId}/modelo-campanha`, {
+    method: "PATCH",
+    body: JSON.stringify({ itens: draft.itens.map(itemModeloCampanhaDraftParaPayload) }),
+  });
 }
