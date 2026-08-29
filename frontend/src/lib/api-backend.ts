@@ -1101,10 +1101,9 @@ type ProjetoReadApi = {
   clienteId: string | null;
   dataInicio: string | null;
   dataFimPrevista: string | null;
-  // O backend ainda devolve `modeloCampanhaId`/`modeloCampanha` (JSONB legado, ver
-  // types/projeto.ts) — deliberadamente omitidos aqui a partir da Fase 2G.5C3: a UI nova lê o
-  // snapshot relacional via `getProjetoModeloCampanhaSnapshot`, nunca este campo. TypeScript
-  // ignora chaves extras do JSON real sem problema.
+  // `modeloCampanhaId`/`modeloCampanha` (JSONB legado) removidos fisicamente do backend na
+  // Fase 2G.5D — nunca existiram neste tipo desde a 2G.5C3. A UI lê o snapshot relacional via
+  // `getProjetoModeloCampanhaSnapshot`, nunca um campo de Projeto.
   responsavelIds: string[];
   departamentoResponsavelIds: string[];
   equipe: { usuarioId: string; funcao: string | null }[];

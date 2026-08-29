@@ -33,7 +33,6 @@ _CAMPOS_SIMPLES = (
     "resumo",
     "data_inicio",
     "data_fim_prevista",
-    "modelo_campanha_id",
     "prioridade",
 )
 
@@ -135,7 +134,6 @@ class ProjetoService:
                 nome_normalizado=nome_normalizado,
                 status=data.status or STATUS_PADRAO,
                 cliente_id=cliente_id,
-                modelo_campanha=[item.model_dump(by_alias=False) for item in (data.modelo_campanha or [])],
                 created_at=now,
                 updated_at=now,
                 **{campo: getattr(data, campo) for campo in _CAMPOS_SIMPLES},
@@ -289,15 +287,6 @@ class ProjetoService:
             if "status" in updates and updates["status"] is not None and updates["status"] != projeto.status:
                 projeto.status = updates["status"]
                 campos_alterados.append("status")
-
-            if "modelo_campanha" in updates:
-                novos = [
-                    item if isinstance(item, dict) else item.model_dump()
-                    for item in (updates["modelo_campanha"] or [])
-                ]
-                if novos != (projeto.modelo_campanha or []):
-                    projeto.modelo_campanha = novos
-                    campos_alterados.append("modeloCampanha")
 
             for campo in _CAMPOS_SIMPLES:
                 if campo not in updates:
@@ -484,8 +473,6 @@ class ProjetoService:
             "clienteId": projeto.cliente_id,
             "dataInicio": projeto.data_inicio,
             "dataFimPrevista": projeto.data_fim_prevista,
-            "modeloCampanhaId": projeto.modelo_campanha_id,
-            "modeloCampanha": projeto.modelo_campanha or [],
             "createdAt": projeto.created_at,
             "updatedAt": projeto.updated_at,
             "arquivadoAt": projeto.arquivado_at,

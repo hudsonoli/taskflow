@@ -530,27 +530,3 @@ def test_deletar_modelo_origem_seta_null_no_cabecalho(db_session: Session, empre
     assert cabecalho.modelo_campanha_origem_id is None
     # Nome snapshot não é recalculado nem apagado — só a FK vira NULL.
     assert cabecalho.modelo_campanha_nome_snapshot == modelo.nome
-
-
-# --------------------------------------------------------------------------------------
-# Projeto legado (JSONB) intocado
-# --------------------------------------------------------------------------------------
-
-
-def test_projeto_jsonb_legado_continua_funcionando_sem_relacao_com_snapshot(
-    db_session: Session, empresa: Empresa
-) -> None:
-    """O snapshot novo é aditivo — projetos.modelo_campanha (JSONB) continua gravável e
-    legível normalmente, sem nenhuma interferência da tabela nova."""
-    projeto = _projeto(db_session, empresa)
-    projeto.modelo_campanha = [{"id": "item-1", "nome_demanda": "Post legado"}]
-    db_session.flush()
-    db_session.refresh(projeto)
-
-    assert projeto.modelo_campanha == [{"id": "item-1", "nome_demanda": "Post legado"}]
-    assert projeto.modelo_campanha_id is None
-
-    cabecalho = (
-        db_session.query(ProjetoModeloCampanha).filter(ProjetoModeloCampanha.projeto_id == projeto.id).first()
-    )
-    assert cabecalho is None

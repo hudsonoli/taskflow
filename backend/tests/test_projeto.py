@@ -371,32 +371,43 @@ def test_arquivar_cliente_depois_nao_derruba_o_projeto(
 
 
 # ======================================================================================
-# modeloCampanha — value objects
+# modeloCampanha legado — removido fisicamente na Fase 2G.5D
 # ======================================================================================
+#
+# O JSONB `projetos.modelo_campanha`/`modelo_campanha_id` não existe mais (migration 0028).
+# A única implementação de Modelo de Campanha em Projeto é o snapshot relacional
+# (`GET/POST/PATCH /projetos/{id}/modelo-campanha`, ver test_projeto_modelo_campanha_snapshot.py).
+# `_ProjetoCamposComuns` usa `extra="forbid"` — os dois campos legados viram 422, nunca são
+# aceitos nem ignorados em silêncio.
 
-def test_modelo_campanha_persiste_como_value_object(client_admin: TestClient) -> None:
-    """Os ids de tipoTarefa/workflow são texto legado, sem FK — TipoTarefa e Workflow ainda
-    não têm tabela."""
-    itens = [
-        {
-            "id": "modelo-item-1",
-            "nomeDemanda": "Posts de lançamento",
-            "tipoTarefaId": "tipo-post",
-            "tipoTarefaNome": "Post social",
-            "briefingBase": "Criar peças para redes sociais.",
-            "prioridadePadrao": "media",
-            "workflowSugeridoId": "workflow-criacao",
-            "workflowSugeridoNome": "Criação padrão",
-            "responsavelOuSetorSugeridoId": "dep-criacao",
-            "responsavelOuSetorSugeridoNome": "Criação",
-        }
-    ]
-    criado = _criar(client_admin, modeloCampanha=itens, modeloCampanhaId="modelo-campanha-1")
-    assert criado["modeloCampanhaId"] == "modelo-campanha-1"
-    assert criado["modeloCampanha"][0]["tipoTarefaId"] == "tipo-post"
 
-    esvaziado = client_admin.patch(f"/projetos/{criado['id']}", json={"modeloCampanha": []}).json()
-    assert esvaziado["modeloCampanha"] == []
+def test_criar_projeto_rejeita_modelo_campanha_legado(client_admin: TestClient) -> None:
+    itens = [{"id": "modelo-item-1", "nomeDemanda": "Posts de lançamento"}]
+    resposta = client_admin.post("/projetos", json=_payload(modeloCampanha=itens))
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_criar_projeto_rejeita_modelo_campanha_id_legado(client_admin: TestClient) -> None:
+    resposta = client_admin.post("/projetos", json=_payload(modeloCampanhaId="modelo-campanha-1"))
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_editar_projeto_rejeita_modelo_campanha_legado(client_admin: TestClient) -> None:
+    criado = _criar(client_admin)
+    resposta = client_admin.patch(f"/projetos/{criado['id']}", json={"modeloCampanha": []})
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_editar_projeto_rejeita_modelo_campanha_id_legado(client_admin: TestClient) -> None:
+    criado = _criar(client_admin)
+    resposta = client_admin.patch(f"/projetos/{criado['id']}", json={"modeloCampanhaId": "x"})
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_projeto_read_nao_contem_campos_legados(client_admin: TestClient) -> None:
+    criado = _criar(client_admin)
+    assert "modeloCampanha" not in criado
+    assert "modeloCampanhaId" not in criado
 
 
 # ======================================================================================
@@ -568,8 +579,8 @@ def test_diretorio_e_acessivel_a_operador(client_operador: TestClient) -> None:
 
 
 def test_diretorio_nao_expoe_dados_administrativos(client_admin: TestClient) -> None:
-    """Projeção mínima — resumo, modeloCampanha, equipe etc. não vazam para quem só está
-    resolvendo referência histórica ou montando um seletor de vínculo novo."""
+    """Projeção mínima — resumo, equipe etc. não vazam para quem só está resolvendo
+    referência histórica ou montando um seletor de vínculo novo."""
     _criar(client_admin, campanha="Marca 2026", descricao="Reposicionamento", resumo="Sigiloso")
     item = client_admin.get("/projetos/diretorio").json()[0]
     assert set(item) == {"id", "codigoReferencia", "sequencialReferencia", "nome", "status", "clienteId"}

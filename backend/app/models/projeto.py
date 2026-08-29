@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -8,19 +7,15 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    JSON,
     SmallInteger,
     String,
     Text,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-
-json_type = JSON().with_variant(JSONB, "postgresql")
 
 
 class Projeto(Base):
@@ -61,12 +56,13 @@ class Projeto(Base):
     fabricados, com nomes e clientes todos distintos, e não provam nada. É revisável quando
     houver base real.
 
-    ## modeloCampanha em JSONB
+    ## Modelo de Campanha
 
-    Os itens do modelo de campanha referenciam TipoTarefa e Workflow, que **ainda não têm
-    tabela**. Guardá-los como value objects (mesmo tratamento de `contatos` em Cliente)
-    preserva a interface sem criar FK para domínio inexistente. Os ids legados ficam como
-    texto e viram relação real em migration própria quando esses domínios migrarem.
+    Viveu como JSONB inline (`modelo_campanha`/`modelo_campanha_id`) até a Fase 2G.5C —
+    removido fisicamente na 2G.5D (migration 0028). A implementação atual é o snapshot
+    relacional `ProjetoModeloCampanha`/`ProjetoModeloCampanhaItem`
+    (`app/models/projeto_modelo_campanha.py`), sempre 0-ou-1 por Projeto via
+    `UNIQUE(projeto_id)`, nunca uma coluna deste model.
 
     ## O que saiu do mock
 
@@ -142,10 +138,6 @@ class Projeto(Base):
 
     data_inicio: Mapped[date | None] = mapped_column(Date, nullable=True)
     data_fim_prevista: Mapped[date | None] = mapped_column(Date, nullable=True)
-
-    # Value objects — ver "modeloCampanha em JSONB" na docstring.
-    modelo_campanha_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    modelo_campanha: Mapped[list[dict[str, Any]] | None] = mapped_column(json_type, nullable=True)
 
     # --- auditoria ----------------------------------------------------------------
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

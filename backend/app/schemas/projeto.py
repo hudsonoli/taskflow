@@ -20,33 +20,6 @@ def ensure_timezone_aware(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
-class ProjetoModeloCampanhaItem(BaseModel):
-    """Item do modelo de campanha — value object, vive dentro do projeto.
-
-    `tipoTarefaId`, `workflowSugeridoId` e `responsavelOuSetorSugeridoId` são **ids legados
-    em texto**, sem FK: TipoTarefa e Workflow ainda não têm tabela. Os nomes vêm junto porque
-    hoje não há de onde resolvê-los. Quando esses domínios migrarem, os ids viram relação
-    real e os nomes saem — migration própria, ver docs/pendencias-arquiteturais.md.
-    """
-
-    id: str = Field(min_length=1, max_length=64)
-    nome_demanda: str = Field(alias="nomeDemanda", min_length=1, max_length=255)
-    tipo_tarefa_id: str | None = Field(default=None, alias="tipoTarefaId", max_length=64)
-    tipo_tarefa_nome: str | None = Field(default=None, alias="tipoTarefaNome", max_length=255)
-    briefing_base: str | None = Field(default=None, alias="briefingBase", max_length=4000)
-    prioridade_padrao: ProjetoPrioridade = Field(default="media", alias="prioridadePadrao")
-    workflow_sugerido_id: str | None = Field(default=None, alias="workflowSugeridoId", max_length=64)
-    workflow_sugerido_nome: str | None = Field(default=None, alias="workflowSugeridoNome", max_length=255)
-    responsavel_ou_setor_sugerido_id: str | None = Field(
-        default=None, alias="responsavelOuSetorSugeridoId", max_length=64
-    )
-    responsavel_ou_setor_sugerido_nome: str | None = Field(
-        default=None, alias="responsavelOuSetorSugeridoNome", max_length=255
-    )
-
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-
 class ProjetoEquipeMembroPayload(BaseModel):
     """Pessoa alocada ao projeto. `funcao` é atributo do vínculo, não da pessoa.
 
@@ -75,10 +48,6 @@ class _ProjetoCamposComuns(BaseModel):
     cliente_id: UUID | None = Field(default=None, alias="clienteId")
     data_inicio: date | None = Field(default=None, alias="dataInicio")
     data_fim_prevista: date | None = Field(default=None, alias="dataFimPrevista")
-    modelo_campanha_id: str | None = Field(default=None, alias="modeloCampanhaId", max_length=64)
-    modelo_campanha: list[ProjetoModeloCampanhaItem] | None = Field(
-        default=None, alias="modeloCampanha"
-    )
     responsavel_ids: list[UUID] | None = Field(default=None, alias="responsavelIds")
     departamento_responsavel_ids: list[UUID] | None = Field(
         default=None, alias="departamentoResponsavelIds"
@@ -139,10 +108,6 @@ class ProjetoRead(BaseModel):
     cliente_id: UUID | None = Field(default=None, alias="clienteId")
     data_inicio: date | None = Field(default=None, alias="dataInicio")
     data_fim_prevista: date | None = Field(default=None, alias="dataFimPrevista")
-    modelo_campanha_id: str | None = Field(default=None, alias="modeloCampanhaId")
-    modelo_campanha: list[ProjetoModeloCampanhaItem] = Field(
-        default_factory=list, alias="modeloCampanha"
-    )
     responsavel_ids: list[UUID] = Field(default_factory=list, alias="responsavelIds")
     departamento_responsavel_ids: list[UUID] = Field(
         default_factory=list, alias="departamentoResponsavelIds"

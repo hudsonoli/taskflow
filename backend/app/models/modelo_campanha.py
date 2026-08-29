@@ -9,10 +9,10 @@ from app.db.base import Base
 class ModeloCampanha(Base):
     """Biblioteca reutilizável de Modelo de Campanha (Fase 2G.5A) — cabeçalho.
 
-    Isto é só a BIBLIOTECA: nenhum vínculo com Projeto ainda. `Projeto.modelo_campanha`
-    (JSONB) e `Projeto.modelo_campanha_id` continuam intocados nesta fase — a materialização
-    de um Modelo num Projeto (snapshot, sem FK de origem — mesmo padrão de
-    `DemandaWorkflowEtapa`) é a Fase 2G.5C.
+    Isto é só a BIBLIOTECA: nenhum vínculo com Projeto ainda nesta fase — a materialização de
+    um Modelo num Projeto (snapshot, sem FK de origem — mesmo padrão de `DemandaWorkflowEtapa`)
+    é a Fase 2G.5C. O JSONB legado que existia em `Projeto.modelo_campanha`/`modelo_campanha_id`
+    foi removido fisicamente na Fase 2G.5D — nunca teve relação com esta biblioteca.
 
     Sem `workflow_modelo_id` aqui de propósito: o comportamento real observado (Fase 2G.5,
     item 3/5 do relatório de análise) mostra Workflow sempre selecionado POR ITEM, nunca por
