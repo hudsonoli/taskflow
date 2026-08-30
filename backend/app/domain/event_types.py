@@ -141,6 +141,14 @@ class DomainEventType(StrEnum):
     # camposAlterados=["modeloCampanhaSnapshot"] — não duplica evento aqui.
     PROJETO_MODELO_CAMPANHA_APLICADO = "projeto.modelo_campanha_aplicado"
 
+    # SlaRegra (Fase 2G.6B) — cadastro puro, sem resolução/cálculo ainda (ver
+    # app/models/sla_regra.py). Nenhum "sla.resolvido": isso só existiria quando a resolução
+    # automática existir (Fase 2G.6C/D).
+    SLA_REGRA_CRIADA = "sla_regra.criada"
+    SLA_REGRA_ALTERADA = "sla_regra.alterada"
+    SLA_REGRA_ARQUIVADA = "sla_regra.arquivada"
+    SLA_REGRA_RESTAURADA = "sla_regra.restaurada"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"
