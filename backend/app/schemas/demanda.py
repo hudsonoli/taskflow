@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.sla_regra import SlaUnidadePrazo
+
 # `arquivada` no feminino acompanha o vocabulário do próprio domínio (concluida, cancelada,
 # pausada). Os demais domínios usam masculino; cada service tem sua constante local, então
 # não há código genérico dependendo da grafia.
@@ -90,7 +92,13 @@ class _DemandaCamposComuns(BaseModel):
 # silêncio faria o cliente da API acreditar que o valor foi aceito:
 #
 # 1. **emitidos pelo servidor**: empresaId, actorUsuarioId, codigoReferencia, anoReferencia,
-#    sequencialReferencia, numeroOperacional, criadoPorUsuarioId, agenciaId, codigoInterno;
+#    sequencialReferencia, numeroOperacional, criadoPorUsuarioId, agenciaId, codigoInterno, e
+#    (Fase 2G.6D1) todo o snapshot/deadline de SLA — slaRegraId, slaRegraNomeSnapshot, os
+#    quatro campos de prazo snapshot, slaConsiderarExpedienteSnapshot, slaResolvidoAt,
+#    slaPrimeiraRespostaLimiteEm, slaResolucaoLimiteEm. SLA é resolvido pelo servidor uma
+#    única vez na criação (ver DemandaService.create_demanda) — nenhum desses campos é
+#    declarado em `_DemandaCamposComuns`, então enviá-los é 422 pelo `extra="forbid"` abaixo,
+#    não por um validador dedicado;
 # 2. **sem persistência nesta fase**: workflowEtapas, etapaAtualId, checklist, arquivos,
 #    comentarios, historico — ver CAMPOS_SEM_PERSISTENCIA.
 #
@@ -259,6 +267,33 @@ class DemandaRead(BaseModel):
         default=None, alias="statusAnteriorArquivamento"
     )
 
+    # --- SLA (snapshot, Fase 2G.6D1) — ver docstring de app/models/demanda.py. Resolvido uma
+    # única vez na criação; `NULL` em tudo quando nenhuma SlaRegra ativa combinou (não é
+    # erro). `sla_regra_id` é só proveniência técnica (pode virar `None` se a regra for
+    # removida fisicamente) — o snapshot abaixo é a fonte histórica real, nunca um JOIN vivo.
+    sla_regra_id: UUID | None = Field(default=None, alias="slaRegraId")
+    sla_regra_nome_snapshot: str | None = Field(default=None, alias="slaRegraNomeSnapshot")
+    sla_prazo_primeira_resposta_quantidade_snapshot: int | None = Field(
+        default=None, alias="slaPrazoPrimeiraRespostaQuantidadeSnapshot"
+    )
+    sla_prazo_primeira_resposta_unidade_snapshot: SlaUnidadePrazo | None = Field(
+        default=None, alias="slaPrazoPrimeiraRespostaUnidadeSnapshot"
+    )
+    sla_prazo_resolucao_quantidade_snapshot: int | None = Field(
+        default=None, alias="slaPrazoResolucaoQuantidadeSnapshot"
+    )
+    sla_prazo_resolucao_unidade_snapshot: SlaUnidadePrazo | None = Field(
+        default=None, alias="slaPrazoResolucaoUnidadeSnapshot"
+    )
+    sla_considerar_expediente_snapshot: bool | None = Field(
+        default=None, alias="slaConsiderarExpedienteSnapshot"
+    )
+    sla_resolvido_at: datetime | None = Field(default=None, alias="slaResolvidoAt")
+    sla_primeira_resposta_limite_em: datetime | None = Field(
+        default=None, alias="slaPrimeiraRespostaLimiteEm"
+    )
+    sla_resolucao_limite_em: datetime | None = Field(default=None, alias="slaResolucaoLimiteEm")
+
     # Etapas de workflow materializadas (Fase 2E.2) — lista real, ordenada por `ordem`.
     # `etapa_atual_id` é DERIVADO em runtime (menor `ordem` com `status != 'concluida'`),
     # nunca uma coluna: evita ciclo de FK com `demanda_workflow_etapas` e uma segunda fonte
@@ -283,6 +318,9 @@ class DemandaRead(BaseModel):
         "prazo_retorno_cliente",
         "retorno_recebido_em",
         "email_conclusao_data",
+        "sla_resolvido_at",
+        "sla_primeira_resposta_limite_em",
+        "sla_resolucao_limite_em",
     )
     @classmethod
     def validate_timezone(cls, value: datetime | None) -> datetime | None:

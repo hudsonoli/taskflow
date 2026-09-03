@@ -9,6 +9,7 @@ from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expedien
 from app.core.referencias import gerar_proxima_referencia
 from app.core.relogio import agora_local, agora_utc
 from app.core.sequencias_operacionais import reservar_proximo_operacional
+from app.core.sla_resolver import resolver_sla
 from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
 from app.models.demanda_departamento import DemandaDepartamento
@@ -28,6 +29,7 @@ from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.regra_expediente_service import RegraExpedienteService
+from app.services.sla_resolucao_service import resolver_e_calcular_sla
 
 # `tarefa` no gerador de referência (prefixo T) e `demanda` no contador operacional: são
 # vocabulários de sistemas diferentes e ambos estão certos. A interface chama de Tarefa, o
@@ -181,9 +183,20 @@ class DemandaService:
             for departamento_id in departamento_ids:
                 self._ensure_departamento_valido(db, empresa_id, departamento_id)
 
+            # Última validação somente-leitura antes da parte operacional: garante que a
+            # RegraExpediente da Empresa já existe (semeando-a se preciso) ANTES do primeiro
+            # add/flush da criação — ver docstring do helper para o porquê ser obrigatório
+            # nesta posição (Fase 2G.6D1, auditoria de atomicidade).
+            self._garantir_regra_expediente_antes_da_criacao(
+                db, empresa_id=empresa_id, prioridade=data.prioridade, cliente_id=cliente_id
+            )
+
             # Os DOIS contadores, a entidade, os vínculos e os eventos na MESMA transação.
             # Se qualquer coisa abaixo falhar, ambos os incrementos sofrem rollback juntos e
             # nenhum dos dois números é queimado — é o motivo de nenhum deles commitar por si.
+            # A partir DAQUI, nenhum caminho chamado por create_demanda pode executar commit —
+            # ver auditoria de atomicidade da Fase 2G.6D1 (o único commit possível antes deste
+            # ponto é o de _garantir_regra_expediente_antes_da_criacao, acima).
             referencia = gerar_proxima_referencia(
                 db, empresa_id=empresa_id, tipo_entidade=TIPO_REFERENCIA
             )
@@ -210,6 +223,7 @@ class DemandaService:
                 **{campo: getattr(data, campo) for campo in _CAMPOS_SIMPLES},
             )
             self.repository.create(db, demanda)
+            self._resolver_e_persistir_sla_snapshot(db, demanda, empresa_id=empresa_id, now=now)
 
             if workflow_modelo_id is not None:
                 self._materializar_workflow(
@@ -270,6 +284,102 @@ class DemandaService:
         except Exception:
             db.rollback()
             raise
+
+    def _garantir_regra_expediente_antes_da_criacao(
+        self, db: Session, *, empresa_id: str, prioridade: str, cliente_id: str | None
+    ) -> None:
+        """Pré-carrega (e, se preciso, semeia) a `RegraExpediente` da Empresa — chamada
+        OBRIGATORIAMENTE antes de qualquer `add`/`flush` da criação da Demanda nesta Session,
+        nunca depois (ver posição da chamada em `create_demanda`).
+
+        ## Por quê
+
+        `RegraExpedienteService.get_ou_criar` executa `db.commit()` quando precisa criar o
+        singleton pela primeira vez (ver docstring de app/services/regra_expediente_service.py)
+        — um commit autônomo, documentado como seguro desde que nada mais esteja pendente na
+        Session no momento em que ele roda. Antes da Fase 2G.6D1, o único chamador
+        (`_ensure_dentro_expediente`, usado por `update_demanda`) sempre respeitava essa
+        condição.
+
+        A resolução de SLA na criação (Fase 2G.6D1) quebrou esse invariante ao chamar
+        `get_ou_criar` (via `_resolver_e_persistir_sla_snapshot` →
+        `resolver_e_calcular_sla` → `get_regra_calculo`) DEPOIS que a Demanda, a referência e o
+        número operacional já tinham sido `add`/`flush`ados. Um commit nesse ponto arrastava
+        tudo isso junto; uma falha posterior (ex.: publicação de evento) só desfazia o que veio
+        depois do commit, deixando Demanda/contadores órfãos no banco mesmo com a criação tendo
+        "falhado" pro chamador — bug encontrado e corrigido na auditoria de atomicidade da
+        Fase 2G.6D1 (nunca chegou a ser commitado/enviado). Este helper restaura o invariante
+        chamando `get_ou_criar` — o único commit possível em toda a criação de Demanda antes da
+        parte operacional — como o passo explícito final das validações somente-leitura.
+
+        ## Por que só quando existe candidata
+
+        Resolve em modo leitura (`resolver_sla`, sem nenhuma escrita) e só chama
+        `get_ou_criar` quando alguma `SlaRegra` combina — Empresas que não usam SLA não ganham
+        uma `RegraExpediente` de graça só por criarem uma Demanda (Alternativa B do kickoff da
+        correção; ver item 8 dos testes). `resolver_sla` roda de novo depois, dentro de
+        `_resolver_e_persistir_sla_snapshot` — não duplicamos o algoritmo de resolução, só a
+        CHAMADA a uma função pura e somente-leitura; um `SELECT` extra é o custo aceito, não
+        uma segunda implementação.
+        """
+        regra_candidata = resolver_sla(
+            db, empresa_id=empresa_id, prioridade=prioridade, departamento_id=None, cliente_id=cliente_id
+        )
+        if regra_candidata is not None:
+            self.regra_expediente_service.get_ou_criar(db, empresa_id=empresa_id)
+
+    def _resolver_e_persistir_sla_snapshot(
+        self, db: Session, demanda: Demanda, *, empresa_id: str, now: datetime
+    ) -> None:
+        """Resolve o SLA aplicável e grava o snapshot na própria Demanda — uma única vez, na
+        criação (Fase 2G.6D1; ver docstring de app/models/demanda.py, seção "Snapshot de
+        SLA"). Nenhum PATCH futuro chama isto de novo: a régua resolvida aqui é histórica e
+        nunca recalculada, mesmo que prioridade/cliente mudem ou a `SlaRegra` de origem seja
+        editada/arquivada depois.
+
+        Ausência de regra combinando (`resolver_sla` devolve `None`) não é erro — os campos
+        ficam `NULL` e a criação segue normalmente, sem inventar regra default. Já uma
+        `SlaRegra` ativa combinando com `RegraExpediente` em configuração impossível É erro:
+        `SlaCalculoInvalidoError`/`SlaExpedienteSemJanelaUtilError` (ambas `ValueError`, ver
+        app/core/calculadora_expediente.py) propagam sem tratamento dedicado aqui — o
+        `except Exception: db.rollback(); raise` de `create_demanda` cuida do rollback
+        atômico (nenhum contador de referência/numeração fica queimado), e a rota devolve 500
+        genérico: é uma falha de configuração do operador da Empresa (a régua existe, o
+        expediente dela é que está inválido), não um erro de input do cliente da API — decisão
+        deliberada desta fase, sem mapeamento HTTP dedicado ainda.
+
+        Critério de departamento **sempre `None`**: uma Demanda pode ter zero, um ou vários
+        `DemandaDepartamento` vinculados, sem nenhum conceito de "principal" no domínio atual
+        — decisão explícita da Fase 2G.6D1 (não escolher o primeiro arbitrariamente). Só
+        regras SLA genéricas nesse eixo podem combinar.
+
+        `RegraExpedienteService.get_ou_criar`, chamado indiretamente por `resolver_e_calcular_sla`
+        abaixo, NUNCA executa commit neste ponto — o singleton já foi garantido por
+        `_garantir_regra_expediente_antes_da_criacao`, chamado antes de qualquer escrita desta
+        transação (ver docstring daquele helper). Aqui ele só lê.
+        """
+        resolvido = resolver_e_calcular_sla(
+            db,
+            empresa_id=empresa_id,
+            prioridade=demanda.prioridade,
+            departamento_id=None,
+            cliente_id=demanda.cliente_id,
+            inicio=now,
+        )
+        if resolvido is None:
+            return
+
+        regra = resolvido.regra
+        demanda.sla_regra_id = regra.id
+        demanda.sla_regra_nome_snapshot = regra.nome
+        demanda.sla_prazo_primeira_resposta_quantidade_snapshot = regra.prazo_primeira_resposta_quantidade
+        demanda.sla_prazo_primeira_resposta_unidade_snapshot = regra.prazo_primeira_resposta_unidade
+        demanda.sla_prazo_resolucao_quantidade_snapshot = regra.prazo_resolucao_quantidade
+        demanda.sla_prazo_resolucao_unidade_snapshot = regra.prazo_resolucao_unidade
+        demanda.sla_considerar_expediente_snapshot = regra.considerar_apenas_expediente
+        demanda.sla_resolvido_at = now
+        demanda.sla_primeira_resposta_limite_em = resolvido.prazo_primeira_resposta_em
+        demanda.sla_resolucao_limite_em = resolvido.prazo_resolucao_em
 
     # ----------------------------------------------------------------------------------
     # Consulta — sempre escopada
@@ -696,6 +806,16 @@ class DemandaService:
             "restauradoAt": demanda.restaurado_at,
             "restauradoPorUsuarioId": demanda.restaurado_por_usuario_id,
             "statusAnteriorArquivamento": demanda.status_anterior_arquivamento,
+            "slaRegraId": demanda.sla_regra_id,
+            "slaRegraNomeSnapshot": demanda.sla_regra_nome_snapshot,
+            "slaPrazoPrimeiraRespostaQuantidadeSnapshot": demanda.sla_prazo_primeira_resposta_quantidade_snapshot,
+            "slaPrazoPrimeiraRespostaUnidadeSnapshot": demanda.sla_prazo_primeira_resposta_unidade_snapshot,
+            "slaPrazoResolucaoQuantidadeSnapshot": demanda.sla_prazo_resolucao_quantidade_snapshot,
+            "slaPrazoResolucaoUnidadeSnapshot": demanda.sla_prazo_resolucao_unidade_snapshot,
+            "slaConsiderarExpedienteSnapshot": demanda.sla_considerar_expediente_snapshot,
+            "slaResolvidoAt": demanda.sla_resolvido_at,
+            "slaPrimeiraRespostaLimiteEm": demanda.sla_primeira_resposta_limite_em,
+            "slaResolucaoLimiteEm": demanda.sla_resolucao_limite_em,
         }
 
     # ----------------------------------------------------------------------------------

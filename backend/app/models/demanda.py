@@ -75,6 +75,29 @@ class Demanda(Base):
 
     `prazo_etapa_atual` **é campo manual e independente** — não deriva de `prazoHoras` das
     etapas, e nunca derivou. A Pauta ordena por ele.
+
+    ## Snapshot de SLA (Fase 2G.6D1)
+
+    SLA é resolvido **uma única vez**, na criação (`DemandaService.create_demanda`, via
+    `resolver_e_calcular_sla`) — nunca recalculado automaticamente por PATCH de
+    prioridade/cliente, nem quando a `SlaRegra` de origem é editada ou arquivada depois. Os
+    campos `sla_*_snapshot` são cópia imutável dos valores da regra **no instante da
+    criação** — nunca lidos via JOIN vivo com `sla_regras`, exatamente para sobreviver a uma
+    régua que muda ou é removida fisicamente depois (`sla_regra_id` é `ON DELETE SET NULL`:
+    perde só a proveniência técnica, nunca o snapshot).
+
+    Ausência de regra combinando (`resolver_sla` devolve `None`) não é erro — a Demanda é
+    criada normalmente com todos os campos de SLA `NULL`. Nenhuma regra default é inventada.
+
+    Critério de departamento **não é usado** na resolução desta fase: uma Demanda pode ter
+    zero, um ou vários `DemandaDepartamento` vinculados, sem nenhum conceito de "principal" no
+    domínio atual — decisão explícita registrada no relatório da Fase 2G.6D1 (não escolher o
+    primeiro arbitrariamente). O resolver sempre recebe `departamento_id=None`; só regras SLA
+    genéricas nesse eixo podem combinar.
+
+    Não existem ainda (ficam para 2G.6D2): marcação de primeira resposta atendida, evento
+    operacional de primeira resposta, e qualquer mecanismo que marque resolução automática ao
+    concluir a Demanda. Esta fase só persiste os DOIS deadlines calculados.
     """
 
     __tablename__ = "demandas"
@@ -88,6 +111,25 @@ class Demanda(Base):
         CheckConstraint(
             "data_inicio IS NULL OR data_fim_prevista IS NULL OR data_fim_prevista >= data_inicio",
             name="ck_demandas_periodo",
+        ),
+        CheckConstraint(
+            "sla_prazo_primeira_resposta_quantidade_snapshot IS NULL OR "
+            "sla_prazo_primeira_resposta_quantidade_snapshot > 0",
+            name="ck_demandas_sla_prazo_primeira_resposta_quantidade_snapshot",
+        ),
+        CheckConstraint(
+            "sla_prazo_primeira_resposta_unidade_snapshot IS NULL OR "
+            "sla_prazo_primeira_resposta_unidade_snapshot IN ('minutos', 'horas', 'dias_corridos', 'dias_uteis')",
+            name="ck_demandas_sla_prazo_primeira_resposta_unidade_snapshot",
+        ),
+        CheckConstraint(
+            "sla_prazo_resolucao_quantidade_snapshot IS NULL OR sla_prazo_resolucao_quantidade_snapshot > 0",
+            name="ck_demandas_sla_prazo_resolucao_quantidade_snapshot",
+        ),
+        CheckConstraint(
+            "sla_prazo_resolucao_unidade_snapshot IS NULL OR "
+            "sla_prazo_resolucao_unidade_snapshot IN ('minutos', 'horas', 'dias_corridos', 'dias_uteis')",
+            name="ck_demandas_sla_prazo_resolucao_unidade_snapshot",
         ),
         UniqueConstraint("empresa_id", "codigo_referencia", name="uq_demandas_empresa_codigo_referencia"),
         UniqueConstraint(
@@ -106,6 +148,10 @@ class Demanda(Base):
         Index("ix_demandas_workflow_modelo_id", "workflow_modelo_id"),
         # A Pauta ordena por este campo — índice evita sort em memória a cada abertura.
         Index("ix_demandas_prazo_etapa_atual", "prazo_etapa_atual"),
+        # Mesmo padrão de índice das outras FKs desta tabela. Deliberadamente SEM índice em
+        # sla_primeira_resposta_limite_em/sla_resolucao_limite_em nesta fase — nenhum filtro ou
+        # ordenação real por elas existe ainda (ver relatório da Fase 2G.6D1).
+        Index("ix_demandas_sla_regra_id", "sla_regra_id"),
     )
 
     # --- identidade ---------------------------------------------------------------
@@ -165,6 +211,23 @@ class Demanda(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     email_conclusao_data: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # --- SLA (snapshot, Fase 2G.6D1) -----------------------------------------------
+    # Proveniência histórica, não fonte de leitura — ver docstring da classe. SET NULL: a
+    # regra pode ser removida fisicamente algum dia sem derrubar o snapshot abaixo.
+    sla_regra_id: Mapped[str | None] = mapped_column(
+        ForeignKey("sla_regras.id", ondelete="SET NULL"), nullable=True
+    )
+    sla_regra_nome_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sla_prazo_primeira_resposta_quantidade_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sla_prazo_primeira_resposta_unidade_snapshot: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    sla_prazo_resolucao_quantidade_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sla_prazo_resolucao_unidade_snapshot: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    sla_considerar_expediente_snapshot: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Quando a resolução aconteceu — sempre o `now` da criação da Demanda, nunca recalculado.
+    sla_resolvido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_primeira_resposta_limite_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_resolucao_limite_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- auditoria ----------------------------------------------------------------
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
