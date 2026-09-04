@@ -549,6 +549,20 @@ class DemandaService:
             if campos_alterados:
                 now = agora_utc()
                 demanda.updated_at = now
+
+                # Resolução do SLA (Fase 2G.6D3B) — só na transição REAL para concluida, nunca
+                # quando já estava concluida e o PATCH reenvia o mesmo valor (`status_final !=
+                # status_anterior` já garantiu isso lá em cima, e é por isso que `campos_alterados`
+                # já contém "status" aqui). Mesmo `now` da transição — sem segunda chamada a
+                # `agora_utc()`. `UPDATE` condicional: reabrir e concluir de novo nunca sobrescreve
+                # a primeira resolução (mesmo mecanismo de `sla_primeira_resposta_em`, 2G.6D2B). O
+                # `db.refresh(demanda)` no fim deste método já sincroniza o objeto em memória —
+                # sem necessidade de atribuição otimista aqui.
+                if status_final == STATUS_CONCLUIDA and status_anterior != STATUS_CONCLUIDA:
+                    self.repository.fixar_resolucao_sla_se_vazia(
+                        db, demanda_id=demanda.id, empresa_id=demanda.empresa_id, timestamp=now
+                    )
+
                 self.repository.update(db, demanda)
                 self._publish_event(
                     db, demanda, DomainEventType.DEMANDA_ALTERADA, actor_usuario_id,
@@ -817,23 +831,26 @@ class DemandaService:
             "slaPrimeiraRespostaLimiteEm": demanda.sla_primeira_resposta_limite_em,
             "slaResolucaoLimiteEm": demanda.sla_resolucao_limite_em,
             "slaPrimeiraRespostaEm": demanda.sla_primeira_resposta_em,
-            "slaPrimeiraRespostaDentroPrazo": DemandaService._derivar_sla_primeira_resposta_dentro_prazo(
+            "slaPrimeiraRespostaDentroPrazo": DemandaService._derivar_sla_dentro_prazo(
                 demanda.sla_primeira_resposta_em, demanda.sla_primeira_resposta_limite_em
+            ),
+            "slaResolvidoEm": demanda.sla_resolvido_em,
+            "slaResolvidoDentroPrazo": DemandaService._derivar_sla_dentro_prazo(
+                demanda.sla_resolvido_em, demanda.sla_resolucao_limite_em
             ),
         }
 
     @staticmethod
-    def _derivar_sla_primeira_resposta_dentro_prazo(
-        primeira_resposta_em: datetime | None, limite_em: datetime | None
-    ) -> bool | None:
+    def _derivar_sla_dentro_prazo(fato_em: datetime | None, limite_em: datetime | None) -> bool | None:
         """Derivado em runtime a cada leitura — nunca persistido (mesmo padrão de
-        `_derivar_etapa_atual_id`, ver Fase 2G.6D2B). `None` quando falta qualquer um dos dois
-        lados: sem primeira resposta ainda, ou sem limite por ausência de SLA combinando —
-        nunca `False` só por indisponibilidade de dado, que seria um falso "fora do prazo".
-        Exatamente no limite conta como dentro (`<=`, inclusivo)."""
-        if primeira_resposta_em is None or limite_em is None:
+        `_derivar_etapa_atual_id`). Reaproveitado por `slaPrimeiraRespostaDentroPrazo` (2G.6D2B)
+        e `slaResolvidoDentroPrazo` (2G.6D3B) — mesma regra para os dois pares (fato, limite).
+        `None` quando falta qualquer um dos dois lados: fato ainda não ocorreu, ou sem limite
+        por ausência de SLA combinando — nunca `False` só por indisponibilidade de dado, que
+        seria um falso "fora do prazo". Exatamente no limite conta como dentro (`<=`, inclusivo)."""
+        if fato_em is None or limite_em is None:
             return None
-        return primeira_resposta_em <= limite_em
+        return fato_em <= limite_em
 
     # ----------------------------------------------------------------------------------
     # Regras

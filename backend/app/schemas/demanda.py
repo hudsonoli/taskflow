@@ -100,7 +100,9 @@ class _DemandaCamposComuns(BaseModel):
 #    declarado em `_DemandaCamposComuns`, então enviá-los é 422 pelo `extra="forbid"` abaixo,
 #    não por um validador dedicado. Mesmo raciocínio para slaPrimeiraRespostaEm/
 #    slaPrimeiraRespostaDentroPrazo (Fase 2G.6D2B) — fixados só pelo primeiro comentário da
-#    equipe (DemandaComentarioService.criar_comentario), nunca por Create/Update de Demanda;
+#    equipe (DemandaComentarioService.criar_comentario) — e para slaResolvidoEm/
+#    slaResolvidoDentroPrazo (Fase 2G.6D3B) — fixado só pela primeira transição real para
+#    concluida (DemandaService.update_demanda); nenhum dos dois por Create/Update de Demanda;
 # 2. **sem persistência nesta fase**: workflowEtapas, etapaAtualId, checklist, arquivos,
 #    comentarios, historico — ver CAMPOS_SEM_PERSISTENCIA.
 #
@@ -303,6 +305,11 @@ class DemandaRead(BaseModel):
     sla_primeira_resposta_dentro_prazo: bool | None = Field(
         default=None, alias="slaPrimeiraRespostaDentroPrazo"
     )
+    # --- Resolução (Fase 2G.6D3B) — ver docstring de app/models/demanda.py. Fixada na
+    # primeira transição REAL para `concluida`; `cancelada`/`arquivada` nunca preenchem.
+    sla_resolvido_em: datetime | None = Field(default=None, alias="slaResolvidoEm")
+    # DERIVADO em runtime (mesmo padrão de `slaPrimeiraRespostaDentroPrazo`) — nunca coluna.
+    sla_resolvido_dentro_prazo: bool | None = Field(default=None, alias="slaResolvidoDentroPrazo")
 
     # Etapas de workflow materializadas (Fase 2E.2) — lista real, ordenada por `ordem`.
     # `etapa_atual_id` é DERIVADO em runtime (menor `ordem` com `status != 'concluida'`),
@@ -332,6 +339,7 @@ class DemandaRead(BaseModel):
         "sla_primeira_resposta_limite_em",
         "sla_resolucao_limite_em",
         "sla_primeira_resposta_em",
+        "sla_resolvido_em",
     )
     @classmethod
     def validate_timezone(cls, value: datetime | None) -> datetime | None:

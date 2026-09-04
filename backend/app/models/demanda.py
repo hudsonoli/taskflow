@@ -112,10 +112,34 @@ class Demanda(Base):
     retroativamente — o primeiro comentário criado DEPOIS do deploy é que fixa o campo, mesmo
     que não seja cronologicamente o primeiro comentário da Demanda.
 
-    Ainda não existem (ficam para fases futuras): `sla_resolvido_em` (provável gatilho: status
-    `concluida`), pausa de SLA, comentário externo/visível ao cliente, portal de cliente.
     `sla_primeira_resposta_dentro_prazo` é **derivado em runtime**, nunca persistido (mesmo
     padrão de `etapa_atual_id`) — ver `DemandaService._campos_base`/`to_read`.
+
+    ## Resolução (Fase 2G.6D3B)
+
+    `sla_resolvido_em` é preenchida na **primeira transição real** para `status = concluida`
+    (`status_anterior != concluida AND status_final == concluida`, dentro de
+    `DemandaService.update_demanda`) — definição V1 aprovada no relatório da Fase 2G.6D3A.
+    `cancelada` e `arquivada` **nunca** preenchem este campo, mesmo que a Demanda tenha
+    deadline de SLA: cancelamento é abandono, não entrega; arquivamento é lifecycle
+    administrativo, sem relação com o trabalho ter sido concluído.
+
+    Gravada **uma única vez**, mesmo padrão de `sla_primeira_resposta_em`: `UPDATE ... WHERE
+    sla_resolvido_em IS NULL` condicional no repository. Reabrir (`concluida → em_execucao`,
+    sem máquina de estados — qualquer transição é aceita) e concluir de novo **não
+    sobrescreve** — preserva o primeiro instante em que o compromisso foi honrado. Não
+    depende de existir SLA (`sla_resolucao_limite_em` pode ser `NULL`): fato operacional por
+    si.
+
+    Sem backfill: uma Demanda já `concluida` no momento do deploy desta fase não recebe o
+    campo retroativamente — só uma transição real e posterior para `concluida` (reabrir e
+    concluir de novo, por exemplo) fixa `sla_resolvido_em`.
+
+    `sla_resolvido_dentro_prazo` é **derivado em runtime**, nunca persistido — mesmo padrão de
+    `sla_primeira_resposta_dentro_prazo`/`etapa_atual_id`.
+
+    Ainda não existem (ficam para fases futuras): pausa de SLA, campo dedicado de
+    cancelamento.
     """
 
     __tablename__ = "demandas"
@@ -249,6 +273,9 @@ class Demanda(Base):
     # Fixada uma única vez pelo primeiro comentário da equipe — ver seção "Primeira resposta"
     # acima. Sem CHECK: é um fato ocorrido, não um valor com formato restrito.
     sla_primeira_resposta_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Fixada uma única vez na primeira transição real para concluida — ver seção "Resolução"
+    # acima. `cancelada`/`arquivada` nunca preenchem. Sem CHECK: fato ocorrido, não formato.
+    sla_resolvido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- auditoria ----------------------------------------------------------------
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

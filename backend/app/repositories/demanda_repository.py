@@ -64,6 +64,25 @@ class DemandaRepository:
         )
         return resultado.rowcount == 1
 
+    def fixar_resolucao_sla_se_vazia(
+        self, db: Session, *, demanda_id: str, empresa_id: str, timestamp: datetime
+    ) -> bool:
+        """Mesmo mecanismo de `fixar_primeira_resposta_se_vazia` (ver docstring lá) aplicado à
+        resolução do SLA (Fase 2G.6D3B): `UPDATE` condicional, garantia de atomicidade vem do
+        `WHERE ... IS NULL` sob o lock de linha do banco, nunca de um `if` em memória. Devolve
+        `True` só quando ESTA chamada fixou o campo; `False` quando outra transação já tinha
+        fixado antes. Sem `commit` (fica com quem chama)."""
+        resultado = db.execute(
+            sa_update(Demanda)
+            .where(
+                Demanda.id == demanda_id,
+                Demanda.empresa_id == empresa_id,
+                Demanda.sla_resolvido_em.is_(None),
+            )
+            .values(sla_resolvido_em=timestamp)
+        )
+        return resultado.rowcount == 1
+
     # ----------------------------------------------------------------------------------
     # Escopo — a mesma expressão para listar e para acessar por UUID
     # ----------------------------------------------------------------------------------
