@@ -95,9 +95,27 @@ class Demanda(Base):
     primeiro arbitrariamente). O resolver sempre recebe `departamento_id=None`; só regras SLA
     genéricas nesse eixo podem combinar.
 
-    Não existem ainda (ficam para 2G.6D2): marcação de primeira resposta atendida, evento
-    operacional de primeira resposta, e qualquer mecanismo que marque resolução automática ao
-    concluir a Demanda. Esta fase só persiste os DOIS deadlines calculados.
+    ## Primeira resposta (Fase 2G.6D2B)
+
+    `sla_primeira_resposta_em` é preenchida pelo **primeiro comentário da equipe** na Demanda
+    (`DemandaComentarioService.criar_comentario`) — definição V1 aprovada no relatório da Fase
+    2G.6D2A. Não é comentário visível ao cliente (essa distinção não existe no domínio ainda);
+    é uma aproximação operacional, documentada como tal.
+
+    Gravada **uma única vez**: fixada via `UPDATE ... WHERE sla_primeira_resposta_em IS NULL`
+    condicional no repository (nunca por `if campo is None` em memória, que teria race entre
+    duas requisições concorrentes) — o segundo/terceiro comentário nunca sobrescrevem. Não
+    depende de existir SLA (`sla_primeira_resposta_limite_em` pode ser `NULL`): é fato
+    operacional por si, independente de haver compromisso contratual.
+
+    Sem backfill: Demandas com comentários anteriores a esta fase não têm o campo preenchido
+    retroativamente — o primeiro comentário criado DEPOIS do deploy é que fixa o campo, mesmo
+    que não seja cronologicamente o primeiro comentário da Demanda.
+
+    Ainda não existem (ficam para fases futuras): `sla_resolvido_em` (provável gatilho: status
+    `concluida`), pausa de SLA, comentário externo/visível ao cliente, portal de cliente.
+    `sla_primeira_resposta_dentro_prazo` é **derivado em runtime**, nunca persistido (mesmo
+    padrão de `etapa_atual_id`) — ver `DemandaService._campos_base`/`to_read`.
     """
 
     __tablename__ = "demandas"
@@ -149,8 +167,8 @@ class Demanda(Base):
         # A Pauta ordena por este campo — índice evita sort em memória a cada abertura.
         Index("ix_demandas_prazo_etapa_atual", "prazo_etapa_atual"),
         # Mesmo padrão de índice das outras FKs desta tabela. Deliberadamente SEM índice em
-        # sla_primeira_resposta_limite_em/sla_resolucao_limite_em nesta fase — nenhum filtro ou
-        # ordenação real por elas existe ainda (ver relatório da Fase 2G.6D1).
+        # sla_primeira_resposta_limite_em/sla_resolucao_limite_em/sla_primeira_resposta_em —
+        # nenhum filtro ou ordenação real por elas existe ainda (ver relatórios 2G.6D1/2G.6D2B).
         Index("ix_demandas_sla_regra_id", "sla_regra_id"),
     )
 
@@ -228,6 +246,9 @@ class Demanda(Base):
     sla_resolvido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sla_primeira_resposta_limite_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sla_resolucao_limite_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Fixada uma única vez pelo primeiro comentário da equipe — ver seção "Primeira resposta"
+    # acima. Sem CHECK: é um fato ocorrido, não um valor com formato restrito.
+    sla_primeira_resposta_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- auditoria ----------------------------------------------------------------
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

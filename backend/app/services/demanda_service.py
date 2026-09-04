@@ -816,7 +816,24 @@ class DemandaService:
             "slaResolvidoAt": demanda.sla_resolvido_at,
             "slaPrimeiraRespostaLimiteEm": demanda.sla_primeira_resposta_limite_em,
             "slaResolucaoLimiteEm": demanda.sla_resolucao_limite_em,
+            "slaPrimeiraRespostaEm": demanda.sla_primeira_resposta_em,
+            "slaPrimeiraRespostaDentroPrazo": DemandaService._derivar_sla_primeira_resposta_dentro_prazo(
+                demanda.sla_primeira_resposta_em, demanda.sla_primeira_resposta_limite_em
+            ),
         }
+
+    @staticmethod
+    def _derivar_sla_primeira_resposta_dentro_prazo(
+        primeira_resposta_em: datetime | None, limite_em: datetime | None
+    ) -> bool | None:
+        """Derivado em runtime a cada leitura — nunca persistido (mesmo padrão de
+        `_derivar_etapa_atual_id`, ver Fase 2G.6D2B). `None` quando falta qualquer um dos dois
+        lados: sem primeira resposta ainda, ou sem limite por ausência de SLA combinando —
+        nunca `False` só por indisponibilidade de dado, que seria um falso "fora do prazo".
+        Exatamente no limite conta como dentro (`<=`, inclusivo)."""
+        if primeira_resposta_em is None or limite_em is None:
+            return None
+        return primeira_resposta_em <= limite_em
 
     # ----------------------------------------------------------------------------------
     # Regras

@@ -9,6 +9,7 @@ from app.models.demanda import Demanda
 from app.models.demanda_comentario import DemandaComentario
 from app.models.usuario import Usuario
 from app.repositories.demanda_comentario_repository import DemandaComentarioRepository
+from app.repositories.demanda_repository import DemandaRepository
 from app.schemas.demanda_comentario import (
     DemandaComentarioCreate,
     DemandaComentarioRead,
@@ -45,9 +46,13 @@ class DemandaComentarioService:
     def __init__(
         self,
         repository: DemandaComentarioRepository | None = None,
+        demanda_repository: DemandaRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
     ) -> None:
         self.repository = repository or DemandaComentarioRepository()
+        # Só pro UPDATE condicional de sla_primeira_resposta_em (Fase 2G.6D2B) — este service
+        # nunca lê/decide nada sobre a Demanda em si além disso.
+        self.demanda_repository = demanda_repository or DemandaRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
 
     def list_comentarios(self, db: Session, demanda_id: str) -> list[DemandaComentario]:
@@ -64,6 +69,13 @@ class DemandaComentarioService:
     def criar_comentario(
         self, db: Session, demanda: Demanda, data: DemandaComentarioCreate, *, autor: Usuario
     ) -> DemandaComentario:
+        """Primeiro comentário da Demanda também fixa `sla_primeira_resposta_em` — definição
+        V1 aprovada no relatório da Fase 2G.6D2A (ver docstring de app/models/demanda.py,
+        seção "Primeira resposta"). Mesma transação do comentário: se qualquer coisa abaixo
+        falhar, nem o comentário nem a marcação persistem (rollback único, sem listener
+        assíncrono). Usa o MESMO `now` do comentário — não chama `agora_utc()` de novo, pra
+        não introduzir diferença artificial de microssegundos entre `comentario.created_at` e
+        `sla_primeira_resposta_em` quando é este comentário quem fixa o campo."""
         try:
             now = agora_utc()
             comentario = DemandaComentario(
@@ -75,6 +87,17 @@ class DemandaComentarioService:
                 updated_at=now,
             )
             self.repository.create(db, comentario)
+
+            fixou_primeira_resposta = self.demanda_repository.fixar_primeira_resposta_se_vazia(
+                db, demanda_id=demanda.id, empresa_id=demanda.empresa_id, timestamp=now
+            )
+            if fixou_primeira_resposta:
+                # Só reflete o resultado do UPDATE condicional no objeto em memória — não é
+                # esta atribuição que decide nada (o `WHERE ... IS NULL` do repository já
+                # decidiu); evita que `demanda` fique com um valor desatualizado dentro desta
+                # mesma sessão/requisição.
+                demanda.sla_primeira_resposta_em = now
+
             self._publish_event(
                 db, demanda, DomainEventType.DEMANDA_COMENTARIO_CRIADO, autor.id,
                 extra_payload={"comentarioId": comentario.id}, occurred_at=now,

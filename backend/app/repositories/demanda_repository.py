@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.busca import interpretar_termo_busca
@@ -34,6 +37,32 @@ class DemandaRepository:
         db.add(demanda)
         db.flush()
         return demanda
+
+    def fixar_primeira_resposta_se_vazia(
+        self, db: Session, *, demanda_id: str, empresa_id: str, timestamp: datetime
+    ) -> bool:
+        """`UPDATE` condicional — não um `if demanda.sla_primeira_resposta_em is None` em
+        memória (Fase 2G.6D2B). Duas requisições concorrentes criando comentário na mesma
+        Demanda podem ambas ler `None` antes de qualquer uma escrever; só o `WHERE ... IS
+        NULL` na própria instrução, avaliado pelo banco sob o lock de linha do `UPDATE`,
+        decide atomicamente qual delas vence — a segunda, ao ser desbloqueada, reavalia a
+        condição contra o valor já commitado pela primeira e não casa nenhuma linha.
+
+        Devolve `True` só quando ESTA chamada foi quem fixou o campo (`rowcount == 1`);
+        `False` quando outra transação já tinha fixado antes (`rowcount == 0`) — nunca
+        sobrescreve. Sem `commit` aqui (fica com quem chama, na mesma transação da ação que
+        disparou a marcação).
+        """
+        resultado = db.execute(
+            sa_update(Demanda)
+            .where(
+                Demanda.id == demanda_id,
+                Demanda.empresa_id == empresa_id,
+                Demanda.sla_primeira_resposta_em.is_(None),
+            )
+            .values(sla_primeira_resposta_em=timestamp)
+        )
+        return resultado.rowcount == 1
 
     # ----------------------------------------------------------------------------------
     # Escopo — a mesma expressão para listar e para acessar por UUID

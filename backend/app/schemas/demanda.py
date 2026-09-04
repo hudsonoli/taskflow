@@ -98,7 +98,9 @@ class _DemandaCamposComuns(BaseModel):
 #    slaPrimeiraRespostaLimiteEm, slaResolucaoLimiteEm. SLA é resolvido pelo servidor uma
 #    única vez na criação (ver DemandaService.create_demanda) — nenhum desses campos é
 #    declarado em `_DemandaCamposComuns`, então enviá-los é 422 pelo `extra="forbid"` abaixo,
-#    não por um validador dedicado;
+#    não por um validador dedicado. Mesmo raciocínio para slaPrimeiraRespostaEm/
+#    slaPrimeiraRespostaDentroPrazo (Fase 2G.6D2B) — fixados só pelo primeiro comentário da
+#    equipe (DemandaComentarioService.criar_comentario), nunca por Create/Update de Demanda;
 # 2. **sem persistência nesta fase**: workflowEtapas, etapaAtualId, checklist, arquivos,
 #    comentarios, historico — ver CAMPOS_SEM_PERSISTENCIA.
 #
@@ -293,6 +295,14 @@ class DemandaRead(BaseModel):
         default=None, alias="slaPrimeiraRespostaLimiteEm"
     )
     sla_resolucao_limite_em: datetime | None = Field(default=None, alias="slaResolucaoLimiteEm")
+    # --- Primeira resposta (Fase 2G.6D2B) — ver docstring de app/models/demanda.py.
+    sla_primeira_resposta_em: datetime | None = Field(default=None, alias="slaPrimeiraRespostaEm")
+    # DERIVADO em runtime pelo service (mesmo padrão de `etapa_atual_id`) — nunca uma coluna.
+    # `None` quando falta qualquer um dos dois lados da comparação (sem primeira resposta
+    # ainda, ou sem limite por ausência de SLA); nunca `False` só por indisponibilidade de dado.
+    sla_primeira_resposta_dentro_prazo: bool | None = Field(
+        default=None, alias="slaPrimeiraRespostaDentroPrazo"
+    )
 
     # Etapas de workflow materializadas (Fase 2E.2) — lista real, ordenada por `ordem`.
     # `etapa_atual_id` é DERIVADO em runtime (menor `ordem` com `status != 'concluida'`),
@@ -321,6 +331,7 @@ class DemandaRead(BaseModel):
         "sla_resolvido_at",
         "sla_primeira_resposta_limite_em",
         "sla_resolucao_limite_em",
+        "sla_primeira_resposta_em",
     )
     @classmethod
     def validate_timezone(cls, value: datetime | None) -> datetime | None:
