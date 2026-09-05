@@ -7,7 +7,8 @@ decisão explícita (ver instrução da Fase 2E.4).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -61,10 +62,24 @@ def test_texto_so_espaco_e_recusado(client_admin: TestClient) -> None:
 
 
 def test_listar_comentarios_mais_recente_primeiro(client_admin: TestClient) -> None:
+    """`list_by_demanda` ordena só por `ORDER BY created_at DESC` (sem tiebreaker) — o
+    contrato de "mais recente primeiro" só existe quando os timestamps DIFEREM; a ordem
+    entre comentários com `created_at` idêntico não é garantida (confirmado empiricamente:
+    nesse caso o Postgres devolve ordem de inserção, não de criação mais recente). Em
+    produção isso nunca colide (requisições HTTP reais sempre têm alguma distância real de
+    relógio); o teste anterior dependia de três chamadas do TestClient em sequência
+    imediata ficarem sempre mensuravelmente distintas — verdade isolado, mas instável sob
+    carga da suíte completa. Fixamos os três `created_at` explicitamente, 1s de distância
+    cada, pra testar exatamente o que o contrato garante, sem depender do relógio real nem
+    reintroduzir a chance de empate (ver Fase 2G.6E2-PRE)."""
     demanda = _criar_demanda(client_admin)
-    _criar_comentario(client_admin, demanda["id"], "Primeiro")
-    _criar_comentario(client_admin, demanda["id"], "Segundo")
-    _criar_comentario(client_admin, demanda["id"], "Terceiro")
+    base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    with patch("app.services.demanda_comentario_service.agora_utc", side_effect=[
+        base, base + timedelta(seconds=1), base + timedelta(seconds=2)
+    ]):
+        _criar_comentario(client_admin, demanda["id"], "Primeiro")
+        _criar_comentario(client_admin, demanda["id"], "Segundo")
+        _criar_comentario(client_admin, demanda["id"], "Terceiro")
 
     resposta = client_admin.get(f"/demandas/{demanda['id']}/comentarios")
     assert resposta.status_code == 200

@@ -18,6 +18,7 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app.core.expediente import JanelaDia, RegraExpediente
 from app.models.demanda import Demanda
 from app.models.empresa import Empresa
 from app.models.sla_regra import SlaRegra
@@ -28,6 +29,29 @@ from app.services.demanda_service import DemandaService
 # --------------------------------------------------------------------------------------
 # Auxiliares
 # --------------------------------------------------------------------------------------
+
+
+def _regra_todos_os_dias() -> RegraExpediente:
+    """Mesma técnica de `dentro_do_expediente` em test_demanda.py: janela 00:00–23:59 nos 7
+    dias, pra estes testes não dependerem nem da hora nem do dia da semana em que a suíte
+    rodar (ver Fase 2G.6E2-PRE — os testes G e P transicionam para `em_execucao`, que passa
+    pelo gate de expediente, e não usavam nenhum override — falhavam sempre que a suíte
+    rodasse fora de 09:00–19:00 num dia útil, e SEMPRE aos sábados/domingos)."""
+    janela = JanelaDia(ativo=True, manha_inicio="00:00", manha_fim="12:00", tarde_inicio="12:00", tarde_fim="23:59")
+    return RegraExpediente(ativo=True, tolerancia_retomada_minutos=0, dias={dia: janela for dia in range(7)})
+
+
+@pytest.fixture()
+def dentro_do_expediente(app):
+    """Equivalente local ao fixture homônimo de test_demanda.py — não importado de lá porque
+    não há precedente no projeto de fixture compartilhada entre módulos de teste fora de
+    conftest.py, e promover para conftest.py estaria fora do escopo desta correção."""
+    from app.api.routes import demandas as rotas
+
+    original = rotas.demanda_service.regra_expediente
+    rotas.demanda_service.regra_expediente = _regra_todos_os_dias()
+    yield
+    rotas.demanda_service.regra_expediente = original
 
 
 def _criar_demanda(client: TestClient, **extra) -> dict:
@@ -184,7 +208,9 @@ def test_f_concluida_para_concluida_nao_sobrescreve(client_admin: TestClient) ->
     assert repetida["slaResolvidoEm"] == primeira
 
 
-def test_g_reabre_e_conclui_novamente_preserva_primeira_resolucao(client_admin: TestClient) -> None:
+def test_g_reabre_e_conclui_novamente_preserva_primeira_resolucao(
+    client_admin: TestClient, dentro_do_expediente
+) -> None:
     demanda = _criar_demanda(client_admin)
     primeira = _patch_status(client_admin, demanda["id"], "concluida")["slaResolvidoEm"]
 
@@ -403,7 +429,7 @@ def test_o_regra_arquivada_depois_nao_muda_resolucao(
 
 
 def test_p_demanda_ja_concluida_antes_da_fase_sem_backfill(
-    client_admin: TestClient, db_session: Session, empresa: Empresa
+    client_admin: TestClient, db_session: Session, empresa: Empresa, dentro_do_expediente
 ) -> None:
     """Simula uma Demanda que já estava `concluida` no momento do deploy desta fase —
     `sla_resolvido_em` não é preenchido retroativamente. Só uma transição real POSTERIOR
