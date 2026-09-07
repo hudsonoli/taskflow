@@ -9,21 +9,41 @@ import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { Textarea } from "@/components/ui/Textarea";
-import { slaPrioridadeAlvoLabels, type SlaPrioridadeAlvo, type SlaRegra, type SlaRegraFormDraft } from "@/types/sla";
+import {
+  slaPrioridadeAlvoLabels,
+  slaUnidadePrazoLabels,
+  type SlaPrioridadeAlvo,
+  type SlaRegra,
+  type SlaRegraFormDraft,
+  type SlaUnidadePrazo,
+} from "@/types/sla";
 import type { ClienteDiretorioItem } from "@/lib/api-backend";
 import type { DepartamentoDiretorioItem } from "@/lib/api-backend";
+
+const opcoesPrioridade: { value: SlaPrioridadeAlvo | ""; label: string }[] = [
+  { value: "", label: "Todas as prioridades" },
+  ...Object.entries(slaPrioridadeAlvoLabels).map(([value, label]) => ({ value: value as SlaPrioridadeAlvo, label })),
+];
+
+const opcoesUnidade = Object.entries(slaUnidadePrazoLabels).map(([value, label]) => ({
+  value: value as SlaUnidadePrazo,
+  label,
+}));
 
 function createInitialDraft(regra?: SlaRegra): SlaRegraFormDraft {
   return {
     nome: regra?.nome ?? "",
     descricao: regra?.descricao ?? "",
-    prioridade: regra?.prioridade ?? "todas",
+    prioridadeAlvo: regra?.prioridadeAlvo ?? "",
     departamentoId: regra?.departamentoId ?? "",
     clienteId: regra?.clienteId ?? "",
-    prazoPrimeiraRespostaHoras: regra?.prazoPrimeiraRespostaHoras ?? 4,
-    prazoResolucaoHoras: regra?.prazoResolucaoHoras ?? 48,
+    prioridadeRegra: regra?.prioridadeRegra ?? 100,
+    prazoPrimeiraRespostaQuantidade: regra?.prazoPrimeiraRespostaQuantidade ?? 4,
+    prazoPrimeiraRespostaUnidade: regra?.prazoPrimeiraRespostaUnidade ?? "horas",
+    prazoResolucaoQuantidade: regra?.prazoResolucaoQuantidade ?? 48,
+    prazoResolucaoUnidade: regra?.prazoResolucaoUnidade ?? "horas",
     considerarApenasExpediente: regra?.considerarApenasExpediente ?? true,
-    ativo: regra?.ativo ?? true,
+    status: regra?.status === "inativo" ? "inativo" : "ativo",
   };
 }
 
@@ -32,6 +52,8 @@ export function SlaFormModal({
   regra,
   departamentos,
   clientes,
+  salvando,
+  erro,
   onClose,
   onSave,
 }: {
@@ -39,6 +61,8 @@ export function SlaFormModal({
   regra?: SlaRegra;
   departamentos: DepartamentoDiretorioItem[];
   clientes: ClienteDiretorioItem[];
+  salvando: boolean;
+  erro: string | null;
   onClose: () => void;
   onSave: (draft: SlaRegraFormDraft, slaRegraId?: string) => void;
 }) {
@@ -46,7 +70,11 @@ export function SlaFormModal({
 
   const editing = regra !== undefined;
   const canSave =
-    draft.nome.trim().length > 0 && draft.prazoPrimeiraRespostaHoras > 0 && draft.prazoResolucaoHoras > 0;
+    !salvando &&
+    draft.nome.trim().length > 0 &&
+    draft.prioridadeRegra >= 1 &&
+    draft.prazoPrimeiraRespostaQuantidade > 0 &&
+    draft.prazoResolucaoQuantidade > 0;
 
   function updateDraft(patch: Partial<SlaRegraFormDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -64,7 +92,7 @@ export function SlaFormModal({
               {editing ? `Editando: ${regra.nome}` : "Nova regra de SLA"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Cadastro local — define prazos de resposta e resolução para o escopo selecionado.
+              Define prazos de resposta e resolução para o escopo selecionado.
             </p>
           </div>
         </div>
@@ -79,6 +107,12 @@ export function SlaFormModal({
       </div>
 
       <div className="mt-6 flex flex-col gap-4">
+        {erro && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+            {erro}
+          </div>
+        )}
+
         <Input label="Nome da regra" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
 
         <Textarea
@@ -90,9 +124,9 @@ export function SlaFormModal({
 
         <Select
           label="Prioridade alvo"
-          value={draft.prioridade}
-          onChange={(event) => updateDraft({ prioridade: event.target.value as SlaPrioridadeAlvo })}
-          options={Object.entries(slaPrioridadeAlvoLabels).map(([value, label]) => ({ value, label }))}
+          value={draft.prioridadeAlvo}
+          onChange={(event) => updateDraft({ prioridadeAlvo: event.target.value as SlaPrioridadeAlvo | "" })}
+          options={opcoesPrioridade}
         />
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -114,20 +148,46 @@ export function SlaFormModal({
           />
         </div>
 
+        <div>
+          <Input
+            label="Precedência da regra"
+            type="number"
+            min={1}
+            value={draft.prioridadeRegra}
+            onChange={(event) => updateDraft({ prioridadeRegra: Number(event.target.value) })}
+          />
+          <p className="mt-1 text-xs text-zinc-400">Menor número = maior precedência.</p>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Input
-            label="Prazo de 1ª resposta (horas)"
+            label="Prazo de 1ª resposta"
             type="number"
             min={1}
-            value={draft.prazoPrimeiraRespostaHoras}
-            onChange={(event) => updateDraft({ prazoPrimeiraRespostaHoras: Number(event.target.value) })}
+            value={draft.prazoPrimeiraRespostaQuantidade}
+            onChange={(event) => updateDraft({ prazoPrimeiraRespostaQuantidade: Number(event.target.value) })}
           />
+          <Select
+            label="Unidade — 1ª resposta"
+            value={draft.prazoPrimeiraRespostaUnidade}
+            onChange={(event) => updateDraft({ prazoPrimeiraRespostaUnidade: event.target.value as SlaUnidadePrazo })}
+            options={opcoesUnidade}
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <Input
-            label="Prazo de resolução (horas)"
+            label="Prazo de resolução"
             type="number"
             min={1}
-            value={draft.prazoResolucaoHoras}
-            onChange={(event) => updateDraft({ prazoResolucaoHoras: Number(event.target.value) })}
+            value={draft.prazoResolucaoQuantidade}
+            onChange={(event) => updateDraft({ prazoResolucaoQuantidade: Number(event.target.value) })}
+          />
+          <Select
+            label="Unidade — resolução"
+            value={draft.prazoResolucaoUnidade}
+            onChange={(event) => updateDraft({ prazoResolucaoUnidade: event.target.value as SlaUnidadePrazo })}
+            options={opcoesUnidade}
           />
         </div>
 
@@ -135,14 +195,20 @@ export function SlaFormModal({
           <Switch
             checked={draft.considerarApenasExpediente}
             onChange={(checked) => updateDraft({ considerarApenasExpediente: checked })}
-            label="Contar prazo apenas no horário de expediente"
+            label="Considerar apenas horário de expediente"
             description="Usa o Horário de expediente configurado — fora dele, o prazo não avança."
           />
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
-          <Switch checked={draft.ativo} onChange={(checked) => updateDraft({ ativo: checked })} label={draft.ativo ? "Ativa" : "Inativa"} />
-        </div>
+        {editing && (
+          <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+            <Switch
+              checked={draft.status === "ativo"}
+              onChange={(checked) => updateDraft({ status: checked ? "ativo" : "inativo" })}
+              label={draft.status === "ativo" ? "Ativa" : "Inativa"}
+            />
+          </div>
+        )}
       </div>
 
       <div className="mt-6 flex flex-col justify-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800 sm:flex-row">
@@ -150,7 +216,7 @@ export function SlaFormModal({
           Cancelar
         </Button>
         <Button type="button" disabled={!canSave} onClick={() => onSave(draft, regra?.id)}>
-          Salvar alterações
+          {salvando ? "Salvando…" : "Salvar alterações"}
         </Button>
       </div>
     </Modal>

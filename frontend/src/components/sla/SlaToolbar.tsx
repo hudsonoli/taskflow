@@ -2,14 +2,29 @@
 
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Tabs } from "@/components/ui/Tabs";
+import type { SlaRegraStatus } from "@/types/sla";
+
+export type FiltroStatus = "todos" | SlaRegraStatus;
+
+const tabsFiltro: { id: FiltroStatus; label: string }[] = [
+  { id: "todos", label: "Todos" },
+  { id: "ativo", label: "Ativas" },
+  { id: "inativo", label: "Inativas" },
+  { id: "arquivado", label: "Arquivadas" },
+];
 
 export function SlaToolbar({
   query,
   onQueryChange,
+  filtro,
+  onFiltroChange,
   onNewRegra,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
+  filtro: FiltroStatus;
+  onFiltroChange: (value: FiltroStatus) => void;
   onNewRegra: () => void;
 }) {
   return (
@@ -32,6 +47,10 @@ export function SlaToolbar({
           <Plus className="h-4 w-4" />
           Nova regra de SLA
         </Button>
+      </div>
+
+      <div className="mt-4">
+        <Tabs tabs={tabsFiltro} activeTab={filtro} onChange={(id) => onFiltroChange(id as FiltroStatus)} />
       </div>
     </div>
   );

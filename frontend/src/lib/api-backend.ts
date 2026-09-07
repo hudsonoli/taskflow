@@ -48,6 +48,7 @@ import type { CategoriaPeca, CategoriaPecaDiretorioItem, CategoriaPecaFormDraft 
 import type { Peca, PecaDiretorioItem, PecaFormDraft } from "@/types/peca";
 import type { ModeloCampanha, ModeloCampanhaDiretorioItem, ModeloCampanhaFormDraft } from "@/types/modelo-campanha";
 import { itemModeloCampanhaDraftParaPayload } from "@/lib/modeloCampanhaItens";
+import type { SlaRegra, SlaRegraFormDraft, SlaRegraStatus } from "@/types/sla";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -119,6 +120,16 @@ export class ModeloCampanhaArquivadoConflictError extends Error {
     super(message);
     this.name = "ModeloCampanhaArquivadoConflictError";
     this.modeloCampanhaArquivadoId = modeloCampanhaArquivadoId;
+  }
+}
+
+export class SlaRegraArquivadaConflictError extends Error {
+  slaRegraArquivadaId: string;
+
+  constructor(message: string, slaRegraArquivadaId: string) {
+    super(message);
+    this.name = "SlaRegraArquivadaConflictError";
+    this.slaRegraArquivadaId = slaRegraArquivadaId;
   }
 }
 
@@ -199,6 +210,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new ModeloCampanhaArquivadoConflictError(
         message ?? "Modelo de campanha arquivado já existe",
         detail.modeloCampanhaArquivadoId,
+      );
+    }
+    if (detail && typeof detail === "object" && detail.code === "SLA_REGRA_ARQUIVADA_EXISTENTE") {
+      throw new SlaRegraArquivadaConflictError(
+        message ?? "Regra de SLA arquivada já existe",
+        detail.slaRegraArquivadaId,
       );
     }
     if (detail && typeof detail === "object" && detail.code === "FORA_DE_EXPEDIENTE") {
@@ -2098,4 +2115,73 @@ export async function atualizarProjetoModeloCampanhaSnapshotReal(
     method: "PATCH",
     body: JSON.stringify({ itens: draft.itens.map(itemModeloCampanhaDraftParaPayload) }),
   });
+}
+
+// ---------------------------------------------------------------------------------
+// SLA — configuração de regras (Fase 2G.6B backend / 2G.6E2 UI)
+// ---------------------------------------------------------------------------------
+//
+// `SlaRegraRead` do backend já devolve exatamente o formato de `SlaRegra` (camelCase via
+// alias Pydantic) — sem mapeamento aqui. `""` do Combobox/Select do formulário nunca é
+// enviado ao backend: a fronteira é só `slaRegraDraftParaPayload`, abaixo.
+//
+// `GET /slas` sem `status` OCULTA arquivado (mesmo comportamento de `/modelos-campanha`) —
+// não existe forma de trazer os 3 status numa única chamada; ver `listSlaRegrasReais`.
+
+function slaRegraDraftParaPayload(draft: SlaRegraFormDraft) {
+  return {
+    nome: draft.nome.trim(),
+    descricao: draft.descricao.trim() || null,
+    prioridadeAlvo: draft.prioridadeAlvo || null,
+    departamentoId: draft.departamentoId || null,
+    clienteId: draft.clienteId || null,
+    prioridadeRegra: draft.prioridadeRegra,
+    prazoPrimeiraRespostaQuantidade: draft.prazoPrimeiraRespostaQuantidade,
+    prazoPrimeiraRespostaUnidade: draft.prazoPrimeiraRespostaUnidade,
+    prazoResolucaoQuantidade: draft.prazoResolucaoQuantidade,
+    prazoResolucaoUnidade: draft.prazoResolucaoUnidade,
+    considerarApenasExpediente: draft.considerarApenasExpediente,
+  };
+}
+
+export async function listSlaRegrasReais(params?: {
+  status?: SlaRegraStatus;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<SlaRegra[]> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  query.set("limit", String(params?.limit ?? 200));
+  if (params?.offset) query.set("offset", String(params.offset));
+  return request<SlaRegra[]>(`/slas?${query.toString()}`);
+}
+
+// Um único POST — SlaRegraCreate não aceita `status`, e a regra sempre nasce ativa (o Switch
+// ativo/inativo do form só existe em modo edição, então `draft.status` já chega "ativo" aqui).
+// Nunca há PATCH de status encadeado após o create.
+export async function criarSlaRegraReal(draft: SlaRegraFormDraft): Promise<SlaRegra> {
+  return request<SlaRegra>("/slas", {
+    method: "POST",
+    body: JSON.stringify(slaRegraDraftParaPayload(draft)),
+  });
+}
+
+export async function atualizarSlaRegraReal(slaRegraId: string, draft: SlaRegraFormDraft): Promise<SlaRegra> {
+  return request<SlaRegra>(`/slas/${slaRegraId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...slaRegraDraftParaPayload(draft), status: draft.status }),
+  });
+}
+
+export async function arquivarSlaRegraReal(slaRegraId: string, motivoArquivamento: string): Promise<SlaRegra> {
+  return request<SlaRegra>(`/slas/${slaRegraId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+}
+
+export async function restaurarSlaRegraReal(slaRegraId: string): Promise<SlaRegra> {
+  return request<SlaRegra>(`/slas/${slaRegraId}/restaurar`, { method: "POST" });
 }
