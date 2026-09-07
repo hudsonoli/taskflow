@@ -47,6 +47,15 @@ class Settings:
     bootstrap_default_password: str | None = field(
         default_factory=lambda: os.getenv("BOOTSTRAP_DEFAULT_PASSWORD")
     )
+    # Chave mestra Fernet pra criptografar `ConfiguracaoEmail.smtp_senha_criptografada` (Fase
+    # 2G.7B1) — nunca persistida, só variável de ambiente. Deliberadamente SEM validação aqui
+    # e SEM guarda de produção em __post_init__ (ao contrário de auth_secret_key): a ausência
+    # não pode derrubar o boot de toda a aplicação por uma feature que a Empresa pode nunca
+    # usar. Quem precisa dela de verdade (salvar/descriptografar senha, testar conexão) valida
+    # a presença e o formato na hora, em ConfiguracaoEmailCryptoService — nunca aqui.
+    email_config_encryption_key: str | None = field(
+        default_factory=lambda: os.getenv("EMAIL_CONFIG_ENCRYPTION_KEY")
+    )
 
     def __post_init__(self) -> None:
         # Falha no boot, não na primeira emissão de código: um APP_TIMEZONE inválido só

@@ -149,6 +149,11 @@ class DomainEventType(StrEnum):
     SLA_REGRA_ARQUIVADA = "sla_regra.arquivada"
     SLA_REGRA_RESTAURADA = "sla_regra.restaurada"
 
+    # ConfiguracaoEmail (Fase 2G.7B1) é singleton por Empresa, mesmo padrão de
+    # RegraExpediente — sem criado/arquivado/restaurado, só alterado (a criação do primeiro
+    # PATCH não é uma ação semanticamente diferente de uma edição comum).
+    CONFIGURACAO_EMAIL_ALTERADA = "configuracao_email.alterada"
+
     AUTH_LOGIN_SUCESSO = "auth.login_sucesso"
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"
