@@ -1,13 +1,11 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { configuracaoEmailMock } from "@/lib/configuracao-email-mock";
 import { configuracaoNumeracaoTarefaMock } from "@/lib/configuracao-numeracao-tarefa-mock";
 import { fetchSessao, fetchUsuarioAtualCompleto, logout as logoutRequest } from "@/lib/auth";
 import { listDemandasReais } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
-import type { ConfiguracaoEmail } from "@/types/configuracao-email";
 import type { ConfiguracaoNumeracaoTarefa } from "@/types/configuracao-numeracao-tarefa";
 
 interface AppDataContextValue {
@@ -26,8 +24,6 @@ interface AppDataContextValue {
   setDemandas: Dispatch<SetStateAction<Demanda[]>>;
   demandasCarregando: boolean;
   recarregarDemandas: () => Promise<void>;
-  configuracaoEmail: ConfiguracaoEmail;
-  setConfiguracaoEmail: Dispatch<SetStateAction<ConfiguracaoEmail>>;
   configuracaoNumeracaoTarefa: ConfiguracaoNumeracaoTarefa;
   setConfiguracaoNumeracaoTarefa: Dispatch<SetStateAction<ConfiguracaoNumeracaoTarefa>>;
   // Intenção de abrir uma tarefa específica (ex.: clique em notificação) — consumida pela tela de Tarefas.
@@ -50,7 +46,6 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [demandasCarregando, setDemandasCarregando] = useState(true);
-  const [configuracaoEmail, setConfiguracaoEmail] = useState<ConfiguracaoEmail>(configuracaoEmailMock);
   const [configuracaoNumeracaoTarefa, setConfiguracaoNumeracaoTarefa] = useState<ConfiguracaoNumeracaoTarefa>(
     configuracaoNumeracaoTarefaMock,
   );
@@ -144,8 +139,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setDemandas,
         demandasCarregando,
         recarregarDemandas,
-        configuracaoEmail,
-        setConfiguracaoEmail,
         configuracaoNumeracaoTarefa,
         setConfiguracaoNumeracaoTarefa,
         demandaParaAbrir,

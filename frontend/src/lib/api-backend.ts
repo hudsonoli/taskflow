@@ -49,6 +49,11 @@ import type { Peca, PecaDiretorioItem, PecaFormDraft } from "@/types/peca";
 import type { ModeloCampanha, ModeloCampanhaDiretorioItem, ModeloCampanhaFormDraft } from "@/types/modelo-campanha";
 import { itemModeloCampanhaDraftParaPayload } from "@/lib/modeloCampanhaItens";
 import type { SlaRegra, SlaRegraFormDraft, SlaRegraStatus } from "@/types/sla";
+import type {
+  ConfiguracaoEmailFormDraft,
+  ConfiguracaoEmailRead,
+  ConfiguracaoEmailTesteResultado,
+} from "@/types/configuracao-email";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -2184,4 +2189,52 @@ export async function arquivarSlaRegraReal(slaRegraId: string, motivoArquivament
 
 export async function restaurarSlaRegraReal(slaRegraId: string): Promise<SlaRegra> {
   return request<SlaRegra>(`/slas/${slaRegraId}/restaurar`, { method: "POST" });
+}
+
+// ---------------------------------------------------------------------------------
+// Configuração de e-mail — singleton por Empresa (Fase 2G.7B1 backend / 2G.7B2 UI)
+// ---------------------------------------------------------------------------------
+//
+// `ConfiguracaoEmailRead` do backend já devolve exatamente o formato de
+// `ConfiguracaoEmailRead` (camelCase via alias Pydantic) — sem mapeamento aqui. `""` dos
+// inputs do formulário nunca é enviado ao backend: a fronteira é só
+// `configuracaoEmailDraftParaPayload`, abaixo.
+//
+// `smtpSenha` tem uma fronteira própria, diferente dos outros campos: usa `undefined` (não
+// `null`) pra representar "omitido" — `JSON.stringify` remove chaves `undefined` do corpo
+// enviado, que é exatamente o que faz o backend preservar o ciphertext atual (ver
+// ConfiguracaoEmailUpdate no backend, semântica de três estados). Nunca enviar `smtpSenha:
+// ""` — o backend rejeita com 422.
+
+function configuracaoEmailDraftParaPayload(draft: ConfiguracaoEmailFormDraft) {
+  return {
+    smtpHost: draft.smtpHost.trim() || null,
+    smtpPort: draft.smtpPort.trim() ? Number(draft.smtpPort) : null,
+    smtpUsuario: draft.smtpUsuario.trim() || null,
+    smtpSenha: draft.removerSenha ? null : draft.smtpSenha.trim() ? draft.smtpSenha : undefined,
+    remetenteEmail: draft.remetenteEmail.trim() || null,
+    remetenteNome: draft.remetenteNome.trim() || null,
+    usarTls: draft.usarTls,
+    usarSsl: draft.usarSsl,
+    ativo: draft.ativo,
+  };
+}
+
+export async function obterConfiguracaoEmailReal(): Promise<ConfiguracaoEmailRead> {
+  return request<ConfiguracaoEmailRead>("/configuracoes/email");
+}
+
+export async function atualizarConfiguracaoEmailReal(
+  draft: ConfiguracaoEmailFormDraft,
+): Promise<ConfiguracaoEmailRead> {
+  return request<ConfiguracaoEmailRead>("/configuracoes/email", {
+    method: "PATCH",
+    body: JSON.stringify(configuracaoEmailDraftParaPayload(draft)),
+  });
+}
+
+// Sem body — o endpoint usa só a configuração já persistida (nunca um draft arbitrário, ver
+// docstring do backend sobre a mitigação de SSRF).
+export async function testarConfiguracaoEmailReal(): Promise<ConfiguracaoEmailTesteResultado> {
+  return request<ConfiguracaoEmailTesteResultado>("/configuracoes/email/testar", { method: "POST" });
 }

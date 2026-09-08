@@ -53,7 +53,7 @@ export const gruposConfiguracao: GrupoConfiguracao[] = [
   {
     titulo: "Integrações",
     itens: [
-      { label: "Configuração de e-mail", description: "Conta de disparo — login Google/M365 ou SMTP manual.", href: "/configuracoes/email", icon: Mail, available: true },
+      { label: "Configuração de e-mail", description: "Servidor SMTP usado para disparar e-mails do sistema.", href: "/configuracoes/email", icon: Mail, available: true },
     ],
   },
 ];
