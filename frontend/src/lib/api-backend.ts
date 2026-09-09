@@ -42,7 +42,7 @@ import type {
   WorkflowModeloFormDraft,
   WorkflowModeloStatus,
 } from "@/types/workflow-modelo";
-import type { TipoTarefaDiretorioItem } from "@/types/tipo-tarefa";
+import type { TipoTarefa, TipoTarefaDiretorioItem, TipoTarefaFormDraft, TipoTarefaStatus } from "@/types/tipo-tarefa";
 import type { EstadoExpediente, RegraExpediente, RegraExpedienteUpdateDraft } from "@/types/regra-expediente";
 import type { CategoriaPeca, CategoriaPecaDiretorioItem, CategoriaPecaFormDraft } from "@/types/categoria-peca";
 import type { Peca, PecaDiretorioItem, PecaFormDraft } from "@/types/peca";
@@ -139,6 +139,16 @@ export class SlaRegraArquivadaConflictError extends Error {
   }
 }
 
+export class TipoTarefaArquivadoConflictError extends Error {
+  tipoTarefaArquivadoId: string;
+
+  constructor(message: string, tipoTarefaArquivadoId: string) {
+    super(message);
+    this.name = "TipoTarefaArquivadoConflictError";
+    this.tipoTarefaArquivadoId = tipoTarefaArquivadoId;
+  }
+}
+
 // Janela de HOJE (não a regra inteira, que agora é por dia da semana — Fase 2G.3). `null` nos
 // quatro horários quando hoje não é dia útil (ver DemandaForaDeExpedienteError no backend).
 export type JanelaExpediente = {
@@ -222,6 +232,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new SlaRegraArquivadaConflictError(
         message ?? "Regra de SLA arquivada já existe",
         detail.slaRegraArquivadaId,
+      );
+    }
+    if (detail && typeof detail === "object" && detail.code === "TIPO_TAREFA_ARQUIVADO_EXISTENTE") {
+      throw new TipoTarefaArquivadoConflictError(
+        message ?? "Tipo de tarefa arquivado já existe",
+        detail.tipoTarefaArquivadoId,
       );
     }
     if (detail && typeof detail === "object" && detail.code === "FORA_DE_EXPEDIENTE") {
@@ -1800,6 +1816,90 @@ type TipoTarefaDiretorioApi = {
 
 export async function listDiretorioTiposTarefa(): Promise<TipoTarefaDiretorioItem[]> {
   return request<TipoTarefaDiretorioApi[]>("/tipos-tarefa/diretorio");
+}
+
+// CRUD real (Fase 2G.9) — cadastro administrativo, mesmo padrão de Departamento/
+// WorkflowModelo (arquivar/restaurar dedicados, status "arquivado" nunca aceito via PATCH).
+type TipoTarefaReadApi = {
+  id: string;
+  empresaId: string;
+  nome: string;
+  descricao: string | null;
+  ordem: number;
+  status: TipoTarefaStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function mapTipoTarefaReadToTipoTarefa(data: TipoTarefaReadApi): TipoTarefa {
+  return {
+    id: data.id,
+    empresaId: data.empresaId,
+    nome: data.nome,
+    descricao: data.descricao ?? "",
+    ordem: data.ordem,
+    status: data.status,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  };
+}
+
+function tipoTarefaDraftParaPayload(draft: TipoTarefaFormDraft) {
+  return {
+    nome: draft.nome,
+    descricao: draft.descricao || null,
+    ordem: draft.ordem,
+  };
+}
+
+export async function listTiposTarefaReais(params?: { status?: string; search?: string }): Promise<TipoTarefa[]> {
+  const query = new URLSearchParams({ limit: "200" });
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  const data = await request<TipoTarefaReadApi[]>(`/tipos-tarefa?${query.toString()}`);
+  return data.map(mapTipoTarefaReadToTipoTarefa);
+}
+
+export async function criarTipoTarefaReal(draft: TipoTarefaFormDraft): Promise<TipoTarefa> {
+  const criado = await request<TipoTarefaReadApi>("/tipos-tarefa", {
+    method: "POST",
+    body: JSON.stringify(tipoTarefaDraftParaPayload(draft)),
+  });
+  // status só é aceito no PATCH — criar sempre nasce ativo.
+  if (draft.status === "inativo") {
+    return atualizarTipoTarefaReal(criado.id, draft);
+  }
+  return mapTipoTarefaReadToTipoTarefa(criado);
+}
+
+export async function atualizarTipoTarefaReal(
+  tipoTarefaId: string,
+  draft: TipoTarefaFormDraft,
+): Promise<TipoTarefa> {
+  const atualizado = await request<TipoTarefaReadApi>(`/tipos-tarefa/${tipoTarefaId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...tipoTarefaDraftParaPayload(draft), status: draft.status }),
+  });
+  return mapTipoTarefaReadToTipoTarefa(atualizado);
+}
+
+// "Excluir" = arquivar (soft-delete permanente) — ver docs/padrao-arquivamento.md.
+export async function arquivarTipoTarefaReal(
+  tipoTarefaId: string,
+  motivoArquivamento: string,
+): Promise<TipoTarefa> {
+  const arquivado = await request<TipoTarefaReadApi>(`/tipos-tarefa/${tipoTarefaId}/arquivar`, {
+    method: "POST",
+    body: JSON.stringify({ motivoArquivamento }),
+  });
+  return mapTipoTarefaReadToTipoTarefa(arquivado);
+}
+
+export async function restaurarTipoTarefaReal(tipoTarefaId: string): Promise<TipoTarefa> {
+  const restaurado = await request<TipoTarefaReadApi>(`/tipos-tarefa/${tipoTarefaId}/restaurar`, {
+    method: "POST",
+  });
+  return mapTipoTarefaReadToTipoTarefa(restaurado);
 }
 
 // Detalhe completo (com etapas) — aberto a qualquer autenticado, não só admin/gestor: quem

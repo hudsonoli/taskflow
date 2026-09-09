@@ -29,7 +29,7 @@ export const gruposConfiguracao: GrupoConfiguracao[] = [
       { label: "Departamentos", description: "Setores da operação e responsáveis.", href: "/configuracoes/departamentos", icon: Building2, available: true },
       { label: "Equipes", description: "Squads e times, com líder e membros.", href: "/configuracoes/equipes", icon: UsersRound, available: true },
       { label: "Workflows", description: "Modelos de etapas padrão para o cadastro de tarefas.", href: "/configuracoes/workflows", icon: Workflow, available: true },
-      { label: "Tipos de tarefa", description: "Categorias de demanda.", href: "#", icon: ClipboardList, available: false },
+      { label: "Tipos de tarefa", description: "Categorias de demanda usadas nos modelos de campanha.", href: "/configuracoes/tipos-tarefa", icon: ClipboardList, available: true },
       { label: "Modelos de campanha", description: "Biblioteca reutilizável de estruturas de campanha.", href: "/configuracoes/modelos-campanha", icon: LayoutTemplate, available: true },
     ],
   },
