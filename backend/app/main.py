@@ -6,6 +6,7 @@ from app.api.routes import (
     clientes,
     auth,
     configuracao_email,
+    configuracao_numeracao_tarefa,
     demanda_arquivos,
     demanda_checklist,
     demanda_comentarios,
@@ -75,6 +76,7 @@ app.include_router(workflow_modelos.router)
 app.include_router(tipos_tarefa.router)
 app.include_router(sla_regras.router)
 app.include_router(configuracao_email.router)
+app.include_router(configuracao_numeracao_tarefa.router)
 app.include_router(regra_expediente.router)
 app.include_router(expediente.router)
 app.include_router(auth.router)

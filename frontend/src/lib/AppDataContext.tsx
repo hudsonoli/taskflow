@@ -1,12 +1,10 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { configuracaoNumeracaoTarefaMock } from "@/lib/configuracao-numeracao-tarefa-mock";
 import { fetchSessao, fetchUsuarioAtualCompleto, logout as logoutRequest } from "@/lib/auth";
 import { listDemandasReais } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
-import type { ConfiguracaoNumeracaoTarefa } from "@/types/configuracao-numeracao-tarefa";
 
 interface AppDataContextValue {
   /**
@@ -24,8 +22,6 @@ interface AppDataContextValue {
   setDemandas: Dispatch<SetStateAction<Demanda[]>>;
   demandasCarregando: boolean;
   recarregarDemandas: () => Promise<void>;
-  configuracaoNumeracaoTarefa: ConfiguracaoNumeracaoTarefa;
-  setConfiguracaoNumeracaoTarefa: Dispatch<SetStateAction<ConfiguracaoNumeracaoTarefa>>;
   // Intenção de abrir uma tarefa específica (ex.: clique em notificação) — consumida pela tela de Tarefas.
   demandaParaAbrir: { demandaId: string; aba?: string } | null;
   setDemandaParaAbrir: Dispatch<SetStateAction<{ demandaId: string; aba?: string } | null>>;
@@ -46,9 +42,6 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [demandasCarregando, setDemandasCarregando] = useState(true);
-  const [configuracaoNumeracaoTarefa, setConfiguracaoNumeracaoTarefa] = useState<ConfiguracaoNumeracaoTarefa>(
-    configuracaoNumeracaoTarefaMock,
-  );
   const [demandaParaAbrir, setDemandaParaAbrir] = useState<{ demandaId: string; aba?: string } | null>(null);
 
   const [sessaoCarregando, setSessaoCarregando] = useState(true);
@@ -139,8 +132,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setDemandas,
         demandasCarregando,
         recarregarDemandas,
-        configuracaoNumeracaoTarefa,
-        setConfiguracaoNumeracaoTarefa,
         demandaParaAbrir,
         setDemandaParaAbrir,
         sessaoCarregando,

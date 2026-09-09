@@ -54,6 +54,7 @@ import type {
   ConfiguracaoEmailRead,
   ConfiguracaoEmailTesteResultado,
 } from "@/types/configuracao-email";
+import type { ConfiguracaoNumeracaoTarefaRead } from "@/types/configuracao-numeracao-tarefa";
 
 // Conflito de criação contra um registro arquivado (soft-delete permanente — ver
 // docs/padrao-arquivamento.md). Distinto de um Error genérico pra a UI poder oferecer
@@ -2237,4 +2238,16 @@ export async function atualizarConfiguracaoEmailReal(
 // docstring do backend sobre a mitigação de SSRF).
 export async function testarConfiguracaoEmailReal(): Promise<ConfiguracaoEmailTesteResultado> {
   return request<ConfiguracaoEmailTesteResultado>("/configuracoes/email/testar", { method: "POST" });
+}
+
+// ---------------------------------------------------------------------------------
+// Configuração de numeração de tarefas — leitura real, sem escrita (Fase 2G.8B)
+// ---------------------------------------------------------------------------------
+//
+// Representa `numero_operacional` (contínuo, sem ano — ver types/configuracao-numeracao-
+// tarefa.ts), nunca `codigoReferencia`. Só GET: não existe PATCH nem endpoint de ajuste —
+// o único mecanismo de inicialização do contador é o CLI administrativo do backend.
+
+export async function obterNumeracaoTarefaReal(): Promise<ConfiguracaoNumeracaoTarefaRead> {
+  return request<ConfiguracaoNumeracaoTarefaRead>("/configuracoes/numeracao-tarefas");
 }

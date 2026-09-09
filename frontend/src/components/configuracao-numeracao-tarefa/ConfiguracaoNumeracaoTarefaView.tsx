@@ -1,20 +1,64 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Hash } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Hash, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { Input } from "@/components/ui/Input";
-import { formatCodigoTarefa } from "@/lib/ids";
-import { useAppData } from "@/lib/AppDataContext";
+import { EstadoErro } from "@/components/operacional/EstadoErro";
+import { obterNumeracaoTarefaReal } from "@/lib/api-backend";
+import type { ConfiguracaoNumeracaoTarefaRead } from "@/types/configuracao-numeracao-tarefa";
+
+/**
+ * Fase 2G.8B — substitui o mock/local state por leitura real, somente informativa. Sem
+ * formulário, sem edição de ano/contador: o backend não oferece (nem deve oferecer) ajuste
+ * via API — o único mecanismo de inicialização do contador é o CLI administrativo, usado uma
+ * única vez antes da primeira Demanda ir para produção. Esta tela nunca escreve nada.
+ */
+
+function formatarNumero(numero: number): string {
+  return `#${numero}`;
+}
 
 export function ConfiguracaoNumeracaoTarefaView() {
-  const { configuracaoNumeracaoTarefa, setConfiguracaoNumeracaoTarefa } = useAppData();
+  const [dados, setDados] = useState<ConfiguracaoNumeracaoTarefaRead | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
 
-  function updateConfig(patch: Partial<typeof configuracaoNumeracaoTarefa>) {
-    setConfiguracaoNumeracaoTarefa((current) => ({ ...current, ...patch, updatedAt: new Date().toISOString() }));
+  async function carregar() {
+    setCarregando(true);
+    setErro(null);
+    try {
+      setDados(await obterNumeracaoTarefaReal());
+    } catch (error) {
+      setErro(
+        error instanceof Error ? error.message : "Não foi possível carregar a numeração de tarefas.",
+      );
+    } finally {
+      setCarregando(false);
+    }
   }
 
-  const proximoCodigo = formatCodigoTarefa(configuracaoNumeracaoTarefa.ano, configuracaoNumeracaoTarefa.proximoNumero);
+  useEffect(() => {
+    // setTimeout(0) tira o setState síncrono de dentro do corpo do efeito — mesmo padrão já
+    // usado em ConfiguracaoEmailView/AppDataContext.
+    const timeout = setTimeout(() => {
+      void carregar();
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  if (carregando) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white p-10 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Carregando numeração de tarefas…
+      </div>
+    );
+  }
+
+  if (erro || !dados) {
+    return <EstadoErro mensagem={erro ?? "Não foi possível carregar a numeração de tarefas."} onRetry={carregar} />;
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -32,40 +76,62 @@ export function ConfiguracaoNumeracaoTarefaView() {
             <div className="min-w-0">
               <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Numeração de tarefas</h1>
               <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                Código de cada tarefa no formato #AA0000 (ano + sequencial), separado por ano.
+                Gerenciado automaticamente pelo sistema.
               </p>
             </div>
           </div>
-          <Badge tone="blue">Dados locais</Badge>
+          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Ano"
-            type="number"
-            value={configuracaoNumeracaoTarefa.ano}
-            onChange={(event) => updateConfig({ ano: Number(event.target.value) || new Date().getFullYear() })}
-          />
-          <Input
-            label="Iniciar tarefas a partir do número"
-            type="number"
-            min={1}
-            value={configuracaoNumeracaoTarefa.proximoNumero}
-            onChange={(event) => updateConfig({ proximoNumero: Math.max(1, Number(event.target.value) || 1) })}
-          />
+          <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Entidade</p>
+            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{dados.rotuloEntidade}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Status</p>
+            <p className="mt-1 flex items-center gap-1.5 text-lg font-semibold">
+              {dados.consistente ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-emerald-700 dark:text-emerald-400">Consistente</span>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-amber-700 dark:text-amber-400">Atenção necessária</span>
+                </>
+              )}
+            </p>
+          </div>
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-500 dark:text-indigo-400">Contador atual</p>
+            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{formatarNumero(dados.contadorAtual)}</p>
+          </div>
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-500 dark:text-indigo-400">Próximo número</p>
+            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{formatarNumero(dados.proximoNumeroEstimado)}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30 sm:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Maior número emitido no TaskFloww</p>
+            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+              {dados.maiorNumeroEmitido != null ? formatarNumero(dados.maiorNumeroEmitido) : "—"}
+            </p>
+          </div>
         </div>
 
-        <div className="mt-5 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-500 dark:text-indigo-400">Próxima tarefa criada</p>
-          <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{proximoCodigo}</p>
-        </div>
+        {!dados.consistente && (
+          <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            A numeração precisa de verificação administrativa.
+          </div>
+        )}
 
-        <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Ajuste manual — use apenas ao migrar a numeração já usada no iClips ou durante a implementação. A
-          contagem vira automaticamente para 0001 a cada novo ano.
+        <div className="mt-5 flex flex-col gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <p>A numeração é contínua e não reinicia a cada ano.</p>
+          <p>A inicialização para continuidade de sistemas anteriores é feita administrativamente antes da primeira emissão.</p>
         </div>
       </div>
     </div>

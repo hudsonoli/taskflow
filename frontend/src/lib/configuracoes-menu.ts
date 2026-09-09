@@ -47,7 +47,7 @@ export const gruposConfiguracao: GrupoConfiguracao[] = [
       { label: "Permissões", description: "Perfis de acesso (RBAC).", href: "#", icon: ShieldCheck, available: false },
       { label: "SLA", description: "Prazos de resposta e resolução por prioridade, departamento ou cliente.", href: "/configuracoes/sla", icon: Timer, available: true },
       { label: "Horário de expediente", description: "Turnos da agência e pausa automática de tarefas.", href: "/configuracoes/horario-expediente", icon: Clock, available: true },
-      { label: "Numeração de tarefas", description: "Próximo código de tarefa (#AA0000) — ajuste ao migrar do iClips.", href: "/configuracoes/numeracao-tarefas", icon: Hash, available: true },
+      { label: "Numeração de tarefas", description: "Contador contínuo usado na numeração operacional das tarefas.", href: "/configuracoes/numeracao-tarefas", icon: Hash, available: true },
     ],
   },
   {
