@@ -125,6 +125,11 @@ class UsuarioRead(BaseModel):
     restaurado_at: datetime | None = Field(default=None, alias="restauradoAt")
     restaurado_por_usuario_id: UUID | None = Field(default=None, alias="restauradoPorUsuarioId")
     status_anterior_arquivamento: UsuarioStatus | None = Field(default=None, alias="statusAnteriorArquivamento")
+    # Fase 2G.10A — só preenchido em GET /usuarios/me (permissões efetivas de quem está
+    # logado); None em toda listagem/consulta de OUTRO usuário, para não expor os overrides
+    # de uma pessoa a quem só tem require_admin_or_gestor sobre ela. Ainda não autoriza
+    # nada — ver app/core/permissoes.py. Campo aditivo, backward-compatible.
+    permissoes: list[str] | None = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

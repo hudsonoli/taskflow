@@ -38,4 +38,5 @@ from app.models import (  # noqa: F401
     sessao_trabalho,
     usuario,
     usuario_credencial,
+    usuario_permissao,
 )

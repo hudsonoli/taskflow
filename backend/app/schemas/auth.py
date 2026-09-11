@@ -50,5 +50,11 @@ class AuthMeResponse(BaseModel):
     acesso_sistema: bool = Field(alias="acessoSistema")
     status: Literal["ativo", "inativo", "bloqueado", "arquivado"]
     must_change_password: bool = Field(alias="mustChangePassword")
+    # Fase 2G.10A — permissões efetivas (default do perfil + exceções individuais), só
+    # informativo ainda: nenhuma rota usa isto para autorizar nada (ver
+    # app/core/permissoes.py). Lista ordenada deterministicamente por
+    # UsuarioPermissaoService.obter_permissoes_efetivas. Aditivo — campo novo, não remove
+    # nenhum existente.
+    permissoes: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True)

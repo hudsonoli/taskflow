@@ -47,6 +47,7 @@ from app.models import (  # noqa: E402,F401
     tipo_tarefa,
     usuario,
     usuario_credencial,
+    usuario_permissao,
     workflow_modelo,
     workflow_modelo_etapa,
     workflow_modelo_etapa_departamento_responsavel,

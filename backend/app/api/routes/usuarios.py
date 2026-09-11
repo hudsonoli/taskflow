@@ -18,6 +18,7 @@ from app.schemas.usuario import (
     UsuarioRead,
     UsuarioUpdate,
 )
+from app.services.usuario_permissao_service import UsuarioPermissaoService
 from app.services.usuario_service import (
     UsuarioArquivadoConflictError,
     UsuarioConflictError,
@@ -34,6 +35,9 @@ from app.services.usuario_service import (
 # controle de perfil (require_admin/require_admin_or_gestor) por cima disso.
 router = APIRouter(prefix="/usuarios", tags=["usuarios"], dependencies=[Depends(get_current_user_password_ready)])
 usuario_service = UsuarioService()
+# Fase 2G.10A — só usado para preencher UsuarioRead.permissoes em GET /usuarios/me
+# (informativo). Nenhuma outra rota deste arquivo o usa.
+usuario_permissao_service = UsuarioPermissaoService()
 
 PATCH_ALLOWED_FIELDS = {
     "codigoInterno",
@@ -139,7 +143,10 @@ def get_me(
     db: Session = Depends(get_db),
 ):
     usuario = usuario_service.get_me(db, current_user.id)
-    return usuario_service.to_read(usuario)
+    leitura = usuario_service.to_read(usuario)
+    # Fase 2G.10A — só em /me: ver nota em UsuarioRead.permissoes.
+    permissoes = usuario_permissao_service.obter_permissoes_efetivas(db, usuario)
+    return leitura.model_copy(update={"permissoes": permissoes})
 
 
 @router.get("/diretorio", response_model=list[UsuarioDiretorioRead])

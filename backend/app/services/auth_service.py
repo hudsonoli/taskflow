@@ -15,6 +15,7 @@ from app.repositories.usuario_repository import UsuarioRepository
 from app.schemas.auth import AccessTokenResponse, AuthMeResponse
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.empresa_service import STATUS_ATIVA as EMPRESA_STATUS_ATIVA
+from app.services.usuario_permissao_service import UsuarioPermissaoService
 from app.services.usuario_service import STATUS_ATIVO as USUARIO_STATUS_ATIVO
 
 INVALID_CREDENTIALS_MESSAGE = "Credenciais inválidas"
@@ -40,12 +41,15 @@ class AuthService:
         credencial_repository: UsuarioCredencialRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
         settings: Settings | None = None,
+        usuario_permissao_service: UsuarioPermissaoService | None = None,
     ) -> None:
         self.usuario_repository = usuario_repository or UsuarioRepository()
         self.empresa_repository = empresa_repository or EmpresaRepository()
         self.credencial_repository = credencial_repository or UsuarioCredencialRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
         self.settings = settings or get_settings()
+        # Fase 2G.10A — só usado para preencher AuthMeResponse.permissoes (informativo).
+        self.usuario_permissao_service = usuario_permissao_service or UsuarioPermissaoService()
 
     def login(
         self,
@@ -141,6 +145,7 @@ class AuthService:
 
     def me(self, db: Session, usuario: Usuario) -> AuthMeResponse:
         credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)
+        permissoes = self.usuario_permissao_service.obter_permissoes_efetivas(db, usuario)
         return AuthMeResponse(
             usuarioId=usuario.id,
             empresaId=usuario.empresa_id,
@@ -149,6 +154,7 @@ class AuthService:
             acessoSistema=usuario.acesso_sistema,
             status=usuario.status,
             mustChangePassword=bool(credencial and credencial.senha_deve_ser_alterada),
+            permissoes=permissoes,
         )
 
     def alterar_senha(
