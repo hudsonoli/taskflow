@@ -14,6 +14,7 @@ from app.core.permissoes import (
     PERFIL_ADMIN,
     PERFIL_GESTOR,
     PERFIL_OPERADOR,
+    PerfilInvalidoError,
     PermissaoInvalidaError,
     TODAS_AS_PERMISSOES,
     permissoes_efetivas,
@@ -39,13 +40,27 @@ def test_catalogo_sem_chaves_duplicadas_entre_modulos() -> None:
 # --------------------------------------------------------------------------------------
 
 
-def test_default_admin_e_o_catalogo_inteiro() -> None:
-    """admin passa em require_admin e em require_admin_or_gestor em toda rota — não há
-    nenhuma permissão do catálogo que admin não tenha hoje."""
+def test_admin_default_e_enumerado_explicitamente_e_cobre_o_catalogo_atual() -> None:
+    """admin passa em require_admin e em require_admin_or_gestor em toda rota — hoje não há
+    nenhuma permissão do catálogo que admin não tenha. Mas o default de admin em
+    app/core/permissoes.py é uma lista LITERAL, não `TODAS_AS_PERMISSOES` nem uma expressão
+    derivada do catálogo (revisão pré-merge, item 8 — evita privilege creep automático).
+
+    Este teste é o que torna essa disciplina segura: se uma permissão nova entrar em
+    CATALOGO sem alguém decidir conscientemente se admin a recebe, este teste QUEBRA — a
+    omissão nunca passa em silêncio."""
     assert DEFAULTS_POR_PERFIL[PERFIL_ADMIN] == TODAS_AS_PERMISSOES
 
 
-def test_default_gestor_administra_cadastros_mas_nao_usuarios_nem_permissoes() -> None:
+def test_defaults_literais_nao_contem_permissao_fora_do_catalogo() -> None:
+    """Protege contra erro de digitação nas listas literais de admin/gestor/operador — uma
+    string que não bate com nenhuma chave real de CATALOGO é pega aqui, não em produção."""
+    for perfil in (PERFIL_ADMIN, PERFIL_GESTOR, PERFIL_OPERADOR):
+        sobra = DEFAULTS_POR_PERFIL[perfil] - TODAS_AS_PERMISSOES
+        assert not sobra, f"{perfil}: permissões fora do catálogo: {sobra}"
+
+
+def test_default_gestor_administra_cadastros_mas_nao_usuarios() -> None:
     gestor = DEFAULTS_POR_PERFIL[PERFIL_GESTOR]
 
     # Cadastros — require_admin_or_gestor real.
@@ -58,12 +73,12 @@ def test_default_gestor_administra_cadastros_mas_nao_usuarios_nem_permissoes() -
     assert "usuarios.editar" not in gestor
     assert "usuarios.suspender" not in gestor
 
-    # Permissões — nenhuma rota existe ainda; gestor não recebe.
-    assert "permissoes.gerenciar" not in gestor
-
     # Financeiro — hoje ClienteRead/UsuarioRead com dado financeiro são require_admin_or_gestor
     # (ver Fase 2G.10, achado D4/item 18 — não é corrigido aqui).
     assert "financeiro.visualizar" in gestor
+
+    # Tráfego (abrir/fechar sessão de trabalho) — require_admin_or_gestor real.
+    assert "trafego.gerenciar" in gestor
 
 
 def test_default_operador_so_tem_demanda_sem_arquivar() -> None:
@@ -83,11 +98,26 @@ def test_default_operador_nao_inclui_nenhum_cadastro_nem_financeiro_nem_administ
         "financeiro.visualizar",
         "configuracoes.visualizar",
         "relatorios.visualizar",
-        "trafego.visualizar",
-        "permissoes.gerenciar",
+        "trafego.gerenciar",
         "demandas.arquivar",
     }
     assert operador.isdisjoint(bloqueadas)
+
+
+def test_permissoes_gerenciar_nao_existe_ainda() -> None:
+    """Revisão pré-merge (item 3): não existe hoje nenhum endpoint de gestão de permissão —
+    a chave só nasce junto da funcionalidade real, em 2G.10C/2G.10E. Não deixar uma chave
+    "reservada para o futuro" sem ação real por trás."""
+    assert "permissoes.gerenciar" not in TODAS_AS_PERMISSOES
+    assert not any(modulo == "permissoes" for modulo in CATALOGO)
+
+
+def test_trafego_e_uma_permissao_so_e_nomeada_pela_acao_mais_ampla() -> None:
+    """sessoes_trabalho.py inteiro (listar, ver uma, abrir, fechar) usa o mesmo guard
+    (require_admin_or_gestor) — uma permissão só, e "gerenciar" porque cobre escrita
+    (abrir/fechar), não só leitura."""
+    assert CATALOGO["trafego"] == ["trafego.gerenciar"]
+    assert "trafego.visualizar" not in TODAS_AS_PERMISSOES
 
 
 # --------------------------------------------------------------------------------------
@@ -149,9 +179,15 @@ def test_efeito_desconhecido_levanta_erro() -> None:
         permissoes_efetivas(PERFIL_OPERADOR, [("demandas.visualizar", "efeito_invalido")])
 
 
-def test_perfil_desconhecido_levanta_erro() -> None:
-    with pytest.raises(ValueError):
-        permissoes_efetivas("superadmin", [])
+def test_perfil_desconhecido_e_fail_closed() -> None:
+    """Perfil fora de admin/gestor/operador nunca herda default de outro perfil — levanta
+    `PerfilInvalidoError` (subclasse de ValueError) em vez de devolver qualquer conjunto,
+    vazio ou não. Cobre explicitamente os 4 rótulos "ricos" do frontend que nunca são
+    persistidos como perfil_base real (ver types/usuario.ts): se um deles chegasse aqui por
+    engano, tem que quebrar, nunca silenciosamente virar admin/gestor."""
+    for perfil_invalido in ("superadmin", "diretoria", "financeiro", "cliente", "", "ADMIN"):
+        with pytest.raises(PerfilInvalidoError):
+            permissoes_efetivas(perfil_invalido, [])
 
 
 def test_resultado_e_frozenset_imutavel() -> None:
