@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
-from app.dependencies.authorization import ensure_resource_empresa, ensure_same_empresa, require_admin, require_admin_or_gestor
+from app.dependencies.authorization import ensure_resource_empresa, ensure_same_empresa
+from app.dependencies.permissoes import require_permissao
 from app.models.usuario import Usuario
 from app.schemas.usuario import (
     UsuarioCreate,
@@ -32,7 +33,8 @@ from app.services.usuario_service import (
 
 # Gate único pra todas as rotas: autenticado + senha em dia (ver
 # get_current_user_password_ready). As rotas específicas ainda aplicam seu próprio
-# controle de perfil (require_admin/require_admin_or_gestor) por cima disso.
+# controle de acesso (require_permissao) por cima disso — exceto /me e /diretorio, que
+# ficam abertas a qualquer autenticado (ver docstrings das duas rotas abaixo).
 router = APIRouter(prefix="/usuarios", tags=["usuarios"], dependencies=[Depends(get_current_user_password_ready)])
 usuario_service = UsuarioService()
 # Fase 2G.10A — só usado para preencher UsuarioRead.permissoes em GET /usuarios/me
@@ -102,7 +104,7 @@ def handle_usuario_error(exc: Exception) -> None:
 @router.post("", response_model=UsuarioRead, status_code=status.HTTP_201_CREATED)
 def create_usuario(
     usuario: UsuarioCreate,
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_permissao("usuarios.criar")),
     db: Session = Depends(get_db),
 ):
     ensure_same_empresa(usuario.empresa_id, current_user)
@@ -121,7 +123,7 @@ def list_usuarios(
     search: str | None = Query(default=None, alias="search"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("usuarios.visualizar")),
     db: Session = Depends(get_db),
 ):
     ensure_same_empresa(empresa_id, current_user)
@@ -139,6 +141,9 @@ def list_usuarios(
 
 @router.get("/me", response_model=UsuarioRead)
 def get_me(
+    # Aberto a qualquer autenticado — consultar o próprio registro nunca dependeu de
+    # usuarios.visualizar (self-service já é o comportamento atual, fora de escopo desta
+    # onda). Continua fora do enforcement por permissão.
     current_user: Usuario = Depends(get_current_user_password_ready),
     db: Session = Depends(get_db),
 ):
@@ -156,6 +161,9 @@ def list_diretorio(
     search: str | None = Query(default=None, alias="search"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    # Aberto a qualquer autenticado — usado como seletor (ex.: responsável de Demanda),
+    # mesmo padrão de /diretorio nos outros cadastros. Continua fora do enforcement por
+    # permissão.
     current_user: Usuario = Depends(get_current_user_password_ready),
     db: Session = Depends(get_db),
 ):
@@ -174,7 +182,7 @@ def list_diretorio(
 @router.get("/{usuario_id}", response_model=UsuarioRead)
 def get_usuario(
     usuario_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("usuarios.visualizar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -189,7 +197,7 @@ def get_usuario(
 def update_usuario(
     usuario_id: UUID,
     payload: dict[str, Any] = Body(...),
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_permissao("usuarios.editar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -218,7 +226,7 @@ def update_usuario(
 def inativar_usuario(
     usuario_id: UUID,
     payload: UsuarioInativar | None = None,
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_permissao("usuarios.suspender")),
     db: Session = Depends(get_db),
 ):
     if str(usuario_id) == current_user.id:
@@ -241,7 +249,7 @@ def inativar_usuario(
 def reativar_usuario(
     usuario_id: UUID,
     actor_usuario_id: str | None = Body(default=None, embed=True, alias="actorUsuarioId"),
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_permissao("usuarios.suspender")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -257,7 +265,7 @@ def reativar_usuario(
 def bloquear_usuario(
     usuario_id: UUID,
     actor_usuario_id: str | None = Body(default=None, embed=True, alias="actorUsuarioId"),
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_permissao("usuarios.suspender")),
     db: Session = Depends(get_db),
 ):
     if str(usuario_id) == current_user.id:
@@ -275,7 +283,7 @@ def bloquear_usuario(
 def desbloquear_usuario(
     usuario_id: UUID,
     actor_usuario_id: str | None = Body(default=None, embed=True, alias="actorUsuarioId"),
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_permissao("usuarios.suspender")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -291,7 +299,7 @@ def desbloquear_usuario(
 def excluir_usuario(
     usuario_id: UUID,
     payload: UsuarioExcluir,
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_permissao("usuarios.suspender")),
     db: Session = Depends(get_db),
 ):
     if str(usuario_id) == current_user.id:
@@ -313,7 +321,7 @@ def excluir_usuario(
 @router.post("/{usuario_id}/restaurar", response_model=UsuarioRead)
 def restaurar_usuario(
     usuario_id: UUID,
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_permissao("usuarios.suspender")),
     db: Session = Depends(get_db),
 ):
     try:

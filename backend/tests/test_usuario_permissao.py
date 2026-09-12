@@ -221,36 +221,51 @@ def test_usuarios_get_outro_usuario_nao_expoe_permissoes(
     assert resposta.json()["permissoes"] is None
 
 
-def test_usuarios_get_outro_usuario_nao_consulta_overrides(
-    client_admin: TestClient, usuario_gestor: Usuario, monkeypatch
+def test_usuarios_get_outro_usuario_consulta_overrides_uma_vez(
+    client_admin: TestClient, usuario_admin: Usuario, usuario_gestor: Usuario, monkeypatch
 ) -> None:
-    """Item 14 — sem N+1: GET /usuarios/{id} de outra pessoa não pode nem chamar o
-    repository de overrides (não é só que o campo vem None — a query nem deve rodar)."""
+    """Item 14 — sem N+1: desde a Fase 2G.10B (bloco 2A), GET /usuarios/{id} passou a usar
+    `require_permissao("usuarios.visualizar")`, que resolve as permissões efetivas de QUEM
+    FAZ a chamada (não da pessoa consultada) — uma query de overrides por request, nunca
+    zero (isso mudou de propósito nesta fase) e nunca mais de uma (não é N+1 por recurso
+    retornado). O campo `permissoes` da resposta continua None — só /me o preenche."""
+    chamadas = []
+    original = UsuarioPermissaoRepository.list_by_usuario
 
-    def _falha_se_chamado(self, db, *, empresa_id, usuario_id):
-        raise AssertionError("list_by_usuario não deveria ser chamado para GET de outro usuário")
+    def _contar(self, db, *, empresa_id, usuario_id):
+        chamadas.append(usuario_id)
+        return original(self, db, empresa_id=empresa_id, usuario_id=usuario_id)
 
-    monkeypatch.setattr(UsuarioPermissaoRepository, "list_by_usuario", _falha_se_chamado)
+    monkeypatch.setattr(UsuarioPermissaoRepository, "list_by_usuario", _contar)
 
     resposta = client_admin.get(f"/usuarios/{usuario_gestor.id}")
     assert resposta.status_code == 200, resposta.text
     assert resposta.json()["permissoes"] is None
+    # a única chamada resolve as permissões de QUEM FAZ a request (admin), nunca da
+    # pessoa consultada (usuario_gestor) — require_permissao nunca troca de identidade.
+    assert chamadas == [usuario_admin.id]
 
 
-def test_usuarios_listagem_nao_consulta_overrides(
-    client_admin: TestClient, empresa: Empresa, usuario_gestor: Usuario, monkeypatch
+def test_usuarios_listagem_consulta_overrides_uma_vez_nao_por_linha(
+    client_admin: TestClient, empresa: Empresa, usuario_admin: Usuario, usuario_gestor: Usuario, monkeypatch
 ) -> None:
-    """Mesma garantia do teste acima, para GET /usuarios (lista) — nenhuma query de
-    overrides por linha listada."""
+    """Mesma garantia do teste acima, para GET /usuarios (lista): uma query de overrides
+    por request (de quem lista, via `require_permissao`), nunca uma por usuário listado."""
+    chamadas = []
+    original = UsuarioPermissaoRepository.list_by_usuario
 
-    def _falha_se_chamado(self, db, *, empresa_id, usuario_id):
-        raise AssertionError("list_by_usuario não deveria ser chamado em listagem")
+    def _contar(self, db, *, empresa_id, usuario_id):
+        chamadas.append(usuario_id)
+        return original(self, db, empresa_id=empresa_id, usuario_id=usuario_id)
 
-    monkeypatch.setattr(UsuarioPermissaoRepository, "list_by_usuario", _falha_se_chamado)
+    monkeypatch.setattr(UsuarioPermissaoRepository, "list_by_usuario", _contar)
 
     resposta = client_admin.get(f"/usuarios?empresaId={empresa.id}")
     assert resposta.status_code == 200, resposta.text
+    assert len(resposta.json()) >= 2  # admin (self) + usuario_gestor, no mínimo
     assert all(usuario["permissoes"] is None for usuario in resposta.json())
+    # uma chamada só, e é a de quem lista (admin) — não uma por linha devolvida.
+    assert chamadas == [usuario_admin.id]
 
 
 # --------------------------------------------------------------------------------------
