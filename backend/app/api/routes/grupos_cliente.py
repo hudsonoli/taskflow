@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
-from app.dependencies.authorization import ensure_resource_empresa, require_admin_or_gestor
+from app.dependencies.authorization import ensure_resource_empresa
+from app.dependencies.permissoes import require_permissao
 from app.models.usuario import Usuario
 from app.schemas.grupo_cliente import (
     GrupoClienteArquivar,
@@ -50,7 +51,7 @@ def handle_grupo_cliente_error(exc: Exception) -> None:
 @router.post("", response_model=GrupoClienteRead, status_code=status.HTTP_201_CREATED)
 def create_grupo_cliente(
     payload: GrupoClienteCreate,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("grupos_cliente.criar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -68,7 +69,7 @@ def list_grupos_cliente(
     search: str | None = Query(default=None, alias="search"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("grupos_cliente.visualizar")),
     db: Session = Depends(get_db),
 ):
     grupos = grupo_cliente_service.list_grupos_cliente(
@@ -94,7 +95,7 @@ def list_diretorio(
 @router.get("/{grupo_id}", response_model=GrupoClienteRead)
 def get_grupo_cliente(
     grupo_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("grupos_cliente.visualizar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -109,7 +110,7 @@ def get_grupo_cliente(
 def update_grupo_cliente(
     grupo_id: UUID,
     payload: GrupoClienteUpdate,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("grupos_cliente.editar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -131,7 +132,7 @@ def update_grupo_cliente(
 def arquivar_grupo_cliente(
     grupo_id: UUID,
     payload: GrupoClienteArquivar,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("grupos_cliente.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -155,7 +156,7 @@ def arquivar_grupo_cliente(
 @router.post("/{grupo_id}/restaurar", response_model=GrupoClienteRead)
 def restaurar_grupo_cliente(
     grupo_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("grupos_cliente.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:

@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
-from app.dependencies.authorization import ensure_resource_empresa, require_admin_or_gestor
+from app.dependencies.authorization import ensure_resource_empresa
+from app.dependencies.permissoes import require_permissao
 from app.models.usuario import Usuario
 from app.schemas.tipo_tarefa import (
     TipoTarefaArquivar,
@@ -54,7 +55,7 @@ def handle_tipo_tarefa_error(exc: Exception) -> None:
 @router.post("", response_model=TipoTarefaRead, status_code=status.HTTP_201_CREATED)
 def create_tipo_tarefa(
     payload: TipoTarefaCreate,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("tipos_tarefa.criar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -72,7 +73,7 @@ def list_tipos_tarefa(
     search: str | None = Query(default=None, alias="search"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("tipos_tarefa.visualizar")),
     db: Session = Depends(get_db),
 ):
     tipos_tarefa = tipo_tarefa_service.list_tipos_tarefa(
@@ -91,7 +92,7 @@ def list_tipos_tarefa(
 # é aberto a qualquer autenticado porque Nova Tarefa (operacional) também consome.
 @router.get("/diretorio", response_model=list[TipoTarefaDiretorioRead])
 def list_diretorio(
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("tipos_tarefa.visualizar")),
     db: Session = Depends(get_db),
 ):
     tipos_tarefa = tipo_tarefa_service.list_diretorio(db, empresa_id=current_user.empresa_id)
@@ -101,7 +102,7 @@ def list_diretorio(
 @router.get("/{tipo_tarefa_id}", response_model=TipoTarefaRead)
 def get_tipo_tarefa(
     tipo_tarefa_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("tipos_tarefa.visualizar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -116,7 +117,7 @@ def get_tipo_tarefa(
 def update_tipo_tarefa(
     tipo_tarefa_id: UUID,
     payload: TipoTarefaUpdate,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("tipos_tarefa.editar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -138,7 +139,7 @@ def update_tipo_tarefa(
 def arquivar_tipo_tarefa(
     tipo_tarefa_id: UUID,
     payload: TipoTarefaArquivar,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("tipos_tarefa.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -162,7 +163,7 @@ def arquivar_tipo_tarefa(
 @router.post("/{tipo_tarefa_id}/restaurar", response_model=TipoTarefaRead)
 def restaurar_tipo_tarefa(
     tipo_tarefa_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("tipos_tarefa.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:

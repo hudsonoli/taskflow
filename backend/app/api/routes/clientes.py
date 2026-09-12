@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
-from app.dependencies.authorization import ensure_resource_empresa, require_admin_or_gestor
+from app.dependencies.authorization import ensure_resource_empresa
+from app.dependencies.permissoes import require_permissao
 from app.models.usuario import Usuario
 from app.schemas.cliente import (
     ClienteArquivar,
@@ -48,7 +49,7 @@ def handle_cliente_error(exc: Exception) -> None:
 @router.post("", response_model=ClienteRead, status_code=status.HTTP_201_CREATED)
 def create_cliente(
     payload: ClienteCreate,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("clientes.criar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -72,7 +73,7 @@ def list_clientes(
     grupo_cliente_id: UUID | None = Query(default=None, alias="grupoClienteId"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("clientes.visualizar")),
     db: Session = Depends(get_db),
 ):
     clientes = cliente_service.list_clientes(
@@ -99,7 +100,7 @@ def list_diretorio(
 @router.get("/{cliente_id}", response_model=ClienteRead)
 def get_cliente(
     cliente_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("clientes.visualizar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -114,7 +115,7 @@ def get_cliente(
 def update_cliente(
     cliente_id: UUID,
     payload: ClienteUpdate,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("clientes.editar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -144,7 +145,7 @@ def update_cliente(
 def arquivar_cliente(
     cliente_id: UUID,
     payload: ClienteArquivar,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("clientes.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -168,7 +169,7 @@ def arquivar_cliente(
 @router.post("/{cliente_id}/restaurar", response_model=ClienteRead)
 def restaurar_cliente(
     cliente_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("clientes.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:

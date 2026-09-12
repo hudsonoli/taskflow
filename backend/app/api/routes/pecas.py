@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
-from app.dependencies.authorization import ensure_resource_empresa, require_admin_or_gestor
+from app.dependencies.authorization import ensure_resource_empresa
+from app.dependencies.permissoes import require_permissao
 from app.models.usuario import Usuario
 from app.schemas.peca import PecaArquivar, PecaCreate, PecaDiretorioRead, PecaRead, PecaUpdate
 from app.services.peca_service import (
@@ -36,7 +37,7 @@ def handle_peca_error(exc: Exception) -> None:
 @router.post("", response_model=PecaRead, status_code=status.HTTP_201_CREATED)
 def create_peca(
     payload: PecaCreate,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("pecas.criar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -55,7 +56,7 @@ def list_pecas(
     search: str | None = Query(default=None, alias="search"),
     limit: int = Query(default=500, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("pecas.visualizar")),
     db: Session = Depends(get_db),
 ):
     pecas = peca_service.list_pecas(
@@ -75,7 +76,7 @@ def list_pecas(
 # único consumidor hoje é a tela administrativa.
 @router.get("/diretorio", response_model=list[PecaDiretorioRead])
 def list_diretorio(
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("pecas.visualizar")),
     db: Session = Depends(get_db),
 ):
     pecas = peca_service.list_diretorio(db, empresa_id=current_user.empresa_id)
@@ -85,7 +86,7 @@ def list_diretorio(
 @router.get("/{peca_id}", response_model=PecaRead)
 def get_peca(
     peca_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("pecas.visualizar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -100,7 +101,7 @@ def get_peca(
 def update_peca(
     peca_id: UUID,
     payload: PecaUpdate,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("pecas.editar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -120,7 +121,7 @@ def update_peca(
 def arquivar_peca(
     peca_id: UUID,
     payload: PecaArquivar,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("pecas.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -141,7 +142,7 @@ def arquivar_peca(
 @router.post("/{peca_id}/restaurar", response_model=PecaRead)
 def restaurar_peca(
     peca_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("pecas.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:
