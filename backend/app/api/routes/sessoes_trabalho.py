@@ -1,10 +1,21 @@
-"""Sessões de trabalho — Central de Tráfego. Leitura e escrita restritas a admin/gestor.
+"""Sessões de trabalho — Central de Tráfego.
 
-Até esta correção o router respondia **sem token nenhum**: qualquer um listava quem estava
-trabalhando em quê, e abria ou fechava sessão em nome de terceiros. O gate existia só em
-`TrafegoView.tsx`, no navegador.
+Até uma correção anterior o router respondia **sem token nenhum**: qualquer um listava quem
+estava trabalhando em quê, e abria ou fechava sessão em nome de terceiros. O gate existia só
+em `TrafegoView.tsx`, no navegador.
 
 Como em `/eventos`, a empresa vem do token e o parâmetro só é aceito se coincidir.
+
+## Enforcement (Fase 2G.10B, Bloco 2B.1)
+
+`abrir/fechar/list/get` usam `require_trafego_gerenciar()` (app/dependencies/permissoes.py)
+— equivalente a `require_admin_or_gestor` hoje (perfil_base admin/gestor), mas que também
+nunca libera para `perfil_base == "operador"` mesmo com override de concessão de
+`trafego.gerenciar`, porque estas rotas expõem `inicioEm`/`fimEm`/`duracaoSegundos` por
+sessão — dado suficiente para reconstruir métricas de horas, o que viola a regra de domínio
+"operador não visualiza métricas temporais". `GET /horas` é a única rota deste router FORA
+desse enforcement — continua com `get_current_user_password_ready` +
+`pode_consultar_horas_departamento` (escopo/relação de Head, não permissão).
 """
 
 from datetime import datetime, timezone
@@ -16,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.core.escopo import EscopoHorasNaoAutorizadoError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
-from app.dependencies.authorization import require_profiles
+from app.dependencies.permissoes import require_trafego_gerenciar
 from app.models.usuario import Usuario
 from app.schemas.evento import EventoCreate
 from app.schemas.sessao_trabalho import (
@@ -35,8 +46,6 @@ router = APIRouter(
 )
 sessao_service = SessaoTrabalhoService()
 evento_service = EventoService()
-
-require_admin_or_gestor = require_profiles("admin", "gestor")
 
 
 def _empresa_do_token(empresa_id: str | None, current_user: Usuario) -> str:
@@ -63,7 +72,7 @@ def normalize_datetime(value: datetime | None) -> datetime | None:
 @router.post("/abrir", response_model=SessaoTrabalhoRead, status_code=status.HTTP_201_CREATED)
 def abrir_sessao(
     payload: SessaoTrabalhoAbrir,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
     db: Session = Depends(get_db),
 ):
     empresa_id = _empresa_do_token(payload.empresa_id, current_user)
@@ -106,7 +115,7 @@ def abrir_sessao(
 def fechar_sessao(
     sessao_id: UUID,
     payload: SessaoTrabalhoFechar,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
     db: Session = Depends(get_db),
 ):
     sessao = sessao_service.get_session(db, str(sessao_id))
@@ -157,7 +166,7 @@ def list_sessoes_trabalho(
     data_fim: datetime | None = Query(default=None, alias="dataFim"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
     db: Session = Depends(get_db),
 ):
     try:
@@ -203,7 +212,7 @@ def horas_departamento(
 @router.get("/{sessao_id}", response_model=SessaoTrabalhoRead)
 def get_sessao_trabalho(
     sessao_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
     db: Session = Depends(get_db),
 ):
     sessao = sessao_service.get_session(db, str(sessao_id))

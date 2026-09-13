@@ -53,7 +53,7 @@ from collections.abc import Callable
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.permissoes import PerfilInvalidoError, validar_permissao_existente
+from app.core.permissoes import PERFIL_OPERADOR, PerfilInvalidoError, validar_permissao_existente
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.usuario import Usuario
@@ -89,6 +89,54 @@ def require_permissao(permissao: str) -> Callable[..., Usuario]:
         if permissao not in efetivas:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
 
+        return current_user
+
+    return dependency
+
+
+def require_trafego_gerenciar() -> Callable[..., Usuario]:
+    """Como `require_permissao("trafego.gerenciar")`, mas nunca libera para
+    `perfil_base == "operador"` — mesmo com override de concessão (Fase 2G.10B, Bloco 2B.1).
+
+    ## Por que isto existe (e por que não é lógica de `require_permissao` genérico)
+
+    `GET /sessoes-trabalho` e `GET /sessoes-trabalho/{id}` devolvem `inicioEm`/`fimEm`/
+    `duracaoSegundos` por sessão, filtráveis por `usuarioId` — dado suficiente para
+    reconstruir métricas de horas/produtividade por pessoa, sem precisar de nenhum
+    agregado. Isso viola a regra de domínio "operador não visualiza métricas
+    temporais/horas" (a mesma razão pela qual um endpoint `/minhas/horas` autoescopado foi
+    removido no passado — ver docstring de `tests/test_sessao_trabalho.py`) caso
+    `trafego.gerenciar` seja concedido a alguém com `perfil_base == "operador"` via
+    `usuario_permissao`.
+
+    Esta é uma invariante de DOMÍNIO específica de Tráfego — paralela a "tenant nunca é
+    ultrapassado por override" (`ensure_resource_empresa`) e "Head só vê o próprio
+    departamento" (`pode_consultar_horas_departamento`) — não uma regra geral de
+    permissões. Por isso vive num helper próprio, reaproveitando `require_permissao` sem
+    alterá-lo: as outras ~30 permissões já migradas não têm essa propriedade e não devem
+    ganhar este piso.
+
+    ## Overrides continuam resolvidos normalmente
+
+    O override de `trafego.gerenciar` (conceder/negar) é calculado por
+    `UsuarioPermissaoService.obter_permissoes_efetivas` exatamente como qualquer outra
+    permissão — este helper não intercepta nem duplica essa resolução, só aplica uma
+    checagem adicional DEPOIS que `require_permissao` já decidiu. Um operador com
+    `trafego.gerenciar = conceder` continua tendo a permissão no conjunto efetivo; só não
+    passa neste piso adicional.
+
+    ## `/horas` nunca passa por aqui
+
+    `GET /sessoes-trabalho/horas` continua usando `get_current_user_password_ready` +
+    `pode_consultar_horas_departamento` (escopo/relação de Head, não permissão) — esta
+    dependency não é usada nessa rota e Head (mesmo com `perfil_base == "operador"`) nunca
+    dependeu de `trafego.gerenciar` para acessá-la.
+    """
+    base = require_permissao("trafego.gerenciar")
+
+    def dependency(current_user: Usuario = Depends(base)) -> Usuario:
+        if current_user.perfil_base == PERFIL_OPERADOR:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
         return current_user
 
     return dependency
