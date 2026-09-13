@@ -16,12 +16,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token
+from app.dependencies.permissoes import require_trafego_gerenciar
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
 from app.models.usuario_credencial import UsuarioCredencial
@@ -154,6 +158,24 @@ def test_operador_com_grant_continua_403_nas_quatro_rotas(
     assert client_operador.get(f"/sessoes-trabalho/{uuid.uuid4()}").status_code == 403
     assert client_operador.post("/sessoes-trabalho/abrir", json=_abrir_payload(empresa.id, usuario_operador.id)).status_code == 403
     assert client_operador.post(f"/sessoes-trabalho/{uuid.uuid4()}/fechar", json={"motivoEncerramento": "conclusao"}).status_code == 403
+
+
+def test_perfil_fora_da_allowlist_bloqueado_mesmo_com_permissao_resolvida() -> None:
+    """`perfil_base` real hoje é só admin/gestor/operador — o CHECK constraint
+    `ck_usuarios_perfil_base` impede persistir qualquer outro valor, então não há como criar
+    esse cenário via HTTP real. O piso é allowlist (`admin`/`gestor`), não blocklist
+    (`!= operador`) — precisamente para que um `perfil_base` futuro, ainda não previsto hoje,
+    nunca herde acesso a dado temporal de Tráfego só por não se chamar "operador" (ver
+    docstring de `require_trafego_gerenciar`). Testado chamando a dependency diretamente com
+    um usuário fake, isolando o piso da resolução real de permissão."""
+    dependency = require_trafego_gerenciar()
+    usuario_fake = SimpleNamespace(perfil_base="diretoria")
+
+    with pytest.raises(HTTPException) as excinfo:
+        dependency(current_user=usuario_fake)
+
+    assert excinfo.value.status_code == 403
+    assert excinfo.value.detail == "Acesso negado"
 
 
 # --------------------------------------------------------------------------------------

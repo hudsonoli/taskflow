@@ -53,7 +53,7 @@ from collections.abc import Callable
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.permissoes import PERFIL_OPERADOR, PerfilInvalidoError, validar_permissao_existente
+from app.core.permissoes import PERFIL_ADMIN, PERFIL_GESTOR, PerfilInvalidoError, validar_permissao_existente
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.usuario import Usuario
@@ -62,6 +62,12 @@ from app.services.usuario_permissao_service import UsuarioPermissaoService
 _usuario_permissao_service = UsuarioPermissaoService()
 
 _ACESSO_NEGADO = "Acesso negado"
+
+# Central de Tráfego, hoje, é admin/gestor — mesma allowlist de `require_admin_or_gestor`
+# (a redefinição local que este helper substitui). Allowlist explícita, não "!= operador":
+# um perfil_base futuro que não seja nenhum dos dois não deve herdar acesso a dado temporal
+# só por não se chamar "operador" — ver docstring de `require_trafego_gerenciar`.
+_PERFIS_TRAFEGO_AUTORIZADOS = frozenset({PERFIL_ADMIN, PERFIL_GESTOR})
 
 
 def require_permissao(permissao: str) -> Callable[..., Usuario]:
@@ -95,8 +101,10 @@ def require_permissao(permissao: str) -> Callable[..., Usuario]:
 
 
 def require_trafego_gerenciar() -> Callable[..., Usuario]:
-    """Como `require_permissao("trafego.gerenciar")`, mas nunca libera para
-    `perfil_base == "operador"` — mesmo com override de concessão (Fase 2G.10B, Bloco 2B.1).
+    """Como `require_permissao("trafego.gerenciar")`, mas só libera para
+    `perfil_base in {"admin", "gestor"}` — mesmo com override de concessão (Fase 2G.10B,
+    Bloco 2B.1; piso reforçado na revisão pré-merge para allowlist explícita, ver seção
+    abaixo).
 
     ## Por que isto existe (e por que não é lógica de `require_permissao` genérico)
 
@@ -115,6 +123,16 @@ def require_trafego_gerenciar() -> Callable[..., Usuario]:
     permissões. Por isso vive num helper próprio, reaproveitando `require_permissao` sem
     alterá-lo: as outras ~30 permissões já migradas não têm essa propriedade e não devem
     ganhar este piso.
+
+    ## Allowlist explícita, não "!= operador"
+
+    O piso é `perfil_base in _PERFIS_TRAFEGO_AUTORIZADOS` ({"admin", "gestor"}) — a mesma
+    dupla que `require_admin_or_gestor` (a redefinição local que este helper substitui) já
+    autorizava antes desta fase. Checar "!= operador" bloquearia hoje exatamente os mesmos
+    casos (só existem 3 perfis reais), mas aceitaria implicitamente qualquer `perfil_base`
+    futuro que não seja "operador" nem admin/gestor — sem uma decisão consciente de que esse
+    perfil deveria ver dado temporal de Tráfego. A allowlist é fail-closed: um perfil novo só
+    ganha acesso por edição explícita desta constante, nunca por omissão.
 
     ## Overrides continuam resolvidos normalmente
 
@@ -135,7 +153,7 @@ def require_trafego_gerenciar() -> Callable[..., Usuario]:
     base = require_permissao("trafego.gerenciar")
 
     def dependency(current_user: Usuario = Depends(base)) -> Usuario:
-        if current_user.perfil_base == PERFIL_OPERADOR:
+        if current_user.perfil_base not in _PERFIS_TRAFEGO_AUTORIZADOS:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
         return current_user
 
