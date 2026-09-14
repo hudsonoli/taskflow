@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 
 from app.models.cliente import Cliente
@@ -229,3 +229,40 @@ def test_cliente_arquivado_continua_422(client_admin: TestClient, db_session: Se
     resposta = client_admin.post("/demandas", json=_payload(clienteId=cliente.id))
     assert resposta.status_code == 422
     assert "arquivado" in resposta.json()["detail"].lower()
+
+
+# --------------------------------------------------------------------------------------
+# Query count — evidência de que a nova checagem não adiciona SELECT extra. Conta só
+# consultas à tabela `projetos`: `_ensure_projeto_valido` carrega o Projeto no máximo uma
+# vez (via `db.get()`, que pode ser satisfeito pelo identity map da sessão sem emitir SQL
+# quando o objeto já foi criado na mesma sessão — daí `<= 1`, não `== 1`: o teste prova a
+# ausência de uma SEGUNDA consulta, não força um número exato que depende de cache);
+# `_ensure_projeto_compativel_com_cliente` só lê o atributo `.cliente_id` do objeto Python
+# já em memória, sem tocar o banco de novo — por isso nunca poderia gerar uma segunda
+# consulta, com ou sem cache.
+# --------------------------------------------------------------------------------------
+
+
+def test_criacao_com_projeto_compativel_nao_gera_segunda_consulta_a_projetos(
+    client_admin: TestClient, db_session: Session, empresa: Empresa
+) -> None:
+    cliente = _cliente(db_session, empresa)
+    projeto = _projeto(db_session, empresa, cliente_id=cliente.id)
+
+    chamadas: list[str] = []
+
+    def _contar(conn, cursor, statement, parameters, context, executemany):
+        if "FROM projetos" in statement:
+            chamadas.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", _contar)
+    try:
+        resposta = client_admin.post(
+            "/demandas", json=_payload(projetoId=projeto.id, clienteId=cliente.id)
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", _contar)
+
+    assert resposta.status_code == 201, resposta.text
+    assert len(chamadas) <= 1, f"esperada no máximo 1 consulta a projetos (nunca uma segunda), houve {len(chamadas)}"
