@@ -96,12 +96,18 @@ class EscopoDemanda:
         )
 
 
-def _departamentos_como_head(db: Session, usuario: Usuario) -> list[str]:
+def departamentos_como_head(db: Session, usuario: Usuario) -> list[str]:
     """Departamentos dos quais o usuário é head, por **relação real**.
 
     Head = responsável formal pelo departamento OU marcado como líder dentro do próprio
     departamento. União das duas regras já existentes, para não divergir do comportamento
     aprovado.
+
+    Pública (Fase 2G.10B, D1.1) — além de `resolver_escopo_demanda`/
+    `pode_consultar_horas_departamento` neste módulo, também é consumida por
+    `require_demandas_criar()` (app/dependencies/permissoes.py) para decidir QUEM pode criar
+    Demanda. Fonte única de "o que é Head" no sistema — nenhum outro lugar reimplementa este
+    critério.
     """
     statement = select(Departamento.id).where(
         Departamento.empresa_id == usuario.empresa_id,
@@ -123,14 +129,14 @@ def pode_consultar_horas_departamento(db: Session, usuario: Usuario, departament
     antes de perguntar isto; ver `SessaoTrabalhoService.horas_departamento`).
 
     Head: só o(s) departamento(s) do qual é head de verdade — reaproveita
-    `_departamentos_como_head`, a MESMA resolução usada em `resolver_escopo_demanda`. Não há
+    `departamentos_como_head`, a MESMA resolução usada em `resolver_escopo_demanda`. Não há
     uma segunda definição de Head neste módulo.
 
     Demais perfis (operador comum, Atendimento sem ser Head): nunca.
     """
     if usuario.perfil_base in PERFIS_VISAO_TOTAL:
         return True
-    return departamento_id in _departamentos_como_head(db, usuario)
+    return departamento_id in departamentos_como_head(db, usuario)
 
 
 def eh_atendimento(db: Session, usuario: Usuario) -> bool:
@@ -164,7 +170,7 @@ def resolver_escopo_demanda(
     escopo-base — `GET /demandas` sem parâmetro nenhum já vem filtrado.
     """
     visao_total = usuario.perfil_base in PERFIS_VISAO_TOTAL
-    departamentos_head = _departamentos_como_head(db, usuario)
+    departamentos_head = departamentos_como_head(db, usuario)
     atendimento = eh_atendimento(db, usuario)
 
     # --- recorte explícito: valida o direito antes de estreitar ------------------------

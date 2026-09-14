@@ -53,6 +53,7 @@ from collections.abc import Callable
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.escopo import departamentos_como_head, eh_atendimento
 from app.core.permissoes import PERFIL_ADMIN, PERFIL_GESTOR, PerfilInvalidoError, validar_permissao_existente
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -156,5 +157,97 @@ def require_trafego_gerenciar() -> Callable[..., Usuario]:
         if current_user.perfil_base not in _PERFIS_TRAFEGO_AUTORIZADOS:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
         return current_user
+
+    return dependency
+
+
+# admin/gestor criam Demanda por perfil, sem depender de relação nenhuma — mesma dupla de
+# `_PERFIS_TRAFEGO_AUTORIZADOS`, reaproveitada aqui por ser exatamente o mesmo conceito
+# ("quem administra a empresa inteira"), não uma segunda definição.
+_PERFIS_DEMANDAS_CRIAR_POR_PERFIL = frozenset({PERFIL_ADMIN, PERFIL_GESTOR})
+
+
+def require_demandas_criar() -> Callable[..., Usuario]:
+    """Quem pode chamar `POST /demandas` (Fase 2G.10B, D1.1 — fechamento deliberado do gap
+    D1 documentado em `app/core/permissoes.py`).
+
+    ## Regra final
+
+    1. Override explícito de `demandas.criar` sempre vence — `"negar"` bloqueia QUALQUER
+       usuário (admin, gestor, Head, Atendimento, sem exceção); `"conceder"` libera QUALQUER
+       usuário, inclusive operador comum sem nenhuma relação.
+    2. Sem override: `perfil_base in {"admin", "gestor"}` cria.
+    3. Sem override: Head de pelo menos um departamento (`departamentos_como_head`,
+       app/core/escopo.py — fonte única, não duplicada) cria.
+    4. Sem override: Atendimento (`eh_atendimento`, mesmo módulo — regra transitória por nome
+       de departamento, já documentada como frágil ali; não corrigida nesta fase) cria.
+    5. Qualquer outro caso (operador comum, sem relação, sem override): 403.
+
+    ## Por que não é só `require_permissao("demandas.criar")`
+
+    `demandas.criar` saiu do default de `PERFIL_OPERADOR` (ver `app/core/permissoes.py`) —
+    hoje só admin/gestor têm por perfil. Head e Atendimento continuam podendo criar, mas por
+    RELAÇÃO, não por perfil nem por permissão — `require_permissao` sozinho não tem acesso a
+    `app/core/escopo.py` e não conseguiria expressar "permissão OU relação".
+
+    ## Por que não usa `UsuarioPermissaoService.obter_permissoes_efetivas`
+
+    O conjunto efetivo (`obter_permissoes_efetivas`) devolve só o resultado FINAL — uma
+    permissão ausente do conjunto não distingue "nunca teve override" de "foi negada
+    explicitamente". Essa distinção importa aqui porque Head/Atendimento são autorizados por
+    um caminho que não passa pelo conjunto efetivo (relação, não perfil/override) — um
+    `negar` explícito precisa continuar bloqueando os dois, então o helper precisa saber que o
+    `negar` é EXPLÍCITO antes de cair no fallback relacional. Por isso usa
+    `UsuarioPermissaoService.obter_efeito_override`, que devolve só a linha crua para esta
+    chave (`"conceder"`/`"negar"`/`None`) — sem duplicar a leitura de `usuario_permissao`
+    (mesma consulta de `list_by_usuario` por baixo) nem a lógica de default (que continua só
+    em `permissoes_efetivas`/`DEFAULTS_POR_PERFIL`, intocada).
+
+    ## Fail-closed
+
+    Perfil inválido (nunca deveria acontecer): `obter_efeito_override` não levanta
+    `PerfilInvalidoError` (não calcula default nenhum), então esse caso nem se aplica aqui —
+    a única forma de chegar a "permitido" é override explícito, perfil admin/gestor, ou
+    relação real; qualquer outra coisa cai no 403 final, nunca num acesso liberado por
+    omissão.
+
+    ## Performance
+
+    admin/gestor sem override: 1 consulta (`obter_efeito_override`). Operador com override
+    (conceder ou negar): 1 consulta. Operador comum sem override: até 3 consultas O(1) —
+    override + `departamentos_como_head` + `eh_atendimento`, esta última só se a anterior não
+    já tiver decidido. Nenhuma delas roda por item de listagem nem em loop; sem N+1, sem
+    Redis, sem cache novo.
+
+    ## Escopo — o que este helper NÃO decide
+
+    Só responde "pode chamar `POST /demandas`". Não restringe `cliente_id`/`projeto_id`/
+    `responsavel_ids`/`departamento_responsavel_ids` — uma vez autorizado, o ator escolhe
+    qualquer recurso válido do próprio tenant, exatamente como antes desta fase (validado por
+    `demanda_service.py`, não tocado aqui). Essa restrição adicional é D1.2, decisão de
+    produto separada, deliberadamente fora desta fase.
+    """
+    validar_permissao_existente("demandas.criar")  # falha na importação, não em runtime
+
+    def dependency(
+        current_user: Usuario = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> Usuario:
+        efeito = _usuario_permissao_service.obter_efeito_override(
+            db, usuario=current_user, permissao="demandas.criar"
+        )
+        if efeito == "negar":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
+        if efeito == "conceder":
+            return current_user
+
+        if current_user.perfil_base in _PERFIS_DEMANDAS_CRIAR_POR_PERFIL:
+            return current_user
+        if departamentos_como_head(db, current_user):
+            return current_user
+        if eh_atendimento(db, current_user):
+            return current_user
+
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
 
     return dependency

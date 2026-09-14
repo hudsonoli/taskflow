@@ -27,9 +27,11 @@ exatamente quem já passa em `require_admin`/`require_admin_or_gestor`/nenhum gu
 que "deveria" ser. Duas consequências deliberadas, ambas já mapeadas no diagnóstico da Fase
 2G.10 e reservadas para subfases futuras (não corrigidas aqui):
 
-- `demandas.criar` inclui `operador` porque `POST /demandas` hoje não tem guard de perfil
-  nenhum (só `get_current_user_password_ready`) — a regra "só head/atendimento/gestão cria"
-  existe somente no frontend (`podeCriarDemanda`). Ver achado D1 do diagnóstico.
+- ~~`demandas.criar` inclui `operador`~~ — **fechado na Fase 2G.10B, D1.1**: `PERFIL_OPERADOR`
+  não tem mais `demandas.criar` por default; a regra real (admin/gestor por perfil,
+  Head/Atendimento por relação, nunca operador comum) vive em `require_demandas_criar()`
+  (app/dependencies/permissoes.py), não neste catálogo — ver docstring de lá para o porquê de
+  Head/Atendimento não aparecerem com essa key em `/auth/me` mesmo autorizados a criar.
 - `financeiro.visualizar` inclui `gestor` porque `ClienteRead`/`UsuarioRead` (rotas
   `require_admin_or_gestor`) devolvem `feeMensalCentavos`/`valorRecebidoMensalCentavos` para
   qualquer gestor hoje — a regra "só Owner/Gestores/Financeiro" ainda não distingue Financeiro
@@ -365,10 +367,18 @@ DEFAULTS_POR_PERFIL: dict[str, frozenset[str]] = {
             "acessos.visualizar",
         }
     ),
-    # operador: só o operacional que já é liberado sem guard de perfil hoje (Demanda —
-    # visualizar/criar/editar, sempre dentro do escopo resolvido por escopo.py). Nenhum
+    # operador: visualizar/editar Demanda dentro do escopo resolvido por escopo.py. Nenhum
     # cadastro, nenhuma área administrativa, nenhum dado financeiro.
-    PERFIL_OPERADOR: frozenset({"demandas.visualizar", "demandas.criar", "demandas.editar"}),
+    #
+    # `demandas.criar` sai do default (Fase 2G.10B, D1.1 — fechamento deliberado do gap D1
+    # documentado acima): operador comum não cria mais por perfil. Head e Atendimento
+    # continuam criando — não por este default, mas por relação, resolvida em
+    # `require_demandas_criar()` (app/dependencies/permissoes.py), que consulta
+    # `departamentos_como_head`/`eh_atendimento` (app/core/escopo.py) quando não há override
+    # explícito. Por isso um Head/Atendimento não verá `demandas.criar` em
+    # `/auth/me`/`/usuarios/me` (que só refletem perfil+override, nunca relação) mesmo
+    # conseguindo criar — divergência aceita conscientemente, ver docstring do helper.
+    PERFIL_OPERADOR: frozenset({"demandas.visualizar", "demandas.editar"}),
 }
 
 

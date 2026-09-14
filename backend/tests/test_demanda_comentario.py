@@ -119,17 +119,20 @@ def test_editado_em_so_aparece_apos_edicao(client_admin: TestClient) -> None:
 
 
 def test_outro_operador_nao_edita_comentario_alheio(
-    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario
+    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, client_admin: TestClient
 ) -> None:
     """O outro operador PRECISA ter escopo sobre a Demanda (senão o 404 de acesso nega
     primeiro, corretamente — ver doutrina 404-antes-de-403). O 403 é especificamente sobre
-    não ser o autor, não sobre não enxergar a Demanda."""
+    não ser o autor, não sobre não enxergar a Demanda.
+
+    Demanda criada por admin (Fase 2G.10B, D1.1 — operador comum não cria mais por default);
+    o que este teste exercita é autoria de COMENTÁRIO, não quem criou a Demanda."""
     outro_operador = _criar_usuario_com_credencial(
         db_session, empresa=empresa, perfil_base="operador", email_prefixo="operador-outro"
     )
     client_autor = _client_para(app, usuario_operador)
     demanda = _criar_demanda(
-        client_autor, usuarioResponsavelIds=[usuario_operador.id, outro_operador.id]
+        client_admin, usuarioResponsavelIds=[usuario_operador.id, outro_operador.id]
     )
     comentario = _criar_comentario(client_autor, demanda["id"])
 
@@ -141,12 +144,15 @@ def test_outro_operador_nao_edita_comentario_alheio(
 
 
 def test_admin_gestor_nao_edita_comentario_alheio(
-    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, usuario_admin: Usuario
+    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, usuario_admin: Usuario,
+    client_admin: TestClient,
 ) -> None:
     """Moderação cobre exclusão, não edição — reescrever o texto de outra pessoa
-    corromperia a autoria do que foi dito (ver instrução da Fase 2E.4, item 2)."""
+    corromperia a autoria do que foi dito (ver instrução da Fase 2E.4, item 2).
+
+    Demanda criada por admin (D1.1 — operador comum não cria mais por default)."""
     client_autor = _client_para(app, usuario_operador)
-    demanda = _criar_demanda(client_autor, usuarioResponsavelIds=[usuario_operador.id])
+    demanda = _criar_demanda(client_admin, usuarioResponsavelIds=[usuario_operador.id])
     comentario = _criar_comentario(client_autor, demanda["id"])
 
     client_admin_direto = _client_para(app, usuario_admin)
@@ -170,10 +176,12 @@ def test_autor_exclui_o_proprio_comentario(client_admin: TestClient) -> None:
 
 
 def test_admin_exclui_comentario_alheio_para_moderar(
-    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, usuario_admin: Usuario
+    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, usuario_admin: Usuario,
+    client_admin: TestClient,
 ) -> None:
+    """Demanda criada por admin (D1.1 — operador comum não cria mais por default)."""
     client_autor = _client_para(app, usuario_operador)
-    demanda = _criar_demanda(client_autor, usuarioResponsavelIds=[usuario_operador.id])
+    demanda = _criar_demanda(client_admin, usuarioResponsavelIds=[usuario_operador.id])
     comentario = _criar_comentario(client_autor, demanda["id"])
 
     client_admin_direto = _client_para(app, usuario_admin)
@@ -182,10 +190,12 @@ def test_admin_exclui_comentario_alheio_para_moderar(
 
 
 def test_gestor_exclui_comentario_alheio_para_moderar(
-    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, usuario_gestor: Usuario
+    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, usuario_gestor: Usuario,
+    client_admin: TestClient,
 ) -> None:
+    """Demanda criada por admin (D1.1 — operador comum não cria mais por default)."""
     client_autor = _client_para(app, usuario_operador)
-    demanda = _criar_demanda(client_autor, usuarioResponsavelIds=[usuario_operador.id])
+    demanda = _criar_demanda(client_admin, usuarioResponsavelIds=[usuario_operador.id])
     comentario = _criar_comentario(client_autor, demanda["id"])
 
     client_gestor_direto = _client_para(app, usuario_gestor)
@@ -194,14 +204,15 @@ def test_gestor_exclui_comentario_alheio_para_moderar(
 
 
 def test_outro_operador_nao_exclui_comentario_alheio(
-    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario
+    app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, client_admin: TestClient
 ) -> None:
+    """Demanda criada por admin (D1.1 — operador comum não cria mais por default)."""
     outro_operador = _criar_usuario_com_credencial(
         db_session, empresa=empresa, perfil_base="operador", email_prefixo="operador-outro2"
     )
     client_autor = _client_para(app, usuario_operador)
     demanda = _criar_demanda(
-        client_autor, usuarioResponsavelIds=[usuario_operador.id, outro_operador.id]
+        client_admin, usuarioResponsavelIds=[usuario_operador.id, outro_operador.id]
     )
     comentario = _criar_comentario(client_autor, demanda["id"])
 

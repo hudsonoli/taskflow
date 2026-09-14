@@ -11,7 +11,7 @@ from app.core.escopo import (
 )
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
-from app.dependencies.permissoes import require_permissao
+from app.dependencies.permissoes import require_demandas_criar, require_permissao
 from app.models.usuario import Usuario
 from app.schemas.demanda import (
     DemandaAjusteRegistrar,
@@ -46,11 +46,11 @@ demanda_service = DemandaService()
 historico_service = DemandaHistoricoService()
 
 # Demanda é o primeiro domínio OPERACIONAL: ao contrário de Cliente, Projeto e Fornecedor,
-# ler/criar/editar é aberto a qualquer autenticado — sempre dentro do escopo resolvido. Isso
-# inclui `demandas.criar` para operador (Fase 2G.10B, Bloco 2C.1 — D1 permanece
-# deliberadamente aberto, ver docstring de app/core/permissoes.py: fechar o gap é decisão
-# funcional separada, não uma migração de mecanismo). Arquivar e restaurar seguem restritos
-# a admin/gestor, como nos cadastros — agora via `require_permissao("demandas.arquivar")`.
+# ler/editar é aberto a qualquer autenticado — sempre dentro do escopo resolvido. Criar
+# (Fase 2G.10B, D1.1) tem regra própria — admin/gestor por perfil, Head/Atendimento por
+# relação, nunca operador comum por default — ver `require_demandas_criar()`
+# (app/dependencies/permissoes.py). Arquivar e restaurar seguem restritos a admin/gestor,
+# como nos cadastros, via `require_permissao("demandas.arquivar")`.
 
 
 def handle_demanda_error(exc: Exception) -> None:
@@ -109,7 +109,7 @@ def _escopo(
 @router.post("", response_model=DemandaRead, status_code=status.HTTP_201_CREATED)
 def create_demanda(
     payload: DemandaCreate,
-    current_user: Usuario = Depends(require_permissao("demandas.criar")),
+    current_user: Usuario = Depends(require_demandas_criar()),
     db: Session = Depends(get_db),
 ):
     try:

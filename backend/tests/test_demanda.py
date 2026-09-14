@@ -452,18 +452,28 @@ def test_operador_sem_vinculo_recebe_lista_vazia_e_nao_erro(client_operador: Tes
     assert resposta.json() == []
 
 
-def test_operador_criador_sem_vinculo_perde_a_demanda_de_vista(client_operador: TestClient) -> None:
+def test_operador_criador_sem_vinculo_perde_a_demanda_de_vista(
+    client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
     """DESVIO CONHECIDO, fixado aqui de propósito para ficar visível.
 
     A tabela de escopo aprovada define `operador` como *responsável OU departamento*;
-    `criado_por` entra apenas no escopo de Atendimento. A consequência é que um operador sem
-    departamento que cria uma demanda **sem se atribuir** recebe 201 e, no instante seguinte,
-    404 no mesmo id.
+    `criado_por` entra apenas no escopo de Atendimento. A consequência é que quem cria uma
+    demanda **sem se atribuir** recebe 201 e, no instante seguinte, 404 no mesmo id — mesmo
+    sendo Head de um departamento, porque a demanda não ficou vinculada a nenhum departamento
+    (`departamentoResponsavelIds` não foi enviado).
 
     Isto é o que a regra aprovada diz — não um bug de implementação. Está pinado para que
     qualquer mudança de comportamento seja deliberada, e para alimentar a decisão da 2E.5
     sobre incluir `criado_por` no escopo-base de todo mundo.
+
+    Ator precisa ser Head (Fase 2G.10B, D1.1): operador comum sem relação não passa mais em
+    `require_demandas_criar()` — ver test_d1_criacao_demandas.py para a política de criação.
+    Ser Head aqui só serve para chegar ao 201; o desvio testado é sobre ESCOPO pós-criação,
+    inalterado por D1.1.
     """
+    _departamento(db_session, empresa, responsavel_usuario_id=usuario_operador.id)
+
     criada = client_operador.post("/demandas", json={"nome": "Criada pelo operador"})
     assert criada.status_code == 201
 

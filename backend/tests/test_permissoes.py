@@ -81,12 +81,15 @@ def test_default_gestor_administra_cadastros_mas_nao_usuarios() -> None:
     assert "trafego.gerenciar" in gestor
 
 
-def test_default_operador_so_tem_demanda_sem_arquivar() -> None:
-    """operador não tem guard de perfil em criar/editar/visualizar Demanda hoje — só
-    arquivar/restaurar são require_admin_or_gestor. Nenhum cadastro, nenhuma área
-    administrativa, nenhum financeiro."""
+def test_default_operador_so_tem_demanda_sem_criar_nem_arquivar() -> None:
+    """Fase 2G.10B, D1.1 — `demandas.criar` saiu do default de operador: fecha o gap D1
+    deliberadamente (operador comum não cria Demanda por perfil; Head/Atendimento continuam
+    criando por relação, resolvida fora do catálogo — ver `require_demandas_criar()`).
+    Visualizar/editar continuam sem guard de perfil (só escopo). Arquivar/restaurar
+    continuam fora do default (equivalente a `require_admin_or_gestor`). Nenhum cadastro,
+    nenhuma área administrativa, nenhum financeiro."""
     assert DEFAULTS_POR_PERFIL[PERFIL_OPERADOR] == frozenset(
-        {"demandas.visualizar", "demandas.criar", "demandas.editar"}
+        {"demandas.visualizar", "demandas.editar"}
     )
 
 

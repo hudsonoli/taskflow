@@ -4,7 +4,12 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from app.core.permissoes import EFEITOS_VALIDOS, TODAS_AS_PERMISSOES, permissoes_efetivas
+from app.core.permissoes import (
+    EFEITOS_VALIDOS,
+    TODAS_AS_PERMISSOES,
+    permissoes_efetivas,
+    validar_permissao_existente,
+)
 from app.models.usuario import Usuario
 from app.repositories.usuario_permissao_repository import UsuarioPermissaoRepository
 
@@ -56,3 +61,35 @@ class UsuarioPermissaoService:
 
         efetivas = permissoes_efetivas(usuario.perfil_base, pares)
         return sorted(efetivas)
+
+    def obter_efeito_override(self, db: Session, *, usuario: Usuario, permissao: str) -> str | None:
+        """Efeito EXPLÍCITO de um override para uma permissão específica — `"conceder"`,
+        `"negar"` ou `None` se não houver override para essa chave nesta empresa.
+
+        Nenhuma lógica de default aqui — quem quer o conjunto efetivo completo (default do
+        perfil + overrides) usa `obter_permissoes_efetivas`. Este método existe para helpers
+        que precisam decidir algo ANTES/INDEPENDENTE do default, tipicamente quando a
+        autorização também pode vir de uma relação (não só de perfil/override) e um `negar`
+        explícito precisa continuar valendo mesmo assim — hoje só
+        `require_demandas_criar()` (Fase 2G.10B, D1.1): Head/Atendimento são autorizados por
+        relação, não por perfil, então "ausente do conjunto efetivo" não distingue "nunca teve
+        override" de "foi negado explicitamente" — só a linha crua resolve essa ambiguidade.
+
+        Reaproveita a MESMA consulta de `obter_permissoes_efetivas` (`list_by_usuario`) — não
+        introduz um segundo caminho de leitura à tabela.
+        """
+        validar_permissao_existente(permissao)
+        overrides = self.repository.list_by_usuario(db, empresa_id=usuario.empresa_id, usuario_id=usuario.id)
+        for override in overrides:
+            if override.permissao != permissao:
+                continue
+            if override.efeito not in EFEITOS_VALIDOS:
+                logger.warning(
+                    "Ignorando usuario_permissao inválido: usuario_id=%s permissao=%r efeito=%r",
+                    usuario.id,
+                    override.permissao,
+                    override.efeito,
+                )
+                return None
+            return override.efeito
+        return None

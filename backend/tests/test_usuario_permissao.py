@@ -120,7 +120,7 @@ def test_service_sem_overrides_devolve_exatamente_o_default_do_perfil(
 ) -> None:
     service = UsuarioPermissaoService()
     efetivas = service.obter_permissoes_efetivas(db_session, usuario_operador)
-    assert efetivas == sorted({"demandas.visualizar", "demandas.criar", "demandas.editar"})
+    assert efetivas == sorted({"demandas.visualizar", "demandas.editar"})
 
 
 def test_service_override_concede_permissao_extra(db_session: Session, usuario_operador: Usuario) -> None:
@@ -172,7 +172,7 @@ def test_service_isolamento_entre_empresas(
     efetivas_b = service.obter_permissoes_efetivas(db_session, usuario_empresa_b)
 
     assert "clientes.visualizar" not in efetivas_b
-    assert efetivas_b == sorted({"demandas.visualizar", "demandas.criar", "demandas.editar"})
+    assert efetivas_b == sorted({"demandas.visualizar", "demandas.editar"})
 
 
 def test_service_determinismo_lista_ordenada(db_session: Session, usuario_admin: Usuario) -> None:
@@ -193,7 +193,7 @@ def test_auth_me_expoe_permissoes_ordenadas(client_operador: TestClient) -> None
     corpo = resposta.json()
     assert "permissoes" in corpo
     assert corpo["permissoes"] == sorted(corpo["permissoes"])
-    assert set(corpo["permissoes"]) == {"demandas.visualizar", "demandas.criar", "demandas.editar"}
+    assert set(corpo["permissoes"]) == {"demandas.visualizar", "demandas.editar"}
 
 
 def test_auth_me_compativel_com_campos_existentes(client_admin: TestClient) -> None:
@@ -312,7 +312,7 @@ def test_override_com_efeito_invalido_e_ignorado_pelo_service(
     service = UsuarioPermissaoService(repository=_RepositorioFalso())
     efetivas = service.obter_permissoes_efetivas(db_session, usuario_operador)
 
-    assert efetivas == sorted({"demandas.visualizar", "demandas.criar", "demandas.editar"})
+    assert efetivas == sorted({"demandas.visualizar", "demandas.editar"})
 
 
 def test_check_constraint_do_banco_recusa_efeito_invalido(db_session: Session, usuario_operador: Usuario) -> None:
@@ -355,14 +355,21 @@ def test_equivalencia_operador_bloqueado_em_area_administrativa(client_operador:
     assert client_operador.get("/usuarios?empresaId=" + str(uuid.uuid4())).status_code == 403
 
 
-def test_equivalencia_operador_continua_criando_demanda(client_operador: TestClient) -> None:
-    """Reflete o achado D1 do diagnóstico — POST /demandas não tem guard de perfil hoje.
-    Este teste documenta o comportamento atual; NÃO é uma correção (fica para 2G.10B)."""
+def test_equivalencia_operador_nao_cria_mais_demanda_por_default(client_operador: TestClient) -> None:
+    """Reflete o achado D1 do diagnóstico original, agora FECHADO na Fase 2G.10B, D1.1:
+    `demandas.criar` saiu do default de operador — só admin/gestor por perfil, Head/Atendimento
+    por relação (ver `require_demandas_criar()`, app/dependencies/permissoes.py). Este teste
+    documentava o comportamento antigo; a assertiva foi invertida deliberadamente."""
     resposta = client_operador.post("/demandas", json={"nome": f"Demanda {uuid.uuid4().hex[:8]}"})
-    assert resposta.status_code == 201, resposta.text
+    assert resposta.status_code == 403, resposta.text
 
 
-def test_equivalencia_operador_nao_arquiva_demanda(client_operador: TestClient) -> None:
-    criada = client_operador.post("/demandas", json={"nome": f"Demanda {uuid.uuid4().hex[:8]}"}).json()
+def test_equivalencia_operador_nao_arquiva_demanda(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    criada = client_admin.post(
+        "/demandas",
+        json={"nome": f"Demanda {uuid.uuid4().hex[:8]}", "usuarioResponsavelIds": [usuario_operador.id]},
+    ).json()
     resposta = client_operador.post(f"/demandas/{criada['id']}/arquivar", json={"motivoArquivamento": "teste"})
     assert resposta.status_code == 403

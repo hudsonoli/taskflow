@@ -127,10 +127,12 @@ def test_gestor_cria(client_gestor: TestClient) -> None:
     assert criada["nome"]
 
 
-def test_operador_cria(client_operador: TestClient) -> None:
-    """default atual do catálogo — ver seção D1 abaixo."""
-    criada = _criar(client_operador)
-    assert criada["nome"]
+def test_operador_comum_nao_cria_mais_por_default(client_operador: TestClient) -> None:
+    """Fase 2G.10B, D1.1 — fechamento deliberado do gap D1: `demandas.criar` saiu do default
+    de `PERFIL_OPERADOR`. Operador comum (sem Head, sem Atendimento, sem override) agora
+    recebe 403. Ver matriz completa em test_d1_criacao_demandas.py."""
+    resposta = client_operador.post("/demandas", json=_payload())
+    assert resposta.status_code == 403
 
 
 def test_admin_edita(client_admin: TestClient) -> None:
@@ -178,18 +180,12 @@ def test_operador_nao_restaura(
 
 
 # --------------------------------------------------------------------------------------
-# D1 — documental. Esta fase NÃO fecha o gap: operador comum continua criando demanda por
-# default, exatamente como antes da migração. A restrição (admin/gestor/Head/Atendimento,
-# ver `podeCriarDemanda` no frontend) é decisão funcional separada, fora desta fase.
+# D1 — FECHADO na Fase 2G.10B, D1.1 (ver test_d1_criacao_demandas.py para a matriz completa
+# de admin/gestor/Head/Atendimento/operador × sem-override/conceder/negar). Este arquivo
+# mantém só a prova mínima de que operador comum não cria mais por default
+# (`test_operador_comum_nao_cria_mais_por_default`, acima) — equivalência das outras 6 rotas
+# principais de Demandas continua coberta pelos testes deste arquivo.
 # --------------------------------------------------------------------------------------
-
-
-def test_operador_continua_criando_por_default_d1_nao_fechado(client_operador: TestClient) -> None:
-    """Prova que o Bloco 2C.1 não fechou D1 por acidente: operador comum, sem Head, sem
-    Atendimento, sem nenhum override, continua com 201 em POST /demandas — igual ao
-    comportamento de antes desta migração (`get_current_user_password_ready` sozinho)."""
-    resposta = client_operador.post("/demandas", json=_payload())
-    assert resposta.status_code == 201, resposta.text
 
 
 # --------------------------------------------------------------------------------------
