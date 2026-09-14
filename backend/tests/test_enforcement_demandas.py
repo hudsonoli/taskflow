@@ -81,6 +81,42 @@ def test_operador_visualiza_diretorio(client_operador: TestClient) -> None:
     assert client_operador.get("/demandas/diretorio").status_code == 200
 
 
+def test_override_visualizar_nao_amplia_escopo_do_diretorio(
+    db_session: Session, client_operador: TestClient, usuario_operador: Usuario, client_admin: TestClient
+) -> None:
+    """`demandas.visualizar = conceder` (redundante — operador já tem por default) não
+    transforma `/demandas/diretorio` em visão total; a resolução de escopo é a mesma da
+    listagem principal, revalidada aqui separadamente."""
+    _override(db_session, usuario=usuario_operador, permissao="demandas.visualizar", efeito="conceder")
+    minha = _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)])
+    _criar(client_admin)  # de outra pessoa, fora do escopo do operador
+
+    achados = client_operador.get("/demandas/diretorio").json()
+    assert [d["id"] for d in achados] == [minha["id"]]
+
+
+def test_diretorio_nao_gera_n_mais_1_de_overrides(client_admin: TestClient, db_session: Session) -> None:
+    for _ in range(5):
+        _criar(client_admin)
+
+    chamadas = []
+
+    def _contar(conn, cursor, statement, parameters, context, executemany):
+        if "usuario_permissao" in statement:
+            chamadas.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", _contar)
+    try:
+        resposta = client_admin.get("/demandas/diretorio")
+    finally:
+        event.remove(engine, "before_cursor_execute", _contar)
+
+    assert resposta.status_code == 200
+    assert len(resposta.json()) >= 5
+    assert len(chamadas) == 1
+
+
 def test_admin_cria(client_admin: TestClient) -> None:
     criada = _criar(client_admin)
     assert criada["nome"]
