@@ -11,7 +11,7 @@ from app.core.escopo import (
 )
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
-from app.dependencies.authorization import require_profiles
+from app.dependencies.permissoes import require_permissao
 from app.models.usuario import Usuario
 from app.schemas.demanda import (
     DemandaAjusteRegistrar,
@@ -46,9 +46,11 @@ demanda_service = DemandaService()
 historico_service = DemandaHistoricoService()
 
 # Demanda é o primeiro domínio OPERACIONAL: ao contrário de Cliente, Projeto e Fornecedor,
-# ler/criar/editar é aberto a qualquer autenticado — sempre dentro do escopo resolvido.
-# Arquivar e restaurar seguem restritos a admin/gestor, como nos cadastros.
-require_admin_or_gestor = require_profiles("admin", "gestor")
+# ler/criar/editar é aberto a qualquer autenticado — sempre dentro do escopo resolvido. Isso
+# inclui `demandas.criar` para operador (Fase 2G.10B, Bloco 2C.1 — D1 permanece
+# deliberadamente aberto, ver docstring de app/core/permissoes.py: fechar o gap é decisão
+# funcional separada, não uma migração de mecanismo). Arquivar e restaurar seguem restritos
+# a admin/gestor, como nos cadastros — agora via `require_permissao("demandas.arquivar")`.
 
 
 def handle_demanda_error(exc: Exception) -> None:
@@ -107,7 +109,7 @@ def _escopo(
 @router.post("", response_model=DemandaRead, status_code=status.HTTP_201_CREATED)
 def create_demanda(
     payload: DemandaCreate,
-    current_user: Usuario = Depends(get_current_user_password_ready),
+    current_user: Usuario = Depends(require_permissao("demandas.criar")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -129,7 +131,7 @@ def list_demandas(
     escopo_solicitado: EscopoSolicitado | None = Query(default=None, alias="escopo"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(get_current_user_password_ready),
+    current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
     db: Session = Depends(get_db),
 ):
     """**Sem parâmetro nenhum já vem escopado.** `escopo=` só estreita, nunca amplia."""
@@ -150,7 +152,7 @@ def list_demandas(
 
 @router.get("/diretorio", response_model=list[DemandaDiretorioRead])
 def list_diretorio(
-    current_user: Usuario = Depends(get_current_user_password_ready),
+    current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
     db: Session = Depends(get_db),
 ):
     """Escopado como a listagem, e sem as arquivadas — arquivada não é opção de vínculo novo."""
@@ -162,7 +164,7 @@ def list_diretorio(
 @router.get("/{demanda_id}", response_model=DemandaRead)
 def get_demanda(
     demanda_id: UUID,
-    current_user: Usuario = Depends(get_current_user_password_ready),
+    current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
     db: Session = Depends(get_db),
 ):
     """Fora da empresa **ou fora do escopo** → 404. Conhecer o UUID não autoriza nada."""
@@ -178,7 +180,7 @@ def get_demanda(
 def update_demanda(
     demanda_id: UUID,
     payload: DemandaUpdate,
-    current_user: Usuario = Depends(get_current_user_password_ready),
+    current_user: Usuario = Depends(require_permissao("demandas.editar")),
     db: Session = Depends(get_db),
 ):
     """A resolução escopada acontece ANTES de qualquer escrita — fora do escopo é 404 e nada
@@ -199,12 +201,13 @@ def update_demanda(
 def arquivar_demanda(
     demanda_id: UUID,
     payload: DemandaArquivar,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("demandas.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:
-        # O escopo se SOMA ao perfil: admin/gestor têm visão total, então na prática só a
-        # empresa filtra — mas a checagem fica aqui para a regra não depender do perfil.
+        # O escopo se SOMA à permissão: admin/gestor têm visão total, então na prática só a
+        # empresa filtra — mas a checagem fica aqui para a regra nunca depender só de
+        # `require_permissao`.
         escopo = _escopo(db, current_user)
         demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
         arquivada = demanda_service.arquivar_demanda(
@@ -221,7 +224,7 @@ def arquivar_demanda(
 @router.post("/{demanda_id}/restaurar", response_model=DemandaRead)
 def restaurar_demanda(
     demanda_id: UUID,
-    current_user: Usuario = Depends(require_admin_or_gestor),
+    current_user: Usuario = Depends(require_permissao("demandas.arquivar")),
     db: Session = Depends(get_db),
 ):
     try:
