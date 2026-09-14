@@ -21,6 +21,7 @@ from app.models.cliente import Cliente
 from app.models.demanda import Demanda
 from app.models.departamento import Departamento
 from app.models.empresa import Empresa
+from app.models.usuario import Usuario
 from app.models.sla_regra import SlaRegra
 from app.schemas.demanda import DemandaCreate
 from app.services.demanda_service import DemandaService
@@ -433,7 +434,7 @@ def test_n_regra_arquivada_ignorada_na_resolucao(
 
 
 def test_o_configuracao_expediente_invalida_criacao_atomica_falha(
-    db_session: Session, empresa: Empresa
+    db_session: Session, empresa: Empresa, usuario_admin: Usuario
 ) -> None:
     _sla_regra(db_session, empresa, considerar_apenas_expediente=True, prioridade_regra=1)
     _quebrar_regra_expediente(db_session, empresa)
@@ -442,7 +443,7 @@ def test_o_configuracao_expediente_invalida_criacao_atomica_falha(
 
     with pytest.raises(SlaExpedienteSemJanelaUtilError):
         DemandaService().create_demanda(
-            db_session, DemandaCreate(nome="Falha de configuracao de SLA"), empresa_id=empresa.id
+            db_session, DemandaCreate(nome="Falha de configuracao de SLA"), empresa_id=empresa.id, actor=usuario_admin
         )
 
     contagem_depois = db_session.query(Demanda).filter(Demanda.empresa_id == empresa.id).count()
@@ -450,7 +451,7 @@ def test_o_configuracao_expediente_invalida_criacao_atomica_falha(
 
 
 def test_p_sem_regra_nao_calcula_expediente_mesmo_com_configuracao_quebrada(
-    db_session: Session, empresa: Empresa
+    db_session: Session, empresa: Empresa, usuario_admin: Usuario
 ) -> None:
     """Sem nenhuma SlaRegra combinando, `resolver_sla` devolve `None` e a criação nunca chega
     a chamar a calculadora/RegraExpediente — confirmado deixando a RegraExpediente da
@@ -458,7 +459,7 @@ def test_p_sem_regra_nao_calcula_expediente_mesmo_com_configuracao_quebrada(
     _quebrar_regra_expediente(db_session, empresa)
 
     demanda = DemandaService().create_demanda(
-        db_session, DemandaCreate(nome="Sem SLA, expediente quebrado"), empresa_id=empresa.id
+        db_session, DemandaCreate(nome="Sem SLA, expediente quebrado"), empresa_id=empresa.id, actor=usuario_admin
     )
 
     assert demanda.sla_regra_id is None

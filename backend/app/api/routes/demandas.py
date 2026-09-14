@@ -26,6 +26,7 @@ from app.schemas.demanda_historico import DemandaHistoricoEventoRead
 from app.services.demanda_historico_service import DemandaHistoricoService
 from app.services.demanda_service import (
     DemandaClienteInvalidoError,
+    DemandaDepartamentoForaDoEscopoError,
     DemandaDepartamentoInvalidoError,
     DemandaForaDeExpedienteError,
     DemandaInvalidTransitionError,
@@ -91,6 +92,7 @@ def handle_demanda_error(exc: Exception) -> None:
             DemandaProjetoClienteIncompativelError,
             DemandaUsuarioInvalidoError,
             DemandaDepartamentoInvalidoError,
+            DemandaDepartamentoForaDoEscopoError,
             DemandaWorkflowModeloInvalidoError,
         ),
     ):
@@ -116,7 +118,7 @@ def create_demanda(
 ):
     try:
         criada = demanda_service.create_demanda(
-            db, payload, empresa_id=current_user.empresa_id, actor_usuario_id=current_user.id
+            db, payload, empresa_id=current_user.empresa_id, actor=current_user
         )
         return demanda_service.to_read(db, criada)
     except Exception as exc:
@@ -191,7 +193,7 @@ def update_demanda(
         escopo = _escopo(db, current_user)
         demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
         atualizada = demanda_service.update_demanda(
-            db, demanda, payload, actor_usuario_id=current_user.id
+            db, demanda, payload, actor=current_user
         )
         return demanda_service.to_read(db, atualizada)
     except Exception as exc:

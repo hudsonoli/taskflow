@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.models.empresa import Empresa
 from app.models.sla_regra import SlaRegra
+from app.models.usuario import Usuario
 from app.schemas.demanda import DemandaCreate
 from app.services.demanda_service import DemandaService
 from app.services.regra_expediente_service import RegraExpedienteService
@@ -89,7 +90,7 @@ def _forcar_falha_tardia(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_falha_tardia_sem_regra_expediente_previa_nao_deixa_demanda_orfa(
-    db_session: Session, empresa: Empresa, monkeypatch: pytest.MonkeyPatch
+    db_session: Session, empresa: Empresa, usuario_admin: Usuario, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     assert _contagem_regra_expediente(db_session, empresa) == 0, "pré-condição: sem RegraExpediente"
 
@@ -98,7 +99,7 @@ def test_falha_tardia_sem_regra_expediente_previa_nao_deixa_demanda_orfa(
 
     with pytest.raises(RuntimeError):
         DemandaService().create_demanda(
-            db_session, DemandaCreate(nome="Demanda que deve falhar"), empresa_id=empresa.id
+            db_session, DemandaCreate(nome="Demanda que deve falhar"), empresa_id=empresa.id, actor=usuario_admin
         )
 
     # 1. Zero Demanda nova — nenhuma linha órfã, nenhum snapshot parcial.
@@ -112,7 +113,7 @@ def test_falha_tardia_sem_regra_expediente_previa_nao_deixa_demanda_orfa(
     # 3. A criação seguinte não deve ter gap de numeração.
     monkeypatch.undo()  # a criação seguinte deve suceder de verdade — sem o evento quebrado
     criada = DemandaService().create_demanda(
-        db_session, DemandaCreate(nome="Demanda que deve suceder"), empresa_id=empresa.id
+        db_session, DemandaCreate(nome="Demanda que deve suceder"), empresa_id=empresa.id, actor=usuario_admin
     )
     assert criada.numero_operacional == 1, "a tentativa abortada não pode ter queimado o número 1"
     assert criada.codigo_referencia == "T26000001", "nem a referência"
@@ -124,7 +125,7 @@ def test_falha_tardia_sem_regra_expediente_previa_nao_deixa_demanda_orfa(
 
 
 def test_falha_tardia_com_regra_expediente_ja_existente_ainda_atomica(
-    db_session: Session, empresa: Empresa, monkeypatch: pytest.MonkeyPatch
+    db_session: Session, empresa: Empresa, usuario_admin: Usuario, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # RegraExpediente pré-existente (bootstrap normal, fora do teste de atomicidade).
     RegraExpedienteService().get_ou_criar(db_session, empresa_id=empresa.id)
@@ -135,7 +136,7 @@ def test_falha_tardia_com_regra_expediente_ja_existente_ainda_atomica(
 
     with pytest.raises(RuntimeError):
         DemandaService().create_demanda(
-            db_session, DemandaCreate(nome="Demanda que deve falhar"), empresa_id=empresa.id
+            db_session, DemandaCreate(nome="Demanda que deve falhar"), empresa_id=empresa.id, actor=usuario_admin
         )
 
     assert _contagem_demandas(db_session, empresa) == 0
@@ -143,7 +144,7 @@ def test_falha_tardia_com_regra_expediente_ja_existente_ainda_atomica(
 
     monkeypatch.undo()  # a criação seguinte deve suceder de verdade — sem o evento quebrado
     criada = DemandaService().create_demanda(
-        db_session, DemandaCreate(nome="Demanda que deve suceder"), empresa_id=empresa.id
+        db_session, DemandaCreate(nome="Demanda que deve suceder"), empresa_id=empresa.id, actor=usuario_admin
     )
     assert criada.numero_operacional == 1
     assert criada.codigo_referencia == "T26000001"
@@ -155,12 +156,12 @@ def test_falha_tardia_com_regra_expediente_ja_existente_ainda_atomica(
 
 
 def test_sem_sla_candidata_criacao_normal_nao_cria_regra_expediente(
-    db_session: Session, empresa: Empresa
+    db_session: Session, empresa: Empresa, usuario_admin: Usuario
 ) -> None:
     assert _contagem_regra_expediente(db_session, empresa) == 0
 
     criada = DemandaService().create_demanda(
-        db_session, DemandaCreate(nome="Demanda sem SLA"), empresa_id=empresa.id
+        db_session, DemandaCreate(nome="Demanda sem SLA"), empresa_id=empresa.id, actor=usuario_admin
     )
 
     assert criada.sla_regra_id is None

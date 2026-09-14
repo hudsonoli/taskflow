@@ -22,6 +22,7 @@ from app.core.expediente import JanelaDia, RegraExpediente
 from app.models.demanda import Demanda
 from app.models.empresa import Empresa
 from app.models.sla_regra import SlaRegra
+from app.models.usuario import Usuario
 from app.repositories.demanda_repository import DemandaRepository
 from app.schemas.demanda import DemandaUpdate
 from app.services.demanda_service import DemandaService
@@ -252,7 +253,7 @@ def test_i_arquivar_sem_nunca_ter_concluido_nao_fixa_resolucao(client_admin: Tes
 
 
 def test_j_falha_apos_fixar_resolucao_reverte_status_e_campo(
-    db_session: Session, empresa: Empresa, monkeypatch: pytest.MonkeyPatch
+    db_session: Session, empresa: Empresa, usuario_admin: Usuario, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     demanda = _demanda_direta(db_session, empresa, status="em_execucao")
     db_session.commit()  # checkpoint: sobrevive ao rollback provocado abaixo
@@ -265,7 +266,7 @@ def test_j_falha_apos_fixar_resolucao_reverte_status_e_campo(
     demanda_recarregada = db_session.get(Demanda, demanda.id)
     with pytest.raises(RuntimeError):
         DemandaService().update_demanda(
-            db_session, demanda_recarregada, DemandaUpdate(status="concluida")
+            db_session, demanda_recarregada, DemandaUpdate(status="concluida"), actor=usuario_admin
         )
 
     demanda_pos_rollback = db_session.get(Demanda, demanda.id)

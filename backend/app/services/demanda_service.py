@@ -4,7 +4,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.escopo import EscopoDemanda
+from app.core.escopo import PERFIS_VISAO_TOTAL, EscopoDemanda, departamentos_como_head
 from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente
 from app.core.referencias import gerar_proxima_referencia
 from app.core.relogio import agora_local, agora_utc
@@ -21,6 +21,7 @@ from app.models.demanda_workflow_etapa_departamento_responsavel import (
 from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaResponsavel
 from app.models.evento import Evento
 from app.models.projeto import Projeto
+from app.models.usuario import Usuario
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.demanda_repository import DemandaRepository
 from app.repositories.departamento_repository import DepartamentoRepository
@@ -128,6 +129,18 @@ class DemandaDepartamentoInvalidoError(ValueError):
     """Departamento inexistente, de outra empresa ou arquivado (vínculo novo)."""
 
 
+class DemandaDepartamentoForaDoEscopoError(ValueError):
+    """Departamento válido e ativo no tenant, mas fora do contexto de Head de quem está
+    criando/editando (Fase 2G.10B, D1.2B — política HEAD-A).
+
+    Distinta de `DemandaDepartamentoInvalidoError`: aqui o departamento existe, é da mesma
+    empresa e está ativo — o problema não é o departamento, é que este ator não o lidera.
+    Só se aplica quando o ator É Head de pelo menos um departamento (`departamentos_como_head`
+    não-vazio); admin/gestor nunca acionam isto, e um ator que não é Head de nada (Atendimento
+    sem relação de Head, Operador com grant) também não — essas restrições ficam para
+    D1.2C/D1.2D, deliberadamente fora desta fase."""
+
+
 class DemandaWorkflowModeloInvalidoError(ValueError):
     """WorkflowModelo inexistente, de outra empresa ou não ativo (aplicação nova)."""
 
@@ -169,9 +182,10 @@ class DemandaService:
         data: DemandaCreate,
         *,
         empresa_id: str,
-        actor_usuario_id: str | None = None,
+        actor: Usuario,
     ) -> Demanda:
         now = agora_utc()
+        actor_usuario_id = actor.id
         cliente_id = str(data.cliente_id) if data.cliente_id else None
         projeto_id = str(data.projeto_id) if data.projeto_id else None
         workflow_modelo_id = str(data.workflow_modelo_id) if data.workflow_modelo_id else None
@@ -193,6 +207,7 @@ class DemandaService:
                 self._ensure_usuario_valido(db, empresa_id, usuario_id)
             for departamento_id in departamento_ids:
                 self._ensure_departamento_valido(db, empresa_id, departamento_id)
+            self._ensure_departamentos_permitidos_para_head(db, actor, departamento_ids)
 
             # Última validação somente-leitura antes da parte operacional: garante que a
             # RegraExpediente da Empresa já existe (semeando-a se preciso) ANTES do primeiro
@@ -442,9 +457,10 @@ class DemandaService:
         demanda: Demanda,
         data: DemandaUpdate,
         *,
-        actor_usuario_id: str | None = None,
+        actor: Usuario,
     ) -> Demanda:
         """Recebe a Demanda **já resolvida dentro do escopo** pela rota — nunca um id solto."""
+        actor_usuario_id = actor.id
         updates = data.model_dump(exclude_unset=True)
         campos_alterados: list[str] = []
         eventos: list[tuple[DomainEventType, dict]] = []
@@ -587,9 +603,14 @@ class DemandaService:
                     db, demanda, [str(uid) for uid in (updates["responsavel_ids"] or [])]
                 )
             if "departamento_responsavel_ids" in updates:
-                eventos += self._sincronizar_departamentos(
-                    db, demanda, [str(did) for did in (updates["departamento_responsavel_ids"] or [])]
-                )
+                departamentos_desejados = [
+                    str(did) for did in (updates["departamento_responsavel_ids"] or [])
+                ]
+                # D1.2B roda ANTES de `_sincronizar_departamentos` — que já valida tenant/
+                # arquivado só dos IDs realmente novos (diff), sem mutação nenhuma até aqui.
+                # Rejeição por Head não adiciona, não remove e não publica evento.
+                self._ensure_departamentos_permitidos_para_head(db, actor, departamentos_desejados)
+                eventos += self._sincronizar_departamentos(db, demanda, departamentos_desejados)
 
             if eventos and not campos_alterados:
                 campos_alterados.append("vinculos")
@@ -1066,6 +1087,35 @@ class DemandaService:
         if departamento.status == "arquivado":
             raise DemandaDepartamentoInvalidoError(
                 "Departamento arquivado não aceita novos vínculos — restaure-o antes"
+            )
+
+    def _ensure_departamentos_permitidos_para_head(
+        self, db: Session, actor: Usuario, departamento_ids: list[str]
+    ) -> None:
+        """Fase 2G.10B, D1.2B — política HEAD-A: quando o ator É Head de verdade, só pode
+        colocar em `departamento_responsavel_ids` departamentos que lidera.
+
+        Reaproveita `departamentos_como_head` (fonte única, `app/core/escopo.py`) — nenhuma
+        segunda definição de Head. `set(departamento_ids) ⊆ set(departamentos_como_head)`;
+        se qualquer item estiver fora, rejeita o payload inteiro (nunca remove silenciosamente
+        o item proibido).
+
+        Gatilhada por "é Head" (`departamentos_como_head` não-vazio), nunca por "não é
+        admin/gestor": admin/gestor sempre retornam cedo (zero query); um ator que não é
+        Head de nada (Atendimento sem relação de Head, Operador com `demandas.criar`/
+        `demandas.editar` concedido por override) também retorna sem erro — essas categorias
+        ficam deliberadamente de fora até D1.2C/D1.2D. Lista vazia/`None` nunca consulta nada:
+        conjunto vazio é subconjunto trivial de qualquer coisa."""
+        if not departamento_ids:
+            return
+        if actor.perfil_base in PERFIS_VISAO_TOTAL:
+            return
+        departamentos_head = departamentos_como_head(db, actor)
+        if not departamentos_head:
+            return
+        if not set(departamento_ids) <= set(departamentos_head):
+            raise DemandaDepartamentoForaDoEscopoError(
+                "Departamento responsável não permitido para este usuário"
             )
 
     # ----------------------------------------------------------------------------------
