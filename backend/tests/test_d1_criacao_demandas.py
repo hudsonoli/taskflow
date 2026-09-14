@@ -358,3 +358,49 @@ def test_head_nao_ve_demandas_criar_em_auth_me_mesmo_podendo_criar(
 
     resposta_criar = cliente.post("/demandas", json=_payload())
     assert resposta_criar.status_code == 201, resposta_criar.text
+
+
+def test_atendimento_nao_ve_demandas_criar_em_auth_me_mesmo_podendo_criar(
+    app, db_session: Session, empresa: Empresa
+) -> None:
+    atendimento = _operador_comum(db_session, empresa, sufixo="atend-authme")
+    _atendimento(db_session, empresa, atendimento)
+    resposta_me = _client_para(app, atendimento).get("/auth/me")
+    assert resposta_me.status_code == 200
+    assert "demandas.criar" not in resposta_me.json()["permissoes"]
+
+
+def test_operador_comum_nao_ve_demandas_criar_em_auth_me(
+    app, db_session: Session, empresa: Empresa
+) -> None:
+    operador = _operador_comum(db_session, empresa, sufixo="comum-authme")
+    resposta_me = _client_para(app, operador).get("/auth/me")
+    assert resposta_me.status_code == 200
+    assert "demandas.criar" not in resposta_me.json()["permissoes"]
+
+
+def test_operador_comum_com_grant_ve_demandas_criar_em_auth_me(
+    app, db_session: Session, empresa: Empresa
+) -> None:
+    """Diferente de Head/Atendimento: um GRANT explícito passa pelo mecanismo de
+    override/default (`permissoes_efetivas`), então aparece em `/auth/me` normalmente —
+    só a autorização por RELAÇÃO fica de fora desse array."""
+    operador = _operador_comum(db_session, empresa, sufixo="comum-grant-authme")
+    _override(db_session, usuario=operador, permissao="demandas.criar", efeito="conceder")
+    resposta_me = _client_para(app, operador).get("/auth/me")
+    assert resposta_me.status_code == 200
+    assert "demandas.criar" in resposta_me.json()["permissoes"]
+
+
+def test_head_com_deny_nao_ve_demandas_criar_em_auth_me(app, db_session: Session, empresa: Empresa) -> None:
+    head = _operador_comum(db_session, empresa, sufixo="head-deny-authme")
+    _head_por_responsavel(db_session, empresa, head)
+    _override(db_session, usuario=head, permissao="demandas.criar", efeito="negar")
+    resposta_me = _client_para(app, head).get("/auth/me")
+    assert resposta_me.status_code == 200
+    assert "demandas.criar" not in resposta_me.json()["permissoes"]
+
+
+def test_admin_e_gestor_veem_demandas_criar_em_auth_me(client_admin: TestClient, client_gestor: TestClient) -> None:
+    assert "demandas.criar" in client_admin.get("/auth/me").json()["permissoes"]
+    assert "demandas.criar" in client_gestor.get("/auth/me").json()["permissoes"]

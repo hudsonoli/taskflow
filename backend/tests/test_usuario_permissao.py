@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.permissoes import PermissaoInvalidaError
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
 from app.models.usuario_permissao import UsuarioPermissao
@@ -180,6 +181,72 @@ def test_service_determinismo_lista_ordenada(db_session: Session, usuario_admin:
     resultado = service.obter_permissoes_efetivas(db_session, usuario_admin)
     assert resultado == sorted(resultado)
     assert isinstance(resultado, list)
+
+
+# --------------------------------------------------------------------------------------
+# obter_efeito_override (Fase 2G.10B, D1.1) — efeito EXPLÍCITO de uma chave, sem lógica de
+# default. Testado isoladamente no service, sem passar pela rota/HTTP.
+# --------------------------------------------------------------------------------------
+
+
+def test_obter_efeito_override_sem_override_devolve_none(db_session: Session, usuario_operador: Usuario) -> None:
+    service = UsuarioPermissaoService()
+    assert service.obter_efeito_override(db_session, usuario=usuario_operador, permissao="demandas.criar") is None
+
+
+def test_obter_efeito_override_conceder(db_session: Session, usuario_operador: Usuario) -> None:
+    _override(db_session, usuario=usuario_operador, permissao="demandas.criar", efeito="conceder")
+    service = UsuarioPermissaoService()
+    assert service.obter_efeito_override(db_session, usuario=usuario_operador, permissao="demandas.criar") == "conceder"
+
+
+def test_obter_efeito_override_negar(db_session: Session, usuario_admin: Usuario) -> None:
+    _override(db_session, usuario=usuario_admin, permissao="demandas.criar", efeito="negar")
+    service = UsuarioPermissaoService()
+    assert service.obter_efeito_override(db_session, usuario=usuario_admin, permissao="demandas.criar") == "negar"
+
+
+def test_obter_efeito_override_nao_ve_override_de_outro_usuario(
+    db_session: Session, usuario_operador: Usuario, usuario_gestor: Usuario
+) -> None:
+    _override(db_session, usuario=usuario_gestor, permissao="demandas.criar", efeito="conceder")
+    service = UsuarioPermissaoService()
+    assert service.obter_efeito_override(db_session, usuario=usuario_operador, permissao="demandas.criar") is None
+
+
+def test_obter_efeito_override_nao_ve_linha_com_empresa_id_divergente(
+    db_session: Session, usuario_operador: Usuario, outra_empresa: Empresa
+) -> None:
+    """`usuario_id` é identidade global (um usuário pertence a exatamente uma empresa) —
+    não é possível, pelo schema real, ter o MESMO `usuario_id` com um override legítimo em
+    duas empresas diferentes. O cenário de risco real e testável é o mesmo que already
+    protegido no repository (defesa em profundidade): uma linha corrompida com `usuario_id`
+    certo mas `empresa_id` divergente do usuário. `list_by_usuario` já filtra por
+    `usuario_id` E `empresa_id`; este teste confirma que `obter_efeito_override` herda essa
+    proteção — não constrói um segundo caminho de leitura que a contorne."""
+    override_corrompido = UsuarioPermissao(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        usuario_id=usuario_operador.id,
+        permissao="demandas.criar",
+        efeito="conceder",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db_session.add(override_corrompido)
+    db_session.flush()
+
+    service = UsuarioPermissaoService()
+    assert service.obter_efeito_override(db_session, usuario=usuario_operador, permissao="demandas.criar") is None
+
+
+def test_obter_efeito_override_permissao_invalida_e_fail_closed(db_session: Session, usuario_operador: Usuario) -> None:
+    """Mesma convenção de `require_permissao`/`validar_permissao_existente`: uma chave que
+    não existe no catálogo falha alto (`PermissaoInvalidaError`), nunca devolve `None`
+    silenciosamente como se fosse "sem override"."""
+    service = UsuarioPermissaoService()
+    with pytest.raises(PermissaoInvalidaError):
+        service.obter_efeito_override(db_session, usuario=usuario_operador, permissao="modulo_que_nao_existe.acao")
 
 
 # --------------------------------------------------------------------------------------
