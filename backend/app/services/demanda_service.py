@@ -511,20 +511,57 @@ class DemandaService:
                 demanda.nome = updates["nome"]
                 campos_alterados.append("nome")
 
-            if "cliente_id" in updates:
-                cliente_final = str(updates["cliente_id"]) if updates["cliente_id"] else None
-                if cliente_final != demanda.cliente_id:
-                    if cliente_final is not None:
-                        self._ensure_cliente_valido(db, demanda.empresa_id, cliente_final)
+            # Cliente e Projeto são validados e aplicados juntos (Fase 2G.10B, D1.2A-UPDATE):
+            # a Política C do POST (bloquear só o mismatch verdadeiro) precisa do par ESTADO
+            # FINAL, não do par enviado — um PATCH que só troca um dos dois lados ainda pode
+            # colidir com o outro lado, que ficou parado. `cliente_tocado`/`projeto_tocado`
+            # distinguem "campo ausente" de "campo enviado" (inclusive `None`) — sem isso,
+            # "não enviado" e "enviado como null" virariam a mesma coisa.
+            cliente_tocado = "cliente_id" in updates
+            projeto_tocado = "projeto_id" in updates
+
+            if cliente_tocado or projeto_tocado:
+                cliente_final = (
+                    (str(updates["cliente_id"]) if updates["cliente_id"] else None)
+                    if cliente_tocado
+                    else demanda.cliente_id
+                )
+                projeto_final_id = (
+                    (str(updates["projeto_id"]) if updates["projeto_id"] else None)
+                    if projeto_tocado
+                    else demanda.projeto_id
+                )
+
+                # Só o lado que está sendo TROCADO passa por `_ensure_*_valido` (tenant +
+                # arquivado) — reenviar o mesmo valor não reconsulta a validade dele.
+                if cliente_tocado and cliente_final is not None and cliente_final != demanda.cliente_id:
+                    self._ensure_cliente_valido(db, demanda.empresa_id, cliente_final)
+
+                projeto_final_obj: Projeto | None = None
+                if projeto_tocado:
+                    if projeto_final_id is not None:
+                        # `_ensure_projeto_valido` já devolve o Projeto carregado — mesmo
+                        # objeto reaproveitado abaixo, sem segunda consulta (igual ao POST).
+                        projeto_final_obj = self._ensure_projeto_valido(
+                            db, demanda.empresa_id, projeto_final_id
+                        )
+                elif projeto_final_id is not None:
+                    # Projeto não tocado neste PATCH mas a Demanda já tinha um: preciso do
+                    # `cliente_id` dele para validar o par final. Fetch CRU — nunca
+                    # `_ensure_projeto_valido` aqui, que revalidaria tenant/arquivado de um
+                    # vínculo que ninguém pediu para trocar (um Projeto arquivado por fora não
+                    # pode passar a bloquear um PATCH que nem toca nele).
+                    projeto_final_obj = self.projeto_repository.get_by_id(db, projeto_final_id)
+
+                if projeto_final_obj is not None:
+                    self._ensure_projeto_compativel_com_cliente(projeto_final_obj, cliente_final)
+
+                if cliente_tocado and cliente_final != demanda.cliente_id:
                     demanda.cliente_id = cliente_final
                     campos_alterados.append("clienteId")
 
-            if "projeto_id" in updates:
-                projeto_final = str(updates["projeto_id"]) if updates["projeto_id"] else None
-                if projeto_final != demanda.projeto_id:
-                    if projeto_final is not None:
-                        self._ensure_projeto_valido(db, demanda.empresa_id, projeto_final)
-                    demanda.projeto_id = projeto_final
+                if projeto_tocado and projeto_final_id != demanda.projeto_id:
+                    demanda.projeto_id = projeto_final_id
                     campos_alterados.append("projetoId")
 
             # Capturado ANTES do loop genérico sobrescrever o campo — é a única forma de
