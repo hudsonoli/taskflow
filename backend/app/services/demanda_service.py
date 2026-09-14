@@ -20,6 +20,7 @@ from app.models.demanda_workflow_etapa_departamento_responsavel import (
 )
 from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaResponsavel
 from app.models.evento import Evento
+from app.models.projeto import Projeto
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.demanda_repository import DemandaRepository
 from app.repositories.departamento_repository import DepartamentoRepository
@@ -110,6 +111,15 @@ class DemandaProjetoInvalidoError(ValueError):
     """Projeto inexistente, de outra empresa ou arquivado (vínculo novo)."""
 
 
+class DemandaProjetoClienteIncompativelError(ValueError):
+    """Cliente informado diverge do cliente real do Projeto (Fase 2G.10B, D1.2A).
+
+    Só dispara quando os DOIS lados estão preenchidos e são diferentes — Política C do
+    diagnóstico. Projeto interno (`cliente_id IS NULL`) nunca aciona isto, com ou sem cliente
+    na Demanda; Projeto com cliente + Demanda sem cliente também não. Nenhum dos dois é
+    tratado como erro — só o mismatch verdadeiro."""
+
+
 class DemandaUsuarioInvalidoError(ValueError):
     """Responsável inexistente, de outra empresa ou em status inválido."""
 
@@ -175,7 +185,8 @@ class DemandaService:
             if cliente_id is not None:
                 self._ensure_cliente_valido(db, empresa_id, cliente_id)
             if projeto_id is not None:
-                self._ensure_projeto_valido(db, empresa_id, projeto_id)
+                projeto = self._ensure_projeto_valido(db, empresa_id, projeto_id)
+                self._ensure_projeto_compativel_com_cliente(projeto, cliente_id)
             if workflow_modelo_id is not None:
                 self._ensure_workflow_modelo_valido(db, empresa_id, workflow_modelo_id)
             for usuario_id in responsavel_ids:
@@ -900,7 +911,10 @@ class DemandaService:
                 "Cliente arquivado não aceita novos vínculos — restaure-o antes"
             )
 
-    def _ensure_projeto_valido(self, db: Session, empresa_id: str, projeto_id: str) -> None:
+    def _ensure_projeto_valido(self, db: Session, empresa_id: str, projeto_id: str) -> Projeto:
+        """Devolve o `Projeto` já carregado (Fase 2G.10B, D1.2A) — quem chama e precisa dele
+        depois (ex.: comparar `cliente_id`) reaproveita o mesmo objeto, sem um segundo
+        `get_by_id`. Chamadores que só querem validar continuam podendo ignorar o retorno."""
         projeto = self.projeto_repository.get_by_id(db, projeto_id)
         if projeto is None or projeto.empresa_id != empresa_id:
             raise DemandaProjetoInvalidoError("Projeto não encontrado para esta empresa")
@@ -908,6 +922,19 @@ class DemandaService:
             raise DemandaProjetoInvalidoError(
                 "Projeto arquivado não aceita novos vínculos — restaure-o antes"
             )
+        return projeto
+
+    def _ensure_projeto_compativel_com_cliente(self, projeto: Projeto, cliente_id: str | None) -> None:
+        """Fase 2G.10B, D1.2A — Política C do diagnóstico: bloqueia SOMENTE o mismatch
+        verdadeiro (os dois lados preenchidos e diferentes). Projeto interno
+        (`projeto.cliente_id is None`) e Demanda sem cliente (`cliente_id is None`) nunca
+        acionam isto, em qualquer combinação — não é inferência de cliente nem alteração
+        silenciosa de payload, só uma recusa explícita do caso inconsistente.
+
+        Reaproveita o `Projeto` já carregado por `_ensure_projeto_valido` — nenhuma consulta
+        adicional."""
+        if projeto.cliente_id is not None and cliente_id is not None and projeto.cliente_id != cliente_id:
+            raise DemandaProjetoClienteIncompativelError("Projeto não pertence ao cliente informado")
 
     def _ensure_workflow_modelo_valido(self, db: Session, empresa_id: str, workflow_modelo_id: str) -> None:
         workflow_modelo = self.workflow_modelo_repository.get_by_id(db, workflow_modelo_id)
