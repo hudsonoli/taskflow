@@ -4,7 +4,13 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.escopo import PERFIS_VISAO_TOTAL, EscopoDemanda, departamentos_como_head
+from app.core.escopo import (
+    PERFIS_VISAO_TOTAL,
+    EscopoDemanda,
+    clientes_sob_responsabilidade,
+    departamentos_como_head,
+    eh_atendimento,
+)
 from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente
 from app.core.referencias import gerar_proxima_referencia
 from app.core.relogio import agora_local, agora_utc
@@ -108,6 +114,16 @@ class DemandaClienteInvalidoError(ValueError):
     """Cliente inexistente, de outra empresa ou arquivado (vínculo novo)."""
 
 
+class DemandaClienteForaDoEscopoError(ValueError):
+    """Cliente válido, ativo e do mesmo tenant, mas fora do contexto de Atendimento de quem
+    está criando/editando (Fase 2G.10B, D1.2C — política ATEND-B).
+
+    Distinta de `DemandaClienteInvalidoError`: aqui o cliente existe e é válido — o problema
+    é que este ator não é o responsável comercial dele. O contexto validado é o CLIENTE FINAL
+    da Demanda — explícito (`cliente_id`) ou implícito (`Projeto.cliente_id`, quando a Demanda
+    não tem cliente próprio) — nunca inferido/preenchido automaticamente no payload."""
+
+
 class DemandaProjetoInvalidoError(ValueError):
     """Projeto inexistente, de outra empresa ou arquivado (vínculo novo)."""
 
@@ -198,9 +214,20 @@ class DemandaService:
 
             if cliente_id is not None:
                 self._ensure_cliente_valido(db, empresa_id, cliente_id)
+
+            projeto: Projeto | None = None
             if projeto_id is not None:
                 projeto = self._ensure_projeto_valido(db, empresa_id, projeto_id)
                 self._ensure_projeto_compativel_com_cliente(projeto, cliente_id)
+
+            # D1.2C (ATEND-B): cliente-contexto é o `cliente_id` explícito, ou — quando a
+            # Demanda não tem cliente próprio — o `cliente_id` do Projeto (se houver e não for
+            # interno). Só um CÁLCULO para validação; nunca escrito de volta em `cliente_id`.
+            cliente_contexto_id = cliente_id
+            if cliente_contexto_id is None and projeto is not None:
+                cliente_contexto_id = projeto.cliente_id
+            self._ensure_contexto_cliente_permitido_para_atendimento(db, actor, cliente_contexto_id)
+
             if workflow_modelo_id is not None:
                 self._ensure_workflow_modelo_valido(db, empresa_id, workflow_modelo_id)
             for usuario_id in responsavel_ids:
@@ -571,6 +598,17 @@ class DemandaService:
 
                 if projeto_final_obj is not None:
                     self._ensure_projeto_compativel_com_cliente(projeto_final_obj, cliente_final)
+
+                # D1.2C (ATEND-B): mesmo cálculo de cliente-contexto do POST, mas sobre o
+                # ESTADO FINAL do PATCH — inclui o caso em que só `projeto_id` muda (ou só
+                # `cliente_id` vira null) e o Projeto (novo ou o atual intocado, já resolvido
+                # acima em `projeto_final_obj`) é quem carrega o cliente relevante.
+                cliente_contexto_final = cliente_final
+                if cliente_contexto_final is None and projeto_final_obj is not None:
+                    cliente_contexto_final = projeto_final_obj.cliente_id
+                self._ensure_contexto_cliente_permitido_para_atendimento(
+                    db, actor, cliente_contexto_final
+                )
 
                 if cliente_tocado and cliente_final != demanda.cliente_id:
                     demanda.cliente_id = cliente_final
@@ -993,6 +1031,32 @@ class DemandaService:
         adicional."""
         if projeto.cliente_id is not None and cliente_id is not None and projeto.cliente_id != cliente_id:
             raise DemandaProjetoClienteIncompativelError("Projeto não pertence ao cliente informado")
+
+    def _ensure_contexto_cliente_permitido_para_atendimento(
+        self, db: Session, actor: Usuario, cliente_contexto_id: str | None
+    ) -> None:
+        """Fase 2G.10B, D1.2C — política ATEND-B: quando o ator É Atendimento de verdade, só
+        pode operar Demandas cujo CLIENTE-CONTEXTO (explícito via `cliente_id`, ou implícito
+        via `Projeto.cliente_id` quando a Demanda não tem cliente próprio) esteja sob sua
+        responsabilidade comercial (`clientes_sob_responsabilidade`, fonte única,
+        `app/core/escopo.py`).
+
+        Recebe só o cliente-contexto JÁ CALCULADO por quem chama — nenhuma lógica de Projeto
+        vive aqui, mantendo o mesmo formato de `_ensure_departamentos_permitidos_para_head`.
+
+        Gatilhada por "é Atendimento" (`eh_atendimento` verdadeiro), nunca por perfil: admin/
+        gestor sempre retornam cedo (zero query); um ator que não é Atendimento (Head puro,
+        Operador com override) também retorna sem erro — fora de escopo até D1.2D. Contexto
+        `None` (sem cliente explícito, sem projeto ou projeto interno) nunca consulta nada:
+        é sempre permitido, para qualquer ator."""
+        if cliente_contexto_id is None:
+            return
+        if actor.perfil_base in PERFIS_VISAO_TOTAL:
+            return
+        if not eh_atendimento(db, actor):
+            return
+        if cliente_contexto_id not in clientes_sob_responsabilidade(db, actor):
+            raise DemandaClienteForaDoEscopoError("Cliente não permitido para este usuário")
 
     def _ensure_workflow_modelo_valido(self, db: Session, empresa_id: str, workflow_modelo_id: str) -> None:
         workflow_modelo = self.workflow_modelo_repository.get_by_id(db, workflow_modelo_id)

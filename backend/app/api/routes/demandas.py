@@ -25,6 +25,7 @@ from app.schemas.demanda import (
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
 from app.services.demanda_historico_service import DemandaHistoricoService
 from app.services.demanda_service import (
+    DemandaClienteForaDoEscopoError,
     DemandaClienteInvalidoError,
     DemandaDepartamentoForaDoEscopoError,
     DemandaDepartamentoInvalidoError,
@@ -88,6 +89,7 @@ def handle_demanda_error(exc: Exception) -> None:
         (
             DemandaMotivoBloqueioObrigatorioError,
             DemandaClienteInvalidoError,
+            DemandaClienteForaDoEscopoError,
             DemandaProjetoInvalidoError,
             DemandaProjetoClienteIncompativelError,
             DemandaUsuarioInvalidoError,

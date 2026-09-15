@@ -153,7 +153,16 @@ def eh_atendimento(db: Session, usuario: Usuario) -> bool:
     return departamento.nome.strip().lower() == NOME_DEPARTAMENTO_ATENDIMENTO
 
 
-def _clientes_sob_responsabilidade(db: Session, usuario: Usuario) -> list[str]:
+def clientes_sob_responsabilidade(db: Session, usuario: Usuario) -> list[str]:
+    """Clientes onde `usuario` é o responsável comercial direto (`Cliente.
+    responsavel_comercial_id`). Sem filtro de status — arquivado ou não, quem decide se um
+    Cliente aceita vínculo novo é `_ensure_cliente_valido` (app/services/demanda_service.py),
+    não este helper.
+
+    Pública (Fase 2G.10B, D1.2C) — além de `resolver_escopo_demanda` (abaixo), também
+    consumida por `DemandaService._ensure_contexto_cliente_permitido_para_atendimento` para
+    decidir quais clientes um Atendimento pode usar numa Demanda. Fonte única de "carteira de
+    clientes" no sistema — nenhum outro lugar reimplementa este critério."""
     statement = select(Cliente.id).where(
         Cliente.empresa_id == usuario.empresa_id,
         Cliente.responsavel_comercial_id == usuario.id,
@@ -194,7 +203,7 @@ def resolver_escopo_demanda(
             usuario_id=usuario.id,
             visao_total=False,
             usuario_responsavel=True,
-            cliente_ids=tuple(_clientes_sob_responsabilidade(db, usuario)),
+            cliente_ids=tuple(clientes_sob_responsabilidade(db, usuario)),
             incluir_criadas_por_usuario=True,
         )
 
@@ -222,6 +231,6 @@ def resolver_escopo_demanda(
         visao_total=False,
         usuario_responsavel=True,
         departamento_ids=tuple(departamentos),
-        cliente_ids=tuple(_clientes_sob_responsabilidade(db, usuario)) if atendimento else (),
+        cliente_ids=tuple(clientes_sob_responsabilidade(db, usuario)) if atendimento else (),
         incluir_criadas_por_usuario=atendimento,
     )
