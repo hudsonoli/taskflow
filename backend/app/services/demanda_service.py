@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -146,15 +147,26 @@ class DemandaDepartamentoInvalidoError(ValueError):
 
 
 class DemandaDepartamentoForaDoEscopoError(ValueError):
-    """Departamento válido e ativo no tenant, mas fora do contexto de Head de quem está
-    criando/editando (Fase 2G.10B, D1.2B — política HEAD-A).
+    """Departamento válido e ativo no tenant, mas fora do contexto de quem está criando/
+    editando — Head (Fase 2G.10B, D1.2B, política HEAD-A) ou Operador comum (D1.2C-D1.2D,
+    contexto mínimo derivado do próprio departamento). Mesma exceção para as duas origens de
+    propósito: a mensagem nunca revela QUAL regra disparou, só que o departamento não é
+    permitido para este ator.
 
     Distinta de `DemandaDepartamentoInvalidoError`: aqui o departamento existe, é da mesma
-    empresa e está ativo — o problema não é o departamento, é que este ator não o lidera.
-    Só se aplica quando o ator É Head de pelo menos um departamento (`departamentos_como_head`
-    não-vazio); admin/gestor nunca acionam isto, e um ator que não é Head de nada (Atendimento
-    sem relação de Head, Operador com grant) também não — essas restrições ficam para
-    D1.2C/D1.2D, deliberadamente fora desta fase."""
+    empresa e está ativo — o problema é de contexto, não de validade. Admin/gestor nunca
+    acionam isto."""
+
+
+class DemandaResponsavelForaDoEscopoError(ValueError):
+    """Responsável válido, ativo e do mesmo tenant, mas fora do contexto operacional mínimo
+    de um Operador comum (Fase 2G.10B, D1.2D): só ele próprio ou usuários do seu próprio
+    departamento. Não se aplica a admin/gestor nem a Head (`departamentos_como_head`
+    não-vazio) — Head mantém, nesta fase, o comportamento atual de poder escolher qualquer
+    usuário válido do tenant como responsável (não inventado aqui).
+
+    Distinta de `DemandaUsuarioInvalidoError`: aqui o usuário existe, é da mesma empresa e
+    está em status válido — o problema é de contexto, não de validade."""
 
 
 class DemandaWorkflowModeloInvalidoError(ValueError):
@@ -232,9 +244,11 @@ class DemandaService:
                 self._ensure_workflow_modelo_valido(db, empresa_id, workflow_modelo_id)
             for usuario_id in responsavel_ids:
                 self._ensure_usuario_valido(db, empresa_id, usuario_id)
+            self._ensure_responsaveis_permitidos_para_operador_comum(db, actor, responsavel_ids)
             for departamento_id in departamento_ids:
                 self._ensure_departamento_valido(db, empresa_id, departamento_id)
             self._ensure_departamentos_permitidos_para_head(db, actor, departamento_ids)
+            self._ensure_departamentos_permitidos_para_operador_comum(db, actor, departamento_ids)
 
             # Última validação somente-leitura antes da parte operacional: garante que a
             # RegraExpediente da Empresa já existe (semeando-a se preciso) ANTES do primeiro
@@ -637,17 +651,28 @@ class DemandaService:
                 eventos.append((DomainEventType.DEMANDA_RETORNO_CLIENTE_REGISTRADO, {}))
 
             if "responsavel_ids" in updates:
-                eventos += self._sincronizar_responsaveis(
-                    db, demanda, [str(uid) for uid in (updates["responsavel_ids"] or [])]
+                responsaveis_desejados = [
+                    str(uid) for uid in (updates["responsavel_ids"] or [])
+                ]
+                # D1.2D roda ANTES de `_sincronizar_responsaveis` — que já valida tenant/status
+                # só dos IDs realmente novos (diff), sem mutação nenhuma até aqui. Rejeição de
+                # contexto não adiciona, não remove e não publica evento.
+                self._ensure_responsaveis_permitidos_para_operador_comum(
+                    db, actor, responsaveis_desejados
                 )
+                eventos += self._sincronizar_responsaveis(db, demanda, responsaveis_desejados)
             if "departamento_responsavel_ids" in updates:
                 departamentos_desejados = [
                     str(did) for did in (updates["departamento_responsavel_ids"] or [])
                 ]
-                # D1.2B roda ANTES de `_sincronizar_departamentos` — que já valida tenant/
-                # arquivado só dos IDs realmente novos (diff), sem mutação nenhuma até aqui.
-                # Rejeição por Head não adiciona, não remove e não publica evento.
+                # D1.2B/D1.2D rodam ANTES de `_sincronizar_departamentos` — que já valida
+                # tenant/arquivado só dos IDs realmente novos (diff), sem mutação nenhuma até
+                # aqui. Rejeição por Head ou por contexto de Operador comum não adiciona, não
+                # remove e não publica evento.
                 self._ensure_departamentos_permitidos_para_head(db, actor, departamentos_desejados)
+                self._ensure_departamentos_permitidos_para_operador_comum(
+                    db, actor, departamentos_desejados
+                )
                 eventos += self._sincronizar_departamentos(db, demanda, departamentos_desejados)
 
             if eventos and not campos_alterados:
@@ -1166,10 +1191,10 @@ class DemandaService:
 
         Gatilhada por "é Head" (`departamentos_como_head` não-vazio), nunca por "não é
         admin/gestor": admin/gestor sempre retornam cedo (zero query); um ator que não é
-        Head de nada (Atendimento sem relação de Head, Operador com `demandas.criar`/
-        `demandas.editar` concedido por override) também retorna sem erro — essas categorias
-        ficam deliberadamente de fora até D1.2C/D1.2D. Lista vazia/`None` nunca consulta nada:
-        conjunto vazio é subconjunto trivial de qualquer coisa."""
+        Head de nada retorna sem erro — não porque esteja livre, mas porque
+        `_ensure_departamentos_permitidos_para_operador_comum` (D1.2D) é quem decide o caso
+        dele, com a regra do contexto mínimo do Operador comum. Lista vazia/`None` nunca
+        consulta nada: conjunto vazio é subconjunto trivial de qualquer coisa."""
         if not departamento_ids:
             return
         if actor.perfil_base in PERFIS_VISAO_TOTAL:
@@ -1181,6 +1206,69 @@ class DemandaService:
             raise DemandaDepartamentoForaDoEscopoError(
                 "Departamento responsável não permitido para este usuário"
             )
+
+    def _ensure_departamentos_permitidos_para_operador_comum(
+        self, db: Session, actor: Usuario, departamento_ids: list[str]
+    ) -> None:
+        """Fase 2G.10B, D1.2D — contexto mínimo do Operador comum: quando o ator NÃO é Head
+        (`departamentos_como_head` vazio) nem admin/gestor, só pode colocar em
+        `departamento_responsavel_ids` o próprio departamento (`actor.departamento_id`) —
+        nunca outro, mesmo válido no tenant. Sem departamento próprio, o único conjunto
+        permitido é vazio.
+
+        Complementar a `_ensure_departamentos_permitidos_para_head`, nunca sobreposta: Head
+        (mesmo com só um departamento liderado, mesmo diferente do próprio) sempre cai
+        naquele helper primeiro e nunca chega aqui — confirmado pelo mesmo teste
+        `departamentos_como_head` usado nos dois, sem duplicar a definição de Head. Admin/
+        gestor e lista vazia/`None` retornam cedo, sem nenhuma query."""
+        if not departamento_ids:
+            return
+        if actor.perfil_base in PERFIS_VISAO_TOTAL:
+            return
+        if departamentos_como_head(db, actor):
+            return
+        permitidos = {actor.departamento_id} if actor.departamento_id else set()
+        if not set(departamento_ids) <= permitidos:
+            raise DemandaDepartamentoForaDoEscopoError(
+                "Departamento responsável não permitido para este usuário"
+            )
+
+    def _usuarios_do_departamento(self, db: Session, empresa_id: str, departamento_id: str) -> list[str]:
+        """Fase 2G.10B, D1.2D — usados só por
+        `_ensure_responsaveis_permitidos_para_operador_comum`, uma única consulta por
+        chamada (nunca por responsável). Sem filtro de status — arquivado/inativo/bloqueado
+        continua responsabilidade de `_ensure_usuario_valido`, chamado antes desta checagem
+        de contexto (mesmo padrão de `clientes_sob_responsabilidade`, que também não duplica
+        essa validação)."""
+        statement = select(Usuario.id).where(
+            Usuario.empresa_id == empresa_id,
+            Usuario.departamento_id == departamento_id,
+        )
+        return list(db.scalars(statement).all())
+
+    def _ensure_responsaveis_permitidos_para_operador_comum(
+        self, db: Session, actor: Usuario, responsavel_ids: list[str]
+    ) -> None:
+        """Fase 2G.10B, D1.2D — contexto mínimo do Operador comum para responsáveis: quando o
+        ator NÃO é Head, só pode definir a si próprio ou usuários do seu próprio departamento
+        como `responsavel_ids`. Head fica fora desta regra nesta fase (comportamento atual
+        preservado — qualquer usuário válido do tenant), decisão explícita de escopo, não
+        esquecimento.
+
+        Chamar DEPOIS de `_ensure_usuario_valido` para cada id (tenant/status já garantidos) —
+        este helper só decide CONTEXTO, nunca validade. Admin/gestor, Head e lista vazia/
+        `None` retornam cedo, sem nenhuma query."""
+        if not responsavel_ids:
+            return
+        if actor.perfil_base in PERFIS_VISAO_TOTAL:
+            return
+        if departamentos_como_head(db, actor):
+            return
+        permitidos = {actor.id}
+        if actor.departamento_id:
+            permitidos |= set(self._usuarios_do_departamento(db, actor.empresa_id, actor.departamento_id))
+        if not set(responsavel_ids) <= permitidos:
+            raise DemandaResponsavelForaDoEscopoError("Responsável não permitido para este usuário")
 
     # ----------------------------------------------------------------------------------
     # Vínculos

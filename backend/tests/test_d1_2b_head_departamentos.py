@@ -339,6 +339,14 @@ def test_patch_de_nome_nao_valida_departamentos_legados_fora_do_escopo(
 def test_operador_com_grant_nao_head_nao_e_restringido_por_d1_2b(
     app, db_session: Session, empresa: Empresa
 ) -> None:
+    """D1.2B especificamente (a checagem de Head) NUNCA dispara aqui — `departamentos_como_
+    head` continua vazio para este operador, então `_ensure_departamentos_permitidos_para_
+    head` retorna sem erro, como sempre. A rejeição abaixo vem de D1.2D
+    (`_ensure_departamentos_permitidos_para_operador_comum`, Fase 2G.10B): sem departamento
+    próprio (`_operador_comum` não define `departamento_id`), o único conjunto permitido é
+    vazio — `departamento_b` (não-vazio, alheio) é 422. Antes do D1.2D existir, este mesmo
+    cenário retornava 201 (fora de escopo naquela fase); o teste foi atualizado para refletir
+    a política aprovada, não uma regressão."""
     operador = _operador_comum(db_session, empresa, sufixo="grant")
     _override(db_session, usuario=operador, permissao="demandas.criar", efeito="conceder")
     departamento_b = _departamento(db_session, empresa, nome="Grant-b")
@@ -346,7 +354,8 @@ def test_operador_com_grant_nao_head_nao_e_restringido_por_d1_2b(
     resposta = _client_para(app, operador).post(
         "/demandas", json=_payload(departamentoResponsavelIds=[departamento_b.id])
     )
-    assert resposta.status_code == 201, resposta.text
+    assert resposta.status_code == 422, resposta.text
+    assert resposta.json()["detail"] == "Departamento responsável não permitido para este usuário"
 
 
 # --------------------------------------------------------------------------------------
@@ -448,9 +457,17 @@ def test_create_admin_nao_chama_departamentos_como_head(
     assert chamadas == 0, "admin/gestor não pode acionar departamentos_como_head no service (D1.2B)"
 
 
-def test_create_head_com_lista_faz_no_maximo_uma_chamada(
+def test_create_head_com_lista_faz_no_maximo_duas_chamadas(
     app, db_session: Session, empresa: Empresa
 ) -> None:
+    """Desde o D1.2D (Fase 2G.10B), um Head com `departamento_responsavel_ids` não-vazio
+    aciona `departamentos_como_head` até DUAS vezes — uma em `_ensure_departamentos_
+    permitidos_para_head` (D1.2B, decide o caso dele) e outra em `_ensure_departamentos_
+    permitidos_para_operador_comum` (D1.2D, que precisa saber "é Head?" antes de decidir se
+    a regra de Operador comum se aplica, e não se aplica). É custo O(1) fixo, não O(n) — não
+    depende de quantos departamentos estão no payload nem vira N+1; os dois helpers foram
+    mantidos separados de propósito (baixo acoplamento, D1.2B intocado) em vez de unificados
+    numa única consulta, aceitando essa segunda chamada como o preço dessa simplicidade."""
     head = _operador_comum(db_session, empresa, sufixo="query-3")
     departamento_a = _head_por_responsavel(db_session, empresa, head)
     client = _client_para(app, head)
@@ -464,4 +481,4 @@ def test_create_head_com_lista_faz_no_maximo_uma_chamada(
 
     chamadas = _contar_chamadas_head(_acao)
     assert resultado["resposta"].status_code == 201, resultado["resposta"].text
-    assert chamadas <= 1, f"esperada no máximo 1 chamada a departamentos_como_head no service, houve {chamadas}"
+    assert chamadas <= 2, f"esperadas no máximo 2 chamadas a departamentos_como_head no service, houve {chamadas}"
