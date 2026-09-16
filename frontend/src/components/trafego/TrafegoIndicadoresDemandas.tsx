@@ -63,7 +63,7 @@ export function TrafegoIndicadoresDemandas({
       key: "total-tarefas",
       title: "Tarefas na base",
       value: demandas.length,
-      description: "Total cadastrado (mock).",
+      description: "Total cadastrado.",
       icon: <Users size={16} />,
       tone: "neutral",
     },

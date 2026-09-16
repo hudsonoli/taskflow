@@ -9,7 +9,7 @@
  * (`lib/referencias.ts`) desde a Fase 2E.5 — nada aqui importa mais `legacy-referencias-mock`.
  */
 
-import { AGENCIA_PADRAO_ID, EMPRESA_PADRAO_ID, generateCodigoInterno, generateId } from "@/lib/ids";
+import { generateCodigoInterno, generateId } from "@/lib/ids";
 import { parseDataLocal } from "@/lib/data-local";
 import type {
   Demanda,
@@ -20,7 +20,7 @@ import type {
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
 import { correspondeUsuario, resolverUsuarioPorReferencia } from "@/lib/referencias";
 
-export { AGENCIA_PADRAO_ID, EMPRESA_PADRAO_ID, generateCodigoInterno, generateId };
+export { generateCodigoInterno, generateId };
 
 export const statusDemandaLabels: Record<DemandaStatus, string> = {
   rascunho: "Rascunho",

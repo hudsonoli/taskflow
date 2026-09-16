@@ -42,7 +42,7 @@ export function RelatoriosView() {
     () => volumePorProjetoEColaborador(demandas, projetos, usuarios),
     [demandas, projetos, usuarios],
   );
-  const pontosSemanais = useMemo(() => volumeSemanal(new Date("2026-08-01"), demandas), [demandas]);
+  const pontosSemanais = useMemo(() => volumeSemanal(new Date(), demandas), [demandas]);
 
   return (
     <div className="flex flex-col gap-6">

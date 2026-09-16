@@ -1,6 +1,3 @@
-export const EMPRESA_PADRAO_ID = "empresa-principal";
-export const AGENCIA_PADRAO_ID = "agencia-principal";
-
 export function generateId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

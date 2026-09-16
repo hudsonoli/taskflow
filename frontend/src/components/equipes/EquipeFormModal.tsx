@@ -53,8 +53,8 @@ export function EquipeFormModal({
     setDraft((current) => ({ ...current, ...patch }));
   }
 
-  // Picker só oferece usuário ativo; grava codigoInterno enquanto Equipe continuar mock —
-  // ver docs/padrao-arquivamento.md / lib/referencias.ts.
+  // Picker só oferece usuário ativo; grava codigoInterno porque MemberSelector usa
+  // codigoInterno como identidade de opção — ver lib/referencias.ts.
   const memberOptions = usuarios
     .filter((usuario) => usuario.status === "ativo")
     .map((usuario) => ({

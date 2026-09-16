@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import { Settings } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 
 export function ConfiguracoesView() {
   return (
@@ -21,7 +20,6 @@ export function ConfiguracoesView() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Escolha um item no menu ao lado para gerenciar cadastros e regras do workspace.</p>
         </div>
       </div>
-      <Badge tone="blue">Dados locais</Badge>
     </motion.div>
   );
 }

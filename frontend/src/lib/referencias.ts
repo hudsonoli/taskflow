@@ -10,12 +10,13 @@ import type {
 /**
  * Camada central de compatibilidade entre UUID real e codigoInterno legado.
  *
- * Contexto: Usuário já é 100% real (UUID). Enquanto Demandas/Equipes/Departamentos/
- * Workflows continuarem mock, toda NOVA seleção de responsável feita nesses domínios grava
- * `usuario.codigoInterno` (nunca o UUID) — mas referências já existentes, criadas antes
- * desta migração, podem conter formatos antigos do mock (ids tipo "user-1"/"usuario-3").
- * Nenhum componente deve comparar `usuario.id === referencia` diretamente: sempre passar
- * pelas funções abaixo, que aceitam qualquer um dos dois formatos.
+ * Contexto: Usuário, Demandas, Equipes, Departamentos e Workflows já são 100% reais (API +
+ * banco). Pickers genéricos (MemberSelector) ainda usam `usuario.codigoInterno` como
+ * identidade de opção, não o UUID (ver docs/pendencias-arquiteturais.md). Além disso,
+ * referências criadas antes da migração de cada domínio podem conter formatos antigos do
+ * mock (ids tipo "user-1"/"usuario-3"). Nenhum componente deve comparar
+ * `usuario.id === referencia` diretamente: sempre passar pelas funções abaixo, que aceitam
+ * qualquer um dos dois formatos.
  */
 export function correspondeUsuario(referencia: string, usuario: UsuarioDiretorioItem): boolean {
   return referencia === usuario.id || referencia === usuario.codigoInterno;
@@ -69,10 +70,11 @@ export function resolverGrupoClientePorReferencia(
  * Departamento: mesmo padrão, com um escopo menor desde o contract da Etapa D.
  *
  * `Usuario.departamentoId` **sempre** vem como UUID — é uma FK real em `usuarios`, o banco
- * não aceita outra coisa. Quem ainda carrega o id legado do mock (`dep-criacao`) são
- * `Demanda.departamentoResponsavelIds`, `Projeto` e `SLA`, que o backend preservou como
- * `codigoInterno` do Departamento. Por isso resolver por `id` OU `codigoInterno` continua
- * obrigatório aqui — some quando Projeto, Demanda e SLA migrarem.
+ * não aceita outra coisa. `Demanda.departamentoResponsavelIds`, `Projeto` e `SLA` já são
+ * reais, mas registros criados antes de cada migração podem carregar o id legado do mock
+ * (`dep-criacao`), que o backend preservou como `codigoInterno` do Departamento. Por isso
+ * resolver por `id` OU `codigoInterno` continua obrigatório aqui, para não quebrar essas
+ * referências históricas.
  */
 /**
  * Aceita qualquer objeto que carregue os dois identificadores — o item de diretório e o
@@ -110,10 +112,10 @@ export function resolverDepartamentoNome(
 }
 
 /**
- * Cliente: mesmo padrão. `Demanda.clienteId`, `Projeto.clienteId` e `SLA` ainda carregam o
- * id legado do mock (`cliente-1`, `#2001`), que o backend preservou como `codigoInterno` —
- * então resolver por `id` OU `codigoInterno` continua obrigatório enquanto esses domínios
- * não migrarem.
+ * Cliente: mesmo padrão. `Demanda.clienteId`, `Projeto.clienteId` e `SLA` já são reais, mas
+ * registros criados antes da migração podem carregar o id legado do mock (`cliente-1`,
+ * `#2001`), que o backend preservou como `codigoInterno` — por isso resolver por `id` OU
+ * `codigoInterno` continua obrigatório, para não quebrar essas referências históricas.
  *
  * Nome NUNCA entra aqui: em Cliente ele não é identidade (filiais homônimas são cadastros
  * legítimos — ver docs/padrao-entidades-externas.md).
