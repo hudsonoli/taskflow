@@ -22,9 +22,6 @@ from app.core.relogio import agora_utc, ano_corrente
 
 # Lista FECHADA e executável: só entra o domínio já migrado e com regras confirmadas.
 #
-# Prefixos reservados, ainda NÃO executáveis (entram junto da migração de cada domínio):
-#   U = usuario
-#
 # `tarefa` emite o código oficial da Demanda (T26000001), anual como os demais. A
 # continuidade com a numeração do iClips é responsabilidade de OUTRO contador, contínuo e
 # sem ano — ver app/core/sequencias_operacionais.py.
@@ -36,6 +33,7 @@ PREFIXOS_REFERENCIA: dict[str, str] = {
     "projeto": "P",
     "tarefa": "T",
     "workflow_modelo": "W",
+    "usuario": "U",
 }
 
 SEQUENCIAL_DIGITOS = 6

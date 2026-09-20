@@ -410,10 +410,10 @@ export async function listDiretorioUsuarios(): Promise<UsuarioDiretorioItem[]> {
   }));
 }
 
-export async function criarUsuarioReal(draft: UsuarioFormDraft, empresaId: string, codigoInterno: string): Promise<Usuario> {
+export async function criarUsuarioReal(draft: UsuarioFormDraft, empresaId: string): Promise<Usuario> {
   const created = await request<UsuarioReadApi>("/usuarios", {
     method: "POST",
-    body: JSON.stringify({ ...draftParaPayload(draft), empresaId, codigoInterno, acessoSistema: true }),
+    body: JSON.stringify({ ...draftParaPayload(draft), empresaId, acessoSistema: true }),
   });
   if (!draft.ativo) {
     await request(`/usuarios/${created.id}/inativar`, { method: "POST", body: JSON.stringify({}) });

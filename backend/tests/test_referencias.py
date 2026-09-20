@@ -43,8 +43,8 @@ def test_lista_executavel_cobre_apenas_dominios_ja_migrados() -> None:
     """A lista é FECHADA: cada domínio entra junto da própria migração, nunca antes.
 
     departamento e equipe entraram na Fase 2A; cliente na 2B; fornecedor na 2C; projeto na
-    2D; tarefa (Demanda) na 2E.1; workflow_modelo entrou na migração do módulo Workflow.
-    `usuario` entra na fase correspondente.
+    2D; tarefa (Demanda) na 2E.1; workflow_modelo entrou na migração do módulo Workflow;
+    usuario entrou na Fase 2G.10C-B.
 
     O código de tarefa é `T26000001` e reinicia por ano, como todos os outros. A continuidade
     com a numeração do iClips é responsabilidade de um contador SEPARADO e contínuo —
@@ -58,6 +58,7 @@ def test_lista_executavel_cobre_apenas_dominios_ja_migrados() -> None:
         "projeto": "P",
         "tarefa": "T",
         "workflow_modelo": "W",
+        "usuario": "U",
     }
 
 
@@ -78,10 +79,20 @@ def test_formato_do_codigo_de_tarefa() -> None:
 
 
 def test_tipo_entidade_fora_da_lista_levanta_erro(db_session: Session, empresa) -> None:
-    """`usuario` tem prefixo reservado (U) mas ainda não é executável — pedir código para ele
-    precisa falhar, não gerar um número silenciosamente."""
+    """Tipo genuinamente não registrado em PREFIXOS_REFERENCIA precisa falhar, nunca gerar um
+    número silenciosamente. `usuario` saiu deste teste na Fase 2G.10C-B — virou domínio
+    executável (ver test_formato_do_codigo_de_usuario/test_primeiro_usuario_do_ano abaixo)."""
     with pytest.raises(TipoEntidadeNaoSuportadoError):
-        gerar_proxima_referencia(db_session, empresa_id=empresa.id, tipo_entidade="usuario")
+        gerar_proxima_referencia(db_session, empresa_id=empresa.id, tipo_entidade="inexistente")
+
+
+def test_formato_do_codigo_de_usuario() -> None:
+    assert formatar_codigo_referencia("usuario", 2026, 1) == "U26000001"
+
+
+def test_primeiro_usuario_do_ano(db_session: Session, empresa) -> None:
+    referencia = gerar_proxima_referencia(db_session, empresa_id=empresa.id, tipo_entidade="usuario", ano=2026)
+    assert referencia.codigo_referencia == "U26000001"
 
 
 def test_formato_do_codigo() -> None:

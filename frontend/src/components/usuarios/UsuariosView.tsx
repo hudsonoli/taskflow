@@ -14,7 +14,6 @@ import {
   restaurarUsuarioReal,
   UsuarioArquivadoConflictError,
 } from "@/lib/api-backend";
-import { generateId } from "@/lib/ids";
 import { invalidarDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverDepartamentoNome, resolverDepartamentoPorReferencia } from "@/lib/referencias";
 import { useAppData } from "@/lib/AppDataContext";
@@ -103,7 +102,7 @@ export function UsuariosView() {
     setSalvando(true);
     try {
       if (!usuarioId) {
-        await criarUsuarioReal(draft, empresaId, generateId("usuario"));
+        await criarUsuarioReal(draft, empresaId);
       } else {
         const anterior = usuarios.find((usuario) => usuario.id === usuarioId);
         await atualizarUsuarioReal(usuarioId, draft, anterior?.ativo ?? true);

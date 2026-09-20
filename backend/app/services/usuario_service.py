@@ -4,6 +4,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.referencias import gerar_proxima_referencia
 from app.domain.event_types import DomainEventType
 from app.models.usuario import Usuario
 from app.repositories.empresa_repository import EmpresaRepository
@@ -110,26 +111,33 @@ class UsuarioService:
         if perfil_kwargs.get("contatos") is not None:
             perfil_kwargs["contatos"] = [contato.model_dump() for contato in data.contatos]
 
-        usuario = Usuario(
-            id=str(uuid4()),
-            empresa_id=empresa_id,
-            codigo_interno=data.codigo_interno,
-            nome=data.nome,
-            email=email,
-            perfil_base=data.perfil_base,
-            acesso_sistema=data.acesso_sistema,
-            status=STATUS_ATIVO,
-            created_at=now,
-            updated_at=now,
-            inativado_at=None,
-            inativado_por_usuario_id=None,
-            motivo_inativacao=None,
-            departamento_id=departamento_id,
-            **perfil_kwargs,
-        )
+        # Validação que não escreve, antes de reservar a referência — não faz sentido
+        # incrementar o contador de codigoInterno para uma empresa que nem aceita criação.
+        self._ensure_empresa_accepts_usuario(db, empresa_id)
 
         try:
-            self._ensure_empresa_accepts_usuario(db, empresa_id)
+            # Fase 2G.10C-B: codigoInterno é gerado pelo backend, nunca aceito do cliente —
+            # mesmo padrão de Cliente (ver app/services/cliente_service.py). Mesma transação
+            # da entidade: se o CREATE falhar abaixo, o rollback reverte o incremento do
+            # contador junto (ver app/core/referencias.py) e o número não é queimado.
+            referencia = gerar_proxima_referencia(db, empresa_id=empresa_id, tipo_entidade="usuario")
+            usuario = Usuario(
+                id=str(uuid4()),
+                empresa_id=empresa_id,
+                codigo_interno=referencia.codigo_referencia,
+                nome=data.nome,
+                email=email,
+                perfil_base=data.perfil_base,
+                acesso_sistema=data.acesso_sistema,
+                status=STATUS_ATIVO,
+                created_at=now,
+                updated_at=now,
+                inativado_at=None,
+                inativado_por_usuario_id=None,
+                motivo_inativacao=None,
+                departamento_id=departamento_id,
+                **perfil_kwargs,
+            )
             self._ensure_codigo_interno_available(db, empresa_id, usuario.codigo_interno)
             self._ensure_email_available(db, empresa_id, usuario.email)
             self.repository.create(db, usuario)
@@ -230,16 +238,6 @@ class UsuarioService:
             self._ensure_not_system_account(usuario)
             changed_fields: list[str] = []
             updates = data.model_dump(exclude_unset=True, by_alias=False)
-
-            if "codigo_interno" in updates and updates["codigo_interno"] != usuario.codigo_interno:
-                self._ensure_codigo_interno_available(
-                    db,
-                    usuario.empresa_id,
-                    updates["codigo_interno"],
-                    exclude_id=usuario.id,
-                )
-                usuario.codigo_interno = updates["codigo_interno"]
-                changed_fields.append("codigoInterno")
 
             if "nome" in updates and updates["nome"] != usuario.nome:
                 usuario.nome = updates["nome"]

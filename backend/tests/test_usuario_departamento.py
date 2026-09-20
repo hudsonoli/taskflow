@@ -43,7 +43,6 @@ def _payload_usuario(empresa: Empresa, **extra) -> dict:
     sufixo = uuid.uuid4().hex[:8]
     return {
         "empresaId": empresa.id,
-        "codigoInterno": f"u-{sufixo}",
         "nome": f"Usuário {sufixo}",
         "email": f"u-{sufixo}@teste.local",
         "perfilBase": "operador",

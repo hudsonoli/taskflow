@@ -46,7 +46,6 @@ def test_admin_cria_usuario_e_le_de_volta(client_admin: TestClient, empresa: Emp
     sufixo = uuid.uuid4().hex[:8]
     payload = {
         "empresaId": empresa.id,
-        "codigoInterno": f"novo-usuario-{sufixo}",
         "nome": "Novo Usuário",
         "email": f"novo-usuario-{sufixo}@teste.taskfloww.local",
         "perfilBase": "operador",
@@ -87,7 +86,6 @@ def test_isolamento_por_empresa_retorna_404(
 def test_operador_recebe_403_em_rota_restrita_a_admin(client_operador: TestClient, empresa: Empresa) -> None:
     payload = {
         "empresaId": empresa.id,
-        "codigoInterno": f"tentativa-{uuid.uuid4().hex[:8]}",
         "nome": "Tentativa Bloqueada",
         "email": f"tentativa-{uuid.uuid4().hex[:8]}@teste.taskfloww.local",
         "perfilBase": "operador",
@@ -102,8 +100,9 @@ EMPRESA_CODIGO_PROVA_COMMIT = "empresa-prova-commit-fixa"
 
 
 def test_commit_nao_vaza_a(db_session: Session) -> None:
-    """Cria um usuário com chave única fixa (mesmo empresa_id + codigo_interno + email) via
-    service com commit() real, de forma totalmente independente do teste `_b` abaixo — não
+    """Cria um usuário com chave única fixa (mesmo empresa_id + email — codigoInterno agora é
+    gerado pelo backend, não faz mais parte da chave fixa) via service com commit() real, de
+    forma totalmente independente do teste `_b` abaixo — não
     usa a fixture `empresa` (que gera um ID novo por teste), justamente pra garantir que os
     dois testes disputem a MESMA chave. Se o isolamento por savepoint falhar, um dos dois
     (não importa qual roda primeiro, nem se rodam sozinhos ou juntos) vê um conflito de
@@ -132,7 +131,6 @@ def _criar_usuario_chave_fixa(db_session: Session) -> None:
     service = UsuarioService()
     payload = UsuarioCreate(
         empresaId=empresa_fixa.id,
-        codigoInterno="prova-commit-nao-vaza",
         nome="Prova Commit",
         email="prova-commit-nao-vaza@teste.taskfloww.local",
         perfilBase="operador",

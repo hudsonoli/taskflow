@@ -36,7 +36,6 @@ def _payload_usuario(empresa_id: str, **overrides) -> dict:
     sufixo = uuid.uuid4().hex[:8]
     payload = {
         "empresaId": empresa_id,
-        "codigoInterno": f"enf-usr-{sufixo}",
         "nome": "Usuário Enforcement Teste",
         "email": f"enf-usr-{sufixo}@teste.taskfloww.local",
         "perfilBase": "operador",

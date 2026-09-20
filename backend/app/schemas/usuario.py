@@ -52,25 +52,29 @@ class UsuarioPerfilFields(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+# `codigoInterno` não é campo desta classe: desde a Fase 2G.10C-B, o backend é a única
+# autoridade que gera esse valor (ver UsuarioService.create_usuario) — mesmo padrão de
+# ClienteCreate (app/schemas/cliente.py). `extra="forbid"` garante que enviar `codigoInterno`
+# (ou qualquer outro campo desconhecido) devolve 422 em vez de ser ignorado em silêncio.
 class UsuarioCreate(UsuarioPerfilFields):
     empresa_id: UUID = Field(alias="empresaId")
-    codigo_interno: str = Field(alias="codigoInterno", min_length=1, max_length=64)
     nome: str = Field(min_length=1, max_length=255)
     email: str = Field(min_length=1, max_length=255)
     perfil_base: UsuarioPerfilBase = Field(alias="perfilBase")
     acesso_sistema: bool = Field(default=True, alias="acessoSistema")
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+# `codigoInterno` também fica de fora daqui: imutável após a criação, mesmo padrão de
+# ClienteUpdate. PATCH com `codigoInterno` devolve 422 (extra="forbid"), nunca altera o valor.
 class UsuarioUpdate(UsuarioPerfilFields):
-    codigo_interno: str | None = Field(default=None, alias="codigoInterno", min_length=1, max_length=64)
     nome: str | None = Field(default=None, min_length=1, max_length=255)
     email: str | None = Field(default=None, min_length=1, max_length=255)
     perfil_base: UsuarioPerfilBase | None = Field(default=None, alias="perfilBase")
     acesso_sistema: bool | None = Field(default=None, alias="acessoSistema")
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
 class UsuarioInativar(BaseModel):
