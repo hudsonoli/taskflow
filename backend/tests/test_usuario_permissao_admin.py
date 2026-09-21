@@ -274,6 +274,44 @@ def test_put_motivo_persistido(client_admin: TestClient, db_session: Session, us
     assert linha.motivo == "cobre férias do time comercial"
 
 
+def test_put_muda_de_conceder_para_negar_publica_evento_do_estado_final(
+    client_admin: TestClient, db_session: Session, usuario_operador: Usuario
+) -> None:
+    """O evento publicado numa atualização reflete o efeito NOVO, nunca o anterior."""
+    client_admin.put(f"/usuarios/{usuario_operador.id}/permissoes/clientes.visualizar", json={"efeito": "conceder"})
+    client_admin.put(f"/usuarios/{usuario_operador.id}/permissoes/clientes.visualizar", json={"efeito": "negar"})
+
+    concedidos = _eventos_de(db_session, usuario_operador.id, "usuario.permissao_concedida")
+    negados = _eventos_de(db_session, usuario_operador.id, "usuario.permissao_negada")
+    assert len(concedidos) == 1  # só o primeiro PUT
+    assert len(negados) == 1  # só o segundo PUT — não duplica o de conceder
+
+
+def test_put_mesmo_efeito_com_motivo_novo_atualiza_e_publica_evento_de_novo(
+    client_admin: TestClient, db_session: Session, usuario_operador: Usuario
+) -> None:
+    """Reenviar o MESMO efeito com motivo diferente ainda conta como ação administrativa
+    explícita — atualiza o motivo e publica um evento novo, não é ignorado por já existir."""
+    client_admin.put(
+        f"/usuarios/{usuario_operador.id}/permissoes/clientes.visualizar",
+        json={"efeito": "conceder", "motivo": "motivo original"},
+    )
+    resposta = client_admin.put(
+        f"/usuarios/{usuario_operador.id}/permissoes/clientes.visualizar",
+        json={"efeito": "conceder", "motivo": "motivo atualizado"},
+    )
+    assert resposta.status_code == 200, resposta.text
+
+    repository = UsuarioPermissaoRepository()
+    linha = repository.get_by_usuario_e_permissao(
+        db_session, empresa_id=usuario_operador.empresa_id, usuario_id=usuario_operador.id, permissao="clientes.visualizar"
+    )
+    assert linha.motivo == "motivo atualizado"
+
+    eventos = _eventos_de(db_session, usuario_operador.id, "usuario.permissao_concedida")
+    assert len(eventos) == 2  # os dois PUTs publicaram, mesmo com o mesmo efeito
+
+
 def test_put_concedido_por_reflete_ator_mais_recente(
     app, client_admin: TestClient, db_session: Session, empresa: Empresa, usuario_admin: Usuario, usuario_operador: Usuario
 ) -> None:
@@ -465,6 +503,24 @@ def test_integracao_grant_demandas_criar_libera_criacao_real(
 
     criada = client_operador.post("/demandas", json={"nome": "Demanda pós-grant"})
     assert criada.status_code == 201, criada.text
+
+
+def test_integracao_grant_reflete_em_auth_me_imediatamente(
+    app, client_admin: TestClient, db_session: Session, empresa: Empresa
+) -> None:
+    """Mesma garantia do teste acima, mas para /auth/me — a outra rota que expõe permissões
+    efetivas (ver test_usuario_permissao.py::test_auth_me_expoe_permissoes_ordenadas). Sem
+    cache, sem token novo, sem relogin: o próximo request já vê o override."""
+    operador = _criar_usuario_com_credencial(db_session, empresa=empresa, perfil_base="operador", email_prefixo="authme-int")
+    client_operador = _client_para(app, operador)
+
+    antes = client_operador.get("/auth/me").json()
+    assert "clientes.visualizar" not in antes["permissoes"]
+
+    client_admin.put(f"/usuarios/{operador.id}/permissoes/clientes.visualizar", json={"efeito": "conceder"})
+
+    depois = client_operador.get("/auth/me").json()
+    assert "clientes.visualizar" in depois["permissoes"]
 
 
 # --------------------------------------------------------------------------------------

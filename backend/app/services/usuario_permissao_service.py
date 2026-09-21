@@ -161,78 +161,86 @@ class UsuarioPermissaoService:
     ) -> UsuarioPermissao:
         """Upsert por `(usuario_id, permissao)` — cria a exceção se não existir, atualiza
         `efeito`/`motivo`/`concedido_por_usuario_id` se já existir (conceder→negar e
-        negar→conceder passam pelo mesmo caminho, sem apagar e recriar a linha). Publica
-        evento e commita na MESMA transação — sem commit intermediário, mesmo padrão de
-        `UsuarioService.create_usuario`."""
+        negar→conceder passam pelo mesmo caminho, sem apagar e recriar a linha; reenviar o
+        MESMO efeito com motivo novo também conta como ação administrativa e publica evento
+        de novo). Publica evento e commita na MESMA transação — sem commit intermediário,
+        mesmo padrão de `UsuarioService.create_usuario`.
+
+        Corrida (duas escritas concorrentes na mesma chave): tenta de novo UMA vez após
+        `IntegrityError` — o retry reconsulta a linha que a outra transação acabou de
+        commitar e aplica o valor desejado por cima dela, em vez de duplicar a lógica de
+        upsert+evento+commit num bloco `except` separado (o que deixaria uma segunda corrida,
+        ainda mais rara, sem tratamento)."""
         validar_permissao_existente(permissao)
-        now = datetime.now(timezone.utc)
 
-        try:
-            existente = self.repository.get_by_usuario_e_permissao(
-                db, empresa_id=usuario.empresa_id, usuario_id=usuario.id, permissao=permissao
-            )
-            if existente is not None:
-                existente.efeito = efeito
-                existente.motivo = motivo
-                existente.concedido_por_usuario_id = concedido_por_usuario_id
-                existente.updated_at = now
-                override = self.repository.upsert(db, existente)
-            else:
-                override = self.repository.upsert(
+        for tentativa in (1, 2):
+            try:
+                return self._upsert_e_publicar(
                     db,
-                    UsuarioPermissao(
-                        id=str(uuid4()),
-                        empresa_id=usuario.empresa_id,
-                        usuario_id=usuario.id,
-                        permissao=permissao,
-                        efeito=efeito,
-                        motivo=motivo,
-                        concedido_por_usuario_id=concedido_por_usuario_id,
-                        created_at=now,
-                        updated_at=now,
-                    ),
+                    usuario=usuario,
+                    permissao=permissao,
+                    efeito=efeito,
+                    motivo=motivo,
+                    concedido_por_usuario_id=concedido_por_usuario_id,
                 )
-
-            tipo = (
-                DomainEventType.USUARIO_PERMISSAO_CONCEDIDA
-                if efeito == EFEITO_CONCEDER
-                else DomainEventType.USUARIO_PERMISSAO_NEGADA
-            )
-            self._publish_permissao_event(
-                db, usuario, tipo, concedido_por_usuario_id, permissao=permissao, efeito=efeito, occurred_at=now
-            )
-            db.commit()
-            db.refresh(override)
-            return override
-        except IntegrityError:
-            # Corrida: duas escritas concorrentes na mesma chave (usuario_id, permissao) —
-            # o SELECT acima não viu a linha que a outra transação acabou de commitar.
-            db.rollback()
-            existente = self.repository.get_by_usuario_e_permissao(
-                db, empresa_id=usuario.empresa_id, usuario_id=usuario.id, permissao=permissao
-            )
-            if existente is None:
+            except IntegrityError:
+                db.rollback()
+                if tentativa == 2:
+                    raise
+            except Exception:
+                db.rollback()
                 raise
+        raise AssertionError("inalcançável")  # loop sempre retorna ou levanta antes daqui
+
+    def _upsert_e_publicar(
+        self,
+        db: Session,
+        *,
+        usuario: Usuario,
+        permissao: str,
+        efeito: str,
+        motivo: str | None,
+        concedido_por_usuario_id: str,
+    ) -> UsuarioPermissao:
+        now = datetime.now(timezone.utc)
+        existente = self.repository.get_by_usuario_e_permissao(
+            db, empresa_id=usuario.empresa_id, usuario_id=usuario.id, permissao=permissao
+        )
+        if existente is not None:
             existente.efeito = efeito
             existente.motivo = motivo
             existente.concedido_por_usuario_id = concedido_por_usuario_id
-            existente.updated_at = datetime.now(timezone.utc)
+            existente.updated_at = now
             override = self.repository.upsert(db, existente)
-            tipo = (
-                DomainEventType.USUARIO_PERMISSAO_CONCEDIDA
-                if efeito == EFEITO_CONCEDER
-                else DomainEventType.USUARIO_PERMISSAO_NEGADA
+        else:
+            override = self.repository.upsert(
+                db,
+                UsuarioPermissao(
+                    id=str(uuid4()),
+                    empresa_id=usuario.empresa_id,
+                    usuario_id=usuario.id,
+                    permissao=permissao,
+                    efeito=efeito,
+                    motivo=motivo,
+                    concedido_por_usuario_id=concedido_por_usuario_id,
+                    created_at=now,
+                    updated_at=now,
+                ),
             )
-            self._publish_permissao_event(
-                db, usuario, tipo, concedido_por_usuario_id, permissao=permissao, efeito=efeito,
-                occurred_at=existente.updated_at,
-            )
-            db.commit()
-            db.refresh(override)
-            return override
-        except Exception:
-            db.rollback()
-            raise
+
+        # Representa o estado FINAL (o efeito que acabou de ser gravado), nunca o anterior —
+        # conceder→negar publica "negada", negar→conceder publica "concedida".
+        tipo = (
+            DomainEventType.USUARIO_PERMISSAO_CONCEDIDA
+            if efeito == EFEITO_CONCEDER
+            else DomainEventType.USUARIO_PERMISSAO_NEGADA
+        )
+        self._publish_permissao_event(
+            db, usuario, tipo, concedido_por_usuario_id, permissao=permissao, efeito=efeito, occurred_at=now
+        )
+        db.commit()
+        db.refresh(override)
+        return override
 
     def remover_override(
         self,
