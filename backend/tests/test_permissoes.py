@@ -11,6 +11,7 @@ import pytest
 from app.core.permissoes import (
     CATALOGO,
     DEFAULTS_POR_PERFIL,
+    LABELS_PERMISSOES,
     PERFIL_ADMIN,
     PERFIL_GESTOR,
     PERFIL_OPERADOR,
@@ -32,6 +33,22 @@ def test_catalogo_usa_convencao_modulo_ponto_acao() -> None:
 def test_catalogo_sem_chaves_duplicadas_entre_modulos() -> None:
     todas = [permissao for permissoes in CATALOGO.values() for permissao in permissoes]
     assert len(todas) == len(set(todas))
+
+
+def test_chaves_do_catalogo_tem_exatamente_um_ponto_modulo_e_acao_nao_vazios() -> None:
+    """Mais estrito que test_catalogo_usa_convencao_modulo_ponto_acao acima: aqui a chave é
+    rejeitada se tiver DOIS pontos (ex.: "a.b.c"), não só se faltar o ponto."""
+    for permissao in TODAS_AS_PERMISSOES:
+        partes = permissao.split(".")
+        assert len(partes) == 2, f"{permissao!r} não tem exatamente um ponto"
+        modulo, acao = partes
+        assert modulo, f"{permissao!r} tem módulo vazio"
+        assert acao, f"{permissao!r} tem ação vazia"
+
+
+def test_labels_cobrem_exatamente_o_catalogo() -> None:
+    """Fase 2G.10C-C1 — nenhuma permissão sem label, nenhuma label para chave inexistente."""
+    assert set(LABELS_PERMISSOES) == TODAS_AS_PERMISSOES
 
 
 # --------------------------------------------------------------------------------------
@@ -107,12 +124,20 @@ def test_default_operador_nao_inclui_nenhum_cadastro_nem_financeiro_nem_administ
     assert operador.isdisjoint(bloqueadas)
 
 
-def test_permissoes_gerenciar_nao_existe_ainda() -> None:
-    """Revisão pré-merge (item 3): não existe hoje nenhum endpoint de gestão de permissão —
-    a chave só nasce junto da funcionalidade real, em 2G.10C/2G.10E. Não deixar uma chave
-    "reservada para o futuro" sem ação real por trás."""
-    assert "permissoes.gerenciar" not in TODAS_AS_PERMISSOES
-    assert not any(modulo == "permissoes" for modulo in CATALOGO)
+def test_permissoes_gerenciar_existe_e_e_modulo_proprio() -> None:
+    """Fase 2G.10C-C1: a chave nasceu junto do endpoint que ela protege
+    (POST/PUT/DELETE /usuarios/{id}/permissoes) — deixou de ser "reservada para o futuro"."""
+    assert "permissoes.gerenciar" in TODAS_AS_PERMISSOES
+    assert CATALOGO["permissoes"] == ["permissoes.gerenciar"]
+
+
+def test_permissoes_gerenciar_e_admin_only_por_default() -> None:
+    """Gestor/operador nunca administram overrides por perfil — o piso fixo em
+    require_permissoes_gerenciar (app/dependencies/permissoes.py) reforça isso mesmo se
+    algum dia um override tentasse conceder a chave a outro perfil."""
+    assert "permissoes.gerenciar" in DEFAULTS_POR_PERFIL[PERFIL_ADMIN]
+    assert "permissoes.gerenciar" not in DEFAULTS_POR_PERFIL[PERFIL_GESTOR]
+    assert "permissoes.gerenciar" not in DEFAULTS_POR_PERFIL[PERFIL_OPERADOR]
 
 
 def test_trafego_e_uma_permissao_so_e_nomeada_pela_acao_mais_ampla() -> None:

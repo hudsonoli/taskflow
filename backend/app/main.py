@@ -30,6 +30,7 @@ from app.api.routes import (
     sessoes_trabalho,
     sla_regras,
     tipos_tarefa,
+    usuario_permissao,
     usuarios,
     workflow_modelos,
 )
@@ -59,6 +60,7 @@ app.include_router(eventos.router)
 app.include_router(sessoes_trabalho.router)
 app.include_router(empresas.router)
 app.include_router(usuarios.router)
+app.include_router(usuario_permissao.router)
 app.include_router(grupos_cliente.router)
 app.include_router(clientes.router)
 app.include_router(fornecedores.router)

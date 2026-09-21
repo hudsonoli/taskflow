@@ -84,11 +84,12 @@ EFEITOS_VALIDOS: frozenset[str] = frozenset({EFEITO_CONCEDER, EFEITO_NEGAR})
 # `dashboard.*` fica de fora de propósito: não existe rota nem página de dashboard no
 # TaskFloww hoje (a raiz "/" só redireciona para "/meu-dia") — ver item 20 da Fase 2G.10A.
 #
-# `permissoes.gerenciar` também ficou de fora (revisão pré-merge, item 3): não existe hoje
-# nenhum endpoint de gestão de permissão, nenhuma tela `/configuracoes/permissoes`, nenhuma
-# ação real que essa chave representaria — só existiria "reservada para o futuro", o que a
-# própria Fase 2G.10A proíbe explicitamente. Ela nasce quando a funcionalidade real nascer
-# (2G.10C ou 2G.10E), junto do endpoint que ela vai proteger.
+# `permissoes.gerenciar` nasceu na Fase 2G.10C-C1, junto do endpoint que ela protege
+# (POST/PUT/DELETE /usuarios/{id}/permissoes — ver app/api/routes/usuario_permissao.py).
+# Default só em admin (ver DEFAULTS_POR_PERFIL) — gestor/operador nunca administram
+# overrides de terceiros, mesmo recebendo um "conceder" via override (piso fixo de perfil em
+# require_permissoes_gerenciar, app/dependencies/permissoes.py, mesmo padrão de
+# require_trafego_gerenciar).
 # ---------------------------------------------------------------------------------------
 
 MODULO_DEMANDAS = "demandas"
@@ -113,6 +114,7 @@ MODULO_EXPEDIENTE = "expediente"
 MODULO_EMAIL = "email"
 MODULO_NUMERACAO = "numeracao"
 MODULO_ACESSOS = "acessos"
+MODULO_PERMISSOES = "permissoes"
 
 # Cadastros administrativos: hoje todos com o mesmo formato (visualizar/criar/editar/
 # arquivar), todos `require_admin_or_gestor` nas 4 ações — ver rotas em
@@ -190,11 +192,93 @@ CATALOGO: dict[str, list[str]] = {
     # publicado internamente pelos services (ver DomainEventPublisher), nunca pela API
     # pública. Não vira `acessos.criar` sem uma ação real de UI por trás.
     MODULO_ACESSOS: ["acessos.visualizar"],
+    # Fase 2G.10C-C1 — administração de exceções individuais (usuario_permissao). Só admin
+    # (ver DEFAULTS_POR_PERFIL e require_permissoes_gerenciar) — nunca gestor/operador, nem
+    # via override.
+    MODULO_PERMISSOES: ["permissoes.gerenciar"],
 }
 
 TODAS_AS_PERMISSOES: frozenset[str] = frozenset(
     permissao for permissoes in CATALOGO.values() for permissao in permissoes
 )
+
+
+# ---------------------------------------------------------------------------------------
+# Labels legíveis (Fase 2G.10C-C1) — só apresentação, para a tela administrativa de
+# overrides (GET /usuarios/{id}/permissoes). Dict separado, não um objeto dentro de
+# CATALOGO: manter CATALOGO como list[str] evita reescrever `TODAS_AS_PERMISSOES` e todo
+# teste que já itera sobre ele como string simples. Uma chave por permissão, nunca uma a
+# menos (test_labels_cobrem_exatamente_o_catalogo) nem uma sobrando.
+# ---------------------------------------------------------------------------------------
+LABELS_PERMISSOES: dict[str, str] = {
+    "demandas.visualizar": "Visualizar demandas",
+    "demandas.criar": "Criar demandas",
+    "demandas.editar": "Editar demandas",
+    "demandas.arquivar": "Arquivar demandas",
+    "projetos.visualizar": "Visualizar projetos",
+    "projetos.criar": "Criar projetos",
+    "projetos.editar": "Editar projetos",
+    "projetos.arquivar": "Arquivar projetos",
+    "clientes.visualizar": "Visualizar clientes",
+    "clientes.criar": "Criar clientes",
+    "clientes.editar": "Editar clientes",
+    "clientes.arquivar": "Arquivar clientes",
+    "grupos_cliente.visualizar": "Visualizar grupos de clientes",
+    "grupos_cliente.criar": "Criar grupos de clientes",
+    "grupos_cliente.editar": "Editar grupos de clientes",
+    "grupos_cliente.arquivar": "Arquivar grupos de clientes",
+    "fornecedores.visualizar": "Visualizar fornecedores",
+    "fornecedores.criar": "Criar fornecedores",
+    "fornecedores.editar": "Editar fornecedores",
+    "fornecedores.arquivar": "Arquivar fornecedores",
+    "departamentos.visualizar": "Visualizar departamentos",
+    "departamentos.criar": "Criar departamentos",
+    "departamentos.editar": "Editar departamentos",
+    "departamentos.arquivar": "Arquivar departamentos",
+    "equipes.visualizar": "Visualizar equipes",
+    "equipes.criar": "Criar equipes",
+    "equipes.editar": "Editar equipes",
+    "equipes.arquivar": "Arquivar equipes",
+    "pecas.visualizar": "Visualizar peças",
+    "pecas.criar": "Criar peças",
+    "pecas.editar": "Editar peças",
+    "pecas.arquivar": "Arquivar peças",
+    "categorias_peca.visualizar": "Visualizar categorias de peça",
+    "categorias_peca.criar": "Criar categorias de peça",
+    "categorias_peca.editar": "Editar categorias de peça",
+    "categorias_peca.arquivar": "Arquivar categorias de peça",
+    "workflows.visualizar": "Visualizar workflows",
+    "workflows.criar": "Criar workflows",
+    "workflows.editar": "Editar workflows",
+    "workflows.arquivar": "Arquivar workflows",
+    "tipos_tarefa.visualizar": "Visualizar tipos de tarefa",
+    "tipos_tarefa.criar": "Criar tipos de tarefa",
+    "tipos_tarefa.editar": "Editar tipos de tarefa",
+    "tipos_tarefa.arquivar": "Arquivar tipos de tarefa",
+    "sla.visualizar": "Visualizar regras de SLA",
+    "sla.criar": "Criar regras de SLA",
+    "sla.editar": "Editar regras de SLA",
+    "sla.arquivar": "Arquivar regras de SLA",
+    "modelos_campanha.visualizar": "Visualizar modelos de campanha",
+    "modelos_campanha.criar": "Criar modelos de campanha",
+    "modelos_campanha.editar": "Editar modelos de campanha",
+    "modelos_campanha.arquivar": "Arquivar modelos de campanha",
+    "usuarios.visualizar": "Visualizar usuários",
+    "usuarios.criar": "Criar usuários",
+    "usuarios.editar": "Editar usuários",
+    "usuarios.suspender": "Suspender/reativar usuários",
+    "financeiro.visualizar": "Visualizar dados financeiros",
+    "relatorios.visualizar": "Visualizar relatórios",
+    "trafego.gerenciar": "Gerenciar Central de Tráfego",
+    "configuracoes.visualizar": "Acessar Configurações",
+    "expediente.visualizar": "Visualizar horário de expediente",
+    "expediente.editar": "Editar horário de expediente",
+    "email.visualizar": "Visualizar configuração de e-mail",
+    "email.editar": "Editar configuração de e-mail",
+    "numeracao.visualizar": "Visualizar numeração de tarefas",
+    "acessos.visualizar": "Visualizar histórico de acessos",
+    "permissoes.gerenciar": "Gerenciar permissões de usuários",
+}
 
 
 class PermissaoInvalidaError(ValueError):
@@ -296,6 +380,7 @@ DEFAULTS_POR_PERFIL: dict[str, frozenset[str]] = {
             "email.editar",
             "numeracao.visualizar",
             "acessos.visualizar",
+            "permissoes.gerenciar",
         }
     ),
     # gestor: administra os mesmos cadastros e áreas que admin, mas não gerencia Usuário

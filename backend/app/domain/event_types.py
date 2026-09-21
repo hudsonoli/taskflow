@@ -16,6 +16,14 @@ class DomainEventType(StrEnum):
     USUARIO_ARQUIVADO = "usuario.arquivado"
     USUARIO_RESTAURADO = "usuario.restaurado"
 
+    # Overrides de usuario_permissao (Fase 2G.10C-C1) — mesma entidade_tipo/entidade_id do
+    # Usuario-alvo, não do ator que administrou. "removida" cobre tanto "herdar" (DELETE
+    # explícito na UI) quanto qualquer remoção futura — o evento descreve a ação mecânica no
+    # banco, não o rótulo de UI.
+    USUARIO_PERMISSAO_CONCEDIDA = "usuario.permissao_concedida"
+    USUARIO_PERMISSAO_NEGADA = "usuario.permissao_negada"
+    USUARIO_PERMISSAO_REMOVIDA = "usuario.permissao_removida"
+
     GRUPO_CLIENTE_CRIADO = "grupo_cliente.criado"
     GRUPO_CLIENTE_ALTERADO = "grupo_cliente.alterado"
     GRUPO_CLIENTE_ARQUIVADO = "grupo_cliente.arquivado"

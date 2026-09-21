@@ -251,3 +251,33 @@ def require_demandas_criar() -> Callable[..., Usuario]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
 
     return dependency
+
+
+# admin-only, mesma allowlist restrita de PERFIL_ADMIN sozinho (nem gestor entra aqui, ao
+# contrário de _PERFIS_TRAFEGO_AUTORIZADOS) — gerenciar overrides de outras pessoas é mais
+# sensível do que abrir/fechar sessão de trabalho: um override de "conceder" mal colocado
+# aqui deixaria alguém administrar as próprias permissões de qualquer um, inclusive de si
+# mesmo (self-escalation).
+_PERFIS_PERMISSOES_GERENCIAR_AUTORIZADOS = frozenset({PERFIL_ADMIN})
+
+
+def require_permissoes_gerenciar() -> Callable[..., Usuario]:
+    """Como `require_trafego_gerenciar`, mas para `permissoes.gerenciar` (Fase 2G.10C-C1).
+
+    Piso fixo: mesmo com `permissoes.gerenciar = conceder` via override, só quem já tem
+    `perfil_base == "admin"` passa. Isso é o que impede um gestor/operador com grant de virar
+    administrador de permissões — a permissão sozinha nunca é suficiente, só perfil real.
+
+    Não existe "super-admin" nem hierarquia nova: um admin pode alterar overrides de outro
+    admin (inclusive negar `permissoes.gerenciar` dele) — ver
+    app/api/routes/usuario_permissao.py para a regra de self (bloqueada por outro motivo,
+    não por este guard).
+    """
+    base = require_permissao("permissoes.gerenciar")
+
+    def dependency(current_user: Usuario = Depends(base)) -> Usuario:
+        if current_user.perfil_base not in _PERFIS_PERMISSOES_GERENCIAR_AUTORIZADOS:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
+        return current_user
+
+    return dependency
