@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Combobox } from "@/components/ui/Combobox";
@@ -41,27 +41,42 @@ export function PermissoesUsuarioView() {
 
   const isSelf = usuarioId !== "" && usuarioId === usuarioAtual?.id;
 
+  // Espelha o usuarioId mais recente para descartar respostas atrasadas (stale) quando o
+  // admin troca de seleção antes do GET anterior terminar — ex.: seleciona A, GET A demora,
+  // troca pra B, GET B termina primeiro; se GET A terminar depois, não pode sobrescrever a
+  // tela de B. Comparar contra a ref (não contra `usuarioId` do closure, que ficaria preso
+  // ao valor de quando `carregar` foi chamada) é o que torna essa checagem confiável.
+  const usuarioIdRef = useRef(usuarioId);
+  useEffect(() => {
+    usuarioIdRef.current = usuarioId;
+  }, [usuarioId]);
+
   async function carregar(id: string) {
     setCarregandoItens(true);
     setErroCarregamento(null);
     setItens(null);
     try {
       const dados = await listarPermissoesUsuario(id);
+      if (usuarioIdRef.current !== id) return; // resposta de uma seleção já abandonada
       setItens(dados);
     } catch (error) {
+      if (usuarioIdRef.current !== id) return;
       setItens(null);
       setErroCarregamento(
         error instanceof Error ? error.message : "Não foi possível carregar as permissões deste usuário.",
       );
     } finally {
-      setCarregandoItens(false);
+      if (usuarioIdRef.current === id) setCarregandoItens(false);
     }
   }
 
   useEffect(() => {
-    if (!usuarioId) return;
     const timeout = setTimeout(() => {
-      void carregar(usuarioId);
+      // Troca de usuário: erro de ação e linhas "em atualização" são do usuário anterior —
+      // nunca devem vazar pra seleção nova (mesma chave de permissão existe pra todo mundo).
+      setErroAcao(null);
+      setEmAtualizacao(new Set());
+      if (usuarioId) void carregar(usuarioId);
     }, 0);
     return () => clearTimeout(timeout);
   }, [usuarioId]);
@@ -179,6 +194,7 @@ export function PermissoesUsuarioView() {
                       <div className="w-36">
                         <Select
                           label=""
+                          aria-label={`Estado de ${item.label}`}
                           className="py-1.5"
                           value={estadoUI(item)}
                           disabled={isSelf || emAtualizacao.has(item.permissao)}
