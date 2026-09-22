@@ -5,17 +5,21 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { gruposConfiguracao } from "@/lib/configuracoes-menu";
 import { useAppData } from "@/lib/AppDataContext";
-import { podeAcessarAcessos } from "@/lib/escopo-operacional";
+import { podeAcessarAcessos, podeGerenciarPermissoes } from "@/lib/escopo-operacional";
 
 export function ConfiguracoesSidebarNav() {
   const pathname = usePathname();
   const { usuarioAtual } = useAppData();
   const acessoAdministrativoLiberado = usuarioAtual ? podeAcessarAcessos(usuarioAtual) : false;
+  const acessoPermissoesLiberado = usuarioAtual ? podeGerenciarPermissoes(usuarioAtual) : false;
 
   const grupos = gruposConfiguracao
     .map((grupo) => ({
       ...grupo,
-      itens: grupo.itens.filter((item) => !item.apenasAdministrativo || acessoAdministrativoLiberado),
+      itens: grupo.itens.filter((item) => {
+        if (item.apenasAdmin) return acessoPermissoesLiberado;
+        return !item.apenasAdministrativo || acessoAdministrativoLiberado;
+      }),
     }))
     .filter((grupo) => grupo.itens.length > 0);
 

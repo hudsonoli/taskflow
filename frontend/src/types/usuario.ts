@@ -79,6 +79,9 @@ export type Usuario = {
   corIdentificacao: string;
   createdAt: string;
   updatedAt: string;
+  // Só preenchido para o próprio usuário logado (GET /usuarios/me) — ver
+  // UsuarioRead.permissoes no backend. Undefined para qualquer outra pessoa.
+  permissoes?: string[];
 };
 
 export type UsuarioFormDraft = Omit<Usuario, "id" | "empresaId" | "createdAt" | "updatedAt">;

@@ -206,6 +206,21 @@ export function podeAcessarAreaAdministrativa(usuario: Usuario): boolean {
   return PERFIL_PARA_PERFIL_BASE[usuario.perfil] !== "operador";
 }
 
+/**
+ * Gestão administrativa de overrides (Fase 2G.10C-C2, `/configuracoes/permissoes`).
+ *
+ * Mais restrito que `podeAcessarAreaAdministrativa`: aqui é só Admin, nunca Gestor — espelha
+ * o piso fixo real do backend (`require_permissoes_gerenciar`, `perfil_base == "admin"`,
+ * app/dependencies/permissoes.py). Checar só o perfil não bastaria: um Admin com
+ * `permissoes.gerenciar = negar` (ver Fase 2G.10C-C1) tem que parar de ver o item também —
+ * por isso a segunda condição usa `usuario.permissoes`, populado só para o próprio usuário
+ * logado (GET /usuarios/me). Isto é só UX: o backend responde 403/404 de qualquer forma se a
+ * rota for acessada direto — ver aviso no topo do arquivo.
+ */
+export function podeGerenciarPermissoes(usuario: Usuario): boolean {
+  return PERFIL_PARA_PERFIL_BASE[usuario.perfil] === "admin" && (usuario.permissoes?.includes("permissoes.gerenciar") ?? false);
+}
+
 // ---------------------------------------------------------------------------------
 // Expediente — o que a operação pode fazer fora do horário
 // ---------------------------------------------------------------------------------

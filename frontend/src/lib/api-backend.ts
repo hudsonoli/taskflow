@@ -1,4 +1,5 @@
 import type { PerfilUsuario, Usuario, UsuarioFormDraft } from "@/types/usuario";
+import type { PermissaoAdminItem, PermissaoOverride } from "@/types/permissao";
 import type { GrupoCliente, GrupoClienteStatus } from "@/types/grupo-cliente";
 import type { Departamento, DepartamentoFormDraft, DepartamentoStatus } from "@/types/departamento";
 import type { Equipe, EquipeFormDraft, EquipeStatus } from "@/types/equipe";
@@ -295,6 +296,8 @@ export type UsuarioReadApi = {
   corIdentificacao: string | null;
   createdAt: string;
   updatedAt: string;
+  // Só vem preenchido em GET /usuarios/me — ver docstring de UsuarioRead.permissoes no backend.
+  permissoes?: string[] | null;
 };
 
 export function mapUsuarioReadToUsuario(data: UsuarioReadApi): Usuario {
@@ -324,6 +327,7 @@ export function mapUsuarioReadToUsuario(data: UsuarioReadApi): Usuario {
     corIdentificacao: data.corIdentificacao ?? "zinc",
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+    permissoes: data.permissoes ?? undefined,
   };
 }
 
@@ -453,6 +457,37 @@ export async function excluirUsuarioReal(usuarioId: string, motivoArquivamento: 
 export async function restaurarUsuarioReal(usuarioId: string): Promise<Usuario> {
   const restored = await request<UsuarioReadApi>(`/usuarios/${usuarioId}/restaurar`, { method: "POST" });
   return mapUsuarioReadToUsuario(restored);
+}
+
+// ---------------------------------------------------------------------------------
+// Gestão administrativa de overrides — Fase 2G.10C-C1/C2. `permissao` sempre passa por
+// encodeURIComponent (é uma chave "<modulo>.<acao>", vai na URL). Backend é a única
+// autoridade: aqui só chamamos os 3 endpoints já validados, sem lógica de negócio.
+// ---------------------------------------------------------------------------------
+
+export async function listarPermissoesUsuario(usuarioId: string): Promise<PermissaoAdminItem[]> {
+  return request<PermissaoAdminItem[]>(`/usuarios/${usuarioId}/permissoes`);
+}
+
+export async function definirPermissaoUsuario(
+  usuarioId: string,
+  permissao: string,
+  efeito: PermissaoOverride,
+  motivo?: string,
+): Promise<PermissaoAdminItem> {
+  return request<PermissaoAdminItem>(`/usuarios/${usuarioId}/permissoes/${encodeURIComponent(permissao)}`, {
+    method: "PUT",
+    body: JSON.stringify({ efeito, motivo }),
+  });
+}
+
+// "Herdar" = remover a exceção individual — nunca um terceiro valor de efeito (ver
+// UsuarioPermissaoService.remover_override no backend). DELETE devolve 204 (sem corpo), por
+// isso quem chama refaz o GET para obter herdado/efetivo corretos da linha.
+export async function herdarPermissaoUsuario(usuarioId: string, permissao: string): Promise<void> {
+  await request<null>(`/usuarios/${usuarioId}/permissoes/${encodeURIComponent(permissao)}`, {
+    method: "DELETE",
+  });
 }
 
 // ---------------------------------------------------------------------------------------

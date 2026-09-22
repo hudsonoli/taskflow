@@ -10,6 +10,14 @@ export type ItemConfiguracao = {
   // Item administrativo — visível apenas para Admin/Gestor/Diretoria/SuperAdmin
   // (ver `podeAcessarAcessos` em lib/escopo-operacional.ts). Filtrado no ConfiguracoesSidebarNav.
   apenasAdministrativo?: boolean;
+  // Mais restrito que `apenasAdministrativo`: só Admin (nunca Gestor) — ver
+  // `podeGerenciarPermissoes` em lib/escopo-operacional.ts. Usado por Permissões, onde o
+  // piso real do backend é `perfil_base == "admin"`, não "admin ou gestor".
+  apenasAdmin?: boolean;
+  // Chave do catálogo de permissões (app/core/permissoes.py) que também precisa estar no
+  // conjunto efetivo do usuário, além de `apenasAdmin`. Deixa visível "Admin comum" mas
+  // esconde de um Admin com essa chave negada explicitamente via override.
+  permissaoNecessaria?: string;
 };
 
 export type GrupoConfiguracao = {
@@ -44,7 +52,15 @@ export const gruposConfiguracao: GrupoConfiguracao[] = [
         available: true,
         apenasAdministrativo: true,
       },
-      { label: "Permissões", description: "Perfis de acesso (RBAC).", href: "#", icon: ShieldCheck, available: false },
+      {
+        label: "Permissões",
+        description: "Exceções individuais sobre as permissões herdadas do perfil de cada usuário.",
+        href: "/configuracoes/permissoes",
+        icon: ShieldCheck,
+        available: true,
+        apenasAdmin: true,
+        permissaoNecessaria: "permissoes.gerenciar",
+      },
       { label: "SLA", description: "Prazos de resposta e resolução por prioridade, departamento ou cliente.", href: "/configuracoes/sla", icon: Timer, available: true },
       { label: "Horário de expediente", description: "Turnos da agência e pausa automática de tarefas.", href: "/configuracoes/horario-expediente", icon: Clock, available: true },
       { label: "Numeração de tarefas", description: "Contador contínuo usado na numeração operacional das tarefas.", href: "/configuracoes/numeracao-tarefas", icon: Hash, available: true },
