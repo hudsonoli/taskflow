@@ -80,11 +80,23 @@ class DemandaArquivoConteudoInvalidoError(ValueError):
     Type do cliente nunca decide isto, só a checagem de assinatura em `_validar_assinatura`."""
 
 
+def _bytes_correspondem_a_assinatura(conteudo_inicial: bytes, extensao: str) -> bool:
+    """Fonte única de verdade da assinatura por extensão — reutilizada pelo upload (onde um
+    mismatch vira 422, ver `_validar_assinatura`) e pelo download (onde um mismatch nunca
+    bloqueia o arquivo, só rebaixa media_type/disposition, ver `resolver_download_seguro`).
+    Extensão fora de `_ASSINATURAS` (nunca ocorre no upload, é o caminho normal de um
+    registro histórico com extensão inesperada no download) sempre devolve `False`."""
+    assinatura = _ASSINATURAS.get(extensao)
+    if assinatura is None:
+        return False
+    return conteudo_inicial.startswith(assinatura)
+
+
 def _validar_assinatura(conteudo: bytes, extensao: str) -> None:
-    """`extensao` já veio validada contra `ALLOWED_EXTENSIONS` por quem chama — sempre uma
-    chave presente em `_ASSINATURAS`. Mensagem sem detalhe interno (não expõe a assinatura
+    """Só chamada pelo upload, onde `extensao` já passou por `ALLOWED_EXTENSIONS` — mismatch
+    aqui é erro do cliente, sempre 422. Mensagem sem detalhe interno (não expõe a assinatura
     esperada nem a recebida)."""
-    if not conteudo.startswith(_ASSINATURAS[extensao]):
+    if not _bytes_correspondem_a_assinatura(conteudo, extensao):
         raise DemandaArquivoConteudoInvalidoError(
             "O conteúdo do arquivo não corresponde ao tipo informado."
         )
@@ -227,19 +239,38 @@ class DemandaArquivoService:
         caminho.unlink(missing_ok=True)
 
     @staticmethod
-    def resolver_download_seguro(nome_fisico: str) -> tuple[str, bool]:
-        """Fase S1-B — devolve `(media_type, inline)` derivados **exclusivamente** da
-        extensão de `nome_fisico` (gerado pelo backend no upload, nunca de entrada do
-        cliente), nunca de `DemandaArquivo.content_type` persistido. Protege também
-        registros legados anteriores a esta fase: um `content_type` antigo gravado a partir
-        do header do cliente (ex.: `text/html` para um `.png` malicioso) é ignorado por
-        completo — só a extensão física decide. Extensão fora do mapa (não deveria ocorrer,
-        dado que upload já valida contra `ALLOWED_EXTENSIONS`, mas é defesa em profundidade)
-        cai em `application/octet-stream` + `attachment`, nunca inline com tipo arbitrário."""
+    def resolver_download_seguro(nome_fisico: str, caminho: Path) -> tuple[str, bool]:
+        """Fase S1-B, endurecido na revisão pré-merge: devolve `(media_type, inline)` sem
+        NUNCA consultar `DemandaArquivo.content_type` persistido — nem o de um upload novo
+        (já é sempre o canônico), nem o de um registro histórico (pode ter vindo do header
+        do cliente, sem validação, de antes desta fase).
+
+        Extensão sozinha não basta: um registro histórico pode ter extensão `.png` válida
+        e bytes reais de HTML (exatamente o ataque reproduzido no diagnóstico S1). Por isso
+        esta função também lê — só o prefixo necessário, nunca o arquivo inteiro — e
+        confere a assinatura real antes de decidir:
+
+        1. extensão fora de `_ASSINATURAS` → `application/octet-stream` + `attachment`
+           (nunca inline com tipo arbitrário);
+        2. extensão conhecida mas bytes reais não correspondem → mesmo fallback seguro,
+           **sem bloquear o download** — o arquivo continua recuperável, só deixa de ser
+           interpretado como o tipo que a extensão sugere;
+        3. extensão conhecida e bytes conferem → MIME canônico e disposição normais da
+           Política S1-B (PNG/JPEG inline, PDF sempre attachment).
+
+        `FileResponse` faz streaming do arquivo inteiro depois, por conta própria — esta
+        leitura curta acontece antes e não interfere nisso."""
         extensao = Path(nome_fisico).suffix.lower()
-        media_type = _MIME_CANONICO.get(extensao, "application/octet-stream")
-        inline = _DISPOSITION_INLINE.get(extensao, False)
-        return media_type, inline
+        assinatura = _ASSINATURAS.get(extensao)
+        if assinatura is None:
+            return "application/octet-stream", False
+
+        with caminho.open("rb") as arquivo_fisico:
+            prefixo = arquivo_fisico.read(len(assinatura))
+        if not _bytes_correspondem_a_assinatura(prefixo, extensao):
+            return "application/octet-stream", False
+
+        return _MIME_CANONICO[extensao], _DISPOSITION_INLINE[extensao]
 
     @staticmethod
     def to_read(arquivo: DemandaArquivo) -> DemandaArquivoRead:

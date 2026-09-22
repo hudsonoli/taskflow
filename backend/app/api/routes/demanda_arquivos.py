@@ -103,18 +103,21 @@ def download_arquivo(
     confirma que o arquivo pertence a ela e só então lê o caminho — sempre reconstruído a
     partir de `demanda_id`/`nome_fisico` já validados, nunca de entrada do cliente.
 
-    Fase S1-B: `media_type`/disposition vêm de `resolver_download_seguro`, nunca de
-    `arquivo.content_type` — protege igualmente uploads novos e registros legados (ver
-    docstring do helper)."""
+    Fase S1-B: `media_type`/disposition vêm de `resolver_download_seguro`, que valida a
+    assinatura real dos bytes contra a extensão — nunca de `arquivo.content_type` — e
+    protegem igualmente uploads novos e registros legados (ver docstring do helper).
+    `X-Content-Type-Options: nosniff` em toda resposta: mesmo com o MIME já correto, evita
+    que um navegador mais antigo tente adivinhar outro tipo por conta própria."""
     try:
         demanda = _demanda_no_escopo(demanda_id, current_user, db)
         arquivo, caminho = arquivo_service.obter_para_download(db, demanda, str(arquivo_id))
-        media_type, inline = arquivo_service.resolver_download_seguro(arquivo.nome_fisico)
+        media_type, inline = arquivo_service.resolver_download_seguro(arquivo.nome_fisico, caminho)
         return FileResponse(
             path=caminho,
             media_type=media_type,
             filename=arquivo.nome_original,
             content_disposition_type="inline" if inline else "attachment",
+            headers={"X-Content-Type-Options": "nosniff"},
         )
     except Exception as exc:
         handle_arquivo_error(exc)

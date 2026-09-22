@@ -202,6 +202,7 @@ def test_content_type_mentiroso_mas_bytes_reais_validos_e_aceito(client_admin: T
     assert download.status_code == 200
     assert download.headers["content-type"] == "image/jpeg"
     assert download.headers["content-disposition"].startswith("inline")
+    assert download.headers["x-content-type-options"] == "nosniff"
 
 
 def test_upload_png_valido_e_aceito_e_fica_inline(client_admin: TestClient) -> None:
@@ -212,6 +213,7 @@ def test_upload_png_valido_e_aceito_e_fica_inline(client_admin: TestClient) -> N
     download = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{corpo['id']}/download")
     assert download.headers["content-type"] == "image/png"
     assert download.headers["content-disposition"].startswith("inline")
+    assert download.headers["x-content-type-options"] == "nosniff"
 
 
 def test_upload_jpeg_valido_extensao_jpg_e_jpeg_ambas_aceitas_e_ficam_inline(client_admin: TestClient) -> None:
@@ -223,6 +225,7 @@ def test_upload_jpeg_valido_extensao_jpg_e_jpeg_ambas_aceitas_e_ficam_inline(cli
         download = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{corpo['id']}/download")
         assert download.headers["content-type"] == "image/jpeg"
         assert download.headers["content-disposition"].startswith("inline")
+        assert download.headers["x-content-type-options"] == "nosniff"
 
 
 def test_upload_pdf_valido_e_aceito_mas_download_e_attachment(client_admin: TestClient) -> None:
@@ -234,6 +237,7 @@ def test_upload_pdf_valido_e_aceito_mas_download_e_attachment(client_admin: Test
     download = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{corpo['id']}/download")
     assert download.headers["content-type"] == "application/pdf"
     assert download.headers["content-disposition"].startswith("attachment")
+    assert download.headers["x-content-type-options"] == "nosniff"
 
 
 def test_extensoes_perigosas_continuam_recusadas(client_admin: TestClient) -> None:
@@ -259,6 +263,7 @@ def test_download_devolve_conteudo_original(client_admin: TestClient) -> None:
     assert resposta.content == conteudo
     assert resposta.headers["content-type"] == "application/pdf"
     assert "briefing.pdf" in resposta.headers.get("content-disposition", "")
+    assert resposta.headers["x-content-type-options"] == "nosniff"
 
 
 def test_download_de_arquivo_inexistente_devolve_404(client_admin: TestClient) -> None:
@@ -275,13 +280,16 @@ def test_download_sem_autenticacao_e_recusado(client: TestClient, client_admin: 
     assert resposta.status_code == 401
 
 
-def test_download_de_registro_historico_neutraliza_content_type_malicioso(
+def test_download_de_registro_historico_com_bytes_html_neutraliza_execucao(
     client_admin: TestClient, db_session: Session
 ) -> None:
-    """Fase S1-B protege também registros gravados ANTES desta fase, sem migration: um
-    `content_type` legado vindo do cliente (aqui, `text/html`, simulando exatamente o
-    cenário reproduzido no diagnóstico) nunca é usado no download — só a extensão física,
-    já validada no momento do upload original."""
+    """Teste de segurança histórico principal (revisão pré-merge do S1-B): um registro
+    gravado ANTES desta fase pode ter extensão `.png` válida, `content_type` legado
+    `text/html` E bytes reais de HTML — exatamente o ataque reproduzido no diagnóstico.
+    Extensão sozinha não bastava (o commit anterior confiava nela sem checar os bytes);
+    `resolver_download_seguro` agora lê o prefixo do arquivo físico e recusa a assinatura,
+    caindo no fallback seguro. O arquivo continua recuperável (200, mesmos bytes), só não é
+    mais servido como `image/png inline` nem, pior, como `text/html`."""
     demanda = _criar_demanda(client_admin)
     arquivo_id = _inserir_registro_historico(
         db_session,
@@ -294,9 +302,36 @@ def test_download_de_registro_historico_neutraliza_content_type_malicioso(
 
     resposta = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{arquivo_id}/download")
     assert resposta.status_code == 200
+    assert resposta.content == HTML_MALICIOSO
+    assert resposta.headers["content-type"] == "application/octet-stream"
+    assert resposta.headers["content-disposition"].startswith("attachment")
+    assert resposta.headers["x-content-type-options"] == "nosniff"
+    assert "text/html" not in resposta.headers["content-type"]
+    assert "image/png" not in resposta.headers["content-type"]
+
+
+def test_download_de_registro_historico_com_mime_legado_ruim_mas_bytes_validos_fica_inline(
+    client_admin: TestClient, db_session: Session
+) -> None:
+    """Prova a direção oposta do teste acima: banco legado não é autoridade em nenhum
+    sentido — nem para negar, nem para conceder. Bytes reais de PNG genuíno + extensão
+    `.png`, mesmo com `content_type` legado errado (`text/html`), continuam servidos
+    normalmente como imagem inline. Autoridade é sempre extensão + bytes reais."""
+    demanda = _criar_demanda(client_admin)
+    arquivo_id = _inserir_registro_historico(
+        db_session,
+        demanda["id"],
+        nome_fisico=f"{uuid.uuid4()}.png",
+        nome_original="foto-legada.png",
+        content_type="text/html",
+        conteudo_fisico=PNG_VALIDO,
+    )
+
+    resposta = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{arquivo_id}/download")
+    assert resposta.status_code == 200
     assert resposta.headers["content-type"] == "image/png"
     assert resposta.headers["content-disposition"].startswith("inline")
-    assert "text/html" not in resposta.headers["content-type"]
+    assert resposta.headers["x-content-type-options"] == "nosniff"
 
 
 def test_download_de_extensao_legada_desconhecida_cai_em_octet_stream_attachment(
@@ -304,7 +339,7 @@ def test_download_de_extensao_legada_desconhecida_cai_em_octet_stream_attachment
 ) -> None:
     """Defesa em profundidade: uma extensão fora do mapa atual (não deveria existir, dado
     que o upload sempre valida contra `ALLOWED_EXTENSIONS`) nunca vira inline com tipo
-    arbitrário — cai no fallback seguro."""
+    arbitrário — cai no fallback seguro, sem sequer precisar ler bytes (extensão já decide)."""
     demanda = _criar_demanda(client_admin)
     arquivo_id = _inserir_registro_historico(
         db_session,
@@ -319,6 +354,7 @@ def test_download_de_extensao_legada_desconhecida_cai_em_octet_stream_attachment
     assert resposta.status_code == 200
     assert resposta.headers["content-type"] == "application/octet-stream"
     assert resposta.headers["content-disposition"].startswith("attachment")
+    assert resposta.headers["x-content-type-options"] == "nosniff"
 
 
 # --------------------------------------------------------------------------------------
