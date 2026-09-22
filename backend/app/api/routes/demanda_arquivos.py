@@ -20,6 +20,7 @@ from app.models.demanda import Demanda
 from app.models.usuario import Usuario
 from app.schemas.demanda_arquivo import DemandaArquivoRead
 from app.services.demanda_arquivo_service import (
+    DemandaArquivoConteudoInvalidoError,
     DemandaArquivoExtensaoInvalidaError,
     DemandaArquivoMuitoGrandeError,
     DemandaArquivoNotFoundError,
@@ -43,7 +44,13 @@ def handle_arquivo_error(exc: Exception) -> None:
     if isinstance(exc, (DemandaNotFoundError, DemandaArquivoNotFoundError)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     if isinstance(
-        exc, (DemandaArquivoExtensaoInvalidaError, DemandaArquivoVazioError, DemandaArquivoMuitoGrandeError)
+        exc,
+        (
+            DemandaArquivoExtensaoInvalidaError,
+            DemandaArquivoVazioError,
+            DemandaArquivoMuitoGrandeError,
+            DemandaArquivoConteudoInvalidoError,
+        ),
     ):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     raise exc
@@ -94,15 +101,20 @@ def download_arquivo(
 ):
     """Único caminho de leitura de conteúdo. Resolve a Demanda no escopo de quem pede,
     confirma que o arquivo pertence a ela e só então lê o caminho — sempre reconstruído a
-    partir de `demanda_id`/`nome_fisico` já validados, nunca de entrada do cliente."""
+    partir de `demanda_id`/`nome_fisico` já validados, nunca de entrada do cliente.
+
+    Fase S1-B: `media_type`/disposition vêm de `resolver_download_seguro`, nunca de
+    `arquivo.content_type` — protege igualmente uploads novos e registros legados (ver
+    docstring do helper)."""
     try:
         demanda = _demanda_no_escopo(demanda_id, current_user, db)
         arquivo, caminho = arquivo_service.obter_para_download(db, demanda, str(arquivo_id))
+        media_type, inline = arquivo_service.resolver_download_seguro(arquivo.nome_fisico)
         return FileResponse(
             path=caminho,
-            media_type=arquivo.content_type or "application/octet-stream",
+            media_type=media_type,
             filename=arquivo.nome_original,
-            content_disposition_type="inline",
+            content_disposition_type="inline" if inline else "attachment",
         )
     except Exception as exc:
         handle_arquivo_error(exc)

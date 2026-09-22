@@ -21,6 +21,41 @@ ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".pdf"}
 # já fazia; 20 MB cobre folgado o uso real (imagem/PDF de briefing).
 MAX_TAMANHO_BYTES = 20 * 1024 * 1024
 
+# Fase S1-B — `UploadFile.content_type` é o header `Content-Type` da parte multipart,
+# inteiramente escolhido por quem envia a requisição: nunca é autoridade de segurança.
+# Assinatura real dos bytes (magic number), Python puro — sem `imghdr` (depreciado desde
+# 3.11, removido no 3.13), sem `python-magic`/`libmagic` (dependência de sistema
+# desproporcional pra validar só 3 formatos fixos). Só os 4 tipos já aceitos pelo domínio.
+_ASSINATURAS: dict[str, bytes] = {
+    ".png": b"\x89PNG\r\n\x1a\n",
+    ".jpg": b"\xff\xd8\xff",
+    ".jpeg": b"\xff\xd8\xff",
+    ".pdf": b"%PDF-",
+}
+
+# MIME canônico, derivado da extensão JÁ VALIDADA contra `ALLOWED_EXTENSIONS` — nunca do
+# header do cliente. É o único valor persistido em `DemandaArquivo.content_type` a partir
+# desta fase, e também a única fonte usada no download (ver `resolver_download_seguro`),
+# que ignora deliberadamente o `content_type` já gravado (inclusive em registros legados).
+_MIME_CANONICO: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".pdf": "application/pdf",
+}
+
+# PDF é formato ativo (pode embutir JavaScript, `/Launch`, formulário) — nunca inline,
+# mesmo sendo um PDF genuíno. PNG/JPEG são bytes de imagem inertes: inline seguro *depois*
+# de confirmados por assinatura. Qualquer extensão fora deste mapa (não deveria existir,
+# dado que upload já valida contra `ALLOWED_EXTENSIONS`, mas é defesa em profundidade para
+# um registro legado inesperado) recebe `False` via `.get(..., False)` no chamador.
+_DISPOSITION_INLINE: dict[str, bool] = {
+    ".png": True,
+    ".jpg": True,
+    ".jpeg": True,
+    ".pdf": False,
+}
+
 
 class DemandaArquivoNotFoundError(ValueError):
     """Arquivo inexistente **ou de outra Demanda**. Mesmo raciocínio de
@@ -38,6 +73,21 @@ class DemandaArquivoVazioError(ValueError):
 
 class DemandaArquivoMuitoGrandeError(ValueError):
     pass
+
+
+class DemandaArquivoConteudoInvalidoError(ValueError):
+    """Bytes reais não começam com a assinatura da extensão declarada (Fase S1-B) — Content-
+    Type do cliente nunca decide isto, só a checagem de assinatura em `_validar_assinatura`."""
+
+
+def _validar_assinatura(conteudo: bytes, extensao: str) -> None:
+    """`extensao` já veio validada contra `ALLOWED_EXTENSIONS` por quem chama — sempre uma
+    chave presente em `_ASSINATURAS`. Mensagem sem detalhe interno (não expõe a assinatura
+    esperada nem a recebida)."""
+    if not conteudo.startswith(_ASSINATURAS[extensao]):
+        raise DemandaArquivoConteudoInvalidoError(
+            "O conteúdo do arquivo não corresponde ao tipo informado."
+        )
 
 
 class DemandaArquivoService:
@@ -113,6 +163,13 @@ class DemandaArquivoService:
             raise DemandaArquivoMuitoGrandeError(
                 f"Arquivo maior que o limite permitido ({MAX_TAMANHO_BYTES // (1024 * 1024)} MB)"
             )
+        # Fase S1-B — bytes reais contra a assinatura da extensão declarada, ANTES de
+        # qualquer escrita em disco. `file.content_type` (header multipart, escolhido por
+        # quem envia) nunca é consultado aqui nem usado como MIME final — só a extensão,
+        # já validada contra ALLOWED_EXTENSIONS, decide a assinatura esperada e o MIME
+        # canônico abaixo.
+        _validar_assinatura(conteudo, extensao)
+        mime_canonico = _MIME_CANONICO[extensao]
 
         # Nome físico gerado pelo backend a partir do próprio id — nunca de `nome_original`.
         # Elimina path traversal por construção (ver docstring de app/models/demanda_arquivo.py).
@@ -130,7 +187,7 @@ class DemandaArquivoService:
                 demanda_id=demanda.id,
                 nome_original=nome_original,
                 nome_fisico=nome_fisico,
-                content_type=file.content_type,
+                content_type=mime_canonico,
                 tamanho_bytes=len(conteudo),
                 enviado_por_usuario_id=actor_usuario_id,
                 created_at=now,
@@ -168,6 +225,21 @@ class DemandaArquivoService:
 
         # Melhor esforço, depois do commit — ver docstring da classe.
         caminho.unlink(missing_ok=True)
+
+    @staticmethod
+    def resolver_download_seguro(nome_fisico: str) -> tuple[str, bool]:
+        """Fase S1-B — devolve `(media_type, inline)` derivados **exclusivamente** da
+        extensão de `nome_fisico` (gerado pelo backend no upload, nunca de entrada do
+        cliente), nunca de `DemandaArquivo.content_type` persistido. Protege também
+        registros legados anteriores a esta fase: um `content_type` antigo gravado a partir
+        do header do cliente (ex.: `text/html` para um `.png` malicioso) é ignorado por
+        completo — só a extensão física decide. Extensão fora do mapa (não deveria ocorrer,
+        dado que upload já valida contra `ALLOWED_EXTENSIONS`, mas é defesa em profundidade)
+        cai em `application/octet-stream` + `attachment`, nunca inline com tipo arbitrário."""
+        extensao = Path(nome_fisico).suffix.lower()
+        media_type = _MIME_CANONICO.get(extensao, "application/octet-stream")
+        inline = _DISPOSITION_INLINE.get(extensao, False)
+        return media_type, inline
 
     @staticmethod
     def to_read(arquivo: DemandaArquivo) -> DemandaArquivoRead:

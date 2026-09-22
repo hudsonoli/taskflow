@@ -19,8 +19,16 @@ from sqlalchemy.orm import Session
 from app.api.routes import demanda_arquivos as rotas
 import app.services.demanda_arquivo_service as servico
 from app.models.demanda import Demanda
+from app.models.demanda_arquivo import DemandaArquivo
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
+
+# Assinaturas reais — mesmas usadas pelo service (Fase S1-B). Corpo depois da assinatura é
+# arbitrário, só a checagem de prefixo importa para `_validar_assinatura`.
+PNG_VALIDO = b"\x89PNG\r\n\x1a\n" + b"conteudo-png-de-teste-apos-assinatura"
+JPEG_VALIDO = b"\xff\xd8\xff" + b"conteudo-jpeg-de-teste-apos-assinatura"
+PDF_VALIDO = b"%PDF-1.4\nconteudo-pdf-de-teste"
+HTML_MALICIOSO = b"<html><body><script>document.title='ataque';</script></body></html>"
 
 
 def _criar_demanda(client: TestClient, **extra) -> dict:
@@ -40,6 +48,33 @@ def _pasta_fisica(demanda_id: str) -> Path:
     # `servico.UPLOADS_ROOT` é lido em tempo de chamada — reflete o valor isolado por
     # `uploads_isolados` (tests/fixtures/uploads.py), nunca a pasta real do repositório.
     return servico.UPLOADS_ROOT / "demandas" / demanda_id
+
+
+def _inserir_registro_historico(
+    db_session: Session, demanda_id: str, *, nome_fisico: str, nome_original: str, content_type: str, conteudo_fisico: bytes
+) -> str:
+    """Simula um registro pré-existente à Fase S1-B, inserido direto (sem passar pelo
+    endpoint de upload, que já bloquearia o mismatch) — o cenário real é um `content_type`
+    gravado ANTES desta fase, quando ainda vinha do header do cliente sem validação."""
+    arquivo_id = str(uuid.uuid4())
+    agora = datetime.now(timezone.utc)
+    db_session.add(
+        DemandaArquivo(
+            id=arquivo_id,
+            demanda_id=demanda_id,
+            nome_original=nome_original,
+            nome_fisico=nome_fisico,
+            content_type=content_type,
+            tamanho_bytes=len(conteudo_fisico),
+            enviado_por_usuario_id=None,
+            created_at=agora,
+        )
+    )
+    db_session.flush()
+    pasta = _pasta_fisica(demanda_id)
+    pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / nome_fisico).write_bytes(conteudo_fisico)
+    return arquivo_id
 
 
 # --------------------------------------------------------------------------------------
@@ -75,7 +110,7 @@ def test_arquivo_fisico_gravado_com_nome_derivado_do_id(client_admin: TestClient
 def test_listar_arquivos(client_admin: TestClient) -> None:
     demanda = _criar_demanda(client_admin)
     _upload(client_admin, demanda["id"], nome="a.pdf")
-    _upload(client_admin, demanda["id"], nome="b.png", conteudo=b"fake-png-bytes", content_type="image/png")
+    _upload(client_admin, demanda["id"], nome="b.png", conteudo=PNG_VALIDO, content_type="image/png")
 
     resposta = client_admin.get(f"/demandas/{demanda['id']}/arquivos")
     assert resposta.status_code == 200
@@ -130,6 +165,87 @@ def test_nome_de_arquivo_malicioso_nao_escapa_da_pasta_da_demanda(client_admin: 
 
 
 # --------------------------------------------------------------------------------------
+# Conteúdo real (assinatura de bytes) — Fase S1-B
+# --------------------------------------------------------------------------------------
+
+def test_conteudo_html_com_extensao_png_e_content_type_mentiroso_e_recusado(client_admin: TestClient) -> None:
+    """Regressão do ataque reproduzido no diagnóstico S1: extensão permitida + Content-Type
+    do cliente mentindo sobre o tipo + bytes reais de HTML. Antes desta fase: 201, servido
+    de volta como `text/html; inline` (execução de conteúdo ativo). Depois: 422, nada
+    persiste — nem linha de metadado, nem arquivo físico."""
+    demanda = _criar_demanda(client_admin)
+
+    resposta = _upload(
+        client_admin, demanda["id"], nome="teste.png", conteudo=HTML_MALICIOSO, content_type="text/html"
+    )
+
+    assert resposta.status_code == 422, resposta.text
+    assert client_admin.get(f"/demandas/{demanda['id']}/arquivos").json() == []
+    pasta = _pasta_fisica(demanda["id"])
+    assert not pasta.exists() or list(pasta.iterdir()) == []
+
+
+def test_content_type_mentiroso_mas_bytes_reais_validos_e_aceito(client_admin: TestClient) -> None:
+    """Prova a direção oposta do teste acima: o backend passa a confiar SÓ nos bytes, nunca
+    no header do cliente — um Content-Type errado não impede um upload genuinamente válido."""
+    demanda = _criar_demanda(client_admin)
+
+    resposta = _upload(
+        client_admin, demanda["id"], nome="foto.jpg", conteudo=JPEG_VALIDO, content_type="text/html"
+    )
+
+    assert resposta.status_code == 201, resposta.text
+    corpo = resposta.json()
+    assert corpo["contentType"] == "image/jpeg"
+
+    download = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{corpo['id']}/download")
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "image/jpeg"
+    assert download.headers["content-disposition"].startswith("inline")
+
+
+def test_upload_png_valido_e_aceito_e_fica_inline(client_admin: TestClient) -> None:
+    demanda = _criar_demanda(client_admin)
+    corpo = _upload(client_admin, demanda["id"], nome="foto.png", conteudo=PNG_VALIDO, content_type="image/png").json()
+    assert corpo["contentType"] == "image/png"
+
+    download = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{corpo['id']}/download")
+    assert download.headers["content-type"] == "image/png"
+    assert download.headers["content-disposition"].startswith("inline")
+
+
+def test_upload_jpeg_valido_extensao_jpg_e_jpeg_ambas_aceitas_e_ficam_inline(client_admin: TestClient) -> None:
+    demanda = _criar_demanda(client_admin)
+    for nome in ("foto.jpg", "foto.jpeg"):
+        corpo = _upload(client_admin, demanda["id"], nome=nome, conteudo=JPEG_VALIDO, content_type="image/jpeg").json()
+        assert corpo["contentType"] == "image/jpeg"
+
+        download = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{corpo['id']}/download")
+        assert download.headers["content-type"] == "image/jpeg"
+        assert download.headers["content-disposition"].startswith("inline")
+
+
+def test_upload_pdf_valido_e_aceito_mas_download_e_attachment(client_admin: TestClient) -> None:
+    """PDF é formato ativo — nunca inline, mesmo sendo um PDF genuíno (Política S1-B)."""
+    demanda = _criar_demanda(client_admin)
+    corpo = _upload(client_admin, demanda["id"], nome="briefing.pdf", conteudo=PDF_VALIDO, content_type="application/pdf").json()
+    assert corpo["contentType"] == "application/pdf"
+
+    download = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{corpo['id']}/download")
+    assert download.headers["content-type"] == "application/pdf"
+    assert download.headers["content-disposition"].startswith("attachment")
+
+
+def test_extensoes_perigosas_continuam_recusadas(client_admin: TestClient) -> None:
+    """`.exe` já é coberto por `test_extensao_nao_permitida_e_recusada` — aqui só os tipos
+    especificamente citados no diagnóstico S1 como candidatos a conteúdo ativo."""
+    demanda = _criar_demanda(client_admin)
+    for nome in ("arquivo.svg", "arquivo.html", "arquivo.xml"):
+        resposta = _upload(client_admin, demanda["id"], nome=nome, conteudo=HTML_MALICIOSO, content_type="text/html")
+        assert resposta.status_code == 422, f"{nome}: {resposta.text}"
+
+
+# --------------------------------------------------------------------------------------
 # Download
 # --------------------------------------------------------------------------------------
 
@@ -157,6 +273,52 @@ def test_download_sem_autenticacao_e_recusado(client: TestClient, client_admin: 
 
     resposta = client.get(f"/demandas/{demanda['id']}/arquivos/{corpo['id']}/download")
     assert resposta.status_code == 401
+
+
+def test_download_de_registro_historico_neutraliza_content_type_malicioso(
+    client_admin: TestClient, db_session: Session
+) -> None:
+    """Fase S1-B protege também registros gravados ANTES desta fase, sem migration: um
+    `content_type` legado vindo do cliente (aqui, `text/html`, simulando exatamente o
+    cenário reproduzido no diagnóstico) nunca é usado no download — só a extensão física,
+    já validada no momento do upload original."""
+    demanda = _criar_demanda(client_admin)
+    arquivo_id = _inserir_registro_historico(
+        db_session,
+        demanda["id"],
+        nome_fisico=f"{uuid.uuid4()}.png",
+        nome_original="historico.png",
+        content_type="text/html",
+        conteudo_fisico=HTML_MALICIOSO,
+    )
+
+    resposta = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{arquivo_id}/download")
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == "image/png"
+    assert resposta.headers["content-disposition"].startswith("inline")
+    assert "text/html" not in resposta.headers["content-type"]
+
+
+def test_download_de_extensao_legada_desconhecida_cai_em_octet_stream_attachment(
+    client_admin: TestClient, db_session: Session
+) -> None:
+    """Defesa em profundidade: uma extensão fora do mapa atual (não deveria existir, dado
+    que o upload sempre valida contra `ALLOWED_EXTENSIONS`) nunca vira inline com tipo
+    arbitrário — cai no fallback seguro."""
+    demanda = _criar_demanda(client_admin)
+    arquivo_id = _inserir_registro_historico(
+        db_session,
+        demanda["id"],
+        nome_fisico=f"{uuid.uuid4()}.txt",
+        nome_original="legado.txt",
+        content_type="text/plain",
+        conteudo_fisico=b"conteudo legado qualquer",
+    )
+
+    resposta = client_admin.get(f"/demandas/{demanda['id']}/arquivos/{arquivo_id}/download")
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"] == "application/octet-stream"
+    assert resposta.headers["content-disposition"].startswith("attachment")
 
 
 # --------------------------------------------------------------------------------------
