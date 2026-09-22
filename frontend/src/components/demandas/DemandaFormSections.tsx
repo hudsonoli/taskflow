@@ -130,6 +130,15 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
   const clientesSelecionaveis = clientes.filter(
     (cliente) => cliente.status !== "arquivado" || cliente.id === demanda.clienteId,
   );
+  // Fase 2G.10B, D1.2E: `/clientes/diretorio` e `/projetos/diretorio` passaram a refletir o
+  // contexto comercial de Atendimento (D1.2C) — mesmo risco e mesmo fallback de
+  // NovaDemandaModal.tsx (ver comentário lá): sem isto, um Atendimento cuja carteira mudou
+  // depois de vincular esta Demanda veria o campo em branco, não só "arquivado". Só preserva
+  // o valor já selecionado — a opção sintética usa o MESMO id que já estava em `demanda`.
+  const projetoAtualForaDoDiretorio =
+    Boolean(demanda.projetoId) && !projetos.some((projeto) => projeto.id === demanda.projetoId);
+  const clienteAtualForaDoDiretorio =
+    Boolean(demanda.clienteId) && !clientes.some((cliente) => cliente.id === demanda.clienteId);
 
   async function handleProjetoChange(projetoId: string) {
     const projeto = projetos.find((item) => item.id === projetoId);
@@ -170,10 +179,15 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
           label="Projeto"
           value={demanda.projetoId ?? ""}
           onChange={(projetoId) => void handleProjetoChange(projetoId)}
-          options={projetosSelecionaveis.map((projeto) => ({
-            value: projeto.id,
-            label: projeto.status === "arquivado" ? `${projeto.nome} (arquivado)` : projeto.nome,
-          }))}
+          options={[
+            ...projetosSelecionaveis.map((projeto) => ({
+              value: projeto.id,
+              label: projeto.status === "arquivado" ? `${projeto.nome} (arquivado)` : projeto.nome,
+            })),
+            ...(projetoAtualForaDoDiretorio && demanda.projetoId
+              ? [{ value: demanda.projetoId, label: "Projeto atual (fora do seu escopo)" }]
+              : []),
+          ]}
           placeholder="Buscar projeto…"
           emptyLabel="Nenhum projeto encontrado"
         />
@@ -181,10 +195,15 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
           label="Cliente"
           value={demanda.clienteId ?? ""}
           onChange={(clienteId) => void salvarCampo(demanda, { clienteId }, onChange, setErro)}
-          options={clientesSelecionaveis.map((cliente) => ({
-            value: cliente.id,
-            label: cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome,
-          }))}
+          options={[
+            ...clientesSelecionaveis.map((cliente) => ({
+              value: cliente.id,
+              label: cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome,
+            })),
+            ...(clienteAtualForaDoDiretorio && demanda.clienteId
+              ? [{ value: demanda.clienteId, label: "Cliente atual (fora do seu escopo)" }]
+              : []),
+          ]}
           placeholder="Buscar cliente…"
           emptyLabel="Nenhum cliente encontrado"
         />

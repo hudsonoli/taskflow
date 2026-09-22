@@ -76,6 +76,22 @@ export function NovaDemandaModal({
   const clientesSelecionaveis = clientes.filter(
     (cliente) => cliente.status !== "arquivado" || cliente.id === draft.clienteId,
   );
+  // Fase 2G.10B, D1.2E: `/clientes/diretorio` e `/projetos/diretorio` passaram a refletir o
+  // contexto comercial de Atendimento (D1.2C) — um Atendimento cuja carteira mudou depois de
+  // vincular uma Demanda pode ter o cliente/projeto histórico dela FORA do diretório agora,
+  // não só arquivado. Sem este fallback, `clientesSelecionaveis`/`projetosSelecionaveis` não
+  // teriam o id nem pra achar (o filtro acima não ajuda — o item não está em `clientes`/
+  // `projetos` de jeito nenhum), e o Combobox mostraria o campo como vazio mesmo com o valor
+  // ainda selecionado (ver Combobox.tsx: `options.find` sem match não limpa `value`, só some
+  // o label). O rótulo genérico é aceito — este ator não tem `clientes.visualizar`/
+  // `projetos.visualizar` pra resolver o nome real (só admin/gestor têm), e o diretório é o
+  // único canal de nome disponível pra ele. Isto SÓ preserva o valor já selecionado — nunca
+  // habilita escolher outro cliente/projeto fora do escopo atual (a opção sintética tem o
+  // MESMO id que já estava em `draft`).
+  const clienteAtualForaDoDiretorio =
+    Boolean(draft.clienteId) && !clientes.some((cliente) => cliente.id === draft.clienteId);
+  const projetoAtualForaDoDiretorio =
+    Boolean(draft.projetoId) && !projetos.some((projeto) => projeto.id === draft.projetoId);
   const [workflowPreview, setWorkflowPreview] = useState<WorkflowModelo | null>(null);
   const previewAtual = draft.workflowModeloId && workflowPreview?.id === draft.workflowModeloId ? workflowPreview : null;
   const carregandoWorkflow = Boolean(draft.workflowModeloId) && previewAtual === null;
@@ -157,10 +173,15 @@ export function NovaDemandaModal({
           label="Projeto (opcional)"
           value={draft.projetoId ?? ""}
           onChange={handleProjectChange}
-          options={projetosSelecionaveis.map((projeto) => ({
-            value: projeto.id,
-            label: projeto.status === "arquivado" ? `${projeto.nome} (arquivado)` : projeto.nome,
-          }))}
+          options={[
+            ...projetosSelecionaveis.map((projeto) => ({
+              value: projeto.id,
+              label: projeto.status === "arquivado" ? `${projeto.nome} (arquivado)` : projeto.nome,
+            })),
+            ...(projetoAtualForaDoDiretorio && draft.projetoId
+              ? [{ value: draft.projetoId, label: "Projeto atual (fora do seu escopo)" }]
+              : []),
+          ]}
           placeholder="Buscar projeto…"
           emptyLabel="Nenhum projeto encontrado"
         />
@@ -168,10 +189,15 @@ export function NovaDemandaModal({
           label="Cliente"
           value={draft.clienteId ?? ""}
           onChange={(clienteId) => updateDraft({ clienteId })}
-          options={clientesSelecionaveis.map((cliente) => ({
-            value: cliente.id,
-            label: cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome,
-          }))}
+          options={[
+            ...clientesSelecionaveis.map((cliente) => ({
+              value: cliente.id,
+              label: cliente.status === "arquivado" ? `${cliente.nome} (arquivado)` : cliente.nome,
+            })),
+            ...(clienteAtualForaDoDiretorio && draft.clienteId
+              ? [{ value: draft.clienteId, label: "Cliente atual (fora do seu escopo)" }]
+              : []),
+          ]}
           placeholder="Buscar cliente…"
           emptyLabel="Nenhum cliente encontrado"
         />

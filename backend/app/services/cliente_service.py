@@ -4,11 +4,13 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.escopo import clientes_sob_responsabilidade, eh_atendimento
 from app.core.referencias import gerar_proxima_referencia
 from app.core.relogio import agora_utc
 from app.domain.event_types import DomainEventType
 from app.models.cliente import Cliente
 from app.models.cliente_grupo import ClienteGrupo
+from app.models.usuario import Usuario
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.grupo_cliente_repository import GrupoClienteRepository
 from app.repositories.usuario_repository import UsuarioRepository
@@ -229,7 +231,20 @@ class ClienteService:
             offset=offset,
         )
 
-    def list_diretorio(self, db: Session, *, empresa_id: str) -> list[Cliente]:
+    def list_diretorio(self, db: Session, *, empresa_id: str, actor: Usuario) -> list[Cliente]:
+        """Fase 2G.10B, D1.2E — alinha o diretório ao contexto comercial que D1.2C já aplica
+        em CREATE/PATCH de Demanda: quando `actor` É Atendimento de verdade (`eh_atendimento`),
+        só devolve clientes sob sua responsabilidade comercial
+        (`clientes_sob_responsabilidade`, fonte única, app/core/escopo.py) — nenhuma segunda
+        definição de carteira. Admin, Gestor, Head puro e Operador comum preservam o
+        comportamento anterior (sem filtro); Head só ganha o filtro se também for Atendimento
+        (ortogonal, nunca por perfil ou por ser Head). Gatilhada por relação, não por perfil —
+        mesmo padrão de `_ensure_contexto_cliente_permitido_para_atendimento`
+        (app/services/demanda_service.py). Não é novo escopo de leitura: é o mesmo diretório
+        auxiliar de sempre, agora actor-aware."""
+        if eh_atendimento(db, actor):
+            cliente_ids = clientes_sob_responsabilidade(db, actor)
+            return self.repository.list_diretorio(db, empresa_id=empresa_id, cliente_ids=cliente_ids)
         return self.repository.list_diretorio(db, empresa_id=empresa_id)
 
     def get_cliente(self, db: Session, cliente_id: str) -> Cliente:

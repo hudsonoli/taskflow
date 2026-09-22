@@ -4,6 +4,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.escopo import clientes_sob_responsabilidade, eh_atendimento
 from app.core.referencias import gerar_proxima_referencia
 from app.core.relogio import agora_utc
 from app.domain.event_types import DomainEventType
@@ -11,6 +12,7 @@ from app.models.projeto import Projeto
 from app.models.projeto_departamento import ProjetoDepartamento
 from app.models.projeto_equipe_membro import ProjetoEquipeMembro
 from app.models.projeto_responsavel import ProjetoResponsavel
+from app.models.usuario import Usuario
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.projeto_repository import ProjetoRepository
@@ -221,7 +223,17 @@ class ProjetoService:
             offset=offset,
         )
 
-    def list_diretorio(self, db: Session, *, empresa_id: str) -> list[Projeto]:
+    def list_diretorio(self, db: Session, *, empresa_id: str, actor: Usuario) -> list[Projeto]:
+        """Fase 2G.10B, D1.2E — mesma regra de `ClienteService.list_diretorio`, com projeto
+        interno (`cliente_id IS NULL`) sempre preservado: D1.2C trata contexto sem cliente
+        como sempre permitido para Atendimento, então a lista nunca esconde projeto interno,
+        mesmo com carteira vazia. Admin, Gestor, Head puro e Operador comum preservam o
+        comportamento anterior."""
+        if eh_atendimento(db, actor):
+            cliente_ids = clientes_sob_responsabilidade(db, actor)
+            return self.repository.list_diretorio(
+                db, empresa_id=empresa_id, cliente_ids_permitidos=cliente_ids
+            )
         return self.repository.list_diretorio(db, empresa_id=empresa_id)
 
     def get_projeto(self, db: Session, projeto_id: str) -> Projeto:

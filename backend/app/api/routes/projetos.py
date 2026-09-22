@@ -105,7 +105,7 @@ def list_diretorio(
     current_user: Usuario = Depends(get_current_user_password_ready),
     db: Session = Depends(get_db),
 ):
-    projetos = projeto_service.list_diretorio(db, empresa_id=current_user.empresa_id)
+    projetos = projeto_service.list_diretorio(db, empresa_id=current_user.empresa_id, actor=current_user)
     return projeto_service.to_diretorio_read_lote(projetos)
 
 

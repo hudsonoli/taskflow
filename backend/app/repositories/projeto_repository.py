@@ -100,19 +100,29 @@ class ProjetoRepository:
         statement = statement.order_by(Projeto.nome.asc()).limit(limit).offset(offset)
         return list(db.scalars(statement).all())
 
-    def list_diretorio(self, db: Session, *, empresa_id: str) -> list[Projeto]:
+    def list_diretorio(
+        self, db: Session, *, empresa_id: str, cliente_ids_permitidos: list[str] | None = None
+    ) -> list[Projeto]:
         """**Inclui arquivados** (Fase 2E.5A/B) — o diretório serve dois usos distintos:
         resolver o nome de um Projeto já vinculado a uma Demanda (precisa achar arquivado
         também, senão a referência histórica vira UUID cru na tela) e oferecer opções de
         vínculo NOVO (que não deve incluir arquivado). A diferença mora no `status` que vai
         junto de cada item — quem monta um seletor de vínculo novo filtra no consumidor,
         mesmo padrão de Cliente/Departamento/Usuário/Equipe. Diverge de Fornecedor de
-        propósito: lá não existe essa necessidade de resolução histórica ainda."""
-        statement = (
-            select(Projeto)
-            .where(Projeto.empresa_id == empresa_id)
-            .order_by(Projeto.nome.asc())
-        )
+        propósito: lá não existe essa necessidade de resolução histórica ainda.
+
+        `cliente_ids_permitidos=None` (padrão): sem filtro adicional. Informado (Fase 2G.10B,
+        D1.2E, só Atendimento): restringe a projetos cujo `cliente_id` esteja no conjunto OU
+        sem cliente (`cliente_id IS NULL`, projeto interno) — D1.2C garante que contexto sem
+        cliente é sempre permitido para Atendimento, então projeto interno nunca desaparece,
+        mesmo com carteira vazia. Lista vazia é filtro válido (carteira vazia), não ausência
+        de filtro — por isso `is not None`, nunca truthiness."""
+        statement = select(Projeto).where(Projeto.empresa_id == empresa_id)
+        if cliente_ids_permitidos is not None:
+            statement = statement.where(
+                or_(Projeto.cliente_id.in_(cliente_ids_permitidos), Projeto.cliente_id.is_(None))
+            )
+        statement = statement.order_by(Projeto.nome.asc())
         return list(db.scalars(statement).all())
 
     def update(self, db: Session, projeto: Projeto) -> Projeto:

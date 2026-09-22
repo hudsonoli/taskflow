@@ -112,11 +112,20 @@ class ClienteRepository:
 
         return list(db.scalars(statement).all())
 
-    def list_diretorio(self, db: Session, *, empresa_id: str) -> list[Cliente]:
-        """Inclui arquivados — referências antigas precisam continuar resolvendo o nome."""
-        statement = (
-            select(Cliente).where(Cliente.empresa_id == empresa_id).order_by(Cliente.nome.asc())
-        )
+    def list_diretorio(
+        self, db: Session, *, empresa_id: str, cliente_ids: list[str] | None = None
+    ) -> list[Cliente]:
+        """Inclui arquivados — referências antigas precisam continuar resolvendo o nome.
+
+        `cliente_ids=None` (padrão): sem filtro adicional além do tenant — Admin, Gestor,
+        Head puro e Operador comum. Informado (Fase 2G.10B, D1.2E, só Atendimento): restringe
+        ao conjunto dado, já resolvido pelo service via `clientes_sob_responsabilidade`
+        (app/core/escopo.py) — uma lista VAZIA é um filtro válido (carteira vazia), não
+        ausência de filtro, por isso a checagem é `is not None`, nunca truthiness."""
+        statement = select(Cliente).where(Cliente.empresa_id == empresa_id)
+        if cliente_ids is not None:
+            statement = statement.where(Cliente.id.in_(cliente_ids))
+        statement = statement.order_by(Cliente.nome.asc())
         return list(db.scalars(statement).all())
 
     def update(self, db: Session, cliente: Cliente) -> Cliente:
