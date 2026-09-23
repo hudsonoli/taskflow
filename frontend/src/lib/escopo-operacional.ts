@@ -221,6 +221,22 @@ export function podeGerenciarPermissoes(usuario: Usuario): boolean {
   return PERFIL_PARA_PERFIL_BASE[usuario.perfil] === "admin" && (usuario.permissoes?.includes("permissoes.gerenciar") ?? false);
 }
 
+/**
+ * Visibilidade de dado financeiro de Cliente/Usuario por permissão efetiva (Fase S1-A) —
+ * `financeiro.visualizar`, sem hard floor (ao contrário de `podeGerenciarPermissoes`): admin
+ * e gestor têm por default, mas um `negar` explícito tira de qualquer perfil, sem piso.
+ * Fail-closed enquanto `usuario.permissoes` estiver `undefined` (sessão carregando).
+ *
+ * Distinta de `podeVerDadosFinanceiros(perfil)` (types/usuario.ts) — aquela é a checagem
+ * legada por perfil estático, ainda usada por Peça (fora do escopo desta fase, ver
+ * PecaFormModal/PecasView); esta é a nova autoridade real para Cliente/Usuario. O backend já
+ * é quem decide de fato (mascara os campos como `null` sem a permissão) — esta função é só
+ * UX, mesmo aviso do topo deste arquivo.
+ */
+export function podeVerFinanceiroEfetivo(usuario: Usuario): boolean {
+  return usuario.permissoes?.includes("financeiro.visualizar") ?? false;
+}
+
 // ---------------------------------------------------------------------------------
 // Expediente — o que a operação pode fazer fora do horário
 // ---------------------------------------------------------------------------------

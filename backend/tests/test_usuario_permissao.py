@@ -293,9 +293,14 @@ def test_usuarios_get_outro_usuario_consulta_overrides_uma_vez(
 ) -> None:
     """Item 14 — sem N+1: desde a Fase 2G.10B (bloco 2A), GET /usuarios/{id} passou a usar
     `require_permissao("usuarios.visualizar")`, que resolve as permissões efetivas de QUEM
-    FAZ a chamada (não da pessoa consultada) — uma query de overrides por request, nunca
-    zero (isso mudou de propósito nesta fase) e nunca mais de uma (não é N+1 por recurso
-    retornado). O campo `permissoes` da resposta continua None — só /me o preenche."""
+    FAZ a chamada (não da pessoa consultada) — nunca zero (isso mudou de propósito nesta
+    fase) e nunca N+1 por recurso retornado. O campo `permissoes` da resposta continua
+    None — só /me o preenche.
+
+    Fase S1-A: `UsuarioService.to_read` ganhou uma segunda consulta própria (independente
+    da do gate) para decidir o mascaramento de `financeiro.visualizar` — por isso agora são
+    2 chamadas, não 1, mas as DUAS continuam resolvendo as permissões de quem FAZ a
+    request (admin), nunca da pessoa consultada."""
     chamadas = []
     original = UsuarioPermissaoRepository.list_by_usuario
 
@@ -308,16 +313,18 @@ def test_usuarios_get_outro_usuario_consulta_overrides_uma_vez(
     resposta = client_admin.get(f"/usuarios/{usuario_gestor.id}")
     assert resposta.status_code == 200, resposta.text
     assert resposta.json()["permissoes"] is None
-    # a única chamada resolve as permissões de QUEM FAZ a request (admin), nunca da
-    # pessoa consultada (usuario_gestor) — require_permissao nunca troca de identidade.
-    assert chamadas == [usuario_admin.id]
+    # 2 chamadas (gate de require_permissao + mascaramento financeiro em to_read), as duas
+    # resolvendo as permissões de QUEM FAZ a request (admin), nunca da pessoa consultada
+    # (usuario_gestor) — nenhuma delas troca de identidade.
+    assert chamadas == [usuario_admin.id, usuario_admin.id]
 
 
 def test_usuarios_listagem_consulta_overrides_uma_vez_nao_por_linha(
     client_admin: TestClient, empresa: Empresa, usuario_admin: Usuario, usuario_gestor: Usuario, monkeypatch
 ) -> None:
-    """Mesma garantia do teste acima, para GET /usuarios (lista): uma query de overrides
-    por request (de quem lista, via `require_permissao`), nunca uma por usuário listado."""
+    """Mesma garantia do teste acima, para GET /usuarios (lista): consultas de overrides de
+    quem lista (via `require_permissao` + mascaramento financeiro, Fase S1-A), nunca uma
+    por usuário listado."""
     chamadas = []
     original = UsuarioPermissaoRepository.list_by_usuario
 
@@ -331,8 +338,9 @@ def test_usuarios_listagem_consulta_overrides_uma_vez_nao_por_linha(
     assert resposta.status_code == 200, resposta.text
     assert len(resposta.json()) >= 2  # admin (self) + usuario_gestor, no mínimo
     assert all(usuario["permissoes"] is None for usuario in resposta.json())
-    # uma chamada só, e é a de quem lista (admin) — não uma por linha devolvida.
-    assert chamadas == [usuario_admin.id]
+    # 2 chamadas (gate + to_read_lote, Fase S1-A), as duas só de quem lista (admin) —
+    # nunca uma por linha devolvida, por maior que seja a lista.
+    assert chamadas == [usuario_admin.id, usuario_admin.id]
 
 
 # --------------------------------------------------------------------------------------

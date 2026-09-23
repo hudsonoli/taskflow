@@ -26,7 +26,7 @@ import { PossiveisDuplicidadesAviso } from "./PossiveisDuplicidadesAviso";
 import { type ClienteStatusFiltro, ClientesToolbar } from "./ClientesToolbar";
 
 export function ClientesView() {
-  const { perfilAtual } = useAppData();
+  const { usuarioAtual } = useAppData();
   const { grupos: gruposCliente } = useDiretorioGruposCliente();
   const { usuarios } = useDiretorioUsuarios();
 
@@ -144,7 +144,7 @@ export function ClientesView() {
         />
       )}
 
-      <ClientesStats clientes={clientes} perfilAtual={perfilAtual} />
+      <ClientesStats clientes={clientes} usuarioAtual={usuarioAtual} />
 
       <ClientesToolbar
         query={query}

@@ -1,14 +1,17 @@
 import { Building2, CheckCircle2, Sparkles, Wallet } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { podeVerDadosFinanceiros, type PerfilUsuario } from "@/types/usuario";
+import { podeVerFinanceiroEfetivo } from "@/lib/escopo-operacional";
+import type { Usuario } from "@/types/usuario";
 import type { Cliente } from "@/types/cliente";
 
-export function ClientesStats({ clientes, perfilAtual }: { clientes: Cliente[]; perfilAtual: PerfilUsuario }) {
+export function ClientesStats({ clientes, usuarioAtual }: { clientes: Cliente[]; usuarioAtual?: Usuario }) {
   const ativos = clientes.filter((cliente) => cliente.status === "ativo").length;
   const referenciais = clientes.filter((cliente) => cliente.clienteReferencial).length;
-  // Centavos no backend (dinheiro nunca em float); converte só na apresentação.
+  // Centavos no backend (dinheiro nunca em float); converte só na apresentação. Sem
+  // financeiro.visualizar, o backend já devolve `feeMensalCentavos: null` (Fase S1-A) — o
+  // `?? 0` aqui já era null-safe antes disso, então a soma nunca gera NaN mesmo mascarada.
   const feeTotal = clientes.reduce((total, cliente) => total + (cliente.feeMensalCentavos ?? 0), 0) / 100;
-  const podeVerFee = podeVerDadosFinanceiros(perfilAtual);
+  const podeVerFee = usuarioAtual ? podeVerFinanceiroEfetivo(usuarioAtual) : false;
 
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

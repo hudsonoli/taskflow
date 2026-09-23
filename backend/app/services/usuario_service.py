@@ -13,6 +13,7 @@ from app.schemas.usuario import UsuarioCreate, UsuarioDiretorioRead, UsuarioRead
 from app.services.empresa_service import STATUS_ARQUIVADA as EMPRESA_STATUS_ARQUIVADA
 from app.services.empresa_service import STATUS_INATIVA as EMPRESA_STATUS_INATIVA
 from app.services.domain_event_publisher import DomainEventPublisher
+from app.services.usuario_permissao_service import UsuarioPermissaoService
 
 # Padrão de arquivamento (soft-delete permanente) — contrato completo documentado em
 # docs/padrao-arquivamento.md. Ao migrar Cliente/Fornecedor, copiar de lá, não daqui.
@@ -87,10 +88,15 @@ class UsuarioService:
         repository: UsuarioRepository | None = None,
         empresa_repository: EmpresaRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
+        usuario_permissao_service: UsuarioPermissaoService | None = None,
     ) -> None:
         self.repository = repository or UsuarioRepository()
         self.empresa_repository = empresa_repository or EmpresaRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
+        # Fase S1-A — mesma dependência já usada por AuthService para calcular permissões
+        # efetivas; reaproveitada aqui só para decidir mascaramento de campo financeiro na
+        # serialização, nunca para autorizar a rota (isso continua em require_permissao).
+        self.usuario_permissao_service = usuario_permissao_service or UsuarioPermissaoService()
 
     def create_usuario(
         self,
@@ -473,7 +479,48 @@ class UsuarioService:
             db.rollback()
             raise
 
-    def to_read(self, usuario: Usuario) -> UsuarioRead:
+    def to_read(
+        self,
+        db: Session,
+        usuario: Usuario,
+        *,
+        actor: Usuario,
+        permitir_financeiro_proprio: bool = False,
+    ) -> UsuarioRead:
+        """Fase S1-A — `valorRecebidoMensalCentavos`/`horasTrabalhoAproximadas` saem com o
+        valor real ou `None` (nunca ausentes do contrato, ver `_construir_leitura`).
+
+        `permitir_financeiro_proprio` é a ÚNICA exceção de autovisualização, e é
+        **explícita, default `False`** (fail-closed) — só `GET /usuarios/me` passa `True`.
+        Isso é deliberado: `GET /usuarios/{id}` sobre o próprio id, ou a própria linha
+        aparecendo em `GET /usuarios`, continuam mascarados sem `financeiro.visualizar` —
+        a exceção nunca é "qualquer resposta sobre mim mesmo", é só o endpoint de
+        autovisualização dedicado. Combinar `permitir_financeiro_proprio` com
+        `actor.id == usuario.id` (em vez de só a flag) é o que impede a exceção de vazar
+        por engano para uma chamada futura que reaproveitasse `to_read` com a flag ligada
+        para outro usuário."""
+        pode_ver_financeiro = (permitir_financeiro_proprio and actor.id == usuario.id) or self._pode_ver_financeiro(
+            db, actor
+        )
+        return self._construir_leitura(usuario, pode_ver_financeiro=pode_ver_financeiro)
+
+    def to_read_lote(self, db: Session, usuarios: list[Usuario], *, actor: Usuario) -> list[UsuarioRead]:
+        """Fase S1-A — `financeiro.visualizar` resolvido UMA vez para o `actor` da request,
+        nunca por Usuario da lista (evita N+1 em `usuario_permissao`). Sem
+        `permitir_financeiro_proprio`: não existe versão "lista com autovisualização" —
+        mesmo a própria linha do `actor`, se estiver na lista, segue a regra normal."""
+        pode_ver_financeiro = self._pode_ver_financeiro(db, actor)
+        return [self._construir_leitura(usuario, pode_ver_financeiro=pode_ver_financeiro) for usuario in usuarios]
+
+    def _pode_ver_financeiro(self, db: Session, actor: Usuario) -> bool:
+        """Única fonte de verdade sobre visibilidade de dado financeiro de Usuario:
+        reaproveita `UsuarioPermissaoService.obter_permissoes_efetivas` (mesma função que
+        `require_permissao` já usa para autorizar a rota) — nenhuma duplicação de
+        defaults/override/deny/grant."""
+        return "financeiro.visualizar" in self.usuario_permissao_service.obter_permissoes_efetivas(db, actor)
+
+    @staticmethod
+    def _construir_leitura(usuario: Usuario, *, pode_ver_financeiro: bool) -> UsuarioRead:
         return UsuarioRead(
             id=usuario.id,
             empresaId=usuario.empresa_id,
@@ -496,8 +543,8 @@ class UsuarioService:
             cargo=usuario.cargo,
             fotoUrl=usuario.foto_url,
             liderDepartamento=usuario.lider_departamento,
-            valorRecebidoMensalCentavos=usuario.valor_recebido_mensal_centavos,
-            horasTrabalhoAproximadas=usuario.horas_trabalho_aproximadas,
+            valorRecebidoMensalCentavos=usuario.valor_recebido_mensal_centavos if pode_ver_financeiro else None,
+            horasTrabalhoAproximadas=usuario.horas_trabalho_aproximadas if pode_ver_financeiro else None,
             observacoes=usuario.observacoes,
             corIdentificacao=usuario.cor_identificacao,
             createdAt=usuario.created_at,

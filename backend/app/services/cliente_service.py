@@ -16,6 +16,7 @@ from app.repositories.grupo_cliente_repository import GrupoClienteRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.schemas.cliente import ClienteCreate, ClienteDiretorioRead, ClienteRead, ClienteUpdate
 from app.services.domain_event_publisher import DomainEventPublisher
+from app.services.usuario_permissao_service import UsuarioPermissaoService
 
 TIPO_ENTIDADE = "cliente"
 
@@ -80,11 +81,16 @@ class ClienteService:
         grupo_repository: GrupoClienteRepository | None = None,
         usuario_repository: UsuarioRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
+        usuario_permissao_service: UsuarioPermissaoService | None = None,
     ) -> None:
         self.repository = repository or ClienteRepository()
         self.grupo_repository = grupo_repository or GrupoClienteRepository()
         self.usuario_repository = usuario_repository or UsuarioRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
+        # Fase S1-A — mesma dependência já usada por AuthService para calcular permissões
+        # efetivas; reaproveitada aqui só para decidir mascaramento de campo financeiro na
+        # serialização, nunca para autorizar a rota (isso continua em require_permissao).
+        self.usuario_permissao_service = usuario_permissao_service or UsuarioPermissaoService()
 
     # ----------------------------------------------------------------------------------
     # Criação
@@ -493,24 +499,41 @@ class ClienteService:
             )
         return avisos
 
-    def to_read(self, db: Session, cliente: Cliente, avisos: list[dict] | None = None) -> ClienteRead:
+    def to_read(
+        self, db: Session, cliente: Cliente, avisos: list[dict] | None = None, *, actor: Usuario
+    ) -> ClienteRead:
+        """Fase S1-A — `actor` é obrigatório: decide se `feeMensalCentavos`/
+        `horasContratadasMes` saem com o valor real ou `None` (nunca ausentes do contrato,
+        ver `_mascarar_financeiro`). Aplica-se igualmente a toda chamada, inclusive as
+        respostas de criação/edição/arquivamento/restauração — quem escreveu o valor não
+        necessariamente o vê de volta se não tiver `financeiro.visualizar` (autorização de
+        escrita e de leitura são eixos independentes, nenhum dos dois muda nesta fase)."""
+        campos = self._campos_base(cliente)
+        if not self._pode_ver_financeiro(db, actor):
+            campos = self._mascarar_financeiro(campos)
         return ClienteRead.model_validate(
             {
-                **self._campos_base(cliente),
+                **campos,
                 "grupoClienteIds": self.repository.listar_grupo_ids(db, cliente.id),
                 "possiveisDuplicidades": avisos or [],
             }
         )
 
-    def to_read_lote(self, db: Session, clientes: list[Cliente]) -> list[ClienteRead]:
-        """Uma query só para os grupos de todos os clientes da página — evita N+1."""
+    def to_read_lote(self, db: Session, clientes: list[Cliente], *, actor: Usuario) -> list[ClienteRead]:
+        """Uma query só para os grupos de todos os clientes da página — evita N+1. Mesmo
+        raciocínio para o financeiro (Fase S1-A): `_pode_ver_financeiro` é resolvido UMA
+        vez para o `actor` da request, nunca por Cliente da lista."""
         grupos = self.repository.listar_grupo_ids_em_lote(db, [c.id for c in clientes])
-        return [
-            ClienteRead.model_validate(
-                {**self._campos_base(cliente), "grupoClienteIds": grupos.get(cliente.id, [])}
+        pode_ver_financeiro = self._pode_ver_financeiro(db, actor)
+        resultados = []
+        for cliente in clientes:
+            campos = self._campos_base(cliente)
+            if not pode_ver_financeiro:
+                campos = self._mascarar_financeiro(campos)
+            resultados.append(
+                ClienteRead.model_validate({**campos, "grupoClienteIds": grupos.get(cliente.id, [])})
             )
-            for cliente in clientes
-        ]
+        return resultados
 
     def to_diretorio_read_lote(self, db: Session, clientes: list[Cliente]) -> list[ClienteDiretorioRead]:
         grupos = self.repository.listar_grupo_ids_em_lote(db, [c.id for c in clientes])
@@ -533,6 +556,20 @@ class ClienteService:
             )
             for cliente in clientes
         ]
+
+    def _pode_ver_financeiro(self, db: Session, actor: Usuario) -> bool:
+        """Fase S1-A — única fonte de verdade sobre visibilidade de dado financeiro de
+        Cliente: reaproveita `UsuarioPermissaoService.obter_permissoes_efetivas` (mesma
+        função que `require_permissao` já usa para autorizar a rota) — nenhuma duplicação
+        de defaults/override/deny/grant. Sem exceção de autovisualização aqui: Cliente não
+        é o próprio ator, então essa pergunta nem se aplica (ao contrário de Usuario)."""
+        return "financeiro.visualizar" in self.usuario_permissao_service.obter_permissoes_efetivas(db, actor)
+
+    @staticmethod
+    def _mascarar_financeiro(campos: dict) -> dict:
+        """Campos financeiros ficam `None`, nunca ausentes do dict — o contrato da resposta
+        não muda, só o valor (Fase S1-A)."""
+        return {**campos, "feeMensalCentavos": None, "horasContratadasMes": None}
 
     @staticmethod
     def _campos_base(cliente: Cliente) -> dict:

@@ -418,8 +418,13 @@ def test_get_lista_nao_gera_n_mais_1_de_overrides(client_admin: TestClient, db_s
 
     assert resposta.status_code == 200
     assert len(resposta.json()) >= 5
-    assert len(consultas_usuario_permissao) == 1, (
-        f"esperada exatamente 1 consulta a usuario_permissao, houve {len(consultas_usuario_permissao)}"
+    # Fase S1-A: `require_permissao("clientes.visualizar")` (autorização da rota) e
+    # `ClienteService.to_read_lote` (mascaramento de `financeiro.visualizar`) cada um faz a
+    # sua própria consulta a `usuario_permissao` — 2 no total, nunca uma por Cliente da
+    # lista (o teto continua fixo, só o valor esperado mudou de 1 para 2).
+    assert len(consultas_usuario_permissao) == 2, (
+        f"esperadas exatamente 2 consultas a usuario_permissao (gate + mascaramento financeiro), "
+        f"houve {len(consultas_usuario_permissao)}"
     )
 
 

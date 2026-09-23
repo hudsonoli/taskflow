@@ -14,9 +14,9 @@ import { formatCPF } from "@/lib/mascaras";
 import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
 import { PERFIL_PARA_PERFIL_BASE } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
+import { podeVerFinanceiroEfetivo } from "@/lib/escopo-operacional";
 import {
   perfilUsuarioLabels,
-  podeVerDadosFinanceiros,
   type PerfilUsuario,
   type Usuario,
   type UsuarioContato,
@@ -76,13 +76,13 @@ export function UsuarioFormModal({
   onClose: () => void;
   onSave: (draft: UsuarioFormDraft, usuarioId?: string) => void;
 }) {
-  const { perfilAtual } = useAppData();
+  const { usuarioAtual } = useAppData();
   const [draft, setDraft] = useState<UsuarioFormDraft>(() => createInitialDraft(usuario));
   const [activeTab, setActiveTab] = useState("dados");
 
   const editing = usuario !== undefined;
   const canSave = draft.nome.trim().length > 0 && draft.email.trim().length > 0;
-  const podeVerFinanceiro = podeVerDadosFinanceiros(perfilAtual);
+  const podeVerFinanceiro = usuarioAtual ? podeVerFinanceiroEfetivo(usuarioAtual) : false;
 
   const tabs = [
     { id: "dados", label: "Dados" },

@@ -61,7 +61,7 @@ def create_cliente(
         criado = cliente_service.create_cliente(
             db, payload, empresa_id=current_user.empresa_id, actor_usuario_id=current_user.id
         )
-        return cliente_service.to_read(db, criado, avisos)
+        return cliente_service.to_read(db, criado, avisos, actor=current_user)
     except Exception as exc:
         handle_cliente_error(exc)
 
@@ -85,7 +85,7 @@ def list_clientes(
         limit=limit,
         offset=offset,
     )
-    return cliente_service.to_read_lote(db, clientes)
+    return cliente_service.to_read_lote(db, clientes, actor=current_user)
 
 
 @router.get("/diretorio", response_model=list[ClienteDiretorioRead])
@@ -106,7 +106,7 @@ def get_cliente(
     try:
         cliente = cliente_service.get_cliente(db, str(cliente_id))
         ensure_resource_empresa(cliente.empresa_id, current_user)
-        return cliente_service.to_read(db, cliente)
+        return cliente_service.to_read(db, cliente, actor=current_user)
     except Exception as exc:
         handle_cliente_error(exc)
 
@@ -135,7 +135,7 @@ def update_cliente(
         cliente = cliente_service.update_cliente(
             db, str(cliente_id), payload, actor_usuario_id=current_user.id
         )
-        return cliente_service.to_read(db, cliente, avisos)
+        return cliente_service.to_read(db, cliente, avisos, actor=current_user)
     except Exception as exc:
         handle_cliente_error(exc)
 
@@ -161,7 +161,7 @@ def arquivar_cliente(
             motivo_arquivamento=payload.motivo_arquivamento,
             actor_usuario_id=current_user.id,
         )
-        return cliente_service.to_read(db, cliente)
+        return cliente_service.to_read(db, cliente, actor=current_user)
     except Exception as exc:
         handle_cliente_error(exc)
 
@@ -182,6 +182,6 @@ def restaurar_cliente(
         cliente = cliente_service.restaurar_cliente(
             db, str(cliente_id), actor_usuario_id=current_user.id
         )
-        return cliente_service.to_read(db, cliente)
+        return cliente_service.to_read(db, cliente, actor=current_user)
     except Exception as exc:
         handle_cliente_error(exc)

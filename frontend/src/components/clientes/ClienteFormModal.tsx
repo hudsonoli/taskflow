@@ -15,8 +15,8 @@ import { generateId } from "@/lib/ids";
 import { detectDocumentType, formatDocument } from "@/lib/mascaras";
 import { buscarDadosPorDocumento } from "@/lib/documento-lookup";
 import { useAppData } from "@/lib/AppDataContext";
+import { podeVerFinanceiroEfetivo } from "@/lib/escopo-operacional";
 import { resolverGrupoClientePorReferencia } from "@/lib/referencias";
-import { podeVerDadosFinanceiros } from "@/types/usuario";
 import {
   origensClienteDisponiveis,
   statusClienteLabels,
@@ -82,13 +82,13 @@ export function ClienteFormModal({
   onClose: () => void;
   onSave: (draft: ClienteFormDraft, clienteId?: string) => void;
 }) {
-  const { perfilAtual } = useAppData();
+  const { usuarioAtual } = useAppData();
   const [draft, setDraft] = useState<ClienteFormDraft>(() => createInitialDraft(cliente));
   const [activeTab, setActiveTab] = useState("dados");
 
   const editing = cliente !== undefined;
   const canSave = draft.nome.trim().length > 0;
-  const podeVerComercial = podeVerDadosFinanceiros(perfilAtual);
+  const podeVerComercial = usuarioAtual ? podeVerFinanceiroEfetivo(usuarioAtual) : false;
   const documentoLabel = draft.tipoDocumento === "cpf" ? "CPF" : "CNPJ";
 
   const tabs = [

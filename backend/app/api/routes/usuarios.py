@@ -110,7 +110,7 @@ def create_usuario(
     ensure_same_empresa(usuario.empresa_id, current_user)
     try:
         created = usuario_service.create_usuario(db, usuario, actor_usuario_id=current_user.id)
-        return usuario_service.to_read(created)
+        return usuario_service.to_read(db, created, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
 
@@ -136,7 +136,7 @@ def list_usuarios(
         limit=limit,
         offset=offset,
     )
-    return [usuario_service.to_read(usuario) for usuario in usuarios]
+    return usuario_service.to_read_lote(db, usuarios, actor=current_user)
 
 
 @router.get("/me", response_model=UsuarioRead)
@@ -148,7 +148,11 @@ def get_me(
     db: Session = Depends(get_db),
 ):
     usuario = usuario_service.get_me(db, current_user.id)
-    leitura = usuario_service.to_read(usuario)
+    # Fase S1-A — única chamada do arquivo com `permitir_financeiro_proprio=True`: só
+    # autovisualização em /me pode devolver o próprio financeiro sem `financeiro.visualizar`
+    # (ver docstring de UsuarioService.to_read — a exceção nunca se generaliza para outra
+    # rota, mesmo quando o id pedido é o do próprio actor).
+    leitura = usuario_service.to_read(db, usuario, actor=current_user, permitir_financeiro_proprio=True)
     # Fase 2G.10A — só em /me: ver nota em UsuarioRead.permissoes.
     permissoes = usuario_permissao_service.obter_permissoes_efetivas(db, usuario)
     return leitura.model_copy(update={"permissoes": permissoes})
@@ -188,7 +192,7 @@ def get_usuario(
     try:
         usuario = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(usuario.empresa_id, current_user)
-        return usuario_service.to_read(usuario)
+        return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
 
@@ -217,7 +221,7 @@ def update_usuario(
     try:
         data = UsuarioUpdate.model_validate(payload)
         usuario = usuario_service.update_usuario(db, str(usuario_id), data, actor_usuario_id=current_user.id)
-        return usuario_service.to_read(usuario)
+        return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
 
@@ -240,7 +244,7 @@ def inativar_usuario(
             motivo_inativacao=payload.motivo_inativacao if payload else None,
             actor_usuario_id=current_user.id,
         )
-        return usuario_service.to_read(usuario)
+        return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
 
@@ -256,7 +260,7 @@ def reativar_usuario(
         existing = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(existing.empresa_id, current_user)
         usuario = usuario_service.reativar_usuario(db, str(usuario_id), actor_usuario_id=current_user.id)
-        return usuario_service.to_read(usuario)
+        return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
 
@@ -274,7 +278,7 @@ def bloquear_usuario(
         existing = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(existing.empresa_id, current_user)
         usuario = usuario_service.bloquear_usuario(db, str(usuario_id), actor_usuario_id=current_user.id)
-        return usuario_service.to_read(usuario)
+        return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
 
@@ -290,7 +294,7 @@ def desbloquear_usuario(
         existing = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(existing.empresa_id, current_user)
         usuario = usuario_service.desbloquear_usuario(db, str(usuario_id), actor_usuario_id=current_user.id)
-        return usuario_service.to_read(usuario)
+        return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
 
@@ -313,7 +317,7 @@ def excluir_usuario(
             motivo_arquivamento=payload.motivo_arquivamento,
             actor_usuario_id=current_user.id,
         )
-        return usuario_service.to_read(usuario)
+        return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
 
@@ -328,6 +332,6 @@ def restaurar_usuario(
         existing = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(existing.empresa_id, current_user)
         usuario = usuario_service.restaurar_usuario(db, str(usuario_id), actor_usuario_id=current_user.id)
-        return usuario_service.to_read(usuario)
+        return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
