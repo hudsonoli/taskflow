@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.escopo import EscopoHorasNaoAutorizadoError, pode_consultar_horas_departamento
@@ -109,41 +110,65 @@ class SessaoTrabalhoService:
             return existing
 
         inicio_em = ensure_utc(inicio_em)
-        active = self.repository.get_active_equivalent(
-            db,
-            demanda_id=demanda_id,
-            usuario_id=usuario_id,
-            departamento_id=departamento_id,
-        )
-        if active:
-            self.close_session(
-                db,
-                active,
-                evento_fim_id=evento_inicio_id,
-                fim_em=inicio_em,
-                motivo_encerramento=MOTIVO_SUBSTITUICAO_SESSAO_ATIVA,
-            )
 
-        now = utc_now()
-        sessao = SessaoTrabalho(
-            id=str(uuid4()),
-            empresa_id=empresa_id,
-            agencia_id=agencia_id,
-            demanda_id=demanda_id,
-            workflow_etapa_id=workflow_etapa_id,
-            usuario_id=usuario_id,
-            departamento_id=departamento_id,
-            evento_inicio_id=evento_inicio_id,
-            evento_fim_id=None,
-            status=STATUS_ATIVA,
-            inicio_em=inicio_em,
-            fim_em=None,
-            duracao_segundos=None,
-            motivo_encerramento=None,
-            created_at=now,
-            updated_at=now,
-        )
-        return self.repository.create(db, sessao)
+        # Corrida (duas aberturas concorrentes pra mesma chave lógica): os índices parciais
+        # únicos (demanda_id, usuario_id)/(demanda_id, departamento_id) WHERE status='ativa'
+        # (ver app/models/sessao_trabalho.py) impedem duas sessões ativas simultâneas, mas o
+        # par SELECT (get_active_equivalent) + INSERT abaixo não é atômico — a segunda
+        # requisição pode ler "nenhuma ativa" antes da primeira commitar e estourar
+        # IntegrityError no INSERT. Reexecuta a MESMA unidade (relê ativa, encerra por
+        # substituição, cria a nova) dentro de um SAVEPOINT — nunca um rollback da Session
+        # inteira, porque a rota já adicionou um Evento não commitado ANTES de chamar
+        # open_session, e Session.begin_nested() faz autoflush do que estiver pendente antes
+        # de abrir o SAVEPOINT (confirmado empiricamente): um rollback do savepoint desfaz só
+        # a tentativa de INSERT/UPDATE desta unidade, nunca o Evento da transação externa.
+        # Mesmo teto de 2 tentativas do precedente já aprovado em
+        # UsuarioPermissaoService.definir_override — sem retry, a segunda requisição
+        # explodiria como 500 em vez de convergir pra mesma semântica de duas chamadas
+        # sequenciais (a última substitui a sessão ativa anterior).
+        for tentativa in (1, 2):
+            try:
+                with db.begin_nested():
+                    active = self.repository.get_active_equivalent(
+                        db,
+                        demanda_id=demanda_id,
+                        usuario_id=usuario_id,
+                        departamento_id=departamento_id,
+                    )
+                    if active:
+                        self.close_session(
+                            db,
+                            active,
+                            evento_fim_id=evento_inicio_id,
+                            fim_em=inicio_em,
+                            motivo_encerramento=MOTIVO_SUBSTITUICAO_SESSAO_ATIVA,
+                        )
+
+                    now = utc_now()
+                    sessao = SessaoTrabalho(
+                        id=str(uuid4()),
+                        empresa_id=empresa_id,
+                        agencia_id=agencia_id,
+                        demanda_id=demanda_id,
+                        workflow_etapa_id=workflow_etapa_id,
+                        usuario_id=usuario_id,
+                        departamento_id=departamento_id,
+                        evento_inicio_id=evento_inicio_id,
+                        evento_fim_id=None,
+                        status=STATUS_ATIVA,
+                        inicio_em=inicio_em,
+                        fim_em=None,
+                        duracao_segundos=None,
+                        motivo_encerramento=None,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    self.repository.create(db, sessao)
+                return sessao
+            except IntegrityError:
+                if tentativa == 2:
+                    raise
+        raise AssertionError("inalcançável — o loop sempre retorna ou levanta antes daqui")
 
     def _ensure_usuario_valido(self, db: Session, empresa_id: str, usuario_id: str) -> None:
         usuario = self.usuario_repository.get_by_id(db, usuario_id)
