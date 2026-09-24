@@ -64,15 +64,20 @@ export function WorkflowModeloFormModal({
   const canSave = draft.nome.trim().length > 0 && draft.etapas.length > 0;
   const todasExpandidas = draft.etapas.length > 0 && draft.etapas.every((etapa) => expandedIds.has(etapa.id));
 
-  // Picker só oferece usuário ativo — grava usuario.id real (UUID), sem ponte de codigoInterno.
-  const memberOptions = usuarios
-    .filter((usuario) => usuario.status === "ativo")
-    .map((usuario) => ({
-      id: usuario.id,
-      nome: usuario.nome,
-      corIdentificacao: usuario.corIdentificacao,
-      fotoUrl: usuario.fotoUrl,
-    }));
+  // Picker oferece usuário ativo + os já responsáveis daquela etapa (mesmo se arquivado/
+  // inativo/bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o responsável
+  // padrão persistido some silenciosamente da etapa. Novo vínculo continua restrito a
+  // ativo. Grava usuario.id real (UUID), sem ponte de codigoInterno.
+  function buildMemberOptions(idsAtuais: string[]) {
+    return usuarios
+      .filter((usuario) => usuario.status === "ativo" || idsAtuais.includes(usuario.id))
+      .map((usuario) => ({
+        id: usuario.id,
+        nome: usuario.nome,
+        corIdentificacao: usuario.corIdentificacao,
+        fotoUrl: usuario.fotoUrl,
+      }));
+  }
 
   // Mesmo critério: picker só oferece departamento ativo, grava departamento.id real.
   const departamentoOptions = departamentos
@@ -170,7 +175,8 @@ export function WorkflowModeloFormModal({
         <div className="space-y-3">
           {draft.etapas.map((etapa, index) => {
             const expanded = expandedIds.has(etapa.id);
-            const responsaveisSelecionados = memberOptions.filter((option) =>
+            const etapaMemberOptions = buildMemberOptions(etapa.usuarioResponsavelIds);
+            const responsaveisSelecionados = etapaMemberOptions.filter((option) =>
               etapa.usuarioResponsavelIds.includes(option.id),
             );
             const tone = etapa.tipo === "aprovacao" ? "amber" : "indigo";
@@ -274,7 +280,7 @@ export function WorkflowModeloFormModal({
                       values={etapa.usuarioResponsavelIds}
                       onChange={(values) => updateEtapa(etapa.id, { usuarioResponsavelIds: values })}
                       placeholder="Selecionar responsáveis…"
-                      options={memberOptions}
+                      options={etapaMemberOptions}
                     />
                     {responsaveisSelecionados.length === 0 && (
                       <p className="text-xs text-zinc-400">Sem responsável padrão — definido na tarefa ao aplicar o modelo.</p>

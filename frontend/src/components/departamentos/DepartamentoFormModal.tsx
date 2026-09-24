@@ -92,10 +92,12 @@ export function DepartamentoFormModal({
           values={draft.responsavelId ? normalizarReferenciasParaCodigoInterno([draft.responsavelId], usuarios) : []}
           onChange={(values) => updateDraft({ responsavelId: values[0] ?? "" })}
           placeholder="Sem responsável"
-          // Picker só oferece usuário ativo; grava codigoInterno porque MemberSelector usa
-          // codigoInterno como identidade de opção — ver lib/referencias.ts.
+          // Picker oferece usuário ativo + o já selecionado (mesmo se arquivado/inativo/
+          // bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o valor
+          // persistido some silenciosamente da tela de edição. Grava codigoInterno porque
+          // MemberSelector usa codigoInterno como identidade de opção — ver lib/referencias.ts.
           options={usuarios
-            .filter((usuario) => usuario.status === "ativo")
+            .filter((usuario) => usuario.status === "ativo" || usuario.id === draft.responsavelId)
             .map((usuario) => ({
               id: usuario.codigoInterno,
               nome: usuario.nome,

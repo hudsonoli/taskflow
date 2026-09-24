@@ -201,10 +201,11 @@ class UsuarioService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[Usuario]:
-        # Sem status explícito, devolve todo mundo exceto arquivado (o repository já filtra
-        # isso na query SQL) — referências históricas a usuário inativo/bloqueado ainda
-        # precisam resolver nome/avatar. Filtrar só "ativo" é responsabilidade de quem monta
-        # a lista de opções selecionáveis (picker), não deste endpoint.
+        # Sem status explícito, devolve todo mundo, inclusive arquivado (o repository já
+        # inclui isso na query SQL) — referências históricas a usuário inativo/bloqueado/
+        # arquivado ainda precisam resolver nome/avatar. Filtrar só "ativo" é
+        # responsabilidade de quem monta a lista de opções selecionáveis (picker), não
+        # deste endpoint.
         return self.repository.list_diretorio(
             db,
             empresa_id=empresa_id,

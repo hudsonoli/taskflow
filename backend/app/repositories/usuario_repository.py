@@ -95,12 +95,15 @@ class UsuarioRepository:
         statement = select(Usuario).where(Usuario.empresa_id == empresa_id, Usuario.is_system_account.is_(False))
 
         if status:
+            # Sem exclusão de arquivado aqui: status explícito (inclusive "arquivado") é
+            # filtro exato, igual antes.
             statement = statement.where(Usuario.status == status)
-        else:
-            # Sem status explícito: exclui só arquivado (não força "ativo") — referências
-            # históricas a usuários inativos/bloqueados ainda precisam resolver nome/avatar
-            # (ver docs/padrao-arquivamento.md). Quem quer só ativos filtra no cliente.
-            statement = statement.where(Usuario.status != STATUS_ARQUIVADO)
+        # Sem status explícito: inclui TODOS os status (ativo/inativo/bloqueado/arquivado) —
+        # referências históricas (responsável de cliente/departamento, membro de equipe,
+        # autor de evento etc.) precisam continuar resolvendo nome/avatar mesmo após o
+        # usuário ser arquivado (ver docs/padrao-arquivamento.md e R1). Quem monta opções de
+        # NOVA seleção filtra "ativo" no cliente — mesmo padrão já usado por
+        # clientes/projetos/departamentos/grupos_cliente diretorio.
         if departamento_id:
             statement = statement.where(Usuario.departamento_id == departamento_id)
         if search:

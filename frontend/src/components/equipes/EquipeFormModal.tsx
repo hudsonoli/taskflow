@@ -53,16 +53,23 @@ export function EquipeFormModal({
     setDraft((current) => ({ ...current, ...patch }));
   }
 
-  // Picker só oferece usuário ativo; grava codigoInterno porque MemberSelector usa
+  // Picker oferece usuário ativo + os já selecionados (mesmo se arquivado/inativo/
+  // bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o vínculo persistido
+  // some silenciosamente da tela de edição. Grava codigoInterno porque MemberSelector usa
   // codigoInterno como identidade de opção — ver lib/referencias.ts.
-  const memberOptions = usuarios
-    .filter((usuario) => usuario.status === "ativo")
-    .map((usuario) => ({
-      id: usuario.codigoInterno,
-      nome: usuario.nome,
-      corIdentificacao: usuario.corIdentificacao,
-      fotoUrl: usuario.fotoUrl,
-    }));
+  function buildMemberOptions(idsAtuais: string[]) {
+    return usuarios
+      .filter((usuario) => usuario.status === "ativo" || idsAtuais.includes(usuario.id))
+      .map((usuario) => ({
+        id: usuario.codigoInterno,
+        nome: usuario.nome,
+        corIdentificacao: usuario.corIdentificacao,
+        fotoUrl: usuario.fotoUrl,
+      }));
+  }
+
+  const liderOptions = buildMemberOptions(draft.liderId ? [draft.liderId] : []);
+  const membroOptions = buildMemberOptions(draft.membroIds);
 
   return (
     <Modal open={open} onClose={onClose} maxWidthClassName="max-w-xl">
@@ -127,7 +134,7 @@ export function EquipeFormModal({
           values={draft.liderId ? normalizarReferenciasParaCodigoInterno([draft.liderId], usuarios) : []}
           onChange={(values) => updateDraft({ liderId: values[0] ?? "" })}
           placeholder="Sem líder"
-          options={memberOptions}
+          options={liderOptions}
         />
 
         <MemberSelector
@@ -135,7 +142,7 @@ export function EquipeFormModal({
           values={normalizarReferenciasParaCodigoInterno(draft.membroIds, usuarios)}
           onChange={(values) => updateDraft({ membroIds: values })}
           placeholder="Selecionar membros…"
-          options={memberOptions}
+          options={membroOptions}
         />
 
         <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">

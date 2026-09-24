@@ -360,10 +360,13 @@ export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
 
 export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSectionProps) {
   const { departamentos } = useDiretorioDepartamentos();
-  // Picker só oferece usuário ativo; referência histórica de inativo resolve nome/avatar
-  // em outros lugares via resolverUsuarioPorReferencia (ver lib/referencias.ts).
+  // Picker oferece usuário ativo + os já responsáveis (mesmo se arquivado/inativo/
+  // bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o responsável
+  // persistido some silenciosamente da tela. Novo vínculo continua restrito a ativo.
   const diretorio = useDiretorioUsuarios().usuarios;
-  const usuariosAtivos = diretorio.filter((usuario) => usuario.status === "ativo");
+  const usuariosSelecionaveis = diretorio.filter(
+    (usuario) => usuario.status === "ativo" || demanda.usuarioResponsavelIds.includes(usuario.id),
+  );
   const [erro, setErro] = useState<string | null>(null);
 
   const departamentosNomes = demanda.departamentoResponsavelIds
@@ -379,7 +382,7 @@ export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSection
           values={demanda.usuarioResponsavelIds}
           onChange={(values) => void salvarCampo(demanda, { usuarioResponsavelIds: values }, onChange, setErro)}
           placeholder="Selecionar responsáveis…"
-          options={usuariosAtivos.map((usuario) => ({
+          options={usuariosSelecionaveis.map((usuario) => ({
             id: usuario.id,
             nome: usuario.nome,
             subtitulo: departamentos.find((departamento) => departamento.id === usuario.departamentoId)?.nome,

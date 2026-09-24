@@ -139,8 +139,11 @@ export function NovoProjetoModal({
           label="Usuários responsáveis"
           values={draft.responsavelIds}
           onChange={(values) => updateDraft({ responsavelIds: values })}
+          // MultiSelect só mostra como chip quem está em `options` — sem o carve-out, um
+          // responsável arquivado/inativo/bloqueado já persistido some da tela sem nem
+          // aparecer removível. Novo vínculo continua restrito a ativo.
           options={usuarios
-            .filter((usuario) => usuario.status === "ativo")
+            .filter((usuario) => usuario.status === "ativo" || draft.responsavelIds.includes(usuario.id))
             .map((usuario) => ({ value: usuario.id, label: usuario.nome }))}
         />
         <MultiSelect
