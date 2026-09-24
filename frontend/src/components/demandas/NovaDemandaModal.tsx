@@ -60,6 +60,7 @@ export function NovaDemandaModal({
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios: diretorio } = useDiretorioUsuarios();
   const { workflowModelos } = useDiretorioWorkflowModelos();
+  const [draft, setDraft] = useState<DemandaFormDraft>(() => createInitialDraft(demanda));
   // Picker oferece usuário ativo + os já responsáveis (mesmo se arquivado/inativo/
   // bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o responsável
   // persistido some silenciosamente ao editar uma Demanda. Novo vínculo continua restrito
@@ -67,7 +68,6 @@ export function NovaDemandaModal({
   const usuarios = diretorio.filter(
     (usuario) => usuario.status === "ativo" || draft.usuarioResponsavelIds.includes(usuario.id),
   );
-  const [draft, setDraft] = useState<DemandaFormDraft>(() => createInitialDraft(demanda));
   // Vínculo novo não pode ser um Projeto arquivado (mesma regra do backend, ver
   // `_ensure_projeto_valido`) — mas o Projeto já vinculado à Demanda continua aparecendo,
   // senão o campo mostraria vazio ao editar uma Demanda cujo Projeto foi arquivado depois.
