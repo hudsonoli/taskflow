@@ -222,7 +222,12 @@ class DemandaRepository:
             statement = statement.where(predicado)
 
         if status:
-            statement = statement.where(Demanda.status == status)
+            # Lista separada por vírgula (ex.: "pausada,bloqueada") — D2-B1: DemandasView tem
+            # um filtro de UI que agrupa dois status reais, e aplicar isso localmente sobre uma
+            # página já paginada esconderia itens de outras páginas. `.in_()` com valor único é
+            # idêntico a `==`, então nenhum chamador existente muda de comportamento.
+            valores_status = [valor.strip() for valor in status.split(",") if valor.strip()]
+            statement = statement.where(Demanda.status.in_(valores_status))
         else:
             # Sem status explícito, arquivada fica oculta — filtro em SQL, antes da paginação.
             statement = statement.where(Demanda.status != STATUS_ARQUIVADO)

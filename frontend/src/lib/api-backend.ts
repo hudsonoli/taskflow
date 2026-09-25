@@ -1446,8 +1446,13 @@ export async function listDemandasReais(params?: {
   projetoId?: string;
   departamentoId?: string;
   escopo?: DemandaEscopo;
+  // Opcionais — quem não passa continua recebendo o comportamento de sempre (limit=200,
+  // offset=0). Introduzidos no D2-B1 para DemandasView paginar de verdade no servidor.
+  limit?: number;
+  offset?: number;
 }): Promise<Demanda[]> {
-  const query = new URLSearchParams({ limit: "200" });
+  const query = new URLSearchParams({ limit: String(params?.limit ?? 200) });
+  if (params?.offset) query.set("offset", String(params.offset));
   if (params?.status) query.set("status", params.status);
   if (params?.search) query.set("search", params.search);
   if (params?.clienteId) query.set("clienteId", params.clienteId);

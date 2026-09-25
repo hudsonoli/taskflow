@@ -844,6 +844,67 @@ def test_toda_demanda_encontrada_justifica_o_proprio_texto(client_admin: TestCli
 
 
 # --------------------------------------------------------------------------------------
+# D2-B1 — paginação real (limit/offset) e status combinado, ver DemandasView.tsx
+# --------------------------------------------------------------------------------------
+
+def test_status_aceita_lista_separada_por_virgula(client_admin: TestClient) -> None:
+    """DemandasView tem um filtro de UI ("pausadas/bloqueadas") que junta dois status reais —
+    sem isso, aplicar o agrupamento no cliente sobre uma página já paginada esconderia itens
+    de outras páginas. Valor único continua funcionando (equivalente a `==`)."""
+    pausada = _criar(client_admin, status="pausada")
+    bloqueada_resp = client_admin.patch(
+        f"/demandas/{_criar(client_admin)['id']}", json={"status": "bloqueada", "motivoBloqueio": "Falta arte"}
+    )
+    assert bloqueada_resp.status_code == 200, bloqueada_resp.text
+    bloqueada = bloqueada_resp.json()
+    concluida = _criar(client_admin, status="concluida")
+
+    achados = client_admin.get("/demandas?status=pausada,bloqueada").json()
+    ids = {d["id"] for d in achados}
+    assert ids == {pausada["id"], bloqueada["id"]}
+    assert concluida["id"] not in ids
+
+    somente_pausada = client_admin.get("/demandas?status=pausada").json()
+    assert [d["id"] for d in somente_pausada] == [pausada["id"]]
+
+
+def test_offset_acessa_itens_alem_da_primeira_pagina(client_admin: TestClient) -> None:
+    """Prova que `limit`+`offset` realmente avançam a paginação — sem isso, qualquer item além
+    da primeira página seria inacessível, o próprio risco que motivou o D2."""
+    criadas = [_criar(client_admin) for _ in range(3)]
+    # Ordenação do backend é numero_operacional DESC — a mais recente primeiro.
+    esperado_desc = list(reversed([c["id"] for c in criadas]))
+
+    pagina1 = client_admin.get("/demandas?limit=1&offset=0").json()
+    pagina2 = client_admin.get("/demandas?limit=1&offset=1").json()
+    pagina3 = client_admin.get("/demandas?limit=1&offset=2").json()
+
+    assert [d["id"] for d in pagina1] == [esperado_desc[0]]
+    assert [d["id"] for d in pagina2] == [esperado_desc[1]]
+    assert [d["id"] for d in pagina3] == [esperado_desc[2]]
+    # Nenhuma repetição entre páginas — cada uma trouxe um item distinto.
+    todos = {d["id"] for pagina in (pagina1, pagina2, pagina3) for d in pagina}
+    assert todos == set(esperado_desc)
+
+
+def test_busca_encontra_item_fora_da_pagina_com_limit_pequeno(client_admin: TestClient) -> None:
+    """search é aplicado ANTES de limit/offset na mesma query (ver
+    app/repositories/demanda_repository.py) — um item que não estaria na primeira página com
+    limit pequeno continua encontrável pela busca, independente da posição dele na ordenação."""
+    alvo = _criar(client_admin, nome="Campanha Verão Exclusiva")
+    _criar(client_admin, nome="Outra tarefa 1")
+    _criar(client_admin, nome="Outra tarefa 2")
+
+    # Sem busca, limit=1 traz só a mais recente — nunca o alvo (criado primeiro, portanto
+    # numero_operacional menor, fora da janela DESC com limit=1).
+    sem_busca = client_admin.get("/demandas?limit=1&offset=0").json()
+    assert alvo["id"] not in [d["id"] for d in sem_busca]
+
+    achados = client_admin.get("/demandas?search=Verão Exclusiva&limit=1&offset=0").json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+# --------------------------------------------------------------------------------------
 # Arquivamento
 # --------------------------------------------------------------------------------------
 
