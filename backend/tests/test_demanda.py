@@ -868,6 +868,30 @@ def test_status_aceita_lista_separada_por_virgula(client_admin: TestClient) -> N
     assert [d["id"] for d in somente_pausada] == [pausada["id"]]
 
 
+def test_status_invalido_ou_vazio_devolve_lista_vazia_nunca_erro(client_admin: TestClient) -> None:
+    """`status` na listagem sempre foi string livre (sem enum na rota/schema) — um valor
+    inexistente já devolvia lista vazia antes do D2-B1, não 422. A lista separada por vírgula
+    preserva exatamente esse comportamento pra cada segmento, incluindo segmentos vazios."""
+    _criar(client_admin, status="planejada")
+
+    # Valor totalmente inexistente: 200 com lista vazia, nunca erro.
+    assert client_admin.get("/demandas?status=valor_inexistente").json() == []
+
+    # Um válido + um inválido: o válido ainda é encontrado, o inválido não gera erro nem
+    # esconde o resultado válido.
+    em_execucao = _criar(client_admin, status="em_execucao")
+    achados = client_admin.get("/demandas?status=em_execucao,valor_inexistente").json()
+    assert [d["id"] for d in achados] == [em_execucao["id"]]
+
+    # Segmentos vazios (",", ou só vírgulas) resultam em `.in_([])` — zero linhas, sem erro.
+    assert client_admin.get("/demandas?status=,").json() == []
+
+    # Espaços ao redor dos valores são tolerados (mesmo tratamento de `.strip()` do termo de
+    # busca em app/core/busca.py).
+    com_espacos = client_admin.get("/demandas?status=%20em_execucao%20,%20bloqueada%20").json()
+    assert [d["id"] for d in com_espacos] == [em_execucao["id"]]
+
+
 def test_offset_acessa_itens_alem_da_primeira_pagina(client_admin: TestClient) -> None:
     """Prova que `limit`+`offset` realmente avançam a paginação — sem isso, qualquer item além
     da primeira página seria inacessível, o próprio risco que motivou o D2."""
@@ -885,6 +909,103 @@ def test_offset_acessa_itens_alem_da_primeira_pagina(client_admin: TestClient) -
     # Nenhuma repetição entre páginas — cada uma trouxe um item distinto.
     todos = {d["id"] for pagina in (pagina1, pagina2, pagina3) for d in pagina}
     assert todos == set(esperado_desc)
+
+
+def test_offset_200_e_aceito_sem_cap_oculto(client_admin: TestClient) -> None:
+    """`limit` tem `le=200` na rota — `offset` não tem cap nenhum (ver
+    app/api/routes/demandas.py). Prova que offset=200 realmente chega ao repository: com só 3
+    demandas no tenant, offset=200 devolve lista vazia (não erro, não "clampado" de volta pra
+    um valor que devolveria resultado incorreto)."""
+    for _ in range(3):
+        _criar(client_admin)
+
+    resposta = client_admin.get("/demandas?limit=50&offset=200")
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json() == []
+
+
+def _usuario_com_nome(db: Session, empresa: Empresa, nome: str) -> Usuario:
+    agora = datetime.now(timezone.utc)
+    sufixo = uuid.uuid4().hex[:8]
+    usuario = Usuario(
+        id=str(uuid.uuid4()),
+        empresa_id=empresa.id,
+        codigo_interno=f"u-{sufixo}",
+        nome=nome,
+        email=f"u-{sufixo}@teste.local",
+        perfil_base="operador",
+        acesso_sistema=True,
+        status="ativo",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db.add(usuario)
+    db.flush()
+    return usuario
+
+
+def _projeto_interno(db: Session, empresa: Empresa, nome: str) -> "Projeto":
+    from app.models.projeto import Projeto
+
+    agora = datetime.now(timezone.utc)
+    sufixo = uuid.uuid4().hex[:8]
+    projeto = Projeto(
+        id=str(uuid.uuid4()),
+        empresa_id=empresa.id,
+        cliente_id=None,  # projeto interno — evita a checagem de compatibilidade cliente/projeto
+        codigo_referencia=f"P26{sufixo[:6]}",
+        ano_referencia=26,
+        sequencial_referencia=int(sufixo[:5], 16) % 900000,
+        nome=nome,
+        nome_normalizado=nome.lower(),
+        status="ativo",
+        prioridade="media",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db.add(projeto)
+    db.flush()
+    return projeto
+
+
+def test_busca_por_nome_de_cliente_continua_funcionando(client_admin: TestClient, db_session: Session, empresa) -> None:
+    """Regressão encontrada na revisão pré-merge do D2-B1: o filtro local antigo de
+    DemandasView.tsx buscava por nome de Cliente resolvido; mover a busca pro servidor SEM essa
+    capacidade seria regressão real, não simplificação aceitável."""
+    cliente = _cliente(db_session, empresa)
+    alvo = _criar(client_admin, clienteId=str(cliente.id))
+    _criar(client_admin)  # sem cliente — não pode aparecer na busca
+
+    termo = cliente.nome.split()[-1]  # um pedaço do nome gerado (ex.: "CMO", "Cliente xxxxxxxx")
+    achados = client_admin.get(f"/demandas?search={termo}").json()
+    assert alvo["id"] in [d["id"] for d in achados]
+
+
+def test_busca_por_nome_de_projeto_continua_funcionando(client_admin: TestClient, db_session: Session, empresa) -> None:
+    projeto = _projeto_interno(db_session, empresa, "Reposicionamento de Marca 2026")
+    alvo = _criar(client_admin, projetoId=str(projeto.id))
+    _criar(client_admin)  # sem projeto — não pode aparecer na busca
+
+    achados = client_admin.get("/demandas?search=Reposicionamento").json()
+    assert alvo["id"] in [d["id"] for d in achados]
+
+
+def test_busca_por_nome_de_responsavel_continua_funcionando(client_admin: TestClient, db_session: Session, empresa) -> None:
+    joao = _usuario_com_nome(db_session, empresa, "João Responsável de Teste")
+    alvo = _criar(client_admin, usuarioResponsavelIds=[str(joao.id)])
+    _criar(client_admin)  # sem responsável — não pode aparecer na busca
+
+    achados = client_admin.get("/demandas?search=João").json()
+    assert alvo["id"] in [d["id"] for d in achados]
+
+
+def test_busca_por_nome_de_departamento_continua_funcionando(client_admin: TestClient, db_session: Session, empresa) -> None:
+    criacao = _departamento(db_session, empresa, nome="CRIAÇÃO")
+    alvo = _criar(client_admin, departamentoResponsavelIds=[str(criacao.id)])
+    _criar(client_admin)  # sem departamento — não pode aparecer na busca
+
+    achados = client_admin.get("/demandas?search=CRIA%C3%87%C3%83O").json()
+    assert alvo["id"] in [d["id"] for d in achados]
 
 
 def test_busca_encontra_item_fora_da_pagina_com_limit_pequeno(client_admin: TestClient) -> None:

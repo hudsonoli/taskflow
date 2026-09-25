@@ -128,6 +128,14 @@ export function DemandasView() {
     })
       .then((resultado) => {
         if (cancelado) return; // resposta obsoleta — outra busca já foi disparada depois desta
+        // Página ficou vazia (ex.: uma mutation tirou o último item dela do filtro atual) —
+        // volta uma página automaticamente em vez de mostrar uma página em branco no meio da
+        // navegação. Só se aplica com offset > 0: navegação normal nunca chega aqui, porque
+        // "Próxima" já fica desabilitada quando a página atual devolve menos que o limite.
+        if (resultado.length === 0 && offset > 0) {
+          setOffset((atual) => Math.max(0, atual - TAMANHO_PAGINA));
+          return;
+        }
         setDemandasPagina(resultado);
         setTemProximaPagina(resultado.length === TAMANHO_PAGINA);
         setBuscandoPagina(false);

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.busca import interpretar_termo_busca
 from app.core.escopo import EscopoDemanda
+from app.models.cliente import Cliente
 from app.models.demanda import Demanda
 from app.models.demanda_departamento import DemandaDepartamento
 from app.models.demanda_responsavel import DemandaResponsavel
@@ -16,6 +17,9 @@ from app.models.demanda_workflow_etapa_departamento_responsavel import (
     DemandaWorkflowEtapaDepartamentoResponsavel,
 )
 from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaResponsavel
+from app.models.departamento import Departamento
+from app.models.projeto import Projeto
+from app.models.usuario import Usuario
 
 STATUS_ARQUIVADO = "arquivada"
 
@@ -258,6 +262,25 @@ class DemandaRepository:
                 Demanda.nome.ilike(like),
                 Demanda.codigo_referencia.ilike(like),
                 Demanda.pit.ilike(like),
+                # D2-B1 (revisão pré-merge): a busca por nome de cliente/projeto/responsável/
+                # departamento existia no filtro local antigo de DemandasView.tsx — perdê-la ao
+                # mover a busca pro servidor seria regressão real, não simplificação aceitável.
+                # `.in_(select(...))` em vez de JOIN: cliente/projeto já são FK 1:1 em Demanda
+                # (sem risco de duplicar linha), e responsável/departamento são N:N — um JOIN
+                # duplicaria a Demanda por vínculo; a subquery evita isso sem precisar de
+                # DISTINCT.
+                Demanda.cliente_id.in_(select(Cliente.id).where(Cliente.nome.ilike(like))),
+                Demanda.projeto_id.in_(select(Projeto.id).where(Projeto.nome.ilike(like))),
+                Demanda.id.in_(
+                    select(DemandaResponsavel.demanda_id)
+                    .join(Usuario, Usuario.id == DemandaResponsavel.usuario_id)
+                    .where(Usuario.nome.ilike(like))
+                ),
+                Demanda.id.in_(
+                    select(DemandaDepartamento.demanda_id)
+                    .join(Departamento, Departamento.id == DemandaDepartamento.departamento_id)
+                    .where(Departamento.nome.ilike(like))
+                ),
             ]
             # Igualdade EXATA, nunca ILIKE: "2063" localiza a demanda #2063, não toda demanda
             # cujo número contenha 2063.
