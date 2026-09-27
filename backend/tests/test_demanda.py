@@ -1025,6 +1025,27 @@ def test_busca_encontra_item_fora_da_pagina_com_limit_pequeno(client_admin: Test
     assert [d["id"] for d in achados] == [alvo["id"]]
 
 
+def test_filtro_projeto_id_encontra_item_alem_da_primeira_pagina_global(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    """Invariante central do D2-B2: ProjetoDemandasSection busca por projetoId sem depender do
+    array global truncado de AppDataContext. `projeto_id` é aplicado no WHERE antes de
+    limit/offset (ver app/repositories/demanda_repository.py) — a demanda-alvo é a mais antiga
+    (menor numero_operacional, portanto fora da janela DESC com limit=1 sem o filtro) e só
+    aparece porque o filtro por projeto restringe o universo antes da paginação."""
+    projeto = _projeto_interno(db_session, empresa, "Campanha Isolada 2026")
+    alvo = _criar(client_admin, projetoId=str(projeto.id))
+    for _ in range(3):
+        _criar(client_admin)  # outros projetos/sem projeto, criados depois — mais recentes
+
+    # Sem o filtro, limit=1 traz a mais recente — nunca o alvo.
+    sem_filtro = client_admin.get("/demandas?limit=1&offset=0").json()
+    assert alvo["id"] not in [d["id"] for d in sem_filtro]
+
+    achados = client_admin.get(f"/demandas?projetoId={projeto.id}&limit=1&offset=0").json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
 # --------------------------------------------------------------------------------------
 # Arquivamento
 # --------------------------------------------------------------------------------------
