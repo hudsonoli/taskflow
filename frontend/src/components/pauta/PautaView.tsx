@@ -81,6 +81,14 @@ export function PautaView() {
     setChaveConsultada(chaveBusca);
     setBuscandoPagina(true);
     setErro(null);
+    // Sem isto, um "carregar mais" em voo de uma geração anterior (filtro velho, ou
+    // pré-mutation) nunca teria seu `carregandoMais` liberado — o guard de `chaveAtualRef`
+    // recusa (corretamente) tocar o estado da geração nova a partir da promise antiga, então
+    // ninguém mais reseta esse flag pra geração atual. Resultado sem isto: botão preso em
+    // "Carregando…" desabilitado para sempre. `temMais` também reseta aqui — senão ficaria
+    // com o valor da geração anterior até a resposta nova chegar.
+    setCarregandoMais(false);
+    setTemMais(false);
   }
 
   // Múltiplos filtros compõem a chave (não só um id, como no D2-B2) — ref sempre atualizada
