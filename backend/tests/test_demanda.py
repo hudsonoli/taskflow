@@ -540,6 +540,242 @@ def test_atendimento_soma_criador_responsavel_e_clientes(
     assert do_cliente["id"] in [d["id"] for d in achados]
 
 
+def _tornar_atendimento(db: Session, empresa: Empresa, usuario: Usuario) -> Departamento:
+    atendimento = _departamento(db, empresa, nome="Atendimento")
+    usuario.departamento_id = atendimento.id
+    db.flush()
+    return atendimento
+
+
+def test_atendimento_criador_isolado_aparece(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Ramo A isolado: criado pelo próprio usuário, sem ser responsável nem cliente da
+    carteira — só entra no escopo Atendimento porque `incluir_criadas_por_usuario=True`."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+
+    criada_pelo_operador = client_operador.post("/demandas", json={"nome": "Criada pelo operador"}).json()
+    de_outra_pessoa = _criar(client_admin)
+
+    achados = client_operador.get("/demandas?escopo=atendimento").json()
+    ids = {d["id"] for d in achados}
+    assert criada_pelo_operador["id"] in ids
+    assert de_outra_pessoa["id"] not in ids
+
+
+def test_atendimento_responsavel_isolado_aparece(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Ramo B isolado: usuário é responsável, sem ser o criador nem haver cliente/carteira."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+
+    sou_responsavel = _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)])
+    sem_relacao = _criar(client_admin)
+
+    achados = client_operador.get("/demandas?escopo=atendimento").json()
+    ids = {d["id"] for d in achados}
+    assert sou_responsavel["id"] in ids
+    assert sem_relacao["id"] not in ids
+
+
+def test_atendimento_carteira_isolada_aparece_e_exclui_sem_relacao(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Ramo C isolado, reforçando `test_atendimento_soma_criador_responsavel_e_clientes` com
+    a exclusão explícita que aquele teste não afirmava."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+    cliente = _cliente(db_session, empresa, responsavel_comercial_id=usuario_operador.id)
+    db_session.flush()
+
+    do_cliente = _criar(client_admin, clienteId=str(cliente.id))
+    sem_relacao = _criar(client_admin)
+
+    achados = client_operador.get("/demandas?escopo=atendimento").json()
+    ids = {d["id"] for d in achados}
+    assert do_cliente["id"] in ids
+    assert sem_relacao["id"] not in ids
+
+
+def test_atendimento_demanda_com_multiplas_condicoes_aparece_uma_unica_vez(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Nenhum JOIN externo multiplica a linha — uma demanda que é ao mesmo tempo criada pelo
+    usuário E de cliente da carteira dele aparece exatamente uma vez."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+    cliente = _cliente(db_session, empresa, responsavel_comercial_id=usuario_operador.id)
+    db_session.flush()
+
+    tripla = client_operador.post("/demandas", json={"nome": "Tripla", "clienteId": str(cliente.id)}).json()
+
+    achados = client_operador.get("/demandas?escopo=atendimento").json()
+    ids = [d["id"] for d in achados]
+    assert ids.count(tripla["id"]) == 1
+
+
+def test_atendimento_outra_empresa_nao_aparece(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Tenant continua o primeiro limite — mesmo com o mesmo `criado_por_usuario_id` (por
+    coincidência de dado inserido direto no banco, bypass do service), uma demanda de outra
+    empresa nunca aparece."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-B4",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26998001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=998001,
+        nome="Demanda de outra empresa",
+        status="rascunho",
+        prioridade="media",
+        criado_por_usuario_id=usuario_operador.id,
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.flush()
+
+    achados = client_operador.get("/demandas?escopo=atendimento").json()
+    assert intrusa.id not in [d["id"] for d in achados]
+
+
+def test_atendimento_encontra_item_alem_da_antiga_janela_global(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Mesma prova empírica do D2-B1/B2/B3: a demanda-alvo é a mais antiga (menor
+    numero_operacional, fora da janela DESC com limit=1 sem o escopo) e só aparece porque o
+    predicado de escopo restringe o universo antes de LIMIT/OFFSET."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+
+    alvo = _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)])
+    for _ in range(3):
+        _criar(client_admin)  # ruído, criado depois — mais recente, sem relação com o operador
+
+    sem_escopo = client_admin.get("/demandas?limit=1&offset=0").json()
+    assert alvo["id"] not in [d["id"] for d in sem_escopo]
+
+    achados = client_operador.get("/demandas?escopo=atendimento&limit=1&offset=0").json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+def test_atendimento_status_filtra_lista(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+
+    em_execucao = _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)], status="em_execucao")
+    concluida = _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)], status="concluida")
+
+    achados = client_operador.get("/demandas?escopo=atendimento&status=em_execucao").json()
+    ids = {d["id"] for d in achados}
+    assert em_execucao["id"] in ids
+    assert concluida["id"] not in ids
+
+
+def test_atendimento_sem_status_exclui_arquivadas(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+
+    ativa = _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)])
+    arquivada_alvo = _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)])
+    resposta = client_admin.post(
+        f"/demandas/{arquivada_alvo['id']}/arquivar", json={"motivoArquivamento": "Cancelada pelo cliente"}
+    )
+    assert resposta.status_code == 200, resposta.text
+
+    achados = client_operador.get("/demandas?escopo=atendimento").json()
+    ids = {d["id"] for d in achados}
+    assert ativa["id"] in ids
+    assert arquivada_alvo["id"] not in ids
+
+
+def test_atendimento_status_arquivada_mostra_arquivadas(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Correção consciente do D2-B4: hoje a opção "Arquivada" existe no dropdown de
+    MinhasDemandasView, mas como `AppDataContext.demandas` nunca carrega arquivadas, escolher
+    esse status sempre resultava em lista vazia. Migrando para o servidor, `status=arquivada`
+    passa a funcionar de verdade — bugfix incidental, registrado e testado."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+
+    arquivada_alvo = _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)])
+    resposta = client_admin.post(
+        f"/demandas/{arquivada_alvo['id']}/arquivar", json={"motivoArquivamento": "Cancelada pelo cliente"}
+    )
+    assert resposta.status_code == 200, resposta.text
+
+    achados = client_operador.get("/demandas?escopo=atendimento&status=arquivada").json()
+    assert [d["id"] for d in achados] == [arquivada_alvo["id"]]
+
+
+def test_resumo_atendimento_sem_ser_do_atendimento_devolve_403(client_operador: TestClient) -> None:
+    resposta = client_operador.get("/demandas/minhas/resumo")
+    assert resposta.status_code == 403, resposta.text
+
+
+def test_resumo_atendimento_calcula_os_nove_indicadores_sobre_universo_integral(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Prova cada um dos 9 campos com dados controlados — não basta existirem as chaves.
+    Reproduz `classificarTarefa`/`MinhasDemandasView.tsx`: `aguardandoAtendimento`/`pausadas`
+    usam `demanda.status` cru (bloqueada/pausada), não o agrupamento `classificacao.pausada`."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+    resp_ids = [str(usuario_operador.id)]
+    agora = datetime.now(timezone.utc)
+    passado = (agora - timedelta(days=2)).isoformat()
+    futuro = (agora + timedelta(days=30)).isoformat()
+
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="rascunho")
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="planejada")
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="em_execucao")
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="aguardando_cliente")
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="bloqueada", motivoBloqueio="Falta arte")
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="pausada")
+    # Prazo no passado E concluída — cenário real e comum. Prova que `atrasadas` exclui
+    # finalizadas de verdade, não só "por acaso" (sem prazo nenhum não discriminaria isso).
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="concluida", prazoEtapaAtual=passado)
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="cancelada")
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="em_execucao", prazoEtapaAtual=passado)
+    _criar(client_admin, usuarioResponsavelIds=resp_ids, status="em_execucao", prazoEtapaAtual=futuro)
+
+    # Ruído: sem relação com o operador — não pode contaminar nenhum contador.
+    _criar(client_admin, status="em_execucao")
+    # Arquivada dentro do escopo do operador — não pode contaminar `criadas` nem nenhum outro.
+    arquivada = _criar(client_admin, usuarioResponsavelIds=resp_ids)
+    resposta_arquivar = client_admin.post(
+        f"/demandas/{arquivada['id']}/arquivar", json={"motivoArquivamento": "Fora de escopo"}
+    )
+    assert resposta_arquivar.status_code == 200, resposta_arquivar.text
+
+    resumo = client_operador.get("/demandas/minhas/resumo").json()
+    assert resumo == {
+        "criadas": 10,
+        "naoIniciadas": 2,
+        "emExecucao": 3,
+        "aguardandoCliente": 1,
+        "aguardandoAtendimento": 1,
+        "pausadas": 1,
+        "atrasadas": 1,
+        "dentroDoPrazo": 7,
+        "concluidas": 1,
+    }
+
+
 # --------------------------------------------------------------------------------------
 # Escopo — acesso direto por UUID (a garantia exigida)
 # --------------------------------------------------------------------------------------

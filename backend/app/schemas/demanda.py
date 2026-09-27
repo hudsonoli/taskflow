@@ -344,3 +344,22 @@ class DemandaRead(BaseModel):
     @classmethod
     def validate_timezone(cls, value: datetime | None) -> datetime | None:
         return ensure_timezone_aware(value)
+
+
+class DemandaResumoAtendimentoRead(BaseModel):
+    """D2-B4 — os nove indicadores de MinhasDemandasView, agregados no servidor sobre o
+    universo INTEGRAL do escopo Atendimento (nunca uma página). Ver
+    DemandaRepository.resumo_atendimento — reproduz `classificarTarefa`/
+    `MinhasDemandasView.tsx` (frontend, pré-migração), não uma aproximação nova."""
+
+    criadas: int
+    nao_iniciadas: int = Field(alias="naoIniciadas")
+    em_execucao: int = Field(alias="emExecucao")
+    aguardando_cliente: int = Field(alias="aguardandoCliente")
+    aguardando_atendimento: int = Field(alias="aguardandoAtendimento")
+    pausadas: int
+    atrasadas: int
+    dentro_do_prazo: int = Field(alias="dentroDoPrazo")
+    concluidas: int
+
+    model_config = ConfigDict(populate_by_name=True)

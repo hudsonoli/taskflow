@@ -22,6 +22,7 @@ from app.schemas.demanda import (
     DemandaCreate,
     DemandaDiretorioRead,
     DemandaRead,
+    DemandaResumoAtendimentoRead,
     DemandaUpdate,
 )
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
@@ -216,6 +217,19 @@ def list_diretorio(
     escopo = _escopo(db, current_user)
     demandas = demanda_service.list_demandas(db, escopo=escopo, limit=200)
     return [DemandaDiretorioRead.model_validate(demanda) for demanda in demandas]
+
+
+@router.get("/minhas/resumo", response_model=DemandaResumoAtendimentoRead)
+def resumo_minhas_demandas(
+    current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
+    db: Session = Depends(get_db),
+):
+    """D2-B4 — os nove indicadores de MinhasDemandasView, sobre o universo INTEGRAL do
+    escopo Atendimento (nunca uma página). Mesma autoridade da listagem: recorte fixo em
+    `EscopoSolicitado.ATENDIMENTO` — quem não é Atendimento recebe 403, nunca zeros."""
+    escopo = _escopo(db, current_user, EscopoSolicitado.ATENDIMENTO)
+    resumo = demanda_service.resumo_atendimento(db, escopo=escopo)
+    return DemandaResumoAtendimentoRead.model_validate(resumo)
 
 
 @router.get("/{demanda_id}", response_model=DemandaRead)

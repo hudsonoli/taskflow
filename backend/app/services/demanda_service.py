@@ -483,6 +483,9 @@ class DemandaService:
             offset=offset,
         )
 
+    def resumo_atendimento(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
+        return self.repository.resumo_atendimento(db, escopo=escopo)
+
     def get_demanda(self, db: Session, demanda_id: str, *, escopo: EscopoDemanda) -> Demanda:
         """**Único** caminho de acesso por UUID nas rotas.
 

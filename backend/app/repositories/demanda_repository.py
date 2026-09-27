@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import ColumnElement, and_, case, func, or_, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.busca import interpretar_termo_busca
 from app.core.escopo import EscopoDemanda
+from app.core.relogio import agora_utc
 from app.models.cliente import Cliente
 from app.models.demanda import Demanda
 from app.models.demanda_departamento import DemandaDepartamento
@@ -321,6 +322,75 @@ class DemandaRepository:
 
         statement = statement.limit(limit).offset(offset)
         return list(db.scalars(statement).all())
+
+    # Únicos dois status que `classificarTarefa`/MinhasDemandasView.tsx tratam como
+    # "finalizada" para fins de atraso — fora daqui, nada mais depende dessa noção.
+    _RESUMO_STATUS_FINALIZADOS = ("concluida", "cancelada")
+
+    def resumo_atendimento(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
+        """Indicadores agregados de "Minhas Demandas" (D2-B4) — universo INTEGRAL permitido
+        pelo escopo, nunca uma página. Reproduz exatamente as nove fórmulas de
+        `MinhasDemandasView.tsx`/`classificarTarefa` (frontend, pré-migração) com CASE/COUNT
+        numa única query — nenhuma `DemandaRead` é carregada em Python para contar.
+
+        Mesma exclusão default de arquivada que `list()` aplica sem `status` explícito — o
+        resumo nunca teve como incluir arquivadas (o array de origem, pré-migração, também as
+        excluía sempre) e isso não muda aqui, mesmo com a correção do dropdown da lista.
+        """
+        zero = {
+            "criadas": 0,
+            "nao_iniciadas": 0,
+            "em_execucao": 0,
+            "aguardando_cliente": 0,
+            "aguardando_atendimento": 0,
+            "pausadas": 0,
+            "atrasadas": 0,
+            "dentro_do_prazo": 0,
+            "concluidas": 0,
+        }
+        if escopo.vazio:
+            return zero
+
+        agora = agora_utc()
+        finalizada = Demanda.status.in_(self._RESUMO_STATUS_FINALIZADOS)
+        # `prazoValido && prazo < agora` do frontend — `IS NOT NULL` cobre `prazoValido`.
+        prazo_vencido = and_(Demanda.prazo_etapa_atual.is_not(None), Demanda.prazo_etapa_atual < agora)
+
+        statement = (
+            select(
+                func.count().label("criadas"),
+                func.count(case((Demanda.status.in_(("rascunho", "planejada")), 1))).label(
+                    "nao_iniciadas"
+                ),
+                func.count(case((Demanda.status == "em_execucao", 1))).label("em_execucao"),
+                func.count(case((Demanda.status == "aguardando_cliente", 1))).label(
+                    "aguardando_cliente"
+                ),
+                # `aguardandoAtendimento`/`pausadas`: MinhasDemandasView.tsx usa
+                # `demanda.status` cru para estes dois indicadores — NÃO o agrupamento
+                # `classificacao.pausada` (que junta pausada+bloqueada). Reproduzir a
+                # distinção, não a versão "simplificada".
+                func.count(case((Demanda.status == "bloqueada", 1))).label(
+                    "aguardando_atendimento"
+                ),
+                func.count(case((Demanda.status == "pausada", 1))).label("pausadas"),
+                func.count(case((and_(~finalizada, prazo_vencido), 1))).label("atrasadas"),
+                # `dentroDoPrazo` = !atrasada && !finalizada (álgebra: !(!fin && venc) && !fin
+                # == !fin && (!venc) — inclui itens sem prazo, igual ao frontend).
+                func.count(case((and_(~finalizada, ~prazo_vencido), 1))).label("dentro_do_prazo"),
+                func.count(case((Demanda.status == "concluida", 1))).label("concluidas"),
+            )
+            .select_from(Demanda)
+            .where(Demanda.empresa_id == escopo.empresa_id)
+        )
+
+        predicado = self._predicado_escopo(escopo)
+        if predicado is not None:
+            statement = statement.where(predicado)
+        statement = statement.where(Demanda.status != STATUS_ARQUIVADO)
+
+        resultado = db.execute(statement).one()
+        return dict(resultado._mapping)
 
     # ----------------------------------------------------------------------------------
     # Vínculos N:N

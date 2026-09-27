@@ -1485,6 +1485,27 @@ export async function listDiretorioDemandas(): Promise<DemandaDiretorio[]> {
   return request<DemandaDiretorio[]>("/demandas/diretorio");
 }
 
+/**
+ * D2-B4 — os nove indicadores de MinhasDemandasView, agregados no servidor sobre o universo
+ * INTEGRAL do escopo Atendimento (nunca uma página). Quem não é Atendimento recebe 403, não
+ * zeros — mesma autoridade da listagem (`GET /demandas?escopo=atendimento`).
+ */
+export type ResumoAtendimento = {
+  criadas: number;
+  naoIniciadas: number;
+  emExecucao: number;
+  aguardandoCliente: number;
+  aguardandoAtendimento: number;
+  pausadas: number;
+  atrasadas: number;
+  dentroDoPrazo: number;
+  concluidas: number;
+};
+
+export async function getResumoAtendimento(): Promise<ResumoAtendimento> {
+  return request<ResumoAtendimento>("/demandas/minhas/resumo");
+}
+
 export async function criarDemandaReal(draft: DemandaFormDraft): Promise<Demanda> {
   const payload = {
     ...demandaDraftParaPayload(draft),
