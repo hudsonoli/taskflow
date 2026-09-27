@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -37,6 +37,17 @@ export function ProjetoDemandasSection({ projetoId }: { projetoId: string }) {
     setCarregandoInicial(true);
   }
 
+  // Hoje o único consumidor (ProjetoDetailsDrawer) sempre desmonta esta seção antes de trocar
+  // de projeto — o backdrop do DetailsModal bloqueia clique em outra linha enquanto está aberto.
+  // Mesmo assim, `carregarMais` roda fora do useEffect (é um handler de clique, não pode usar o
+  // flag `cancelado` de cleanup) e não tinha nenhuma proteção própria: se um consumidor futuro
+  // permitir trocar projetoId sem desmontar, uma resposta tardia da página 2 do projeto anterior
+  // se concatenaria na lista do projeto novo. Ref sempre atualizada no render guarda contra isso.
+  const projetoIdAtualRef = useRef(projetoId);
+  useEffect(() => {
+    projetoIdAtualRef.current = projetoId;
+  }, [projetoId]);
+
   useEffect(() => {
     let cancelado = false;
     listDemandasReais({ projetoId, limit: TAMANHO_PAGINA, offset: 0 })
@@ -58,19 +69,22 @@ export function ProjetoDemandasSection({ projetoId }: { projetoId: string }) {
   }, [projetoId]);
 
   function carregarMais() {
+    const projetoDoClique = projetoId;
     setCarregandoMais(true);
     listDemandasReais({ projetoId, limit: TAMANHO_PAGINA, offset: demandas.length })
       .then((resultado) => {
+        if (projetoIdAtualRef.current !== projetoDoClique) return; // projeto mudou enquanto a página carregava
         setDemandas((atual) => [...atual, ...resultado]);
         setTemMais(resultado.length === TAMANHO_PAGINA);
         setErro(null);
       })
       .catch((error) => {
+        if (projetoIdAtualRef.current !== projetoDoClique) return;
         // Não corrompe a lista já exibida — mantém o que já veio, com o erro sinalizado abaixo.
         setErro(error instanceof Error ? error.message : "Não foi possível carregar mais demandas.");
       })
       .finally(() => {
-        setCarregandoMais(false);
+        if (projetoIdAtualRef.current === projetoDoClique) setCarregandoMais(false);
       });
   }
 
