@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente
 from app.models.cliente import Cliente
 from app.models.demanda import Demanda
+from app.models.demanda_departamento import DemandaDepartamento
 from app.models.departamento import Departamento
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
@@ -1044,6 +1045,294 @@ def test_filtro_projeto_id_encontra_item_alem_da_primeira_pagina_global(
 
     achados = client_admin.get(f"/demandas?projetoId={projeto.id}&limit=1&offset=0").json()
     assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+# --------------------------------------------------------------------------------------
+# D2-B3 — Pauta: departamentos (CSV), prazo (intervalo) e ordenação
+# --------------------------------------------------------------------------------------
+
+def test_departamento_id_unico_continua_funcionando(client_admin: TestClient, db_session: Session, empresa) -> None:
+    dep = _departamento(db_session, empresa)
+    alvo = _criar(client_admin, departamentoResponsavelIds=[str(dep.id)])
+    _criar(client_admin)  # sem departamento — não pode aparecer
+
+    achados = client_admin.get(f"/demandas?departamentoId={dep.id}").json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+def test_departamento_id_csv_com_dois_departamentos_e_semantica_or(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    dep_a = _departamento(db_session, empresa)
+    dep_b = _departamento(db_session, empresa)
+    dep_c = _departamento(db_session, empresa)
+    alvo_a = _criar(client_admin, departamentoResponsavelIds=[str(dep_a.id)])
+    alvo_b = _criar(client_admin, departamentoResponsavelIds=[str(dep_b.id)])
+    fora = _criar(client_admin, departamentoResponsavelIds=[str(dep_c.id)])
+
+    achados = client_admin.get(f"/demandas?departamentoId={dep_a.id},{dep_b.id}").json()
+    ids = {d["id"] for d in achados}
+    assert ids == {alvo_a["id"], alvo_b["id"]}
+    assert fora["id"] not in ids
+
+
+def test_departamento_id_invalido_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas?departamentoId=abc")
+    assert resposta.status_code == 422
+
+
+def test_departamento_id_csv_com_um_segmento_invalido_e_422(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    dep = _departamento(db_session, empresa)
+    resposta = client_admin.get(f"/demandas?departamentoId={dep.id},abc")
+    assert resposta.status_code == 422
+
+
+def test_departamento_id_faz_trim_de_espacos(client_admin: TestClient, db_session: Session, empresa) -> None:
+    dep = _departamento(db_session, empresa)
+    alvo = _criar(client_admin, departamentoResponsavelIds=[str(dep.id)])
+
+    achados = client_admin.get("/demandas", params={"departamentoId": f" {dep.id} "}).json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+def test_departamento_id_so_virgula_vira_ausencia_de_filtro(client_admin: TestClient) -> None:
+    """Decisão registrada no diagnóstico D2-B3: segmento vazio (vírgula sobrando/espaços) não
+    é erro — vira ausência de filtro, mesma tolerância já usada em `status` (D2-B1). Só um
+    segmento sintaticamente inválido (não-UUID) continua 422."""
+    criada = _criar(client_admin)
+    resposta = client_admin.get("/demandas?departamentoId=,")
+    assert resposta.status_code == 200
+    assert criada["id"] in [d["id"] for d in resposta.json()]
+
+
+def test_prazo_inicio_e_fim_filtram_intervalo_fechado_incluindo_bordas(client_admin: TestClient) -> None:
+    referencia = datetime(2026, 3, 10, 12, 0, 0, tzinfo=timezone.utc)
+    antes = _criar(client_admin, prazoEtapaAtual=(referencia - timedelta(days=1)).isoformat())
+    inicio_exato = _criar(client_admin, prazoEtapaAtual=referencia.isoformat())
+    fim_exato = _criar(client_admin, prazoEtapaAtual=(referencia + timedelta(days=2)).isoformat())
+    depois = _criar(client_admin, prazoEtapaAtual=(referencia + timedelta(days=3)).isoformat())
+
+    achados = client_admin.get(
+        "/demandas",
+        params={
+            "prazoInicio": referencia.isoformat(),
+            "prazoFim": (referencia + timedelta(days=2)).isoformat(),
+        },
+    ).json()
+    ids = {d["id"] for d in achados}
+    assert ids == {inicio_exato["id"], fim_exato["id"]}
+    assert antes["id"] not in ids
+    assert depois["id"] not in ids
+
+
+def test_prazo_inicio_isolado_filtra_sem_limite_superior(client_admin: TestClient) -> None:
+    referencia = datetime(2026, 4, 1, tzinfo=timezone.utc)
+    antes = _criar(client_admin, prazoEtapaAtual=(referencia - timedelta(days=1)).isoformat())
+    depois = _criar(client_admin, prazoEtapaAtual=(referencia + timedelta(days=100)).isoformat())
+
+    achados = client_admin.get("/demandas", params={"prazoInicio": referencia.isoformat()}).json()
+    ids = {d["id"] for d in achados}
+    assert depois["id"] in ids
+    assert antes["id"] not in ids
+
+
+def test_prazo_fim_isolado_filtra_sem_limite_inferior(client_admin: TestClient) -> None:
+    referencia = datetime(2026, 4, 1, tzinfo=timezone.utc)
+    antes = _criar(client_admin, prazoEtapaAtual=(referencia - timedelta(days=100)).isoformat())
+    depois = _criar(client_admin, prazoEtapaAtual=(referencia + timedelta(days=1)).isoformat())
+
+    achados = client_admin.get("/demandas", params={"prazoFim": referencia.isoformat()}).json()
+    ids = {d["id"] for d in achados}
+    assert antes["id"] in ids
+    assert depois["id"] not in ids
+
+
+def test_prazo_nulo_fica_fora_quando_periodo_ativo(client_admin: TestClient) -> None:
+    """Preserva o comportamento atual do filtro de período da Pauta: uma demanda sem prazo
+    não aparece quando prazoInicio/prazoFim estão ativos — mesma exclusão que já acontecia no
+    filtro local de `PautaView.tsx` (`Number.isNaN(prazo.getTime())` descarta o item)."""
+    sem_prazo = _criar(client_admin)
+    referencia = datetime(2026, 4, 1, tzinfo=timezone.utc)
+
+    achados = client_admin.get(
+        "/demandas",
+        params={
+            "prazoInicio": (referencia - timedelta(days=1)).isoformat(),
+            "prazoFim": (referencia + timedelta(days=1)).isoformat(),
+        },
+    ).json()
+    assert sem_prazo["id"] not in [d["id"] for d in achados]
+
+    sem_filtro = client_admin.get("/demandas").json()
+    assert sem_prazo["id"] in [d["id"] for d in sem_filtro]
+
+
+def test_prazo_sem_timezone_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas", params={"prazoInicio": "2026-04-01T00:00:00"})
+    assert resposta.status_code == 422
+
+
+def test_prazo_com_timezone_funciona(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas", params={"prazoInicio": "2026-04-01T00:00:00Z"})
+    assert resposta.status_code == 200
+
+
+def test_sort_default_continua_numero_operacional_desc(client_admin: TestClient) -> None:
+    criadas = [_criar(client_admin) for _ in range(3)]
+    esperado_desc = list(reversed([c["id"] for c in criadas]))
+
+    achados = client_admin.get("/demandas").json()
+    assert [d["id"] for d in achados] == esperado_desc
+
+
+def test_sort_prazo_asc_ordena_por_prazo_com_nulls_last(client_admin: TestClient) -> None:
+    referencia = datetime(2026, 5, 1, tzinfo=timezone.utc)
+    tarde = _criar(client_admin, prazoEtapaAtual=(referencia + timedelta(days=5)).isoformat())
+    cedo = _criar(client_admin, prazoEtapaAtual=referencia.isoformat())
+    sem_prazo = _criar(client_admin)
+
+    achados = client_admin.get("/demandas?sort=prazo_asc").json()
+    ids = [d["id"] for d in achados]
+    assert ids == [cedo["id"], tarde["id"], sem_prazo["id"]]
+
+
+def test_sort_prazo_asc_empate_usa_numero_operacional_desc(client_admin: TestClient) -> None:
+    """`compararPorAgenda` (frontend) não define desempate — o SQL precisa de um, senão a
+    ordem de duas demandas com o mesmo prazo seria não-determinística entre requests, e isso
+    quebraria paginação por offset (mesma linha podendo aparecer em duas páginas, ou
+    nenhuma). numero_operacional DESC: a criada por último (maior número) vem primeiro."""
+    mesmo_prazo = datetime(2026, 6, 1, tzinfo=timezone.utc).isoformat()
+    primeira = _criar(client_admin, prazoEtapaAtual=mesmo_prazo)
+    segunda = _criar(client_admin, prazoEtapaAtual=mesmo_prazo)
+
+    achados = client_admin.get("/demandas?sort=prazo_asc").json()
+    ids = [d["id"] for d in achados]
+    assert ids == [segunda["id"], primeira["id"]]
+
+
+def test_sort_invalido_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas?sort=alfabetica")
+    assert resposta.status_code == 422
+
+
+def test_paginacao_global_correta_com_sort_prazo_asc(client_admin: TestClient) -> None:
+    """CRÍTICO (razão de existir do D2-B3): as demandas são criadas em ordem INVERSA ao
+    prazo — a primeira criada (menor numero_operacional) tem o prazo mais distante, a última
+    criada (maior numero_operacional) tem o prazo mais próximo. Se o backend paginasse por
+    numero_operacional e só depois reordenasse (ou a ordenação por prazo fosse reaplicada
+    localmente por página), a sequência global ficaria errada. Provado aqui percorrendo cada
+    offset com limit=1 e comparando com a ordem esperada por prazo, não por criação."""
+    referencia = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    criadas = [
+        _criar(client_admin, prazoEtapaAtual=(referencia + timedelta(days=(3 - i))).isoformat())
+        for i in range(4)
+    ]
+    # criadas[0] tem prazo +3d (mais distante), criadas[3] tem prazo +0d (mais próximo)
+    esperado_prazo_asc = list(reversed([c["id"] for c in criadas]))
+
+    obtidos = []
+    for offset in range(4):
+        pagina = client_admin.get(f"/demandas?sort=prazo_asc&limit=1&offset={offset}").json()
+        assert len(pagina) == 1
+        obtidos.append(pagina[0]["id"])
+
+    assert obtidos == esperado_prazo_asc
+
+
+def test_filtro_prazo_e_departamento_encontram_item_alem_da_antiga_janela_global(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    """Prova a razão de existir do D2-B3: uma demanda dentro da janela temporal e do
+    departamento corretos continua encontrável mesmo quando limit pequeno a excluiria da
+    ordenação padrão (numero_operacional DESC) — o filtro de prazo/departamento é aplicado no
+    WHERE, antes de LIMIT/OFFSET, não depois."""
+    dep = _departamento(db_session, empresa)
+    referencia = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    alvo = _criar(
+        client_admin,
+        departamentoResponsavelIds=[str(dep.id)],
+        prazoEtapaAtual=referencia.isoformat(),
+    )
+    for _ in range(3):
+        _criar(client_admin)  # ruído, criado depois — mais recente, sem departamento/prazo
+
+    sem_filtro = client_admin.get("/demandas?limit=1&offset=0").json()
+    assert alvo["id"] not in [d["id"] for d in sem_filtro]
+
+    achados = client_admin.get(
+        "/demandas",
+        params={
+            "departamentoId": str(dep.id),
+            "prazoInicio": (referencia - timedelta(hours=1)).isoformat(),
+            "prazoFim": (referencia + timedelta(hours=1)).isoformat(),
+            "limit": 1,
+            "offset": 0,
+        },
+    ).json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+def test_prazo_departamento_e_sort_combinados_nao_ampliam_escopo_de_tenant(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    """Combinação central da Pauta (prazo + departamentos + sort) não é isenção de tenant.
+    `intrusa` é vinculada ao MESMO departamento e MESMO prazo da demanda própria — se
+    `empresa_id` não fosse o primeiro predicado da query, ela apareceria no resultado. O
+    vínculo departamento é inserido diretamente (bypass do service), o suficiente pra provar
+    que só o predicado de tenant a exclui, não a ausência de vínculo com o departamento."""
+    dep = _departamento(db_session, empresa)
+    referencia = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    minha = _criar(
+        client_admin,
+        departamentoResponsavelIds=[str(dep.id)],
+        prazoEtapaAtual=referencia.isoformat(),
+    )
+
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-B3",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26999001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=999001,
+        nome="Demanda de outra empresa",
+        status="rascunho",
+        prioridade="media",
+        prazo_etapa_atual=referencia,
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.flush()
+    db_session.add(
+        DemandaDepartamento(demanda_id=intrusa.id, departamento_id=dep.id, created_at=agora)
+    )
+    db_session.flush()
+
+    achados = client_admin.get(
+        "/demandas",
+        params={
+            "departamentoId": str(dep.id),
+            "prazoInicio": (referencia - timedelta(hours=1)).isoformat(),
+            "prazoFim": (referencia + timedelta(hours=1)).isoformat(),
+            "sort": "prazo_asc",
+        },
+    ).json()
+    assert [d["id"] for d in achados] == [minha["id"]]
 
 
 # --------------------------------------------------------------------------------------

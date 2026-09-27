@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy import update as sa_update
@@ -22,6 +23,14 @@ from app.models.projeto import Projeto
 from app.models.usuario import Usuario
 
 STATUS_ARQUIVADO = "arquivada"
+
+
+class SortDemandas(StrEnum):
+    """Ordenação de `list()` — D2-B3. Default preserva o comportamento de todo caller
+    existente (DemandasView, ProjetoDemandasSection); `PRAZO_ASC` é usado pela Pauta."""
+
+    NUMERO_OPERACIONAL_DESC = "numero_operacional_desc"
+    PRAZO_ASC = "prazo_asc"
 
 
 class DemandaRepository:
@@ -210,7 +219,10 @@ class DemandaRepository:
         search: str | None = None,
         cliente_id: str | None = None,
         projeto_id: str | None = None,
-        departamento_id: str | None = None,
+        departamento_ids: list[str] | None = None,
+        prazo_inicio: datetime | None = None,
+        prazo_fim: datetime | None = None,
+        sort: SortDemandas = SortDemandas.NUMERO_OPERACIONAL_DESC,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Demanda]:
@@ -242,14 +254,23 @@ class DemandaRepository:
         if projeto_id:
             statement = statement.where(Demanda.projeto_id == projeto_id)
 
-        if departamento_id:
+        if departamento_ids:
+            # Aceita um ou vários ids (D2-B3: Pauta filtra por múltiplos departamentos, OR
+            # entre eles) — mesma subquery de antes, só troca `==` por `.in_()`; um único id
+            # continua idêntico ao comportamento anterior.
             statement = statement.where(
                 Demanda.id.in_(
                     select(DemandaDepartamento.demanda_id).where(
-                        DemandaDepartamento.departamento_id == departamento_id
+                        DemandaDepartamento.departamento_id.in_(departamento_ids)
                     )
                 )
             )
+
+        if prazo_inicio:
+            statement = statement.where(Demanda.prazo_etapa_atual >= prazo_inicio)
+
+        if prazo_fim:
+            statement = statement.where(Demanda.prazo_etapa_atual <= prazo_fim)
 
         # A decisão "isto é texto, documento ou número?" mora INTEIRA em app/core/busca.py.
         # Este repository não extrai dígitos nem decide nada sobre o termo — reimplementar a
@@ -288,9 +309,17 @@ class DemandaRepository:
                 alternativas.append(Demanda.numero_operacional == termo.numero)
             statement = statement.where(or_(*alternativas))
 
-        statement = (
-            statement.order_by(Demanda.numero_operacional.desc()).limit(limit).offset(offset)
-        )
+        if sort == SortDemandas.PRAZO_ASC:
+            # Tiebreaker por numero_operacional DESC: sem ele, duas demandas com o mesmo prazo
+            # (ou ambas sem prazo) teriam ordem não-determinística entre requests — quebrando
+            # paginação por offset (a mesma linha poderia aparecer em duas páginas, ou nenhuma).
+            statement = statement.order_by(
+                Demanda.prazo_etapa_atual.asc().nulls_last(), Demanda.numero_operacional.desc()
+            )
+        else:
+            statement = statement.order_by(Demanda.numero_operacional.desc())
+
+        statement = statement.limit(limit).offset(offset)
         return list(db.scalars(statement).all())
 
     # ----------------------------------------------------------------------------------

@@ -1,29 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { listDemandasReais } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
-import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { resolverProjetoNome, rotuloDemanda } from "@/lib/referencias";
 import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer";
-import type { ProjetoDiretorioItem } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
 import { PautaGantt } from "./PautaGantt";
 import { PautaLista } from "./PautaLista";
 import { type PautaPeriodoFiltro, type PautaViewMode, PautaToolbar } from "./PautaToolbar";
 
-function normalize(value: string) {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
-
-function matchesQuery(demanda: Demanda, query: string, projetos: ProjetoDiretorioItem[]) {
-  if (!query.trim()) return true;
-  const haystack = [demanda.nome, rotuloDemanda(demanda), demanda.pit ?? "", resolverProjetoNome(demanda.projetoId, projetos)].join(" ");
-  return normalize(haystack).includes(normalize(query));
-}
+// D2-B3: mesma razão do D2-B1/D2-B2 — AppDataContext.demandas vem limitado a 200 itens
+// carregados uma única vez no login. A Pauta filtrava esse array localmente (busca,
+// departamentos, período); uma tarefa fora dessa janela simplesmente não aparecia, sem
+// nenhum aviso. A Pauta passa a buscar do servidor com search/departamentos/prazo/ordenação
+// reais — ver diagnóstico D2-B3. AppDataContext continua alimentando mutations (patch) e
+// outras telas ainda não migradas.
+const TAMANHO_PAGINA = 50;
+const DEBOUNCE_BUSCA_MS = 300;
 
 function periodoParaIntervalo(periodo: PautaPeriodoFiltro): { inicio: Date; fim: Date } {
   const inicio = new Date();
@@ -40,29 +39,128 @@ function periodoParaIntervalo(periodo: PautaPeriodoFiltro): { inicio: Date; fim:
 export function PautaView() {
   const router = useRouter();
   const { demandas, setDemandas, usuarioAtual, setDemandaParaAbrir } = useAppData();
-  const { projetos } = useDiretorioProjetos();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [departamentoIds, setDepartamentoIds] = useState<string[]>([]);
   const [periodo, setPeriodo] = useState<PautaPeriodoFiltro>("7d");
   const [viewMode, setViewMode] = useState<PautaViewMode>("lista");
   const [selectedDemandId, setSelectedDemandId] = useState<string | null>(null);
 
   const { inicio: periodoInicio, fim: periodoFim } = useMemo(() => periodoParaIntervalo(periodo), [periodo]);
+  const departamentoIdsParam = departamentoIds.join(",");
 
-  const filteredDemands = useMemo(() => {
-    return demandas.filter((demanda) => {
-      const prazo = new Date(demanda.prazoEtapaAtual ?? "");
-      const dentroDoPeriodo = !Number.isNaN(prazo.getTime()) && prazo >= periodoInicio && prazo <= periodoFim;
-      const departamentoMatches =
-        departamentoIds.length === 0 || demanda.departamentoResponsavelIds.some((id) => departamentoIds.includes(id));
-      return dentroDoPeriodo && departamentoMatches && matchesQuery(demanda, query, projetos);
-    });
-  }, [demandas, periodoInicio, periodoFim, departamentoIds, query, projetos]);
+  // Página acumulada, vinda do servidor — fonte autoritativa da lista exibida (lista e
+  // gantt compartilham o mesmo array; trocar de modo não refaz a consulta).
+  const [demandasPauta, setDemandasPauta] = useState<Demanda[]>([]);
+  // `carregandoInicial` só é true até a PRIMEIRA resposta (sucesso ou erro) da sessão —
+  // nunca mais volta a ser true depois disso. `buscandoPagina` cobre toda busca seguinte
+  // (filtro novo ou refetch pós-mutation): esmaece a lista já exibida em vez de apagá-la —
+  // mesmo padrão de DemandasView.tsx (D2-B1), pra não "piscar vazio" a cada tecla digitada
+  // ou a cada mutation bem-sucedida.
+  const [carregandoInicial, setCarregandoInicial] = useState(true);
+  const [buscandoPagina, setBuscandoPagina] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [temMais, setTemMais] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  // Incrementado após mutation bem-sucedida pra forçar refetch mesmo quando filtros não
+  // mudaram — ver handleDemandChange.
+  const [refetchTick, setRefetchTick] = useState(0);
 
-  const selectedDemand = demandas.find((demanda) => demanda.id === selectedDemandId);
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedQuery(query.trim()), DEBOUNCE_BUSCA_MS);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  // Chave da combinação atual de filtros — muda a cada busca/departamentos/período/refetch
+  // explícito. Comparada durante o RENDER (não dentro do efeito): setState síncrono no corpo
+  // do efeito é o padrão que react-hooks/set-state-in-effect rejeita neste projeto — mesma
+  // técnica de DemandasView.tsx/ProjetoDemandasSection.tsx.
+  const chaveBusca = `${debouncedQuery}\u0000${departamentoIdsParam}\u0000${periodo}\u0000${refetchTick}`;
+  const [chaveConsultada, setChaveConsultada] = useState<string | null>(null);
+  if (chaveBusca !== chaveConsultada) {
+    setChaveConsultada(chaveBusca);
+    setBuscandoPagina(true);
+    setErro(null);
+  }
+
+  // Múltiplos filtros compõem a chave (não só um id, como no D2-B2) — ref sempre atualizada
+  // via efeito guarda "carregar mais" contra resposta de uma combinação de filtros anterior.
+  const chaveAtualRef = useRef(chaveBusca);
+  useEffect(() => {
+    chaveAtualRef.current = chaveBusca;
+  }, [chaveBusca]);
+
+  useEffect(() => {
+    let cancelado = false;
+    listDemandasReais({
+      search: debouncedQuery || undefined,
+      departamentoId: departamentoIdsParam || undefined,
+      prazoInicio: periodoInicio.toISOString(),
+      prazoFim: periodoFim.toISOString(),
+      sort: "prazo_asc",
+      limit: TAMANHO_PAGINA,
+      offset: 0,
+    })
+      .then((resultado) => {
+        if (cancelado) return; // combinação de filtros obsoleta — outra busca já foi disparada
+        setDemandasPauta(resultado);
+        setTemMais(resultado.length === TAMANHO_PAGINA);
+        setErro(null);
+        setBuscandoPagina(false);
+        setCarregandoInicial(false);
+      })
+      .catch((error) => {
+        if (cancelado) return;
+        setErro(error instanceof Error ? error.message : "Não foi possível carregar a pauta.");
+        setBuscandoPagina(false);
+        setCarregandoInicial(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [debouncedQuery, departamentoIdsParam, periodoInicio, periodoFim, refetchTick]);
+
+  function carregarMais() {
+    const chaveDoClique = chaveBusca;
+    setCarregandoMais(true);
+    listDemandasReais({
+      search: debouncedQuery || undefined,
+      departamentoId: departamentoIdsParam || undefined,
+      prazoInicio: periodoInicio.toISOString(),
+      prazoFim: periodoFim.toISOString(),
+      sort: "prazo_asc",
+      limit: TAMANHO_PAGINA,
+      offset: demandasPauta.length,
+    })
+      .then((resultado) => {
+        if (chaveAtualRef.current !== chaveDoClique) return; // filtros mudaram enquanto carregava
+        setDemandasPauta((atual) => [...atual, ...resultado]);
+        setTemMais(resultado.length === TAMANHO_PAGINA);
+        setErro(null);
+      })
+      .catch((error) => {
+        if (chaveAtualRef.current !== chaveDoClique) return;
+        // Não corrompe a lista já exibida — mantém o que já veio, com o erro sinalizado.
+        setErro(error instanceof Error ? error.message : "Não foi possível carregar mais tarefas.");
+      })
+      .finally(() => {
+        if (chaveAtualRef.current === chaveDoClique) setCarregandoMais(false);
+      });
+  }
+
+  // Página do servidor é a fonte de verdade; contexto só cobre o intervalo entre o patch
+  // síncrono de uma mutation e o refetch assíncrono terminar.
+  const selectedDemand =
+    demandasPauta.find((demanda) => demanda.id === selectedDemandId) ??
+    demandas.find((demanda) => demanda.id === selectedDemandId);
 
   function handleDemandChange(nextDemand: Demanda) {
+    // Só patch de contexto (outras telas ainda dependem dele) + refetch — NUNCA patch local
+    // de demandasPauta: a mutation pode mudar prazo/departamento/nome/projeto e fazer a
+    // demanda entrar, sair ou mudar de posição na pauta atual: só um refetch sabe decidir isso
+    // corretamente.
     setDemandas((current) => current.map((demanda) => (demanda.id === nextDemand.id ? nextDemand : demanda)));
+    setRefetchTick((tick) => tick + 1);
   }
 
   // Pauta não duplica o modal de edição — "Editar" leva para Tarefas com a tarefa já aberta.
@@ -109,10 +207,28 @@ export function PautaView() {
         onViewModeChange={setViewMode}
       />
 
-      {viewMode === "lista" ? (
-        <PautaLista demandas={filteredDemands} onOpenDetails={setSelectedDemandId} />
+      {carregandoInicial ? (
+        <p className="text-sm text-zinc-400">Carregando pauta…</p>
+      ) : erro && demandasPauta.length === 0 ? (
+        <EmptyState title="Não foi possível carregar a pauta" description={erro} icon={<CalendarClock size={16} />} />
       ) : (
-        <PautaGantt demandas={filteredDemands} periodoInicio={periodoInicio} periodoFim={periodoFim} onOpenDetails={setSelectedDemandId} />
+        <div className={buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}>
+          {viewMode === "lista" ? (
+            <PautaLista demandas={demandasPauta} onOpenDetails={setSelectedDemandId} />
+          ) : (
+            <PautaGantt demandas={demandasPauta} periodoInicio={periodoInicio} periodoFim={periodoFim} onOpenDetails={setSelectedDemandId} />
+          )}
+        </div>
+      )}
+
+      {erro && demandasPauta.length > 0 && <p className="text-xs text-red-500">{erro}</p>}
+
+      {!carregandoInicial && temMais && (
+        <div className="flex justify-center">
+          <Button type="button" variant="secondary" onClick={carregarMais} disabled={carregandoMais || buscandoPagina}>
+            {carregandoMais ? "Carregando…" : "Carregar mais"}
+          </Button>
+        </div>
       )}
 
       <DemandaDetailsDrawer

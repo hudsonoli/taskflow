@@ -1439,17 +1439,28 @@ function demandaDraftParaPayload(draft: DemandaFormDraft) {
   };
 }
 
+export type DemandaSort = "numero_operacional_desc" | "prazo_asc";
+
 export async function listDemandasReais(params?: {
   status?: string;
   search?: string;
   clienteId?: string;
   projetoId?: string;
+  // Aceita um único id ou uma lista separada por vírgula — o caller monta o CSV, mesma
+  // convenção já usada em `status` (D2-B1). Ver PautaView para o caso de múltiplos.
   departamentoId?: string;
   escopo?: DemandaEscopo;
   // Opcionais — quem não passa continua recebendo o comportamento de sempre (limit=200,
   // offset=0). Introduzidos no D2-B1 para DemandasView paginar de verdade no servidor.
   limit?: number;
   offset?: number;
+  // D2-B3: filtro de intervalo sobre `prazoEtapaAtual`, ISO com timezone (o backend recusa
+  // datetime naive — ver app/api/routes/demandas.py). Usado pela Pauta.
+  prazoInicio?: string;
+  prazoFim?: string;
+  // Default do backend é "numero_operacional_desc" — omitir preserva o comportamento de
+  // todo caller existente (DemandasView, ProjetoDemandasSection).
+  sort?: DemandaSort;
 }): Promise<Demanda[]> {
   const query = new URLSearchParams({ limit: String(params?.limit ?? 200) });
   if (params?.offset) query.set("offset", String(params.offset));
@@ -1459,6 +1470,9 @@ export async function listDemandasReais(params?: {
   if (params?.projetoId) query.set("projetoId", params.projetoId);
   if (params?.departamentoId) query.set("departamentoId", params.departamentoId);
   if (params?.escopo) query.set("escopo", params.escopo);
+  if (params?.prazoInicio) query.set("prazoInicio", params.prazoInicio);
+  if (params?.prazoFim) query.set("prazoFim", params.prazoFim);
+  if (params?.sort) query.set("sort", params.sort);
   const data = await request<DemandaReadApi[]>(`/demandas?${query.toString()}`);
   return data.map(mapDemandaReadToDemanda);
 }

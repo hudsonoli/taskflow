@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,6 +14,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.permissoes import require_demandas_criar, require_permissao
 from app.models.usuario import Usuario
+from app.repositories.demanda_repository import SortDemandas
 from app.schemas.demanda import (
     DemandaAjusteRegistrar,
     DemandaArquivar,
@@ -114,6 +116,47 @@ def _escopo(
         raise  # inalcançável — handle_demanda_error sempre levanta
 
 
+def _parse_departamento_ids(raw: str | None) -> list[str] | None:
+    """`departamentoId` aceita um único UUID (compatibilidade) ou uma lista separada por
+    vírgula (D2-B3: Pauta filtra por vários departamentos, semântica OR). Segmentos vazios
+    (vírgula sobrando, espaços) são descartados silenciosamente — mesma tolerância já usada
+    para `status` no D2-B1. O que sobra precisa ser um UUID válido; um segmento inválido é
+    422, nunca ignorado silenciosamente — diferente de `status`, aqui o valor vira FK direta
+    de uma consulta, então "silenciosamente ignorar o inválido" esconderia um erro de
+    integração do cliente em vez de recusá-lo."""
+    if raw is None:
+        return None
+    segmentos = [segmento.strip() for segmento in raw.split(",") if segmento.strip()]
+    if not segmentos:
+        return None
+    for segmento in segmentos:
+        try:
+            UUID(segmento)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"departamentoId inválido: '{segmento}' não é um UUID",
+            ) from exc
+    return segmentos
+
+
+def _normalize_datetime(value: datetime | None) -> datetime | None:
+    """Mesma semântica de `eventos.py`/`sessoes_trabalho.py` (não extraída para um helper
+    compartilhado nesta fase — ver política D2-B3: extrair ampliaria o diff para arquivos
+    fora do escopo deste bloco sem necessidade funcional). Datetime sem timezone é recusado:
+    aceitar um "hoje 00:00" ambíguo aqui reintroduziria exatamente o risco de fuso que este
+    parâmetro existe para eliminar — o cliente já calcula o intervalo no fuso local do
+    navegador e manda o instante UTC resultante."""
+    if value is None:
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Filtros de prazo devem incluir timezone",
+        )
+    return value.astimezone(timezone.utc)
+
+
 @router.post("", response_model=DemandaRead, status_code=status.HTTP_201_CREATED)
 def create_demanda(
     payload: DemandaCreate,
@@ -135,7 +178,10 @@ def list_demandas(
     search: str | None = Query(default=None, alias="search"),
     cliente_id: UUID | None = Query(default=None, alias="clienteId"),
     projeto_id: UUID | None = Query(default=None, alias="projetoId"),
-    departamento_id: UUID | None = Query(default=None, alias="departamentoId"),
+    departamento_id: str | None = Query(default=None, alias="departamentoId"),
+    prazo_inicio: datetime | None = Query(default=None, alias="prazoInicio"),
+    prazo_fim: datetime | None = Query(default=None, alias="prazoFim"),
+    sort: SortDemandas = Query(default=SortDemandas.NUMERO_OPERACIONAL_DESC),
     escopo_solicitado: EscopoSolicitado | None = Query(default=None, alias="escopo"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -151,7 +197,10 @@ def list_demandas(
         search=search,
         cliente_id=str(cliente_id) if cliente_id else None,
         projeto_id=str(projeto_id) if projeto_id else None,
-        departamento_id=str(departamento_id) if departamento_id else None,
+        departamento_ids=_parse_departamento_ids(departamento_id),
+        prazo_inicio=_normalize_datetime(prazo_inicio),
+        prazo_fim=_normalize_datetime(prazo_fim),
+        sort=sort,
         limit=limit,
         offset=offset,
     )

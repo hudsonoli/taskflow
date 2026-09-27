@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import clsx from "clsx";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { BadgeTone } from "@/components/ui/Badge";
-import { compararPorAgenda, statusDemandaTone } from "@/lib/demandas";
+import { statusDemandaTone } from "@/lib/demandas";
 import { parseDataLocal } from "@/lib/data-local";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { resolverProjetoNome } from "@/lib/referencias";
@@ -63,7 +63,7 @@ export function PautaGantt({
   }
 
   const dias = listarDias(periodoInicio, periodoFim);
-  const ordenadas = [...demandas].sort(compararPorAgenda);
+  // Ordem já vem do servidor (sort=prazo_asc, ver PautaView).
   const hoje = new Date();
   const indiceHoje = hoje >= periodoInicio && hoje <= periodoFim ? indiceDoDia(hoje, dias) : null;
 
@@ -89,7 +89,7 @@ export function PautaGantt({
           </div>
 
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {ordenadas.map((demanda) => {
+            {demandas.map((demanda) => {
               // `dataInicio`/`dataFimPrevista` são data pura (sem hora) — passam por
               // `parseDataLocal`, nunca por `new Date(string)` direto (ver lib/data-local.ts).
               // `prazoEtapaAtual`, usado como fallback quando não há `dataFimPrevista`, já é

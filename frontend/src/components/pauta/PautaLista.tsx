@@ -8,12 +8,7 @@ import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
-import {
-  compararPorAgenda,
-  normalizarUsuarioId,
-  statusDemandaLabels,
-  statusDemandaTone,
-} from "@/lib/demandas";
+import { normalizarUsuarioId, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import type { Demanda } from "@/types/demanda";
 
 const formatHora = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -40,9 +35,10 @@ export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; o
     return <EmptyState title="Nenhuma tarefa na pauta" description="Ajuste a busca ou os filtros para visualizar as tarefas do período." />;
   }
 
-  const ordenadas = [...demandas].sort(compararPorAgenda);
+  // Ordem já vem do servidor (sort=prazo_asc, ver PautaView) — agrupar por dia é
+  // apresentação, não filtro; seguro sobre o array acumulado já ordenado corretamente.
   const grupos = new Map<string, Demanda[]>();
-  for (const demanda of ordenadas) {
+  for (const demanda of demandas) {
     const chave = chaveDoDia(demanda);
     const grupo = grupos.get(chave);
     if (grupo) grupo.push(demanda);

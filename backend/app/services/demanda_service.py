@@ -30,7 +30,7 @@ from app.models.evento import Evento
 from app.models.projeto import Projeto
 from app.models.usuario import Usuario
 from app.repositories.cliente_repository import ClienteRepository
-from app.repositories.demanda_repository import DemandaRepository
+from app.repositories.demanda_repository import DemandaRepository, SortDemandas
 from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.projeto_repository import ProjetoRepository
 from app.repositories.usuario_repository import UsuarioRepository
@@ -461,7 +461,10 @@ class DemandaService:
         search: str | None = None,
         cliente_id: str | None = None,
         projeto_id: str | None = None,
-        departamento_id: str | None = None,
+        departamento_ids: list[str] | None = None,
+        prazo_inicio: datetime | None = None,
+        prazo_fim: datetime | None = None,
+        sort: SortDemandas = SortDemandas.NUMERO_OPERACIONAL_DESC,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Demanda]:
@@ -472,7 +475,10 @@ class DemandaService:
             search=search,
             cliente_id=cliente_id,
             projeto_id=projeto_id,
-            departamento_id=departamento_id,
+            departamento_ids=departamento_ids,
+            prazo_inicio=prazo_inicio,
+            prazo_fim=prazo_fim,
+            sort=sort,
             limit=limit,
             offset=offset,
         )
