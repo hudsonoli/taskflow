@@ -16,6 +16,7 @@ import {
 } from "@/lib/api-backend";
 import { invalidarDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { resolverUsuarioPorReferencia } from "@/lib/referencias";
 import type { Departamento, DepartamentoFormDraft } from "@/types/departamento";
 import { ArquivarDepartamentoModal } from "./ArquivarDepartamentoModal";
 import { DepartamentoFormModal } from "./DepartamentoFormModal";
@@ -70,10 +71,20 @@ export function DepartamentosView() {
     setSalvando(true);
     setErro(null);
     try {
+      // MemberSelector devolve `codigoInterno` como identidade de opção (ver
+      // lib/referencias.ts), não o UUID — sem resolver aqui, `responsavelUsuarioId` chega
+      // no backend como "U26000001"/"BOOTSTRAP" em vez de UUID e o Pydantic rejeita com 422.
+      // `resolverUsuarioPorReferencia` aceita qualquer um dos dois formatos.
+      const draftParaSalvar: DepartamentoFormDraft = {
+        ...draft,
+        responsavelId: draft.responsavelId
+          ? (resolverUsuarioPorReferencia(draft.responsavelId, usuarios)?.id ?? draft.responsavelId)
+          : draft.responsavelId,
+      };
       if (!departamentoId) {
-        await criarDepartamentoReal(draft);
+        await criarDepartamentoReal(draftParaSalvar);
       } else {
-        await atualizarDepartamentoReal(departamentoId, draft);
+        await atualizarDepartamentoReal(departamentoId, draftParaSalvar);
       }
       await carregar();
       invalidarDiretorioDepartamentos();
