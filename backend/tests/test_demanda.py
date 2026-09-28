@@ -776,6 +776,50 @@ def test_resumo_atendimento_calcula_os_nove_indicadores_sobre_universo_integral(
     }
 
 
+def test_resumo_atendimento_nao_conta_demanda_de_outra_empresa(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """Mesmo predicado de tenant da lista (`empresa_id` como primeiro WHERE), mas provado
+    separadamente para o agregado: uma demanda de outra empresa com o MESMO
+    `criado_por_usuario_id` (dado conflitante real, não apenas empresa vazia) não pode
+    inflar nenhum dos 9 contadores."""
+    _tornar_atendimento(db_session, empresa, usuario_operador)
+    _criar(client_admin, usuarioResponsavelIds=[str(usuario_operador.id)], status="em_execucao")
+
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-B4 Resumo",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26997001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=997001,
+        nome="Demanda de outra empresa",
+        status="em_execucao",
+        prioridade="media",
+        criado_por_usuario_id=usuario_operador.id,
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.flush()
+
+    resumo = client_operador.get("/demandas/minhas/resumo").json()
+    assert resumo["criadas"] == 1
+    assert resumo["emExecucao"] == 1
+
+
 # --------------------------------------------------------------------------------------
 # Escopo — acesso direto por UUID (a garantia exigida)
 # --------------------------------------------------------------------------------------
