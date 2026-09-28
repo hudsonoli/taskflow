@@ -14,15 +14,17 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.permissoes import require_demandas_criar, require_permissao
 from app.models.usuario import Usuario
-from app.repositories.demanda_repository import SortDemandas
+from app.repositories.demanda_repository import OrigemDemanda, SortDemandas
 from app.schemas.demanda import (
     DemandaAjusteRegistrar,
     DemandaArquivar,
     DemandaConclusaoEmailRegistrar,
     DemandaCreate,
     DemandaDiretorioRead,
+    DemandaPrioridade,
     DemandaRead,
     DemandaResumoAtendimentoRead,
+    DemandaResumoDepartamentoRead,
     DemandaUpdate,
 )
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
@@ -180,8 +182,13 @@ def list_demandas(
     cliente_id: UUID | None = Query(default=None, alias="clienteId"),
     projeto_id: UUID | None = Query(default=None, alias="projetoId"),
     departamento_id: str | None = Query(default=None, alias="departamentoId"),
+    responsavel_id: UUID | None = Query(default=None, alias="responsavelId"),
+    equipe_id: UUID | None = Query(default=None, alias="equipeId"),
+    prioridade: DemandaPrioridade | None = Query(default=None),
+    origem: OrigemDemanda | None = Query(default=None),
     prazo_inicio: datetime | None = Query(default=None, alias="prazoInicio"),
     prazo_fim: datetime | None = Query(default=None, alias="prazoFim"),
+    atrasada: bool = Query(default=False),
     sort: SortDemandas = Query(default=SortDemandas.NUMERO_OPERACIONAL_DESC),
     escopo_solicitado: EscopoSolicitado | None = Query(default=None, alias="escopo"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -199,8 +206,13 @@ def list_demandas(
         cliente_id=str(cliente_id) if cliente_id else None,
         projeto_id=str(projeto_id) if projeto_id else None,
         departamento_ids=_parse_departamento_ids(departamento_id),
+        responsavel_id=str(responsavel_id) if responsavel_id else None,
+        equipe_id=str(equipe_id) if equipe_id else None,
+        prioridade=prioridade,
+        origem=origem,
         prazo_inicio=_normalize_datetime(prazo_inicio),
         prazo_fim=_normalize_datetime(prazo_fim),
+        atrasada=atrasada,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -230,6 +242,29 @@ def resumo_minhas_demandas(
     escopo = _escopo(db, current_user, EscopoSolicitado.ATENDIMENTO)
     resumo = demanda_service.resumo_atendimento(db, escopo=escopo)
     return DemandaResumoAtendimentoRead.model_validate(resumo)
+
+
+@router.get("/meu-departamento/resumo", response_model=DemandaResumoDepartamentoRead)
+def resumo_meu_departamento(
+    departamento_id: UUID = Query(alias="departamentoId"),
+    current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
+    db: Session = Depends(get_db),
+):
+    """D2-B5 — indicadores de MeuDepartamentoView, sobre o universo INTEGRAL do
+    departamento (nunca uma página, nunca os 8 filtros de UI — mesma semântica de
+    `tarefasDoDept`/`classificacoesDept` pré-migração). `departamentoId` é o departamento
+    ÚNICO já resolvido pelo frontend (`resolverHeadDepartamento`, `.find()` — o primeiro
+    departamento formal do usuário, não "todos os que ele lidera"); este endpoint não decide
+    qual é, só recebe. Autoridade: `EscopoSolicitado.MEU_DEPARTAMENTO` — quem não é head de
+    nenhum departamento recebe 403. Um `departamentoId` fora do(s) departamento(s) que o
+    usuário lidera não é 403 — o predicado de escopo e o filtro funcional apenas não se
+    intersectam, resultando em zeros (mesma regra de list() com departamento fora do
+    escopo)."""
+    escopo = _escopo(db, current_user, EscopoSolicitado.MEU_DEPARTAMENTO)
+    resumo = demanda_service.resumo_departamento(
+        db, escopo=escopo, departamento_id=str(departamento_id), empresa_id=current_user.empresa_id
+    )
+    return DemandaResumoDepartamentoRead.model_validate(resumo)
 
 
 @router.get("/{demanda_id}", response_model=DemandaRead)

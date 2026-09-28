@@ -363,3 +363,23 @@ class DemandaResumoAtendimentoRead(BaseModel):
     concluidas: int
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class DemandaResumoDepartamentoRead(BaseModel):
+    """D2-B5 — indicadores de MeuDepartamentoView, agregados no servidor sobre o universo
+    INTEGRAL do departamento (nunca a página filtrada). Não inclui `horasConsumidas`
+    (continua vindo de `GET /sessoes-trabalho/horas`) nem `capacidadeDisponivel`
+    (calculável no cliente a partir de `horasUteisHoje` + headcount, sem depender de
+    Demanda) — só as métricas que este endpoint é responsável por fornecer."""
+
+    novas: int
+    sem_responsavel: int = Field(alias="semResponsavel")
+    em_andamento: int = Field(alias="emAndamento")
+    pausadas: int
+    aguardando: int
+    atrasadas: int
+    concluidas: int
+    horas_estimadas_total: float = Field(alias="horasEstimadasTotal")
+    colaboradores_sobrecarregados: int = Field(alias="colaboradoresSobrecarregados")
+
+    model_config = ConfigDict(populate_by_name=True)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -15,11 +15,18 @@ import {
   UserX,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { IndicadoresGrid, type IndicadorItem } from "@/components/operacional/IndicadoresGrid";
 import { TarefasLista } from "@/components/operacional/TarefasLista";
+import {
+  getResumoDepartamento,
+  listDemandasReais,
+  type DemandaOrigemFiltro,
+  type ResumoDepartamento,
+} from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useEstadoExpediente } from "@/lib/estadoExpediente";
 import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
@@ -27,27 +34,58 @@ import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { getHorasDepartamento } from "@/lib/api";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { demandaTemResponsavel, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels } from "@/lib/demandas";
+import { prioridadeDemandaLabels, statusDemandaLabels } from "@/lib/demandas";
 import {
   capacidadeAproximada,
-  classificarTarefa,
-  detectarSobrecargaEstimada,
+  fimDaSemana,
   formatHoras,
-  horasEstimadasDemanda,
+  inicioDaSemana,
   podeAcessarMeuDepartamento,
   resolverHeadDepartamento,
-  tarefasDoDepartamento,
 } from "@/lib/escopo-operacional";
-import type { DemandaPrioridade, DemandaStatus } from "@/types/demanda";
+import type { Demanda, DemandaPrioridade, DemandaStatus } from "@/types/demanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 
 type PeriodoFiltro = "todos" | "hoje" | "semana" | "atrasadas";
-type OrigemFiltro = "todos" | "interna" | "cliente";
+type OrigemFiltro = "todos" | DemandaOrigemFiltro;
 
 const DIAS_UTEIS_SEMANA = 5;
+const TAMANHO_PAGINA = 50;
+
+// D2-B5: mesma razão do D2-B1/B2/B3/B4 — AppDataContext.demandas vem limitado a 200 itens.
+// MeuDepartamentoView filtrava esse array localmente E calculava os 11 indicadores sobre o
+// mesmo array truncado. A lista passa a consultar GET /demandas com escopo=meu-departamento
+// (autoridade RBAC — 403 se não for head) + departamentoId=<departamentoHead.id> (recorte
+// funcional singular, mesma lógica de resolverHeadDepartamento já existente — nunca "todos
+// os departamentos que ele lidera"); os 7 contadores + horasEstimadas + sobrecarga passam a
+// vir de GET /demandas/meu-departamento/resumo, agregados no servidor sobre o universo
+// INTEGRAL do departamento. horasConsumidas (GET /sessoes-trabalho/horas) e
+// capacidadeDisponivel (headcount + expediente, sem depender de Demanda) já eram corretos e
+// não mudam. Tela permanece somente-leitura — sem drawer, sem mutation, sem refetchTick.
+function periodoParaFiltros(periodo: PeriodoFiltro): {
+  prazoInicio?: string;
+  prazoFim?: string;
+  atrasada?: boolean;
+} {
+  if (periodo === "hoje") {
+    const inicio = new Date();
+    inicio.setHours(0, 0, 0, 0);
+    const fim = new Date(inicio);
+    fim.setHours(23, 59, 59, 999);
+    return { prazoInicio: inicio.toISOString(), prazoFim: fim.toISOString() };
+  }
+  if (periodo === "semana") {
+    const agora = new Date();
+    return { prazoInicio: inicioDaSemana(agora).toISOString(), prazoFim: fimDaSemana(agora).toISOString() };
+  }
+  if (periodo === "atrasadas") {
+    return { atrasada: true };
+  }
+  return {};
+}
 
 export function MeuDepartamentoView() {
-  const { demandas, usuarioAtual } = useAppData();
+  const { usuarioAtual } = useAppData();
   const { estado: estadoExpediente } = useEstadoExpediente();
   const { clientes } = useDiretorioClientes();
   const { equipes } = useDiretorioEquipes();
@@ -63,6 +101,7 @@ export function MeuDepartamentoView() {
   const [prioridade, setPrioridade] = useState<DemandaPrioridade | "todos">("todos");
   const [periodo, setPeriodo] = useState<PeriodoFiltro>("todos");
   const [origem, setOrigem] = useState<OrigemFiltro>("todos");
+  const [offset, setOffset] = useState(0);
 
   const [horasConsumidas, setHorasConsumidas] = useState(0);
   const [carregandoHoras, setCarregandoHoras] = useState(true);
@@ -71,11 +110,24 @@ export function MeuDepartamentoView() {
   const departamentoHead = usuarioAtual ? resolverHeadDepartamento(usuarioAtual, departamentos) : undefined;
   const podeAcessar = usuarioAtual ? podeAcessarMeuDepartamento(usuarioAtual, departamentos) : false;
 
-  async function carregarHoras(departamentoId: string) {
+  // Página do servidor — fonte autoritativa da lista exibida.
+  const [demandasPagina, setDemandasPagina] = useState<Demanda[]>([]);
+  const [carregandoInicial, setCarregandoInicial] = useState(true);
+  const [buscandoPagina, setBuscandoPagina] = useState(true);
+  const [temProximaPagina, setTemProximaPagina] = useState(false);
+  const [erroPagina, setErroPagina] = useState<string | null>(null);
+
+  // Resumo agregado — universo INTEGRAL do departamento, nunca a página/filtros da lista
+  // (mesma semântica de `classificacoesDept` pré-migração: os 8 selects afetam só a tabela).
+  const [resumo, setResumo] = useState<ResumoDepartamento | null>(null);
+  const [carregandoResumo, setCarregandoResumo] = useState(true);
+  const [erroResumo, setErroResumo] = useState<string | null>(null);
+
+  async function carregarHoras(id: string) {
     setCarregandoHoras(true);
     setErroHoras(null);
     try {
-      const resultado = await getHorasDepartamento(departamentoId);
+      const resultado = await getHorasDepartamento(id);
       setHorasConsumidas(resultado.horasConsumidas);
     } catch (error) {
       setErroHoras(error instanceof Error ? error.message : "Não foi possível carregar as horas (API indisponível).");
@@ -93,92 +145,141 @@ export function MeuDepartamentoView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [departamentoHead?.id]);
 
-  const tarefasDoDept = useMemo(
-    () => (departamentoHead ? tarefasDoDepartamento(demandas, departamentoHead.id) : []),
-    [demandas, departamentoHead],
-  );
+  function alterarFiltro<T>(setter: (valor: T) => void) {
+    return (valor: T) => {
+      setter(valor);
+      setOffset(0); // qualquer filtro novo sempre volta pra primeira página
+    };
+  }
 
-  // Colaborador estrutural do departamento = vínculo organizacional (usuarios.departamentoId),
-  // não responsabilidade em Demanda — existe mesmo sem nenhuma tarefa atribuída ainda. Só
-  // usuários ativos entram na base de capacidade/sobrecarga (mesmo padrão de
-  // `UsuarioDiretorioItem` para listas selecionáveis).
-  const colaboradoresOptions = useMemo(() => {
-    if (!departamentoHead) return [];
-    return usuarios.filter(
-      (usuario) => usuario.departamentoId === departamentoHead.id && usuario.status === "ativo",
-    );
-  }, [usuarios, departamentoHead]);
+  // Colaborador estrutural do departamento — vínculo organizacional, não responsabilidade
+  // em Demanda. Já vinha de diretório completo (useDiretorioUsuarios), nunca truncado —
+  // preservado sem alteração.
+  const colaboradoresOptions = departamentoHead
+    ? usuarios.filter((usuario) => usuario.departamentoId === departamentoHead.id && usuario.status === "ativo")
+    : [];
 
-  const clientesOptions = useMemo(() => {
-    const ids = new Set(tarefasDoDept.map((demanda) => demanda.clienteId).filter(Boolean));
-    return clientes.filter((cliente) => ids.has(cliente.id));
-  }, [tarefasDoDept, clientes]);
+  // Cliente/Projeto: ANTES derivados de `tarefasDoDept` (array truncado) — corrigido para
+  // diretório completo, mesma correção já aplicada em D2-B1 (busca) e D2-B2/B3
+  // (paginação). Equipe já vinha de diretório completo — sem alteração.
 
-  const projetosOptions = useMemo(() => {
-    const ids = new Set(tarefasDoDept.map((demanda) => demanda.projetoId).filter(Boolean));
-    return projetos.filter((projeto) => ids.has(projeto.id));
-  }, [tarefasDoDept, projetos]);
+  // Chave da busca atual — comparada durante o RENDER, mesma técnica de
+  // DemandasView.tsx/PautaView.tsx/MinhasDemandasView.tsx.
+  const chaveBusca = [
+    departamentoHead?.id ?? "",
+    colaboradorId,
+    equipeId,
+    clienteId,
+    projetoId,
+    status,
+    prioridade,
+    periodo,
+    origem,
+    offset,
+  ].join("\u0000");
+  const [chaveConsultada, setChaveConsultada] = useState<string | null>(null);
+  if (chaveBusca !== chaveConsultada) {
+    setChaveConsultada(chaveBusca);
+    setBuscandoPagina(true);
+    setErroPagina(null);
+  }
 
-  const tarefasFiltradas = useMemo(() => {
-    return tarefasDoDept.filter((demanda) => {
-      if (colaboradorId && !demandaTemResponsavel(demanda, colaboradorId, usuarios)) return false;
-      if (equipeId) {
-        const equipe = equipes.find((item) => item.id === equipeId);
-        const membros = new Set(equipe?.membroIds ?? []);
-        const temMembro = demanda.usuarioResponsavelIds.some((id) => membros.has(normalizarUsuarioId(id)));
-        if (!temMembro) return false;
-      }
-      if (clienteId && demanda.clienteId !== clienteId) return false;
-      if (projetoId && demanda.projetoId !== projetoId) return false;
-      if (status !== "todos" && demanda.status !== status) return false;
-      if (prioridade !== "todos" && demanda.prioridade !== prioridade) return false;
+  useEffect(() => {
+    if (!podeAcessar || !departamentoHead) return;
+    let cancelado = false;
+    const { prazoInicio, prazoFim, atrasada } = periodoParaFiltros(periodo);
+    listDemandasReais({
+      escopo: "meu-departamento",
+      departamentoId: departamentoHead.id,
+      responsavelId: colaboradorId || undefined,
+      equipeId: equipeId || undefined,
+      clienteId: clienteId || undefined,
+      projetoId: projetoId || undefined,
+      status: status === "todos" ? undefined : status,
+      prioridade: prioridade === "todos" ? undefined : prioridade,
+      origem: origem === "todos" ? undefined : origem,
+      prazoInicio,
+      prazoFim,
+      atrasada,
+      limit: TAMANHO_PAGINA,
+      offset,
+    })
+      .then((resultado) => {
+        if (cancelado) return;
+        setDemandasPagina(resultado);
+        setTemProximaPagina(resultado.length === TAMANHO_PAGINA);
+        setErroPagina(null);
+        setBuscandoPagina(false);
+        setCarregandoInicial(false);
+      })
+      .catch((error) => {
+        if (cancelado) return;
+        setErroPagina(error instanceof Error ? error.message : "Não foi possível carregar as tarefas do departamento.");
+        setBuscandoPagina(false);
+        setCarregandoInicial(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [podeAcessar, departamentoHead, colaboradorId, equipeId, clienteId, projetoId, status, prioridade, periodo, origem, offset]);
 
-      const classificacao = classificarTarefa(demanda);
-      if (periodo === "hoje" && !classificacao.previstaHoje) return false;
-      if (periodo === "semana" && !classificacao.previstaSemana) return false;
-      if (periodo === "atrasadas" && !classificacao.atrasada) return false;
-      if (origem !== "todos" && classificacao.origem !== origem) return false;
-      return true;
-    });
-  }, [tarefasDoDept, colaboradorId, equipeId, equipes, clienteId, projetoId, status, prioridade, periodo, origem, usuarios]);
+  useEffect(() => {
+    if (!podeAcessar || !departamentoHead) return;
+    let cancelado = false;
+    getResumoDepartamento(departamentoHead.id)
+      .then((resultado) => {
+        if (cancelado) return;
+        setResumo(resultado);
+        setErroResumo(null);
+        setCarregandoResumo(false);
+      })
+      .catch((error) => {
+        if (cancelado) return;
+        setErroResumo(error instanceof Error ? error.message : "Não foi possível carregar os indicadores.");
+        setCarregandoResumo(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [podeAcessar, departamentoHead]);
 
-  // Indicadores consideram todo o departamento (não os filtros) — os filtros afetam só a lista abaixo.
-  const classificacoesDept = useMemo(() => tarefasDoDept.map((demanda) => classificarTarefa(demanda)), [tarefasDoDept]);
-  const novas = classificacoesDept.filter((c) => c.nova).length;
-  const semResponsavel = classificacoesDept.filter((c) => c.semResponsavel).length;
-  const emAndamento = classificacoesDept.filter((c) => c.emAndamento).length;
-  const pausadas = classificacoesDept.filter((c) => c.pausada).length;
-  const aguardando = classificacoesDept.filter((c) => c.aguardando).length;
-  const atrasadas = classificacoesDept.filter((c) => c.atrasada).length;
-  const concluidas = classificacoesDept.filter((c) => c.concluida).length;
+  const valorIndicador = (valor: number | undefined): number | string => {
+    if (carregandoResumo) return "…";
+    if (erroResumo || valor === undefined) return "—";
+    return valor;
+  };
 
   // `null` (não `0`) enquanto o estado ainda não chegou — `0` é um valor real (hoje não é
   // dia útil) e não pode ser confundido com "sem dado ainda" (ver capacidadeAproximada).
   const horasUteisHoje = estadoExpediente?.horasUteisHoje ?? null;
-  const horasEstimadasTotal = tarefasDoDept.reduce((total, demanda) => total + horasEstimadasDemanda(demanda), 0);
   const capacidadeTotal = capacidadeAproximada(horasUteisHoje, colaboradoresOptions.length, DIAS_UTEIS_SEMANA);
   const capacidadeDisponivel = Math.max(0, capacidadeTotal - horasConsumidas);
 
-  const colaboradoresSobrecarregados = colaboradoresOptions.filter((colaborador) => {
-    const estimadoColaborador = tarefasDoDept
-      .filter((demanda) => demandaTemResponsavel(demanda, colaborador.id, usuarios))
-      .reduce((total, demanda) => total + horasEstimadasDemanda(demanda), 0);
-    const capacidadeIndividual = capacidadeAproximada(horasUteisHoje, 1, DIAS_UTEIS_SEMANA);
-    return detectarSobrecargaEstimada(estimadoColaborador, capacidadeIndividual).sobrecarregado;
-  }).length;
+  function formatHorasIndicador(valor: number | undefined): string {
+    if (carregandoResumo) return "…";
+    if (erroResumo || valor === undefined) return "—";
+    return formatHoras(valor);
+  }
 
   const indicadores: IndicadorItem[] = [
-    { key: "novas", title: "Novas", value: novas, description: "Rascunho ou planejada.", icon: <CalendarClock size={16} />, tone: "blue" },
-    { key: "sem-responsavel", title: "Sem responsável", value: semResponsavel, description: "Precisam de atribuição.", icon: <UserX size={16} />, tone: "amber" },
-    { key: "andamento", title: "Em andamento", value: emAndamento, description: "Em execução agora.", icon: <Gauge size={16} />, tone: "green" },
-    { key: "pausadas", title: "Pausadas", value: pausadas, description: "Pausadas ou bloqueadas.", icon: <PauseCircle size={16} />, tone: "amber" },
-    { key: "aguardando", title: "Aguardando", value: aguardando, description: "Aguardando retorno do cliente.", icon: <Send size={16} />, tone: "amber" },
-    { key: "atrasadas", title: "Atrasadas", value: atrasadas, description: "Prazo da etapa atual vencido.", icon: <AlertTriangle size={16} />, tone: "red" },
-    { key: "concluidas", title: "Concluídas", value: concluidas, description: "Finalizadas.", icon: <CheckCircle2 size={16} />, tone: "green" },
-    { key: "horas-estimadas", title: "Horas estimadas (aprox.)", value: formatHoras(horasEstimadasTotal), description: "Soma do workflow — estimativa derivada.", icon: <Timer size={16} />, tone: "neutral" },
+    { key: "novas", title: "Novas", value: valorIndicador(resumo?.novas), description: "Rascunho ou planejada.", icon: <CalendarClock size={16} />, tone: "blue" },
+    { key: "sem-responsavel", title: "Sem responsável", value: valorIndicador(resumo?.semResponsavel), description: "Precisam de atribuição.", icon: <UserX size={16} />, tone: "amber" },
+    { key: "andamento", title: "Em andamento", value: valorIndicador(resumo?.emAndamento), description: "Em execução agora.", icon: <Gauge size={16} />, tone: "green" },
+    { key: "pausadas", title: "Pausadas", value: valorIndicador(resumo?.pausadas), description: "Pausadas ou bloqueadas.", icon: <PauseCircle size={16} />, tone: "amber" },
+    { key: "aguardando", title: "Aguardando", value: valorIndicador(resumo?.aguardando), description: "Aguardando retorno do cliente.", icon: <Send size={16} />, tone: "amber" },
+    { key: "atrasadas", title: "Atrasadas", value: valorIndicador(resumo?.atrasadas), description: "Prazo da etapa atual vencido.", icon: <AlertTriangle size={16} />, tone: "red" },
+    { key: "concluidas", title: "Concluídas", value: valorIndicador(resumo?.concluidas), description: "Finalizadas.", icon: <CheckCircle2 size={16} />, tone: "green" },
+    { key: "horas-estimadas", title: "Horas estimadas (aprox.)", value: formatHorasIndicador(resumo?.horasEstimadasTotal), description: "Soma do workflow — estimativa derivada.", icon: <Timer size={16} />, tone: "neutral" },
     { key: "horas-consumidas", title: "Horas consumidas", value: carregandoHoras ? "…" : formatHoras(horasConsumidas), description: "Sessões de trabalho reais do departamento.", icon: <Timer size={16} />, tone: "neutral" },
     { key: "capacidade-disponivel", title: "Capacidade disponível (aprox.)", value: formatHoras(capacidadeDisponivel), description: "Capacidade aproximada da semana menos consumido.", icon: <Gauge size={16} />, tone: "blue" },
-    { key: "sobrecarregados", title: "Colaboradores sobrecarregados", value: colaboradoresSobrecarregados, description: "Estimativa acima da capacidade aproximada.", icon: <ShieldAlert size={16} />, tone: colaboradoresSobrecarregados > 0 ? "red" : "neutral" },
+    {
+      key: "sobrecarregados",
+      title: "Colaboradores sobrecarregados",
+      value: valorIndicador(resumo?.colaboradoresSobrecarregados),
+      description: "Estimativa acima da capacidade aproximada.",
+      icon: <ShieldAlert size={16} />,
+      tone: (resumo?.colaboradoresSobrecarregados ?? 0) > 0 ? "red" : "neutral",
+    },
   ];
 
   if (!usuarioAtual) return null;
@@ -200,6 +301,7 @@ export function MeuDepartamentoView() {
       <Cabecalho nomeDepartamento={departamentoHead.nome} />
 
       <IndicadoresGrid itens={indicadores} colunas={4} />
+      {erroResumo && <p className="text-xs text-red-500">{erroResumo}</p>}
 
       {erroHoras && departamentoHead && (
         <EstadoErro
@@ -214,43 +316,43 @@ export function MeuDepartamentoView() {
           <Select
             label="Colaborador"
             value={colaboradorId}
-            onChange={(event) => setColaboradorId(event.target.value)}
+            onChange={(event) => alterarFiltro(setColaboradorId)(event.target.value)}
             options={[{ value: "", label: "Todos" }, ...colaboradoresOptions.map((usuario) => ({ value: usuario.id, label: usuario.nome }))]}
           />
           <Select
             label="Equipe"
             value={equipeId}
-            onChange={(event) => setEquipeId(event.target.value)}
+            onChange={(event) => alterarFiltro(setEquipeId)(event.target.value)}
             options={[{ value: "", label: "Todas" }, ...equipes.map((equipe) => ({ value: equipe.id, label: equipe.nome }))]}
           />
           <Select
             label="Cliente"
             value={clienteId}
-            onChange={(event) => setClienteId(event.target.value)}
-            options={[{ value: "", label: "Todos" }, ...clientesOptions.map((cliente) => ({ value: cliente.id, label: cliente.nome }))]}
+            onChange={(event) => alterarFiltro(setClienteId)(event.target.value)}
+            options={[{ value: "", label: "Todos" }, ...clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))]}
           />
           <Select
             label="Projeto"
             value={projetoId}
-            onChange={(event) => setProjetoId(event.target.value)}
-            options={[{ value: "", label: "Todos" }, ...projetosOptions.map((projeto) => ({ value: projeto.id, label: projeto.nome }))]}
+            onChange={(event) => alterarFiltro(setProjetoId)(event.target.value)}
+            options={[{ value: "", label: "Todos" }, ...projetos.map((projeto) => ({ value: projeto.id, label: projeto.nome }))]}
           />
           <Select
             label="Status"
             value={status}
-            onChange={(event) => setStatus(event.target.value as DemandaStatus | "todos")}
+            onChange={(event) => alterarFiltro(setStatus)(event.target.value as DemandaStatus | "todos")}
             options={[{ value: "todos", label: "Todos" }, ...Object.entries(statusDemandaLabels).map(([value, label]) => ({ value, label }))]}
           />
           <Select
             label="Prioridade"
             value={prioridade}
-            onChange={(event) => setPrioridade(event.target.value as DemandaPrioridade | "todos")}
+            onChange={(event) => alterarFiltro(setPrioridade)(event.target.value as DemandaPrioridade | "todos")}
             options={[{ value: "todos", label: "Todas" }, ...Object.entries(prioridadeDemandaLabels).map(([value, label]) => ({ value, label }))]}
           />
           <Select
             label="Período"
             value={periodo}
-            onChange={(event) => setPeriodo(event.target.value as PeriodoFiltro)}
+            onChange={(event) => alterarFiltro(setPeriodo)(event.target.value as PeriodoFiltro)}
             options={[
               { value: "todos", label: "Todos" },
               { value: "hoje", label: "Previstas para hoje" },
@@ -261,7 +363,7 @@ export function MeuDepartamentoView() {
           <Select
             label="Origem"
             value={origem}
-            onChange={(event) => setOrigem(event.target.value as OrigemFiltro)}
+            onChange={(event) => alterarFiltro(setOrigem)(event.target.value as OrigemFiltro)}
             options={[
               { value: "todos", label: "Todas" },
               { value: "cliente", label: "Cliente" },
@@ -271,13 +373,47 @@ export function MeuDepartamentoView() {
         </div>
       </div>
 
-      <TarefasLista
-        demandas={tarefasFiltradas}
-        usuarios={usuarios}
-        clientes={clientes}
-        emptyTitle="Nenhuma tarefa encontrada"
-        emptyDescription="Ajuste os filtros para visualizar tarefas do departamento."
-      />
+      {carregandoInicial ? (
+        <p className="text-sm text-zinc-400">Carregando tarefas do departamento…</p>
+      ) : (
+        <div className={buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}>
+          <TarefasLista
+            demandas={demandasPagina}
+            usuarios={usuarios}
+            clientes={clientes}
+            emptyTitle={erroPagina ? "Não foi possível carregar" : "Nenhuma tarefa encontrada"}
+            emptyDescription={erroPagina ?? "Ajuste os filtros para visualizar tarefas do departamento."}
+          />
+        </div>
+      )}
+
+      {erroPagina && demandasPagina.length > 0 && <p className="text-xs text-red-500">{erroPagina}</p>}
+
+      {!carregandoInicial && (demandasPagina.length > 0 || offset > 0) && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-400">
+            {offset > 0 ? `Itens ${offset + 1}–${offset + demandasPagina.length}` : `${demandasPagina.length} item(ns)`}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={offset === 0 || buscandoPagina}
+              onClick={() => setOffset((atual) => Math.max(0, atual - TAMANHO_PAGINA))}
+            >
+              Anterior
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!temProximaPagina || buscandoPagina}
+              onClick={() => setOffset((atual) => atual + TAMANHO_PAGINA)}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,10 +20,15 @@ from app.models.demanda_workflow_etapa_departamento_responsavel import (
 )
 from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaResponsavel
 from app.models.departamento import Departamento
+from app.models.equipe_membro import EquipeMembro
 from app.models.projeto import Projeto
 from app.models.usuario import Usuario
 
 STATUS_ARQUIVADO = "arquivada"
+# Dias úteis por semana usados na aproximação de capacidade — mesma constante de
+# `DIAS_UTEIS_SEMANA` em MeuDepartamentoView.tsx (D2-B5). Sem calendário de dias úteis, dias
+# corridos mesmo (aproximação já existente, ver lib/workflow-modelo.ts).
+DIAS_UTEIS_SEMANA = 5
 
 
 class SortDemandas(StrEnum):
@@ -32,6 +37,15 @@ class SortDemandas(StrEnum):
 
     NUMERO_OPERACIONAL_DESC = "numero_operacional_desc"
     PRAZO_ASC = "prazo_asc"
+
+
+class OrigemDemanda(StrEnum):
+    """D2-B5 — origem é sempre derivada (nunca persistida): `interna` quando não há
+    cliente vinculado, `cliente` caso contrário. Mesmo par já usado em
+    `escopo-operacional.ts` (`OrigemDemanda`/`classificarTarefa`)."""
+
+    INTERNA = "interna"
+    CLIENTE = "cliente"
 
 
 class DemandaRepository:
@@ -221,8 +235,13 @@ class DemandaRepository:
         cliente_id: str | None = None,
         projeto_id: str | None = None,
         departamento_ids: list[str] | None = None,
+        responsavel_id: str | None = None,
+        equipe_id: str | None = None,
+        prioridade: str | None = None,
+        origem: OrigemDemanda | None = None,
         prazo_inicio: datetime | None = None,
         prazo_fim: datetime | None = None,
+        atrasada: bool = False,
         sort: SortDemandas = SortDemandas.NUMERO_OPERACIONAL_DESC,
         limit: int = 50,
         offset: int = 0,
@@ -267,11 +286,53 @@ class DemandaRepository:
                 )
             )
 
+        if responsavel_id:
+            # D2-B5 (MeuDepartamentoView: filtro "Colaborador") — mesma subquery de
+            # `usuario_responsavel` em `_predicado_escopo`, só que como filtro funcional, não
+            # de segurança.
+            statement = statement.where(
+                Demanda.id.in_(
+                    select(DemandaResponsavel.demanda_id).where(
+                        DemandaResponsavel.usuario_id == responsavel_id
+                    )
+                )
+            )
+
+        if equipe_id:
+            # D2-B5 (filtro "Equipe"): demanda tem AO MENOS UM responsável que é membro da
+            # equipe — join dentro da subquery, nunca na query principal (não multiplica
+            # Demanda mesmo com múltiplos responsáveis/membros).
+            statement = statement.where(
+                Demanda.id.in_(
+                    select(DemandaResponsavel.demanda_id)
+                    .join(EquipeMembro, EquipeMembro.usuario_id == DemandaResponsavel.usuario_id)
+                    .where(EquipeMembro.equipe_id == equipe_id)
+                )
+            )
+
+        if prioridade:
+            statement = statement.where(Demanda.prioridade == prioridade)
+
+        if origem is not None:
+            # Sempre derivada, nunca persistida — mesmo par de `classificarTarefa` (frontend).
+            if origem == OrigemDemanda.INTERNA:
+                statement = statement.where(Demanda.cliente_id.is_(None))
+            else:
+                statement = statement.where(Demanda.cliente_id.is_not(None))
+
         if prazo_inicio:
             statement = statement.where(Demanda.prazo_etapa_atual >= prazo_inicio)
 
         if prazo_fim:
             statement = statement.where(Demanda.prazo_etapa_atual <= prazo_fim)
+
+        if atrasada:
+            # D2-B5 (MeuDepartamentoView: período "Atrasadas") — mesma expressão do resumo
+            # de Atendimento (D2-B4), agora também filtrável na lista. `status=` continua
+            # independente: combinar com um status finalizado devolve vazio por construção
+            # (AND), não é "corrigido" aqui — preserva a UI atual.
+            finalizada, prazo_vencido = self._finalizada_e_prazo_vencido(agora_utc())
+            statement = statement.where(and_(~finalizada, prazo_vencido))
 
         # A decisão "isto é texto, documento ou número?" mora INTEIRA em app/core/busca.py.
         # Este repository não extrai dígitos nem decide nada sobre o termo — reimplementar a
@@ -323,9 +384,20 @@ class DemandaRepository:
         statement = statement.limit(limit).offset(offset)
         return list(db.scalars(statement).all())
 
-    # Únicos dois status que `classificarTarefa`/MinhasDemandasView.tsx tratam como
-    # "finalizada" para fins de atraso — fora daqui, nada mais depende dessa noção.
-    _RESUMO_STATUS_FINALIZADOS = ("concluida", "cancelada")
+    # Únicos dois status que `classificarTarefa` (frontend) trata como "finalizada" para
+    # fins de atraso — fora daqui, nada mais depende dessa noção. Compartilhado por
+    # `list()` (filtro `atrasada=`), `resumo_atendimento` (D2-B4) e `resumo_departamento`
+    # (D2-B5) — uma única definição, nunca reimplementada em cada método.
+    _STATUS_FINALIZADOS = ("concluida", "cancelada")
+
+    @classmethod
+    def _finalizada_e_prazo_vencido(cls, agora: datetime) -> tuple[ColumnElement[bool], ColumnElement[bool]]:
+        """`(finalizada, prazo_vencido)` — mesma expressão usada em toda noção de "atrasada"
+        neste repository. `prazoValido && prazo < agora` do frontend vira `IS NOT NULL` para
+        `prazoValido`."""
+        finalizada = Demanda.status.in_(cls._STATUS_FINALIZADOS)
+        prazo_vencido = and_(Demanda.prazo_etapa_atual.is_not(None), Demanda.prazo_etapa_atual < agora)
+        return finalizada, prazo_vencido
 
     def resumo_atendimento(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
         """Indicadores agregados de "Minhas Demandas" (D2-B4) — universo INTEGRAL permitido
@@ -352,9 +424,7 @@ class DemandaRepository:
             return zero
 
         agora = agora_utc()
-        finalizada = Demanda.status.in_(self._RESUMO_STATUS_FINALIZADOS)
-        # `prazoValido && prazo < agora` do frontend — `IS NOT NULL` cobre `prazoValido`.
-        prazo_vencido = and_(Demanda.prazo_etapa_atual.is_not(None), Demanda.prazo_etapa_atual < agora)
+        finalizada, prazo_vencido = self._finalizada_e_prazo_vencido(agora)
 
         statement = (
             select(
@@ -391,6 +461,146 @@ class DemandaRepository:
 
         resultado = db.execute(statement).one()
         return dict(resultado._mapping)
+
+    def resumo_departamento(
+        self, db: Session, *, escopo: EscopoDemanda, departamento_id: str, horas_uteis_hoje: float
+    ) -> dict[str, float | int]:
+        """Indicadores agregados de MeuDepartamentoView (D2-B5) — universo INTEGRAL do
+        departamento dentro do escopo permitido, nunca a página filtrada da lista (os
+        filtros dos 8 selects não afetam o resumo, mesma semântica de
+        `classificacoesDept`/`tarefasDoDept` no frontend pré-migração).
+
+        `horas_uteis_hoje` vem de `RegraExpedienteService.to_estado_read` — a MESMA fonte já
+        usada por `GET /expediente/estado` (nenhum cálculo de horário duplicado aqui);
+        `horasConsumidas` continua vindo só de `GET /sessoes-trabalho/horas`, este resumo não
+        a recalcula.
+        """
+        zero: dict[str, float | int] = {
+            "novas": 0,
+            "sem_responsavel": 0,
+            "em_andamento": 0,
+            "pausadas": 0,
+            "aguardando": 0,
+            "atrasadas": 0,
+            "concluidas": 0,
+            "horas_estimadas_total": 0.0,
+            "colaboradores_sobrecarregados": 0,
+        }
+        if escopo.vazio:
+            return zero
+
+        agora = agora_utc()
+        finalizada, prazo_vencido = self._finalizada_e_prazo_vencido(agora)
+
+        # Universo: empresa + escopo RBAC (Head) + departamento funcional (singular, o
+        # departamentoHead.id resolvido no frontend) + exclusão de arquivada — mesma regra
+        # de `list()` sem status explícito. Reaproveitado como subquery de ids pelas duas
+        # agregações seguintes (contadores e horas), nunca materializado em Python.
+        universo_ids = select(Demanda.id).where(Demanda.empresa_id == escopo.empresa_id)
+        predicado = self._predicado_escopo(escopo)
+        if predicado is not None:
+            universo_ids = universo_ids.where(predicado)
+        universo_ids = universo_ids.where(
+            Demanda.id.in_(
+                select(DemandaDepartamento.demanda_id).where(
+                    DemandaDepartamento.departamento_id == departamento_id
+                )
+            )
+        )
+        universo_ids = universo_ids.where(Demanda.status != STATUS_ARQUIVADO)
+
+        contadores_statement = (
+            select(
+                func.count(case((Demanda.status.in_(("rascunho", "planejada")), 1))).label("novas"),
+                # semResponsavel: nenhuma linha em DemandaResponsavel para esta demanda.
+                func.count(
+                    case((~Demanda.id.in_(select(DemandaResponsavel.demanda_id)), 1))
+                ).label("sem_responsavel"),
+                func.count(case((Demanda.status == "em_execucao", 1))).label("em_andamento"),
+                # `pausadas` aqui é o agrupamento (pausada OU bloqueada) — `classificacao.
+                # pausada` do frontend, DIFERENTE do resumo de Atendimento (D2-B4), que usa
+                # os dois status crus separadamente. Telas diferentes, semânticas diferentes;
+                # não uniformizar.
+                func.count(case((Demanda.status.in_(("pausada", "bloqueada")), 1))).label("pausadas"),
+                func.count(case((Demanda.status == "aguardando_cliente", 1))).label("aguardando"),
+                func.count(case((and_(~finalizada, prazo_vencido), 1))).label("atrasadas"),
+                func.count(case((Demanda.status == "concluida", 1))).label("concluidas"),
+            )
+            .select_from(Demanda)
+            .where(Demanda.id.in_(universo_ids))
+        )
+        contadores = db.execute(contadores_statement).one()
+
+        # horasEstimadasDemanda soma TODAS as etapas de workflow da demanda, convertendo
+        # unidade≠"horas" (dias_corridos/dias_uteis) para horas ×24 — mesma aproximação de
+        # `converterQuantidadeEmHoras` (lib/workflow-modelo.ts). Sem filtro de status: uma
+        # demanda concluída/cancelada CONTINUA contribuindo para o total (fiel ao frontend,
+        # que soma sobre `tarefasDoDept` inteiro, não sobre um subconjunto ativo).
+        horas_por_etapa = case(
+            (DemandaWorkflowEtapa.unidade_prazo == "horas", DemandaWorkflowEtapa.quantidade_antes_deadline),
+            else_=DemandaWorkflowEtapa.quantidade_antes_deadline * 24,
+        )
+
+        horas_totais_statement = (
+            select(func.coalesce(func.sum(horas_por_etapa), 0))
+            .select_from(DemandaWorkflowEtapa)
+            .where(DemandaWorkflowEtapa.demanda_id.in_(universo_ids))
+        )
+        horas_estimadas_total = db.execute(horas_totais_statement).scalar_one()
+
+        # Sobrecarga: por colaborador ELEGÍVEL (membro ativo do departamento — mesmo filtro
+        # de `colaboradoresOptions` no frontend), soma INTEGRAL (não dividida) das horas
+        # estimadas de toda demanda do universo onde ele é responsável — uma demanda com
+        # vários responsáveis conta inteira para CADA um, mesma regra do frontend (nenhuma
+        # divisão por número de responsáveis). Capacidade individual =
+        # `horas_uteis_hoje × DIAS_UTEIS_SEMANA` (mesma fórmula de `capacidadeAproximada`
+        # com 1 pessoa) — nunca negativa nesta rota, então `> capacidade` já cobre o caso
+        # `capacidade == 0` sem precisar do ramo especial `> 0` de `detectarSobrecargaEstimada`.
+        horas_por_demanda = (
+            select(
+                DemandaWorkflowEtapa.demanda_id.label("demanda_id"),
+                func.sum(horas_por_etapa).label("horas"),
+            )
+            .where(DemandaWorkflowEtapa.demanda_id.in_(universo_ids))
+            .group_by(DemandaWorkflowEtapa.demanda_id)
+            .subquery()
+        )
+        colaboradores_elegiveis = select(Usuario.id).where(
+            Usuario.departamento_id == departamento_id, Usuario.status == "ativo"
+        )
+        horas_por_colaborador = (
+            select(
+                DemandaResponsavel.usuario_id.label("usuario_id"),
+                func.coalesce(func.sum(horas_por_demanda.c.horas), 0).label("horas"),
+            )
+            .select_from(DemandaResponsavel)
+            .outerjoin(horas_por_demanda, horas_por_demanda.c.demanda_id == DemandaResponsavel.demanda_id)
+            .where(
+                DemandaResponsavel.demanda_id.in_(universo_ids),
+                DemandaResponsavel.usuario_id.in_(colaboradores_elegiveis),
+            )
+            .group_by(DemandaResponsavel.usuario_id)
+            .subquery()
+        )
+        capacidade_individual = horas_uteis_hoje * DIAS_UTEIS_SEMANA
+        sobrecarregados_statement = select(func.count()).select_from(
+            select(horas_por_colaborador.c.usuario_id)
+            .where(horas_por_colaborador.c.horas > capacidade_individual)
+            .subquery()
+        )
+        colaboradores_sobrecarregados = db.execute(sobrecarregados_statement).scalar_one()
+
+        return {
+            "novas": contadores.novas,
+            "sem_responsavel": contadores.sem_responsavel,
+            "em_andamento": contadores.em_andamento,
+            "pausadas": contadores.pausadas,
+            "aguardando": contadores.aguardando,
+            "atrasadas": contadores.atrasadas,
+            "concluidas": contadores.concluidas,
+            "horas_estimadas_total": float(horas_estimadas_total),
+            "colaboradores_sobrecarregados": colaboradores_sobrecarregados,
+        }
 
     # ----------------------------------------------------------------------------------
     # Vínculos N:N

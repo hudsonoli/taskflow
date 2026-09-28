@@ -29,8 +29,14 @@ from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expedien
 from app.models.cliente import Cliente
 from app.models.demanda import Demanda
 from app.models.demanda_departamento import DemandaDepartamento
+from app.models.demanda_responsavel import DemandaResponsavel
+from app.models.demanda_workflow_etapa import DemandaWorkflowEtapa
 from app.models.departamento import Departamento
 from app.models.empresa import Empresa
+from app.models.equipe import Equipe
+from app.models.equipe_membro import EquipeMembro
+from app.models.regra_expediente import RegraExpediente as RegraExpedienteModel
+from app.models.regra_expediente import RegraExpedienteDia
 from app.models.usuario import Usuario
 
 
@@ -86,6 +92,102 @@ def _departamento(
     db.add(departamento)
     db.flush()
     return departamento
+
+
+def _equipe(db: Session, empresa: Empresa, *, nome: str | None = None) -> Equipe:
+    agora = datetime.now(timezone.utc)
+    sufixo = uuid.uuid4().hex[:8]
+    nome_final = nome or f"Equipe {sufixo}"
+    equipe = Equipe(
+        id=str(uuid.uuid4()),
+        empresa_id=empresa.id,
+        codigo_interno=f"eq-{sufixo}",
+        codigo_referencia=f"E26{sufixo[:6]}",
+        ano_referencia=26,
+        sequencial_referencia=int(sufixo[:5], 16) % 900000,
+        nome=nome_final,
+        nome_normalizado=nome_final.lower(),
+        cor_identificacao="blue",
+        status="ativo",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db.add(equipe)
+    db.flush()
+    return equipe
+
+
+def _membro_equipe(db: Session, equipe: Equipe, usuario_id: str) -> None:
+    db.add(
+        EquipeMembro(equipe_id=equipe.id, usuario_id=usuario_id, created_at=datetime.now(timezone.utc))
+    )
+    db.flush()
+
+
+def _tornar_head(db: Session, empresa: Empresa, usuario: Usuario) -> Departamento:
+    """Head resolvido por relação REAL (`responsavel_usuario_id`) — mesmo padrão de
+    `test_head_acessa_o_escopo_do_departamento`."""
+    departamento = _departamento(db, empresa, responsavel_usuario_id=usuario.id)
+    db.flush()
+    return departamento
+
+
+def _fixar_expediente_8h_todos_os_dias(db: Session, empresa: Empresa) -> None:
+    """Regra de expediente determinística (8h/dia — 4h manhã + 4h tarde —, ativa nos 7 dias)
+    para os testes de capacidade/sobrecarga de `resumo_departamento` (D2-B5) não dependerem
+    do dia da semana em que a suíte roda. Mesma razão da fixture `dentro_do_expediente`, mas
+    persistida no banco: `resumo_departamento` lê `RegraExpedienteService` diretamente, sem
+    passar pelo override de `demanda_service.regra_expediente` que aquela fixture usa — os
+    dois caminhos não colidem porque o override, quando ativo, nunca chega a consultar o
+    banco (curto-circuito `self.regra_expediente or ...`)."""
+    agora = datetime.now(timezone.utc)
+    regra = RegraExpedienteModel(
+        id=str(uuid.uuid4()),
+        empresa_id=empresa.id,
+        ativo=True,
+        tolerancia_retomada_minutos=0,
+        created_at=agora,
+        updated_at=agora,
+    )
+    db.add(regra)
+    db.flush()
+    for dia_semana in range(7):
+        db.add(
+            RegraExpedienteDia(
+                id=str(uuid.uuid4()),
+                regra_expediente_id=regra.id,
+                dia_semana=dia_semana,
+                ativo=True,
+                manha_inicio=time(0, 0),
+                manha_fim=time(4, 0),
+                tarde_inicio=time(4, 0),
+                tarde_fim=time(8, 0),
+            )
+        )
+    db.flush()
+
+
+def _etapa_workflow(db: Session, demanda_id: str, *, quantidade: int, unidade: str, ordem: int = 1) -> None:
+    """Insere uma `DemandaWorkflowEtapa` diretamente, sem passar por WorkflowModelo — mesmo
+    espírito de inserir `DemandaDepartamento`/`EquipeMembro` direto nos testes: a etapa é o
+    dado mínimo necessário para `resumo_departamento` somar horas estimadas, sem montar um
+    modelo de workflow inteiro só para isso."""
+    agora = datetime.now(timezone.utc)
+    db.add(
+        DemandaWorkflowEtapa(
+            id=str(uuid.uuid4()),
+            demanda_id=demanda_id,
+            ordem=ordem,
+            nome=f"Etapa {ordem}",
+            tipo="execucao",
+            quantidade_antes_deadline=quantidade,
+            unidade_prazo=unidade,
+            status="pendente",
+            created_at=agora,
+            updated_at=agora,
+        )
+    )
+    db.flush()
 
 
 def _payload(**extra) -> dict:
@@ -818,6 +920,391 @@ def test_resumo_atendimento_nao_conta_demanda_de_outra_empresa(
     resumo = client_operador.get("/demandas/minhas/resumo").json()
     assert resumo["criadas"] == 1
     assert resumo["emExecucao"] == 1
+
+
+# --------------------------------------------------------------------------------------
+# D2-B5 — MeuDepartamentoView: novos filtros (responsavelId, equipeId, prioridade, origem,
+# atrasada), escopo funcional (meu-departamento + departamentoId) e resumo agregado.
+# --------------------------------------------------------------------------------------
+
+def test_responsavel_id_filtra_lista(client_admin: TestClient, db_session: Session, empresa) -> None:
+    joao = _usuario_com_nome(db_session, empresa, "João Colaborador")
+    alvo = _criar(client_admin, usuarioResponsavelIds=[str(joao.id)])
+    _criar(client_admin)
+
+    achados = client_admin.get(f"/demandas?responsavelId={joao.id}").json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+def test_responsavel_id_invalido_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas?responsavelId=abc")
+    assert resposta.status_code == 422
+
+
+def test_equipe_id_filtra_por_responsavel_membro(client_admin: TestClient, db_session: Session, empresa) -> None:
+    membro = _usuario_com_nome(db_session, empresa, "Membro da Equipe")
+    nao_membro = _usuario_com_nome(db_session, empresa, "Fora da Equipe")
+    equipe = _equipe(db_session, empresa)
+    _membro_equipe(db_session, equipe, membro.id)
+
+    alvo = _criar(client_admin, usuarioResponsavelIds=[str(membro.id)])
+    fora = _criar(client_admin, usuarioResponsavelIds=[str(nao_membro.id)])
+
+    achados = client_admin.get(f"/demandas?equipeId={equipe.id}").json()
+    ids = {d["id"] for d in achados}
+    assert alvo["id"] in ids
+    assert fora["id"] not in ids
+
+
+def test_equipe_id_invalido_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas?equipeId=abc")
+    assert resposta.status_code == 422
+
+
+def test_equipe_id_demanda_com_multiplos_responsaveis_aparece_uma_vez(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    """Join Demanda→Responsável→EquipeMembro dentro da subquery — mesmo com dois
+    responsáveis da mesma equipe, a demanda não é duplicada na lista."""
+    membro_a = _usuario_com_nome(db_session, empresa, "Membro A")
+    membro_b = _usuario_com_nome(db_session, empresa, "Membro B")
+    equipe = _equipe(db_session, empresa)
+    _membro_equipe(db_session, equipe, membro_a.id)
+    _membro_equipe(db_session, equipe, membro_b.id)
+
+    alvo = _criar(client_admin, usuarioResponsavelIds=[str(membro_a.id), str(membro_b.id)])
+
+    achados = client_admin.get(f"/demandas?equipeId={equipe.id}").json()
+    ids = [d["id"] for d in achados]
+    assert ids.count(alvo["id"]) == 1
+
+
+def test_prioridade_filtra_lista(client_admin: TestClient) -> None:
+    alta = _criar(client_admin, prioridade="alta")
+    baixa = _criar(client_admin, prioridade="baixa")
+
+    achados = client_admin.get("/demandas?prioridade=alta").json()
+    ids = {d["id"] for d in achados}
+    assert alta["id"] in ids
+    assert baixa["id"] not in ids
+
+
+def test_prioridade_invalida_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas?prioridade=urgentissima")
+    assert resposta.status_code == 422
+
+
+def test_origem_interna_e_cliente_filtram(client_admin: TestClient, db_session: Session, empresa) -> None:
+    cliente = _cliente(db_session, empresa)
+    de_cliente = _criar(client_admin, clienteId=str(cliente.id))
+    interna = _criar(client_admin)
+
+    achados_interna = {d["id"] for d in client_admin.get("/demandas?origem=interna").json()}
+    assert interna["id"] in achados_interna
+    assert de_cliente["id"] not in achados_interna
+
+    achados_cliente = {d["id"] for d in client_admin.get("/demandas?origem=cliente").json()}
+    assert de_cliente["id"] in achados_cliente
+    assert interna["id"] not in achados_cliente
+
+
+def test_origem_invalida_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas?origem=externa")
+    assert resposta.status_code == 422
+
+
+def test_atrasada_true_aplica_formula_completa(client_admin: TestClient) -> None:
+    """Prova os 5 casos da fórmula `!finalizada && prazo IS NOT NULL && prazo < agora` numa
+    só asserção de conjunto — não basta o caso trivial."""
+    agora = datetime.now(timezone.utc)
+    passado = (agora - timedelta(days=1)).isoformat()
+    futuro = (agora + timedelta(days=1)).isoformat()
+
+    aberta_passado = _criar(client_admin, status="em_execucao", prazoEtapaAtual=passado)
+    _criar(client_admin, status="em_execucao", prazoEtapaAtual=futuro)  # aberta + futuro
+    _criar(client_admin, status="em_execucao")  # sem prazo
+    _criar(client_admin, status="concluida", prazoEtapaAtual=passado)  # concluída + passado
+    _criar(client_admin, status="cancelada", prazoEtapaAtual=passado)  # cancelada + passado
+
+    achados = client_admin.get("/demandas?atrasada=true").json()
+    assert {d["id"] for d in achados} == {aberta_passado["id"]}
+
+
+def test_atrasada_e_status_contraditorio_devolve_vazio(client_admin: TestClient) -> None:
+    """Filtros são AND — `atrasada=true` + `status=concluida` nunca pode casar (concluída é
+    finalizada), e isso NÃO é corrigido: é a mesma lógica contraditória que a UI atual já
+    permite montar."""
+    agora = datetime.now(timezone.utc)
+    passado = (agora - timedelta(days=1)).isoformat()
+    _criar(client_admin, status="concluida", prazoEtapaAtual=passado)
+
+    achados = client_admin.get("/demandas?atrasada=true&status=concluida").json()
+    assert achados == []
+
+
+def test_escopo_meu_departamento_com_departamento_fora_do_escopo_devolve_vazio_nao_403(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    """`departamentoId` fora do(s) departamento(s) que o usuário lidera não é 403 — o
+    predicado de escopo e o filtro funcional simplesmente não se intersectam."""
+    _tornar_head(db_session, empresa, usuario_operador)
+    outro_departamento = _departamento(db_session, empresa)
+    _criar(client_admin, departamentoResponsavelIds=[str(outro_departamento.id)])
+
+    resposta = client_operador.get(f"/demandas?escopo=meu-departamento&departamentoId={outro_departamento.id}")
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json() == []
+
+
+def test_escopo_meu_departamento_com_departamento_do_proprio_escopo_encontra_demanda(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    departamento = _tornar_head(db_session, empresa, usuario_operador)
+    alvo = _criar(client_admin, departamentoResponsavelIds=[str(departamento.id)])
+    _criar(client_admin)  # sem departamento — não pode aparecer
+
+    achados = client_operador.get(f"/demandas?escopo=meu-departamento&departamentoId={departamento.id}").json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+def test_filtros_combinados_sao_and(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    """Combinação de vários filtros ao mesmo tempo — todos precisam casar (AND), não OR."""
+    cliente = _cliente(db_session, empresa)
+    joao = _usuario_com_nome(db_session, empresa, "Combinado João")
+
+    alvo = _criar(
+        client_admin,
+        clienteId=str(cliente.id),
+        usuarioResponsavelIds=[str(joao.id)],
+        status="em_execucao",
+        prioridade="alta",
+    )
+    # Cada um destes casa em só UM dos critérios — nenhum pode aparecer no resultado.
+    _criar(client_admin, clienteId=str(cliente.id), status="em_execucao", prioridade="baixa")
+    _criar(client_admin, usuarioResponsavelIds=[str(joao.id)], status="pausada", prioridade="alta")
+    _criar(client_admin, status="em_execucao", prioridade="alta")
+
+    achados = client_admin.get(
+        "/demandas",
+        params={
+            "clienteId": str(cliente.id),
+            "responsavelId": str(joao.id),
+            "status": "em_execucao",
+            "prioridade": "alta",
+        },
+    ).json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+def test_departamento_encontra_item_alem_da_antiga_janela_global_com_escopo_meu_departamento(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    departamento = _tornar_head(db_session, empresa, usuario_operador)
+    alvo = _criar(client_admin, departamentoResponsavelIds=[str(departamento.id)])
+    for _ in range(3):
+        _criar(client_admin)  # ruído, criado depois — mais recente, sem relação
+
+    achados = client_operador.get(
+        f"/demandas?escopo=meu-departamento&departamentoId={departamento.id}&limit=1&offset=0"
+    ).json()
+    assert [d["id"] for d in achados] == [alvo["id"]]
+
+
+def test_resumo_meu_departamento_sem_ser_head_devolve_403(client_operador: TestClient) -> None:
+    resposta = client_operador.get(f"/demandas/meu-departamento/resumo?departamentoId={uuid.uuid4()}")
+    assert resposta.status_code == 403, resposta.text
+
+
+def test_resumo_meu_departamento_fora_do_escopo_devolve_zeros_nao_403(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    _tornar_head(db_session, empresa, usuario_operador)
+    outro_departamento = _departamento(db_session, empresa)
+    _criar(client_admin, departamentoResponsavelIds=[str(outro_departamento.id)])
+
+    resposta = client_operador.get(f"/demandas/meu-departamento/resumo?departamentoId={outro_departamento.id}")
+    assert resposta.status_code == 200, resposta.text
+    resumo = resposta.json()
+    assert resumo["novas"] == 0
+    assert resumo["horasEstimadasTotal"] == 0.0
+    assert resumo["colaboradoresSobrecarregados"] == 0
+
+
+def test_resumo_meu_departamento_nao_conta_demanda_de_outra_empresa(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
+) -> None:
+    departamento = _tornar_head(db_session, empresa, usuario_operador)
+    _criar(client_admin, departamentoResponsavelIds=[str(departamento.id)], status="em_execucao")
+
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-B5",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26996001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=996001,
+        nome="Demanda de outra empresa",
+        status="em_execucao",
+        prioridade="media",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.flush()
+    db_session.add(
+        DemandaDepartamento(demanda_id=intrusa.id, departamento_id=departamento.id, created_at=agora)
+    )
+    db_session.flush()
+
+    resumo = client_operador.get(f"/demandas/meu-departamento/resumo?departamentoId={departamento.id}").json()
+    assert resumo["emAndamento"] == 1  # só a própria, não a intrusa
+
+
+def test_resumo_meu_departamento_calcula_todos_os_indicadores(
+    client_admin: TestClient,
+    client_operador: TestClient,
+    db_session: Session,
+    empresa,
+    usuario_operador: Usuario,
+    dentro_do_expediente,
+) -> None:
+    """Prova com dados discriminantes os 7 contadores + horasEstimadasTotal +
+    colaboradoresSobrecarregados. `dentro_do_expediente` permite criar demandas
+    `em_execucao` diretamente; `_fixar_expediente_8h_todos_os_dias` fixa `horasUteisHoje`
+    para o cálculo de capacidade (que `resumo_departamento` lê direto do banco, sem passar
+    pelo override daquela fixture — ver docstring do helper)."""
+    departamento = _tornar_head(db_session, empresa, usuario_operador)
+    outro_departamento = _departamento(db_session, empresa)
+    _fixar_expediente_8h_todos_os_dias(db_session, empresa)
+    # capacidade individual = 8h/dia × 5 dias = 40h.
+
+    colaborador_a = _usuario_com_nome(db_session, empresa, "Colaborador A")
+    colaborador_a.departamento_id = departamento.id
+    colaborador_b = _usuario_com_nome(db_session, empresa, "Colaborador B")
+    colaborador_b.departamento_id = departamento.id
+    colaborador_c_inativo = _usuario_com_nome(db_session, empresa, "Colaborador C Inativo")
+    colaborador_c_inativo.departamento_id = departamento.id
+    colaborador_c_inativo.status = "inativo"
+    db_session.flush()
+
+    agora = datetime.now(timezone.utc)
+    passado = (agora - timedelta(days=1)).isoformat()
+    dep_ids = [str(departamento.id)]
+
+    # --- Os 7 contadores (sem workflowEtapas — não interferem nas horas) --------------
+    _criar(client_admin, departamentoResponsavelIds=dep_ids, status="rascunho")  # novas
+    _criar(client_admin, departamentoResponsavelIds=dep_ids, status="planejada")  # novas
+    _criar(client_admin, departamentoResponsavelIds=dep_ids, status="em_execucao")  # semResponsavel + emAndamento
+    _criar(client_admin, departamentoResponsavelIds=dep_ids, status="pausada")  # pausadas
+    _criar(client_admin, departamentoResponsavelIds=dep_ids, status="bloqueada", motivoBloqueio="Falta arte")  # pausadas (agrupado)
+    _criar(client_admin, departamentoResponsavelIds=dep_ids, status="aguardando_cliente")  # aguardando
+    atrasada1 = _criar(
+        client_admin,
+        departamentoResponsavelIds=dep_ids,
+        usuarioResponsavelIds=[str(colaborador_a.id)],
+        status="em_execucao",
+        prazoEtapaAtual=passado,
+    )  # atrasadas + emAndamento
+    # cancelada + prazo vencido: não deve contar em NENHUM dos 7 (nem atrasadas, nem nada).
+    _criar(client_admin, departamentoResponsavelIds=dep_ids, status="cancelada", prazoEtapaAtual=passado)
+
+    # --- Horas estimadas / sobrecarga --------------------------------------------------
+    # P: concluída + prazo vencido, responsável A — prova que finalizada AINDA soma horas
+    # (não filtra por status), e que concluída+prazo-vencido não conta como atrasada.
+    demanda_p = _criar(
+        client_admin,
+        departamentoResponsavelIds=dep_ids,
+        usuarioResponsavelIds=[str(colaborador_a.id)],
+        status="concluida",
+        prazoEtapaAtual=passado,
+    )
+    _etapa_workflow(db_session, demanda_p["id"], quantidade=50, unidade="horas")
+
+    # Q: responsável só B — abaixo da capacidade individual (fica só com Q+S = 34h < 40h).
+    demanda_q = _criar(
+        client_admin, departamentoResponsavelIds=dep_ids, usuarioResponsavelIds=[str(colaborador_b.id)], status="cancelada"
+    )
+    _etapa_workflow(db_session, demanda_q["id"], quantidade=10, unidade="horas")
+
+    # R: responsável só o colaborador INATIVO — 1000h não pode contar para sobrecarga
+    # (inativo não é elegível), mas AINDA soma no total do departamento. A API recusa
+    # atribuir um usuário inativo como responsável (regra de negócio correta) — vínculo
+    # inserido direto no banco, mesmo espírito de `_membro_equipe`/`DemandaDepartamento`.
+    demanda_r = _criar(client_admin, departamentoResponsavelIds=dep_ids, status="cancelada")
+    db_session.add(
+        DemandaResponsavel(
+            demanda_id=demanda_r["id"], usuario_id=colaborador_c_inativo.id, created_at=agora
+        )
+    )
+    db_session.flush()
+    _etapa_workflow(db_session, demanda_r["id"], quantidade=1000, unidade="horas")
+
+    # S: DOIS responsáveis (A e B) — soma INTEGRAL (não dividida) para CADA um.
+    # unidade dias_uteis: 1 dia × 24h = 24h.
+    demanda_s = _criar(
+        client_admin,
+        departamentoResponsavelIds=dep_ids,
+        usuarioResponsavelIds=[str(colaborador_a.id), str(colaborador_b.id)],
+        status="cancelada",
+    )
+    _etapa_workflow(db_session, demanda_s["id"], quantidade=1, unidade="dias_uteis")
+
+    # T: responsável A, SEM workflowEtapas — contribui 0h, não pode quebrar a soma.
+    _criar(client_admin, departamentoResponsavelIds=dep_ids, usuarioResponsavelIds=[str(colaborador_a.id)], status="cancelada")
+
+    # U: OUTRO departamento, responsável A — não pode entrar no total nem na sobrecarga de A.
+    demanda_u = _criar(
+        client_admin,
+        departamentoResponsavelIds=[str(outro_departamento.id)],
+        usuarioResponsavelIds=[str(colaborador_a.id)],
+        status="cancelada",
+    )
+    _etapa_workflow(db_session, demanda_u["id"], quantidade=999, unidade="horas")
+
+    # V: MESMO departamento, mas ARQUIVADA — não pode contar em nada.
+    demanda_v = _criar(client_admin, departamentoResponsavelIds=dep_ids, status="rascunho")
+    _etapa_workflow(db_session, demanda_v["id"], quantidade=500, unidade="horas")
+    resposta_arquivar = client_admin.post(
+        f"/demandas/{demanda_v['id']}/arquivar", json={"motivoArquivamento": "Fora de escopo"}
+    )
+    assert resposta_arquivar.status_code == 200, resposta_arquivar.text
+
+    # A: P(50) + S(24) = 74h > 40h → sobrecarregado.
+    # B: Q(10) + S(24) = 34h < 40h → NÃO sobrecarregado.
+    # C (inativo): excluído da elegibilidade, independente de R(1000h).
+    # Total do departamento: P(50)+Q(10)+R(1000)+S(24)+T(0) = 1084h. (U e V excluídos.)
+
+    resumo = client_operador.get(f"/demandas/meu-departamento/resumo?departamentoId={departamento.id}").json()
+    # semResponsavel conta TODA demanda sem responsável, não só a pensada para isso —
+    # rascunho/planejada/pausada/bloqueada/aguardando_cliente/cancelada+passado também não
+    # têm responsável atribuído (só atrasada1/P/Q/R/S/T têm) = 7, mesma semântica de
+    # `classificacao.semResponsavel` aplicada ao departamento inteiro no frontend.
+    assert resumo == {
+        "novas": 2,
+        "semResponsavel": 7,
+        "emAndamento": 2,
+        "pausadas": 2,
+        "aguardando": 1,
+        "atrasadas": 1,
+        "concluidas": 1,
+        "horasEstimadasTotal": 1084.0,
+        "colaboradoresSobrecarregados": 1,
+    }
+    assert atrasada1["id"]  # usado só para criar a demanda; id não reaproveitado no resumo
 
 
 # --------------------------------------------------------------------------------------

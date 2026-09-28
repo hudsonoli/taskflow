@@ -30,7 +30,7 @@ from app.models.evento import Evento
 from app.models.projeto import Projeto
 from app.models.usuario import Usuario
 from app.repositories.cliente_repository import ClienteRepository
-from app.repositories.demanda_repository import DemandaRepository, SortDemandas
+from app.repositories.demanda_repository import DemandaRepository, OrigemDemanda, SortDemandas
 from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.projeto_repository import ProjetoRepository
 from app.repositories.usuario_repository import UsuarioRepository
@@ -462,8 +462,13 @@ class DemandaService:
         cliente_id: str | None = None,
         projeto_id: str | None = None,
         departamento_ids: list[str] | None = None,
+        responsavel_id: str | None = None,
+        equipe_id: str | None = None,
+        prioridade: str | None = None,
+        origem: OrigemDemanda | None = None,
         prazo_inicio: datetime | None = None,
         prazo_fim: datetime | None = None,
+        atrasada: bool = False,
         sort: SortDemandas = SortDemandas.NUMERO_OPERACIONAL_DESC,
         limit: int = 50,
         offset: int = 0,
@@ -476,8 +481,13 @@ class DemandaService:
             cliente_id=cliente_id,
             projeto_id=projeto_id,
             departamento_ids=departamento_ids,
+            responsavel_id=responsavel_id,
+            equipe_id=equipe_id,
+            prioridade=prioridade,
+            origem=origem,
             prazo_inicio=prazo_inicio,
             prazo_fim=prazo_fim,
+            atrasada=atrasada,
             sort=sort,
             limit=limit,
             offset=offset,
@@ -485,6 +495,18 @@ class DemandaService:
 
     def resumo_atendimento(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
         return self.repository.resumo_atendimento(db, escopo=escopo)
+
+    def resumo_departamento(
+        self, db: Session, *, escopo: EscopoDemanda, departamento_id: str, empresa_id: str
+    ) -> dict[str, float | int]:
+        # Mesma fonte de `GET /expediente/estado` (self.regra_expediente_service já existe
+        # nesta classe, injetado no __init__) — nenhum cálculo de horário duplicado aqui.
+        horas_uteis_hoje = self.regra_expediente_service.to_estado_read(
+            db, empresa_id=empresa_id
+        ).horas_uteis_hoje
+        return self.repository.resumo_departamento(
+            db, escopo=escopo, departamento_id=departamento_id, horas_uteis_hoje=horas_uteis_hoje
+        )
 
     def get_demanda(self, db: Session, demanda_id: str, *, escopo: EscopoDemanda) -> Demanda:
         """**Único** caminho de acesso por UUID nas rotas.

@@ -1441,6 +1441,11 @@ function demandaDraftParaPayload(draft: DemandaFormDraft) {
 
 export type DemandaSort = "numero_operacional_desc" | "prazo_asc";
 
+// D2-B5: mesmo par de `OrigemDemanda` (lib/escopo-operacional.ts) — definido aqui de novo
+// (não importado de lá) porque escopo-operacional.ts já importa DESTE arquivo; importar na
+// direção contrária criaria dependência circular.
+export type DemandaOrigemFiltro = "interna" | "cliente";
+
 export async function listDemandasReais(params?: {
   status?: string;
   search?: string;
@@ -1461,6 +1466,15 @@ export async function listDemandasReais(params?: {
   // Default do backend é "numero_operacional_desc" — omitir preserva o comportamento de
   // todo caller existente (DemandasView, ProjetoDemandasSection).
   sort?: DemandaSort;
+  // D2-B5 (MeuDepartamentoView): filtros "Colaborador" (é responsável), "Equipe" (algum
+  // responsável é membro), "Prioridade" e "Origem" (derivada — cliente vinculado ou não).
+  responsavelId?: string;
+  equipeId?: string;
+  prioridade?: DemandaPrioridade;
+  origem?: DemandaOrigemFiltro;
+  // D2-B5: período "Atrasadas" — `!finalizada && prazo IS NOT NULL && prazo < agora`,
+  // mesma fórmula do resumo de Atendimento (D2-B4), agora também filtrável na lista.
+  atrasada?: boolean;
 }): Promise<Demanda[]> {
   const query = new URLSearchParams({ limit: String(params?.limit ?? 200) });
   if (params?.offset) query.set("offset", String(params.offset));
@@ -1473,6 +1487,11 @@ export async function listDemandasReais(params?: {
   if (params?.prazoInicio) query.set("prazoInicio", params.prazoInicio);
   if (params?.prazoFim) query.set("prazoFim", params.prazoFim);
   if (params?.sort) query.set("sort", params.sort);
+  if (params?.responsavelId) query.set("responsavelId", params.responsavelId);
+  if (params?.equipeId) query.set("equipeId", params.equipeId);
+  if (params?.prioridade) query.set("prioridade", params.prioridade);
+  if (params?.origem) query.set("origem", params.origem);
+  if (params?.atrasada) query.set("atrasada", "true");
   const data = await request<DemandaReadApi[]>(`/demandas?${query.toString()}`);
   return data.map(mapDemandaReadToDemanda);
 }
@@ -1504,6 +1523,31 @@ export type ResumoAtendimento = {
 
 export async function getResumoAtendimento(): Promise<ResumoAtendimento> {
   return request<ResumoAtendimento>("/demandas/minhas/resumo");
+}
+
+/**
+ * D2-B5 — indicadores de MeuDepartamentoView, agregados no servidor sobre o universo
+ * INTEGRAL do departamento (nunca a página filtrada). Não inclui `horasConsumidas`
+ * (continua vindo de `getHorasDepartamento`, lib/api.ts) nem `capacidadeDisponivel`
+ * (calculável no cliente a partir de headcount + `horasUteisHoje`, sem depender de
+ * Demanda). `departamentoId` é o departamento ÚNICO já resolvido por
+ * `resolverHeadDepartamento` — este client não decide qual é, só recebe.
+ */
+export type ResumoDepartamento = {
+  novas: number;
+  semResponsavel: number;
+  emAndamento: number;
+  pausadas: number;
+  aguardando: number;
+  atrasadas: number;
+  concluidas: number;
+  horasEstimadasTotal: number;
+  colaboradoresSobrecarregados: number;
+};
+
+export async function getResumoDepartamento(departamentoId: string): Promise<ResumoDepartamento> {
+  const query = new URLSearchParams({ departamentoId });
+  return request<ResumoDepartamento>(`/demandas/meu-departamento/resumo?${query.toString()}`);
 }
 
 export async function criarDemandaReal(draft: DemandaFormDraft): Promise<Demanda> {
