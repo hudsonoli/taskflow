@@ -1504,6 +1504,39 @@ export async function listDiretorioDemandas(): Promise<DemandaDiretorio[]> {
   return request<DemandaDiretorio[]>("/demandas/diretorio");
 }
 
+const MAX_IDS_POR_LOTE = 100;
+
+/**
+ * D2-C — resolução histórica em lote. Ao contrário de `listDiretorioDemandas`, inclui
+ * arquivada (mesma semântica de `getDemandaReal`, não da listagem) — quem consome isto
+ * precisa continuar resolvendo uma Demanda mesmo depois de arquivada.
+ *
+ * Deduplica e ignora vazios antes de montar os lotes; zero ids não dispara request. Mais de
+ * `MAX_IDS_POR_LOTE` ids vira múltiplas chamadas (nunca truncado, nunca uma request >100)
+ * — ainda é batch, não volta a ser N+1. IDs ausentes da resposta (inexistente/outra
+ * empresa/fora do escopo) são simplesmente omitidos; quem chama trata pela ausência, não por
+ * erro.
+ */
+export async function getDemandasPorIds(ids: string[]): Promise<DemandaDiretorio[]> {
+  const unicos = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (unicos.length === 0) return [];
+
+  const lotes: string[][] = [];
+  for (let inicio = 0; inicio < unicos.length; inicio += MAX_IDS_POR_LOTE) {
+    lotes.push(unicos.slice(inicio, inicio + MAX_IDS_POR_LOTE));
+  }
+
+  const resultados = await Promise.all(
+    lotes.map((lote) => request<DemandaDiretorio[]>(`/demandas/por-ids?ids=${lote.join(",")}`)),
+  );
+
+  const porId = new Map<string, DemandaDiretorio>();
+  for (const demanda of resultados.flat()) {
+    porId.set(demanda.id, demanda);
+  }
+  return Array.from(porId.values());
+}
+
 /**
  * D2-B4 — os nove indicadores de MinhasDemandasView, agregados no servidor sobre o universo
  * INTEGRAL do escopo Atendimento (nunca uma página). Quem não é Atendimento recebe 403, não

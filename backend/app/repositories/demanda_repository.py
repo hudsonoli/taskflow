@@ -189,6 +189,27 @@ class DemandaRepository:
             statement = statement.where(predicado)
         return db.scalars(statement).first()
 
+    def list_por_ids(
+        self, db: Session, *, ids: list[str], escopo: EscopoDemanda
+    ) -> list[Demanda]:
+        """D2-C — resolução histórica em lote. Mesma semântica de escopo de `get_no_escopo`
+        (arquivada incluída — sem `status != STATUS_ARQUIVADO`), não a de `list()`/
+        `/diretorio` (que excluem arquivada por padrão): quem já podia ver uma Demanda
+        individualmente continua podendo, mesmo depois de arquivada.
+
+        UMA consulta `IN (...)` + predicado de escopo — nunca um `get_no_escopo` por ID em
+        loop. IDs inexistentes/fora do escopo simplesmente não entram no resultado; ordem não
+        é garantida (quem chama indexa por `id`)."""
+        if escopo.vazio or not ids:
+            return []
+        statement = select(Demanda).where(
+            Demanda.id.in_(ids), Demanda.empresa_id == escopo.empresa_id
+        )
+        predicado = self._predicado_escopo(escopo)
+        if predicado is not None:
+            statement = statement.where(predicado)
+        return list(db.scalars(statement).all())
+
     def get_por_codigo_no_escopo(
         self, db: Session, *, codigo_referencia: str, escopo: EscopoDemanda
     ) -> Demanda | None:

@@ -143,6 +143,44 @@ def _parse_departamento_ids(raw: str | None) -> list[str] | None:
     return segmentos
 
 
+MAX_IDS_LOTE = 100
+
+
+def _parse_ids_lote(raw: str) -> list[str]:
+    """`ids` de `/demandas/por-ids` — CSV obrigatório, ao contrário de `departamentoId`
+    (opcional, `None` vira "sem filtro"). Aqui não existe "sem filtro": ausência de conteúdo
+    útil (vazio, só vírgulas/espaços) é 422, nunca uma lista vazia processada em silêncio —
+    devolver `[]` para "ids=" pareceria sucesso e esconderia um erro de integração do
+    cliente. Deduplicado (mesmo ID pode vir repetido de múltiplas sessões/eventos que
+    apontam pra mesma Demanda) preservando primeira ocorrência; limite de
+    `MAX_IDS_LOTE` é sobre IDs ÚNICOS, não sobre o CSV bruto."""
+    segmentos = [segmento.strip() for segmento in raw.split(",") if segmento.strip()]
+    if not segmentos:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="ids não pode ser vazio",
+        )
+    unicos: list[str] = []
+    vistos: set[str] = set()
+    for segmento in segmentos:
+        try:
+            UUID(segmento)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"ids inválido: '{segmento}' não é um UUID",
+            ) from exc
+        if segmento not in vistos:
+            vistos.add(segmento)
+            unicos.append(segmento)
+    if len(unicos) > MAX_IDS_LOTE:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"ids aceita no máximo {MAX_IDS_LOTE} valores únicos, recebido {len(unicos)}",
+        )
+    return unicos
+
+
 def _normalize_datetime(value: datetime | None) -> datetime | None:
     """Mesma semântica de `eventos.py`/`sessoes_trabalho.py` (não extraída para um helper
     compartilhado nesta fase — ver política D2-B3: extrair ampliaria o diff para arquivos
@@ -265,6 +303,29 @@ def resumo_meu_departamento(
         db, escopo=escopo, departamento_id=str(departamento_id), empresa_id=current_user.empresa_id
     )
     return DemandaResumoDepartamentoRead.model_validate(resumo)
+
+
+@router.get("/por-ids", response_model=list[DemandaDiretorioRead])
+def list_demandas_por_ids(
+    ids: str = Query(...),
+    current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
+    db: Session = Depends(get_db),
+):
+    """D2-C — resolução histórica em lote. Registrada ANTES de `/{demanda_id}` (mesmo motivo
+    de `/diretorio`, `/minhas/resumo`, `/meu-departamento/resumo`): sem isso, `por-ids`
+    casaria com o path param UUID e nunca seria alcançada.
+
+    Semântica de `GET /{demanda_id}` (arquivada incluída, escopo idêntico), NÃO de
+    `GET /demandas`/`/diretorio` (que excluem arquivada) — histórico precisa continuar
+    resolvendo uma Demanda mesmo depois de arquivada, se o usuário ainda tem escopo pra ela.
+
+    ID inexistente, de outra empresa ou fora do escopo simplesmente não aparece na resposta —
+    nunca 404/null por item: um sinal diferenciado por item permitiria mapear a base variando
+    o UUID, exatamente o que `get_no_escopo` já evita no acesso individual."""
+    ids_unicos = _parse_ids_lote(ids)
+    escopo = _escopo(db, current_user)
+    demandas = demanda_service.list_por_ids(db, escopo=escopo, ids=ids_unicos)
+    return [DemandaDiretorioRead.model_validate(demanda) for demanda in demandas]
 
 
 @router.get("/{demanda_id}", response_model=DemandaRead)

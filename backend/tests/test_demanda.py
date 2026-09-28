@@ -22,7 +22,7 @@ from datetime import datetime, time, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 
 from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente
@@ -2398,3 +2398,218 @@ def test_cli_nao_entra_no_seed_all() -> None:
 
     fonte = Path(__file__).resolve().parents[1] / "app" / "cli" / "seed_all.py"
     assert "inicializar_numero_operacional" not in fonte.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------------------
+# Batch por IDs (D2-C) — GET /demandas/por-ids
+# --------------------------------------------------------------------------------------
+
+
+def test_por_ids_um_id_valido(client_admin: TestClient) -> None:
+    criada = _criar(client_admin)
+    resposta = client_admin.get(f"/demandas/por-ids?ids={criada['id']}")
+    assert resposta.status_code == 200, resposta.text
+    assert [d["id"] for d in resposta.json()] == [criada["id"]]
+
+
+def test_por_ids_multiplos_ids(client_admin: TestClient) -> None:
+    primeira = _criar(client_admin)
+    segunda = _criar(client_admin)
+    resposta = client_admin.get(f"/demandas/por-ids?ids={primeira['id']},{segunda['id']}")
+    assert resposta.status_code == 200, resposta.text
+    assert {d["id"] for d in resposta.json()} == {primeira["id"], segunda["id"]}
+
+
+def test_por_ids_duplicados_devolve_uma_entidade(client_admin: TestClient) -> None:
+    criada = _criar(client_admin)
+    resposta = client_admin.get(f"/demandas/por-ids?ids={criada['id']},{criada['id']}")
+    assert resposta.status_code == 200, resposta.text
+    assert [d["id"] for d in resposta.json()] == [criada["id"]]
+
+
+def test_por_ids_aplica_trim(client_admin: TestClient) -> None:
+    criada = _criar(client_admin)
+    resposta = client_admin.get(f"/demandas/por-ids?ids=  {criada['id']}  ")
+    assert resposta.status_code == 200, resposta.text
+    assert [d["id"] for d in resposta.json()] == [criada["id"]]
+
+
+def test_por_ids_uuid_invalido_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas/por-ids?ids=nao-e-um-uuid")
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_por_ids_vazio_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas/por-ids?ids=")
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_por_ids_somente_virgulas_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas/por-ids?ids=,,,")
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_por_ids_acima_do_limite_e_422(client_admin: TestClient) -> None:
+    ids = ",".join(str(uuid.uuid4()) for _ in range(101))
+    resposta = client_admin.get(f"/demandas/por-ids?ids={ids}")
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_por_ids_inexistente_e_omitido(client_admin: TestClient) -> None:
+    resposta = client_admin.get(f"/demandas/por-ids?ids={uuid.uuid4()}")
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json() == []
+
+
+def test_por_ids_outra_empresa_e_omitida(client_admin: TestClient, db_session: Session) -> None:
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-C",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26997001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=997001,
+        nome="Demanda de outra empresa",
+        status="em_execucao",
+        prioridade="media",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.flush()
+
+    resposta = client_admin.get(f"/demandas/por-ids?ids={intrusa.id}")
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json() == []
+
+
+def test_por_ids_fora_do_escopo_e_omitida(client_operador: TestClient, client_admin: TestClient) -> None:
+    """Operador sem relação nenhuma com a demanda (não é responsável, sem departamento em
+    comum) — mesma regra de `get_no_escopo`, agora aplicada ao lote."""
+    alheia = _criar(client_admin)
+    resposta = client_operador.get(f"/demandas/por-ids?ids={alheia['id']}")
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json() == []
+
+
+def test_por_ids_mistura_autorizado_inexistente_proibido_devolve_so_autorizado(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    autorizada = _criar(client_admin, usuarioResponsavelIds=[usuario_operador.id])
+    alheia = _criar(client_admin)
+    inexistente = str(uuid.uuid4())
+
+    resposta = client_operador.get(
+        f"/demandas/por-ids?ids={autorizada['id']},{alheia['id']},{inexistente}"
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert [d["id"] for d in resposta.json()] == [autorizada["id"]]
+
+
+def test_por_ids_arquivada_autorizada_aparece(client_admin: TestClient) -> None:
+    """Diferente de `/demandas` e `/demandas/diretorio` (excluem arquivada por padrão):
+    `/por-ids` segue a semântica de `GET /demandas/{id}` — arquivada continua visível a quem
+    já tinha escopo pra ela, porque histórico precisa continuar resolvendo o nome mesmo
+    depois do arquivamento."""
+    criada = _criar(client_admin)
+    client_admin.post(f"/demandas/{criada['id']}/arquivar", json={"motivoArquivamento": "Motivo"})
+
+    resposta = client_admin.get(f"/demandas/por-ids?ids={criada['id']}")
+    assert resposta.status_code == 200, resposta.text
+    achados = resposta.json()
+    assert [d["id"] for d in achados] == [criada["id"]]
+    assert achados[0]["status"] == "arquivada"
+
+
+def test_por_ids_payload_e_diretorio_read(client_admin: TestClient) -> None:
+    criada = _criar(client_admin)
+    achado = client_admin.get(f"/demandas/por-ids?ids={criada['id']}").json()[0]
+    assert set(achado.keys()) == {
+        "id",
+        "numeroOperacional",
+        "codigoReferencia",
+        "nome",
+        "status",
+        "clienteId",
+        "projetoId",
+    }
+
+
+def test_por_ids_uma_query_estrutural_sem_loop(client_admin: TestClient, db_session: Session) -> None:
+    """Mesma técnica de `test_criacao_com_projeto_compativel_nao_gera_segunda_consulta_a_projetos`
+    (test_d1_2a_cliente_projeto.py): prova por contagem real de SQL, não por leitura de
+    código — um `for id: get_by_id(...)` geraria 5 consultas a `demandas`, não 1."""
+    ids = [_criar(client_admin)["id"] for _ in range(5)]
+
+    chamadas: list[str] = []
+
+    def _contar(conn, cursor, statement, parameters, context, executemany):
+        if "FROM demandas" in statement:
+            chamadas.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", _contar)
+    try:
+        resposta = client_admin.get(f"/demandas/por-ids?ids={','.join(ids)}")
+    finally:
+        event.remove(engine, "before_cursor_execute", _contar)
+
+    assert resposta.status_code == 200, resposta.text
+    assert len(resposta.json()) == 5
+    assert len(chamadas) == 1, (
+        f"esperada exatamente 1 consulta a demandas (nunca uma por id), houve {len(chamadas)}"
+    )
+
+
+def test_por_ids_inexistente_outra_empresa_e_fora_do_escopo_sao_indistinguiveis(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session
+) -> None:
+    """Prova de segurança (item 33): os três casos — inexistente, outro tenant, fora do
+    escopo — produzem exatamente a mesma resposta (200, lista vazia), sem nenhum sinal que
+    permita diferenciar um UUID que existe mas é inacessível de um que nunca existiu."""
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-C Seg",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26998001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=998001,
+        nome="Intrusa",
+        status="em_execucao",
+        prioridade="media",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.flush()
+    alheia = _criar(client_admin)
+    inexistente = str(uuid.uuid4())
+
+    for id_testado in (inexistente, intrusa.id, alheia["id"]):
+        resposta = client_operador.get(f"/demandas/por-ids?ids={id_testado}")
+        assert resposta.status_code == 200
+        assert resposta.json() == []

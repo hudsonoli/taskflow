@@ -493,6 +493,11 @@ class DemandaService:
             offset=offset,
         )
 
+    def list_por_ids(
+        self, db: Session, *, escopo: EscopoDemanda, ids: list[str]
+    ) -> list[Demanda]:
+        return self.repository.list_por_ids(db, escopo=escopo, ids=ids)
+
     def resumo_atendimento(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
         return self.repository.resumo_atendimento(db, escopo=escopo)
 

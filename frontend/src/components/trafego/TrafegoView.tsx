@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { listSessoesTrabalho } from "@/lib/api";
+import { getDemandasPorIds, listDiretorioDemandas } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
@@ -15,6 +16,7 @@ import {
   periodoParaDataInicio,
 } from "@/lib/trafego";
 import { useNow } from "@/lib/useNow";
+import type { DemandaDiretorio } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import type { TrafegoFiltersState } from "@/types/trafego";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
@@ -47,6 +49,13 @@ export function TrafegoView() {
   const [sessoesEncerradas, setSessoesEncerradas] = useState<SessaoTrabalho[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  // D2-C — diretório para vincular uma sessão NOVA: semântica de `/diretorio` (não
+  // arquivada), carregado uma vez, independente de filtro/período.
+  const [diretorioNovaSessao, setDiretorioNovaSessao] = useState<DemandaDiretorio[]>([]);
+  // D2-C — diretório para resolver o NOME de sessões já carregadas (ativas + encerradas):
+  // semântica de `GET /demandas/{id}` (arquivada incluída), resolvido em lote a partir dos
+  // `demandaId` realmente presentes nas sessões — nunca mais `AppDataContext.demandas`.
+  const [diretorioHistorico, setDiretorioHistorico] = useState<DemandaDiretorio[]>([]);
   const now = useNow(1000);
 
   const carregar = useCallback(async () => {
@@ -79,20 +88,50 @@ export function TrafegoView() {
     return () => clearTimeout(timeout);
   }, [carregar]);
 
-  // O diretório sai das demandas do contexto, que já vêm escopadas pelo servidor — não há
-  // segunda busca nem segunda fonte de verdade sobre o que este usuário pode ver.
-  const diretorioDemandas = demandas.map((demanda) => ({
-    id: demanda.id,
-    numeroOperacional: demanda.numeroOperacional,
-    codigoReferencia: demanda.codigoReferencia,
-    nome: demanda.nome,
-    status: demanda.status,
-    clienteId: demanda.clienteId,
-    projetoId: demanda.projetoId,
-  }));
+  // D2-C — diretório de vínculo (autocomplete de "Iniciar sessão"): não arquivada, escopo
+  // padrão da listagem, carregado uma vez — não depende de filtro/período de sessões.
+  useEffect(() => {
+    let cancelado = false;
+    listDiretorioDemandas()
+      .then((diretorio) => {
+        if (!cancelado) setDiretorioNovaSessao(diretorio);
+      })
+      .catch(() => {
+        // Falha aqui não pode derrubar a tela — só o seletor de nova sessão fica vazio.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
 
-  const ativasFiltradas = filterSessoes(sessoesAtivas, filters, diretorioDemandas);
-  const encerradasFiltradas = filterSessoes(sessoesEncerradas, filters, diretorioDemandas);
+  // D2-C — diretório histórico: extrai os `demandaId` realmente presentes nas sessões
+  // carregadas (ativas + encerradas, deduplicado) e resolve em lote via `/demandas/por-ids`
+  // (arquivada incluída). `cancelado` evita que um lote antigo, ainda em voo quando o
+  // usuário troca o período/filtro e novas sessões chegam, sobrescreva o diretório mais
+  // novo.
+  useEffect(() => {
+    let cancelado = false;
+    const idsUnicos = Array.from(
+      new Set([...sessoesAtivas, ...sessoesEncerradas].map((sessao) => sessao.demandaId)),
+    );
+    // Sem sessões, não há `demandaId` pra resolver — nenhuma linha vai consultar o
+    // diretório mesmo, então não há necessidade de zerar o estado (e fazer isso aqui
+    // dispararia setState síncrono no corpo do efeito).
+    if (idsUnicos.length === 0) return;
+    getDemandasPorIds(idsUnicos)
+      .then((diretorio) => {
+        if (!cancelado) setDiretorioHistorico(diretorio);
+      })
+      .catch(() => {
+        // Falha aqui degrada para o fallback de `resolveTrafegoDemandaNome` (mostra o id).
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [sessoesAtivas, sessoesEncerradas]);
+
+  const ativasFiltradas = filterSessoes(sessoesAtivas, filters, diretorioHistorico);
+  const encerradasFiltradas = filterSessoes(sessoesEncerradas, filters, diretorioHistorico);
   const resumo = buildResumo(ativasFiltradas, encerradasFiltradas, now);
   const cargaUsuarios = buildCarga(ativasFiltradas, "usuario", now);
   const cargaDepartamentos = buildCarga(ativasFiltradas, "departamento", now);
@@ -115,7 +154,7 @@ export function TrafegoView() {
   return (
     <div className="flex flex-col gap-6">
       <TrafegoHeader onRefresh={carregar} refreshing={loading} />
-      <TrafegoIniciarSessao onCreated={carregar} demandas={diretorioDemandas} />
+      <TrafegoIniciarSessao onCreated={carregar} demandas={diretorioNovaSessao} />
       <TrafegoFilters filters={filters} onChange={setFilters} usuarios={usuarios} departamentos={departamentos} />
 
       {erro ? (
@@ -135,7 +174,7 @@ export function TrafegoView() {
               sessoes={ativasFiltradas}
               now={now}
               onChanged={carregar}
-              diretorioDemandas={diretorioDemandas}
+              diretorioDemandas={diretorioHistorico}
               diretorioUsuarios={usuarios}
               diretorioDepartamentos={departamentos}
             />

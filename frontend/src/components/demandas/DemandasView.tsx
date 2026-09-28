@@ -10,6 +10,7 @@ import {
   atualizarDemandaReal,
   criarDemandaReal,
   ForaDeExpedienteError,
+  getDemandaReal,
   listDemandasReais,
   patchDemandaReal,
 } from "@/lib/api-backend";
@@ -163,12 +164,42 @@ export function DemandasView() {
     return () => clearTimeout(timeoutId);
   }, [demandaParaAbrir, setDemandaParaAbrir]);
 
-  // Busca primeiro na página atual (fonte do que está renderizado); cai pro contexto só na
+  // D2-C — só entra em jogo quando `selectedDemandId` vem de fora (NotificationBell via
+  // `demandaParaAbrir`) e o alvo não está nem na página atual nem no array do contexto: aí
+  // sim busca individual (`GET /demandas/{id}`, reaproveitado — não o endpoint batch pra 1
+  // item). Nunca dispara em clique normal dentro da própria lista já renderizada, porque
+  // nesse caso `demandasPagina.find` já resolve. 404/erro não derruba a tela: o drawer
+  // simplesmente não abre. `cancelado` protege contra o cenário de A ser pedido, o usuário
+  // trocar pra B antes de A responder, e A abrir por cima de B.
+  const [fallbackDemand, setFallbackDemand] = useState<Demanda | null>(null);
+  useEffect(() => {
+    if (!selectedDemandId) return;
+    const jaResolvido =
+      demandasPagina.some((demanda) => demanda.id === selectedDemandId) ||
+      demandas.some((demanda) => demanda.id === selectedDemandId);
+    if (jaResolvido) return;
+    let cancelado = false;
+    getDemandaReal(selectedDemandId)
+      .then((demanda) => {
+        if (!cancelado) setFallbackDemand(demanda);
+      })
+      .catch(() => {
+        // Inexistente/fora do escopo: drawer permanece fechado, sem toast/library nova.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [selectedDemandId, demandasPagina, demandas]);
+
+  // Busca primeiro na página atual (fonte do que está renderizado); cai pro contexto na
   // janela entre "acabei de criar/mutar" e o refetch da página terminar — o contexto já tem o
-  // objeto fresco ali (patch síncrono), a página ainda não.
+  // objeto fresco ali (patch síncrono), a página ainda não. Só then o fallback individual
+  // acima, e só se `fallbackDemand` já resolveu o MESMO id (evita usar um resultado de uma
+  // troca de seleção anterior enquanto o efeito ainda não limpou o estado).
   const selectedDemand =
     demandasPagina.find((demanda) => demanda.id === selectedDemandId) ??
-    demandas.find((demanda) => demanda.id === selectedDemandId);
+    demandas.find((demanda) => demanda.id === selectedDemandId) ??
+    (fallbackDemand?.id === selectedDemandId ? fallbackDemand : undefined);
   const bloqueandoDemanda =
     demandasPagina.find((demanda) => demanda.id === bloqueandoId) ??
     demandas.find((demanda) => demanda.id === bloqueandoId);

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { listDemandasReais } from "@/lib/api-backend";
+import { getDemandaReal, listDemandasReais } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer";
 import type { Demanda } from "@/types/demanda";
@@ -156,11 +156,36 @@ export function PautaView() {
       });
   }
 
-  // Página do servidor é a fonte de verdade; contexto só cobre o intervalo entre o patch
-  // síncrono de uma mutation e o refetch assíncrono terminar.
+  // D2-C — mesmo padrão de DemandasView.tsx: só busca individual (GET /demandas/{id}) se o
+  // id não estiver nem na página atual nem no contexto. `cancelado` protege troca de seleção
+  // antes da resposta chegar.
+  const [fallbackDemand, setFallbackDemand] = useState<Demanda | null>(null);
+  useEffect(() => {
+    if (!selectedDemandId) return;
+    const jaResolvido =
+      demandasPauta.some((demanda) => demanda.id === selectedDemandId) ||
+      demandas.some((demanda) => demanda.id === selectedDemandId);
+    if (jaResolvido) return;
+    let cancelado = false;
+    getDemandaReal(selectedDemandId)
+      .then((demanda) => {
+        if (!cancelado) setFallbackDemand(demanda);
+      })
+      .catch(() => {
+        // Inexistente/fora do escopo: drawer permanece fechado.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [selectedDemandId, demandasPauta, demandas]);
+
+  // Página do servidor é a fonte de verdade; contexto cobre o intervalo entre o patch
+  // síncrono de uma mutation e o refetch assíncrono terminar; o fallback acima só entra se
+  // nenhum dos dois resolveu.
   const selectedDemand =
     demandasPauta.find((demanda) => demanda.id === selectedDemandId) ??
-    demandas.find((demanda) => demanda.id === selectedDemandId);
+    demandas.find((demanda) => demanda.id === selectedDemandId) ??
+    (fallbackDemand?.id === selectedDemandId ? fallbackDemand : undefined);
 
   function handleDemandChange(nextDemand: Demanda) {
     // Só patch de contexto (outras telas ainda dependem dele) + refetch — NUNCA patch local
