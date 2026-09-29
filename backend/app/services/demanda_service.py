@@ -530,6 +530,14 @@ class DemandaService:
             ontem_fim=ontem_fim,
         )
 
+    def resumo_operacional(
+        self, db: Session, *, escopo: EscopoDemanda, periodo_inicio: datetime
+    ) -> dict[str, float | int]:
+        return self.repository.resumo_operacional(db, escopo=escopo, periodo_inicio=periodo_inicio)
+
+    def count_em_andamento_operacional(self, db: Session, *, escopo: EscopoDemanda) -> int:
+        return self.repository.count_em_andamento_operacional(db, escopo=escopo)
+
     def resumo_departamento(
         self, db: Session, *, escopo: EscopoDemanda, departamento_id: str, empresa_id: str
     ) -> dict[str, float | int]:

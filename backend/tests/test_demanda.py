@@ -3084,3 +3084,166 @@ def test_resumo_minha_home_alem_de_janela_global_pequena(
 
     resumo = client_operador.get(_url_minha_home_resumo()).json()
     assert resumo["ativas"] == 1
+
+
+# --------------------------------------------------------------------------------------
+# Resumo operacional (D2-D3A) — GET /demandas/operacional/resumo e /operacional/em-andamento
+# --------------------------------------------------------------------------------------
+
+_PERIODO_INICIO_OPERACIONAL = datetime(2026, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+
+def _url_resumo_operacional(periodo_inicio: datetime = _PERIODO_INICIO_OPERACIONAL) -> str:
+    return f"/demandas/operacional/resumo?periodoInicio={periodo_inicio.isoformat().replace('+00:00', 'Z')}"
+
+
+def test_resumo_operacional_admin_acessa(client_admin: TestClient) -> None:
+    resposta = client_admin.get(_url_resumo_operacional())
+    assert resposta.status_code == 200, resposta.text
+
+
+def test_resumo_operacional_gestor_acessa(client_gestor: TestClient) -> None:
+    resposta = client_gestor.get(_url_resumo_operacional())
+    assert resposta.status_code == 200, resposta.text
+
+
+def test_resumo_operacional_operador_e_403(client_operador: TestClient) -> None:
+    resposta = client_operador.get(_url_resumo_operacional())
+    assert resposta.status_code == 403, resposta.text
+
+
+def test_em_andamento_operacional_operador_e_403(client_operador: TestClient) -> None:
+    resposta = client_operador.get("/demandas/operacional/em-andamento")
+    assert resposta.status_code == 403, resposta.text
+
+
+def test_em_andamento_operacional_admin_acessa(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas/operacional/em-andamento")
+    assert resposta.status_code == 200, resposta.text
+
+
+def test_resumo_operacional_tenant_isolado(client_admin: TestClient, db_session: Session) -> None:
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-D3A",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26994001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=994001,
+        nome="Intrusa D2-D3A",
+        status="em_execucao",
+        prioridade="media",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.flush()
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["totalNaBase"] == 0
+
+
+def test_resumo_operacional_arquivada_excluida(client_admin: TestClient) -> None:
+    criada = _criar(client_admin, status="em_execucao")
+    client_admin.post(f"/demandas/{criada['id']}/arquivar", json={"motivoArquivamento": "Motivo"})
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["totalNaBase"] == 0
+    assert resumo["emAndamento"] == 0
+
+    em_andamento = client_admin.get("/demandas/operacional/em-andamento").json()
+    assert em_andamento["emAndamento"] == 0
+
+
+def test_resumo_operacional_internas_e_clientes(
+    client_admin: TestClient, db_session: Session, empresa
+) -> None:
+    cliente = _cliente(db_session, empresa)
+    _criar(client_admin)  # interna — sem cliente
+    _criar(client_admin, clienteId=cliente.id)
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["internas"] == 1
+    assert resumo["clientes"] == 1
+
+
+def test_resumo_operacional_recebidas_por_periodo(client_admin: TestClient, db_session: Session) -> None:
+    dentro = _criar(client_admin)
+    fora = _criar(client_admin)
+    db_session.get(Demanda, dentro["id"]).created_at = _PERIODO_INICIO_OPERACIONAL
+    db_session.get(Demanda, fora["id"]).created_at = _PERIODO_INICIO_OPERACIONAL - timedelta(microseconds=1)
+    db_session.flush()
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["recebidas"] == 1
+
+
+def test_resumo_operacional_concluidas_no_periodo_cancelada_nao_entra(
+    client_admin: TestClient, db_session: Session
+) -> None:
+    concluida = _criar(client_admin, status="concluida")
+    cancelada = _criar(client_admin, status="cancelada")
+    db_session.get(Demanda, concluida["id"]).updated_at = _PERIODO_INICIO_OPERACIONAL
+    db_session.get(Demanda, cancelada["id"]).updated_at = _PERIODO_INICIO_OPERACIONAL
+    db_session.flush()
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["concluidasNoPeriodo"] == 1
+
+
+def test_resumo_operacional_total_na_base(client_admin: TestClient) -> None:
+    for _ in range(3):
+        _criar(client_admin)
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["totalNaBase"] == 3
+
+
+def test_resumo_operacional_em_andamento(client_admin: TestClient) -> None:
+    _criar(client_admin, status="em_execucao")
+    _criar(client_admin, status="em_execucao")
+    _criar(client_admin, status="planejada")
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["emAndamento"] == 2
+
+    em_andamento = client_admin.get("/demandas/operacional/em-andamento").json()
+    assert em_andamento["emAndamento"] == 2
+
+
+def test_resumo_operacional_horas_estimadas(client_admin: TestClient, db_session: Session) -> None:
+    demanda = _criar(client_admin, status="em_execucao")
+    _etapa_workflow(db_session, demanda["id"], quantidade=2, unidade="horas", ordem=1)
+    _etapa_workflow(db_session, demanda["id"], quantidade=1, unidade="dias_corridos", ordem=2)
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["horasEstimadas"] == 2 + 24
+
+
+def test_resumo_operacional_periodo_naive_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas/operacional/resumo?periodoInicio=2026-05-01T00:00:00")
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_resumo_operacional_alem_de_janela_global_pequena(client_admin: TestClient) -> None:
+    """Mesmo padrão B1-B5/D2-C/D2-D1/D2-D2: soma sobre o universo INTEGRAL, não uma janela —
+    6 demandas provam que `totalNaBase`/`emAndamento` não estagnam num "top N" implícito."""
+    _criar(client_admin, status="em_execucao")
+    for _ in range(5):
+        _criar(client_admin, status="em_execucao")
+
+    resumo = client_admin.get(_url_resumo_operacional()).json()
+    assert resumo["totalNaBase"] == 6
+    assert resumo["emAndamento"] == 6

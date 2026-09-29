@@ -1626,6 +1626,37 @@ export async function getResumoMinhaHome(limites: {
   return request<ResumoMinhaHome>(`/demandas/minha-home/resumo?${query.toString()}`);
 }
 
+/**
+ * D2-D3A — os 7 indicadores baseados em Demanda da Central de Tráfego
+ * (`TrafegoIndicadoresDemandas`), agregados no servidor sobre o universo INTEGRAL permitido
+ * — nunca as 200 demandas globais de `AppDataContext`. Autorização própria no backend
+ * (admin/gestor, 403 para qualquer outro perfil) — não depende só de `podeAcessarCentralTrafego`
+ * no cliente. Sem `horasExecutadas` (SessaoTrabalho, fonte separada — D2-D3B).
+ */
+export type ResumoOperacional = {
+  internas: number;
+  clientes: number;
+  recebidas: number;
+  concluidasNoPeriodo: number;
+  horasEstimadas: number;
+  totalNaBase: number;
+  emAndamento: number;
+};
+
+/** `periodoInicio` é "desde quando", sem teto — mesma semântica de `periodoParaDataInicio`. */
+export async function getResumoOperacional(periodoInicio: string): Promise<ResumoOperacional> {
+  const query = new URLSearchParams({ periodoInicio });
+  return request<ResumoOperacional>(`/demandas/operacional/resumo?${query.toString()}`);
+}
+
+/**
+ * D2-D3A — RegraExpedienteView. Endpoint dedicado (não o resumo acima): `emAndamento` não
+ * depende de período, e essa tela nunca teve conceito de período.
+ */
+export async function getEmAndamentoOperacional(): Promise<{ emAndamento: number }> {
+  return request<{ emAndamento: number }>("/demandas/operacional/em-andamento");
+}
+
 export async function criarDemandaReal(draft: DemandaFormDraft): Promise<Demanda> {
   const payload = {
     ...demandaDraftParaPayload(draft),

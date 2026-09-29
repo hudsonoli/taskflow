@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
-import { atualizarRegraExpedienteReal, getRegraExpedienteReal } from "@/lib/api-backend";
-import { useAppData } from "@/lib/AppDataContext";
+import { atualizarRegraExpedienteReal, getEmAndamentoOperacional, getRegraExpedienteReal } from "@/lib/api-backend";
 import { useEstadoExpediente } from "@/lib/estadoExpediente";
 import type { DiaSemana, JanelaDia, RegraExpediente } from "@/types/regra-expediente";
 
@@ -42,13 +41,18 @@ function tardeInicioEfetivo(diaReferencia: JanelaDia | null, toleranciaRetomadaM
 }
 
 export function RegraExpedienteView() {
-  const { demandas } = useAppData();
   const { estado } = useEstadoExpediente();
   const [regra, setRegra] = useState<RegraExpediente | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
+  // D2-D3A — endpoint dedicado (`GET /demandas/operacional/em-andamento`, admin/gestor),
+  // agregado no servidor sobre o universo INTEGRAL — nunca mais
+  // `AppDataContext.demandas.filter(status === "em_execucao").length`. `null` distingue
+  // "carregando" de "zero confirmado".
+  const [emAndamento, setEmAndamento] = useState<number | null>(null);
+  const [erroEmAndamento, setErroEmAndamento] = useState(false);
 
   function buscar() {
     getRegraExpedienteReal()
@@ -62,6 +66,9 @@ export function RegraExpedienteView() {
 
   useEffect(() => {
     buscar();
+    getEmAndamentoOperacional()
+      .then((resultado) => setEmAndamento(resultado.emAndamento))
+      .catch(() => setErroEmAndamento(true));
   }, []);
 
   function tentarNovamente() {
@@ -147,7 +154,7 @@ export function RegraExpedienteView() {
   const agoraFormatado = estado
     ? new Date(estado.agora).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     : null;
-  const emExecucaoAgora = demandas.filter((demanda) => demanda.status === "em_execucao").length;
+  const emExecucaoAgoraTexto = emAndamento === null && !erroEmAndamento ? "…" : erroEmAndamento ? "—" : emAndamento;
   const inicioTarde = tardeInicioEfetivo(diaReferencia, regra.toleranciaRetomadaMinutos);
 
   return (
@@ -189,7 +196,7 @@ export function RegraExpedienteView() {
             {dentroDoExpediente ? "Agora: dentro do expediente" : "Agora: fora do expediente — pausas automáticas ativas"}
           </p>
           <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-            {agoraFormatado ?? "—"} · {emExecucaoAgora} demanda(s) em execução agora
+            {agoraFormatado ?? "—"} · {emExecucaoAgoraTexto} demanda(s) em execução agora
           </p>
         </div>
       </div>

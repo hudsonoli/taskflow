@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { listSessoesTrabalho } from "@/lib/api";
-import { getDemandasPorIds, listDiretorioDemandas } from "@/lib/api-backend";
+import { getDemandasPorIds, getResumoOperacional, listDiretorioDemandas, type ResumoOperacional } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
@@ -40,7 +40,7 @@ const initialFilters: TrafegoFiltersState = {
 };
 
 export function TrafegoView() {
-  const { demandas, usuarioAtual } = useAppData();
+  const { usuarioAtual } = useAppData();
   const { equipes } = useDiretorioEquipes();
   const { usuarios } = useDiretorioUsuarios();
   const { departamentos } = useDiretorioDepartamentos();
@@ -56,6 +56,12 @@ export function TrafegoView() {
   // semântica de `GET /demandas/{id}` (arquivada incluída), resolvido em lote a partir dos
   // `demandaId` realmente presentes nas sessões — nunca mais `AppDataContext.demandas`.
   const [diretorioHistorico, setDiretorioHistorico] = useState<DemandaDiretorio[]>([]);
+  // D2-D3A — indicadores baseados em Demanda, agregados no servidor sobre o universo
+  // INTEGRAL permitido (admin/gestor via `require_admin_or_gestor`, nunca mais
+  // `AppDataContext.demandas`). `resumoOperacional === null` distingue "carregando" de
+  // "zero confirmado" — nunca fabricado no `TrafegoIndicadoresDemandas`.
+  const [resumoOperacional, setResumoOperacional] = useState<ResumoOperacional | null>(null);
+  const [erroResumoOperacional, setErroResumoOperacional] = useState<string | null>(null);
   const now = useNow(1000);
 
   const carregar = useCallback(async () => {
@@ -87,6 +93,30 @@ export function TrafegoView() {
     }, 0);
     return () => clearTimeout(timeout);
   }, [carregar]);
+
+  // D2-D3A — resumo operacional de Demandas, refeito a cada troca de período (o servidor
+  // não recebe filtro nenhum além de `periodoInicio`, então trocar usuário/departamento/
+  // status/busca na UI não precisa refetch — só o período afeta `recebidas`/
+  // `concluidasNoPeriodo`). `cancelado` evita que uma resposta de um período antigo (troca
+  // rápida hoje → 24h → 7d) sobrescreva a mais nova.
+  useEffect(() => {
+    let cancelado = false;
+    getResumoOperacional(periodoParaDataInicio[filters.periodo]())
+      .then((resultado) => {
+        if (!cancelado) {
+          setResumoOperacional(resultado);
+          setErroResumoOperacional(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelado) {
+          setErroResumoOperacional(error instanceof Error ? error.message : "Não foi possível carregar os indicadores.");
+        }
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [filters.periodo]);
 
   // D2-C — diretório de vínculo (autocomplete de "Iniciar sessão"): não arquivada, escopo
   // padrão da listagem, carregado uma vez — não depende de filtro/período de sessões.
@@ -166,9 +196,9 @@ export function TrafegoView() {
           <TrafegoResumoCards resumo={resumo} />
           <TempoOperacionalCard resumo={resumo} />
           <TrafegoIndicadoresDemandas
-            demandas={demandas}
+            resumo={resumoOperacional}
+            erro={erroResumoOperacional}
             sessoes={[...ativasFiltradas, ...encerradasFiltradas]}
-            periodoInicio={periodoParaDataInicio[filters.periodo]()}
           />
           <TrafegoAgoraTable
               sessoes={ativasFiltradas}

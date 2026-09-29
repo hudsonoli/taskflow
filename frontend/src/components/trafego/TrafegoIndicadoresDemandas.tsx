@@ -3,42 +3,43 @@
 import { useMemo } from "react";
 import { ArrowDownToLine, Building2, CheckCircle2, Timer, Users } from "lucide-react";
 import { IndicadoresGrid, type IndicadorItem } from "@/components/operacional/IndicadoresGrid";
-import { classificarTarefa, formatHoras, horasEstimadasDemanda, horasExecutadasPorEscopo } from "@/lib/escopo-operacional";
-import type { Demanda } from "@/types/demanda";
+import { formatHoras, horasExecutadasPorEscopo } from "@/lib/escopo-operacional";
+import type { ResumoOperacional } from "@/lib/api-backend";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 
 /**
- * Indicadores de empresa cruzando Demanda (mock) com Sessão de trabalho (real, via API) —
- * escopo global, exclusivo desta visão (Central de Tráfego).
+ * D2-D3A — os 5 indicadores baseados em Demanda (interno/cliente, recebido/concluído, horas
+ * estimadas, tarefas na base) passam a vir de `GET /demandas/operacional/resumo`, agregado
+ * no servidor sobre o universo INTEGRAL permitido — nunca mais `AppDataContext.demandas`
+ * (200 mais recentes da empresa). `resumo === null` distingue "carregando" de "zero
+ * confirmado"; `erro` cobre falha da requisição — nenhum dos dois fabrica valor.
+ *
+ * Horas EXECUTADAS continuam vindo de `SessaoTrabalho` (`sessoes`, já filtradas por período
+ * pelo caller) — fonte correta, mas com cap de paginação (~100) ainda não corrigido nesta
+ * onda: ver D2-D3B, pendente.
  */
 export function TrafegoIndicadoresDemandas({
-  demandas,
+  resumo,
+  erro,
   sessoes,
-  periodoInicio,
 }: {
-  demandas: Demanda[];
+  resumo: ResumoOperacional | null;
+  erro: string | null;
   sessoes: SessaoTrabalho[];
-  periodoInicio: string;
 }) {
-  const dados = useMemo(() => {
-    const inicio = new Date(periodoInicio).getTime();
-    const internas = demandas.filter((demanda) => classificarTarefa(demanda).origem === "interna").length;
-    const clientes = demandas.length - internas;
-    const recebidas = demandas.filter((demanda) => new Date(demanda.createdAt).getTime() >= inicio).length;
-    const concluidasNoPeriodo = demandas.filter(
-      (demanda) => demanda.status === "concluida" && new Date(demanda.updatedAt).getTime() >= inicio,
-    ).length;
-    const horasEstimadas = demandas.reduce((total, demanda) => total + horasEstimadasDemanda(demanda), 0);
-    const horasExecutadas = horasExecutadasPorEscopo(sessoes, {});
+  const horasExecutadas = useMemo(() => horasExecutadasPorEscopo(sessoes, {}), [sessoes]);
 
-    return { internas, clientes, recebidas, concluidasNoPeriodo, horasEstimadas, horasExecutadas };
-  }, [demandas, sessoes, periodoInicio]);
+  const valor = (campo: number | undefined): number | string => {
+    if (resumo === null && !erro) return "…";
+    if (erro || campo === undefined) return "—";
+    return campo;
+  };
 
   const indicadores: IndicadorItem[] = [
     {
       key: "interno-cliente",
       title: "Interno vs. cliente",
-      value: `${dados.internas} / ${dados.clientes}`,
+      value: `${valor(resumo?.internas)} / ${valor(resumo?.clientes)}`,
       description: "Tarefas sem cliente vinculado vs. com cliente (total da base).",
       icon: <Building2 size={16} />,
       tone: "neutral",
@@ -46,7 +47,7 @@ export function TrafegoIndicadoresDemandas({
     {
       key: "recebido-concluido",
       title: "Recebido vs. concluído",
-      value: `${dados.recebidas} / ${dados.concluidasNoPeriodo}`,
+      value: `${valor(resumo?.recebidas)} / ${valor(resumo?.concluidasNoPeriodo)}`,
       description: "Criadas vs. concluídas no período filtrado.",
       icon: <ArrowDownToLine size={16} />,
       tone: "blue",
@@ -54,7 +55,7 @@ export function TrafegoIndicadoresDemandas({
     {
       key: "horas-estimadas-vs-executadas",
       title: "Horas estimadas (aprox.) vs. executadas",
-      value: `${formatHoras(dados.horasEstimadas)} / ${formatHoras(dados.horasExecutadas)}`,
+      value: `${resumo === null && !erro ? "…" : erro ? "—" : formatHoras(resumo?.horasEstimadas ?? 0)} / ${formatHoras(horasExecutadas)}`,
       description: "Estimativa derivada do workflow vs. sessões de trabalho reais (toda a base).",
       icon: <Timer size={16} />,
       tone: "amber",
@@ -62,7 +63,7 @@ export function TrafegoIndicadoresDemandas({
     {
       key: "total-tarefas",
       title: "Tarefas na base",
-      value: demandas.length,
+      value: valor(resumo?.totalNaBase),
       description: "Total cadastrado.",
       icon: <Users size={16} />,
       tone: "neutral",
@@ -70,7 +71,7 @@ export function TrafegoIndicadoresDemandas({
     {
       key: "concluidas-periodo",
       title: "Concluídas no período",
-      value: dados.concluidasNoPeriodo,
+      value: valor(resumo?.concluidasNoPeriodo),
       description: "Mesma janela do filtro de período acima.",
       icon: <CheckCircle2 size={16} />,
       tone: "green",

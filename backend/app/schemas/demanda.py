@@ -388,6 +388,33 @@ class DemandaResumoMinhaHomeRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class DemandaResumoOperacionalRead(BaseModel):
+    """D2-D3A — os 7 indicadores baseados em Demanda de `TrafegoIndicadoresDemandas`,
+    agregados no servidor sobre o universo INTEGRAL permitido (escopo normal, default) —
+    nunca as 200 demandas globais de `AppDataContext`. Sem `horasExecutadas` (fonte separada,
+    `SessaoTrabalho` — D2-D3B trata o cap de sessões, não este schema)."""
+
+    internas: int
+    clientes: int
+    recebidas: int
+    concluidas_no_periodo: int = Field(alias="concluidasNoPeriodo")
+    horas_estimadas: float = Field(alias="horasEstimadas")
+    total_na_base: int = Field(alias="totalNaBase")
+    em_andamento: int = Field(alias="emAndamento")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class DemandaOperacionalEmAndamentoRead(BaseModel):
+    """D2-D3A — RegraExpedienteView. Endpoint dedicado, não o resumo acima: `emAndamento`
+    não depende de período, e essa tela nunca teve conceito de período — ver
+    `DemandaRepository.count_em_andamento_operacional`."""
+
+    em_andamento: int = Field(alias="emAndamento")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class DemandaResumoDepartamentoRead(BaseModel):
     """D2-B5 — indicadores de MeuDepartamentoView, agregados no servidor sobre o universo
     INTEGRAL do departamento (nunca a página filtrada). Não inclui `horasConsumidas`

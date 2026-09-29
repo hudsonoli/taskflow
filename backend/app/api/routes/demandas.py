@@ -12,6 +12,7 @@ from app.core.escopo import (
 )
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
+from app.dependencies.authorization import require_admin_or_gestor
 from app.dependencies.permissoes import require_demandas_criar, require_permissao
 from app.models.usuario import Usuario
 from app.repositories.demanda_repository import OrigemDemanda, SortDemandas
@@ -21,11 +22,13 @@ from app.schemas.demanda import (
     DemandaConclusaoEmailRegistrar,
     DemandaCreate,
     DemandaDiretorioRead,
+    DemandaOperacionalEmAndamentoRead,
     DemandaPrioridade,
     DemandaRead,
     DemandaResumoAtendimentoRead,
     DemandaResumoDepartamentoRead,
     DemandaResumoMinhaHomeRead,
+    DemandaResumoOperacionalRead,
     DemandaUpdate,
 )
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
@@ -343,6 +346,43 @@ def resumo_minha_home(
         ontem_fim=_normalize_datetime(ontem_fim),
     )
     return DemandaResumoMinhaHomeRead.model_validate(resumo)
+
+
+@router.get("/operacional/resumo", response_model=DemandaResumoOperacionalRead)
+def resumo_operacional(
+    periodo_inicio: datetime = Query(..., alias="periodoInicio"),
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    """D2-D3A — Central de Tráfego (`TrafegoIndicadoresDemandas`). Autorização própria,
+    real no backend — `require_admin_or_gestor` (`perfil_base in {"admin","gestor"}`),
+    **não** apenas `require_permissao("demandas.visualizar")`: operador autenticado recebe
+    403, nunca um resumo escopado parcial (política congelada do diagnóstico D2-D3 —
+    Tráfego já exige exatamente este mesmo conjunto de perfis para `GET
+    /sessoes-trabalho`, via `require_trafego_gerenciar`).
+
+    Escopo: `_escopo(db, current_user)` default, sem override — para quem passa no gate
+    acima (sempre admin/gestor), isso resolve `visao_total=True` pelo mecanismo normal, não
+    por hardcode aqui. `periodoInicio` é "desde quando", sem teto — mesma semântica de
+    `periodoParaDataInicio` no frontend (hoje/24h/7d/30d)."""
+    escopo = _escopo(db, current_user)
+    resumo = demanda_service.resumo_operacional(
+        db, escopo=escopo, periodo_inicio=_normalize_datetime(periodo_inicio)
+    )
+    return DemandaResumoOperacionalRead.model_validate(resumo)
+
+
+@router.get("/operacional/em-andamento", response_model=DemandaOperacionalEmAndamentoRead)
+def em_andamento_operacional(
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    """D2-D3A — RegraExpedienteView. Mesma autorização/escopo de `resumo_operacional`
+    acima, endpoint dedicado porque `emAndamento` não depende de período — ver
+    `DemandaRepository.count_em_andamento_operacional`."""
+    escopo = _escopo(db, current_user)
+    total = demanda_service.count_em_andamento_operacional(db, escopo=escopo)
+    return DemandaOperacionalEmAndamentoRead(em_andamento=total)
 
 
 @router.get("/por-ids", response_model=list[DemandaDiretorioRead])

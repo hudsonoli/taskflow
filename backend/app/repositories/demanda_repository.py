@@ -619,6 +619,100 @@ class DemandaRepository:
         resultado = db.execute(statement).one()
         return dict(resultado._mapping)
 
+    def _universo_operacional_ids(self, escopo: EscopoDemanda):
+        """Universo compartilhado por `resumo_operacional`/`count_em_andamento_operacional`
+        (D2-D3A) — empresa + escopo normal (default, sem override) + exclusão de arquivada.
+        Quem chega a essas duas consultas já é admin/gestor (gate na rota) e portanto tem
+        `visao_total` no escopo default — isso não é hardcoded aqui, é consequência do
+        mesmo `_predicado_escopo` usado por `list()`."""
+        universo_ids = select(Demanda.id).where(Demanda.empresa_id == escopo.empresa_id)
+        predicado = self._predicado_escopo(escopo)
+        if predicado is not None:
+            universo_ids = universo_ids.where(predicado)
+        return universo_ids.where(Demanda.status != STATUS_ARQUIVADO)
+
+    def resumo_operacional(
+        self, db: Session, *, escopo: EscopoDemanda, periodo_inicio: datetime
+    ) -> dict[str, float | int]:
+        """D2-D3A — os 7 indicadores baseados em Demanda da Central de Tráfego
+        (`TrafegoIndicadoresDemandas`), sobre o universo INTEGRAL permitido — nunca as 200
+        demandas globais de `AppDataContext`. NÃO inclui horas executadas (`SessaoTrabalho`,
+        fonte separada — D2-D3B trata o cap de sessões, não este método).
+
+        `periodo_inicio` é "desde quando", sem teto — mesma semântica de
+        `periodoParaDataInicio` no frontend (hoje/24h/7d/30d são todas janelas abertas até
+        agora, nunca um intervalo fechado)."""
+        zero: dict[str, float | int] = {
+            "internas": 0,
+            "clientes": 0,
+            "recebidas": 0,
+            "concluidas_no_periodo": 0,
+            "horas_estimadas": 0.0,
+            "total_na_base": 0,
+            "em_andamento": 0,
+        }
+        if escopo.vazio:
+            return zero
+
+        universo_ids = self._universo_operacional_ids(escopo)
+
+        contadores_statement = (
+            select(
+                func.count(case((Demanda.cliente_id.is_(None), 1))).label("internas"),
+                func.count(case((Demanda.cliente_id.is_not(None), 1))).label("clientes"),
+                func.count(case((Demanda.created_at >= periodo_inicio, 1))).label("recebidas"),
+                func.count(
+                    case((and_(Demanda.status == "concluida", Demanda.updated_at >= periodo_inicio), 1))
+                ).label("concluidas_no_periodo"),
+                func.count().label("total_na_base"),
+                func.count(case((Demanda.status == "em_execucao", 1))).label("em_andamento"),
+            )
+            .select_from(Demanda)
+            .where(Demanda.id.in_(universo_ids))
+        )
+        contadores = db.execute(contadores_statement).one()
+
+        # Mesma técnica de `resumo_departamento` (D2-B5): soma TODAS as etapas de workflow,
+        # convertendo unidade≠"horas" para horas ×24. Sem filtro de status/período — uma
+        # demanda concluída ou antiga continua contribuindo (fiel ao frontend, que soma sobre
+        # `demandas` inteiro em `TrafegoIndicadoresDemandas.tsx`, sem nenhum desses filtros).
+        horas_por_etapa = case(
+            (DemandaWorkflowEtapa.unidade_prazo == "horas", DemandaWorkflowEtapa.quantidade_antes_deadline),
+            else_=DemandaWorkflowEtapa.quantidade_antes_deadline * 24,
+        )
+        horas_totais_statement = (
+            select(func.coalesce(func.sum(horas_por_etapa), 0))
+            .select_from(DemandaWorkflowEtapa)
+            .where(DemandaWorkflowEtapa.demanda_id.in_(universo_ids))
+        )
+        horas_estimadas = db.execute(horas_totais_statement).scalar_one()
+
+        return {
+            "internas": contadores.internas,
+            "clientes": contadores.clientes,
+            "recebidas": contadores.recebidas,
+            "concluidas_no_periodo": contadores.concluidas_no_periodo,
+            "horas_estimadas": float(horas_estimadas),
+            "total_na_base": contadores.total_na_base,
+            "em_andamento": contadores.em_andamento,
+        }
+
+    def count_em_andamento_operacional(self, db: Session, *, escopo: EscopoDemanda) -> int:
+        """D2-D3A — RegraExpedienteView. Endpoint dedicado, não o resumo completo acima:
+        `emAndamento` não depende de período nenhum (é filtro de status puro), e forçar essa
+        tela — que nunca teve conceito de período — a inventar um `periodoInicio` só para
+        satisfazer o contrato do Tráfego seria um parâmetro decorativo, não uma necessidade
+        real. Mesmo universo (`_universo_operacional_ids`), 1 COUNT."""
+        if escopo.vazio:
+            return 0
+        statement = (
+            select(func.count())
+            .select_from(Demanda)
+            .where(Demanda.id.in_(self._universo_operacional_ids(escopo)))
+            .where(Demanda.status == "em_execucao")
+        )
+        return db.execute(statement).scalar_one()
+
     def resumo_departamento(
         self, db: Session, *, escopo: EscopoDemanda, departamento_id: str, horas_uteis_hoje: float
     ) -> dict[str, float | int]:
