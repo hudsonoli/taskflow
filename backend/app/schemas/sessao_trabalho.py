@@ -96,3 +96,16 @@ class SessaoTrabalhoHorasRead(BaseModel):
     sessoes_consideradas: int = Field(alias="sessoesConsideradas")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class SessaoTrabalhoTrafegoResumoRead(BaseModel):
+    """D2-D3B — "Horas executadas" da Central de Tráfego (`/trafego/resumo`), agregado no
+    servidor sobre o universo INTEGRAL permitido — nunca a listagem paginada de
+    `GET /sessoes-trabalho` (cap de 100 no cliente). Contrato mínimo, de propósito: sem
+    `sessoesConsideradas`/`departamentoId` — só o número que este endpoint é responsável por
+    fornecer. Não confundir com `SessaoTrabalhoHorasRead` (`/horas`): escopo, RBAC e
+    semântica de período são diferentes, ver `SessaoTrabalhoRepository.resumo_trafego`."""
+
+    horas_executadas: float = Field(alias="horasExecutadas")
+
+    model_config = ConfigDict(populate_by_name=True)

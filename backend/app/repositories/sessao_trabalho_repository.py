@@ -144,3 +144,44 @@ class SessaoTrabalhoRepository:
         ).one()
         horas_consumidas = float(resultado.segundos_totais) / 3600
         return horas_consumidas, int(resultado.sessoes_consideradas)
+
+    def resumo_trafego(
+        self, db: Session, *, empresa_id: str, periodo_inicio: datetime
+    ) -> float:
+        """D2-D3B — "Horas executadas" da Central de Tráfego, sobre o universo INTEGRAL da
+        empresa (sem departamento/usuário) — nunca a listagem paginada de sessões (cap de
+        100 no cliente). Técnica de duração igual a `horas_departamento` (acima), mas
+        universo e filtro de período são DIFERENTES — não é uma chamada àquele método:
+
+        - `cancelada` é excluída estruturalmente (`horas_departamento` não filtra status,
+          `resumo_trafego` precisa);
+        - `ativa` sempre entra, SEM filtro de período — reproduz `elapsedSeconds` do
+          frontend (`NOW() - inicio_em` inteiro, nunca recortado por `periodo_inicio`);
+        - `encerrada` só entra quando `inicio_em >= periodo_inicio` — mesmo campo/predicado
+          de `SessaoTrabalhoRepository.list` (`data_inicio`), nunca `fim_em`/overlap. Uma
+          sessão que começou antes do período e terminou depois **não conta nada** — não é
+          recortada, é excluída por inteiro. Contraintuitivo, mas é a semântica já congelada
+          do frontend (`listSessoesTrabalho({dataInicio: ...})`), preservada aqui de
+          propósito, não corrigida.
+        """
+        statement = text(
+            """
+            SELECT
+                COALESCE(SUM(
+                    CASE
+                        WHEN s.duracao_segundos IS NOT NULL THEN s.duracao_segundos
+                        ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - s.inicio_em))))
+                    END
+                ), 0) AS segundos_totais
+            FROM sessoes_trabalho s
+            WHERE s.empresa_id = :empresa_id
+              AND (
+                s.status = 'ativa'
+                OR (s.status = 'encerrada' AND s.inicio_em >= :periodo_inicio)
+              )
+            """
+        )
+        resultado = db.execute(
+            statement, {"empresa_id": empresa_id, "periodo_inicio": periodo_inicio}
+        ).one()
+        return float(resultado.segundos_totais) / 3600

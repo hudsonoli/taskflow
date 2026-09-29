@@ -162,6 +162,25 @@ export async function getHorasDepartamento(departamentoId: string): Promise<Hora
   return response.json();
 }
 
+/**
+ * D2-D3B — "Horas executadas" da Central de Tráfego, agregado no servidor sobre o universo
+ * INTEGRAL (empresa inteira, sem departamento) — nunca a listagem paginada de
+ * `listSessoesTrabalho` (cap de 100). `periodoInicio` é "desde quando", sem teto — mesma
+ * semântica de `periodoParaDataInicio` (lib/trafego.ts). Não confundir com
+ * `getHorasDepartamento`: escopo, RBAC e período são diferentes.
+ */
+export async function getResumoTrafegoSessoes(periodoInicio: string): Promise<{ horasExecutadas: number }> {
+  const search = new URLSearchParams({ periodoInicio });
+  const response = await fetch(`${API_PROXY}/sessoes-trabalho/trafego/resumo?${search.toString()}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? "Falha ao carregar horas executadas do Tráfego");
+  }
+  return response.json();
+}
+
 export async function fecharSessaoTrabalho(sessaoId: string, motivoEncerramento: string): Promise<SessaoTrabalho> {
   const response = await fetch(`${API_PROXY}/sessoes-trabalho/${sessaoId}/fechar`, {
     method: "POST",

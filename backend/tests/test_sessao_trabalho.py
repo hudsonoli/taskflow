@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -128,6 +128,7 @@ def _sessao(
     departamento_id: str | None = None,
     status: str = "ativa",
     duracao_segundos: int | None = None,
+    inicio_em: datetime | None = None,
 ) -> SessaoTrabalho:
     """Construída direto pelo ORM (sem passar pelo service) — usada nos testes de invariante
     de schema, onde o que importa é a constraint, não o fluxo de abertura de sessão.
@@ -135,8 +136,11 @@ def _sessao(
     `status="encerrada"` preenche `fim_em`/`evento_fim_id`/`duracao_segundos` sozinha —
     `ck_sessoes_trabalho_encerrada_com_fim` exige os três não-nulos juntos; `duracao_segundos`
     é ajustável para os testes de agregado, default 0 quando só a presença da sessão importa.
+    `inicio_em` (D2-D3B) é ajustável para os testes de boundary/cruzamento de período —
+    default `agora` quando só a presença da sessão importa.
     """
     agora = datetime.now(timezone.utc)
+    inicio = inicio_em if inicio_em is not None else agora
     encerrada = status == "encerrada"
     sessao = SessaoTrabalho(
         id=str(uuid.uuid4()),
@@ -149,7 +153,7 @@ def _sessao(
         status=status,
         created_at=agora,
         updated_at=agora,
-        inicio_em=agora,
+        inicio_em=inicio,
         fim_em=agora if encerrada else None,
         duracao_segundos=(duracao_segundos if duracao_segundos is not None else 0) if encerrada else None,
     )
@@ -615,3 +619,234 @@ def test_horas_departamento_soma_sessao_encerrada_e_ativa(
     corpo = resposta.json()
     assert corpo["sessoesConsideradas"] == 2
     assert corpo["horasConsumidas"] == pytest.approx(2.0, abs=0.02)
+
+
+# --------------------------------------------------------------------------------------
+# Resumo Tráfego (D2-D3B) — GET /sessoes-trabalho/trafego/resumo
+# --------------------------------------------------------------------------------------
+
+_PERIODO_INICIO_TRAFEGO = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _url_resumo_trafego(periodo_inicio: datetime = _PERIODO_INICIO_TRAFEGO) -> str:
+    iso = periodo_inicio.isoformat().replace("+00:00", "Z")
+    return f"/sessoes-trabalho/trafego/resumo?periodoInicio={iso}"
+
+
+def test_resumo_trafego_admin_acessa(app, token_admin: str) -> None:
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.status_code == 200, resposta.text
+
+
+def test_resumo_trafego_gestor_acessa(app, token_gestor: str) -> None:
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_gestor)
+    assert resposta.status_code == 200, resposta.text
+
+
+def test_resumo_trafego_operador_e_403(app, token_operador: str) -> None:
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_operador)
+    assert resposta.status_code == 403, resposta.text
+
+
+def test_resumo_trafego_tenant_isolado(app, db_session: Session, token_admin: str) -> None:
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-D3B",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    _sessao(
+        db_session,
+        outra_empresa,
+        status="encerrada",
+        duracao_segundos=3600,
+        inicio_em=_PERIODO_INICIO_TRAFEGO,
+    )
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == 0.0
+
+
+def test_resumo_trafego_sem_sessoes_e_zero(app, token_admin: str) -> None:
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["horasExecutadas"] == 0.0
+
+
+def test_resumo_trafego_uma_encerrada_dentro_do_periodo(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    _sessao(
+        db_session,
+        empresa,
+        status="encerrada",
+        duracao_segundos=3600,
+        inicio_em=_PERIODO_INICIO_TRAFEGO + timedelta(hours=1),
+    )
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == pytest.approx(1.0)
+
+
+def test_resumo_trafego_varias_encerradas_somam(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    for _ in range(3):
+        _sessao(
+            db_session,
+            empresa,
+            status="encerrada",
+            duracao_segundos=1800,
+            inicio_em=_PERIODO_INICIO_TRAFEGO + timedelta(hours=1),
+        )
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == pytest.approx(1.5)
+
+
+def test_resumo_trafego_ativa_iniciada_apos_periodo_conta_desde_inicio(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    agora = datetime.now(timezone.utc)
+    periodo_inicio = agora - timedelta(hours=1)
+    ativa = _sessao(db_session, empresa, status="ativa", inicio_em=agora - timedelta(minutes=30))
+    db_session.flush()
+
+    resposta = get(TestClient(app), _url_resumo_trafego(periodo_inicio), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == pytest.approx(0.5, abs=0.02)
+    assert ativa.id is not None  # só documentando qual é a discriminante
+
+
+def test_resumo_trafego_ativa_iniciada_antes_do_periodo_conta_integralmente(
+    app, db_session: Session, empresa: Empresa, token_admin: str
+) -> None:
+    """CRÍTICO: NÃO recorta a duração em `periodoInicio` — conta desde o início REAL da
+    sessão, mesmo que seja anterior ao período (mesma semântica de `elapsedSeconds` no
+    frontend, que nunca aplica `GREATEST(inicio_em, periodoInicio)`)."""
+    agora = datetime.now(timezone.utc)
+    periodo_inicio = agora - timedelta(hours=1)
+    _sessao(db_session, empresa, status="ativa", inicio_em=agora - timedelta(hours=3))
+
+    resposta = get(TestClient(app), _url_resumo_trafego(periodo_inicio), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == pytest.approx(3.0, abs=0.02)
+
+
+def test_resumo_trafego_encerrada_cruzando_inicio_do_periodo_nao_conta(
+    app, db_session: Session, empresa: Empresa, token_admin: str
+) -> None:
+    """Contraintuitivo, mas é a semântica atual congelada: `inicio_em >= periodoInicio` —
+    uma sessão que começou ANTES do período e terminou DEPOIS não é recortada, é excluída
+    por inteiro. Não "corrigir" aqui."""
+    _sessao(
+        db_session,
+        empresa,
+        status="encerrada",
+        duracao_segundos=3600,
+        inicio_em=_PERIODO_INICIO_TRAFEGO - timedelta(minutes=30),
+    )
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == 0.0
+
+
+def test_resumo_trafego_encerrada_totalmente_antes_nao_conta(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    _sessao(
+        db_session,
+        empresa,
+        status="encerrada",
+        duracao_segundos=1800,
+        inicio_em=_PERIODO_INICIO_TRAFEGO - timedelta(hours=2),
+    )
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == 0.0
+
+
+def test_resumo_trafego_boundary_inicio_igual_periodo_conta(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    _sessao(
+        db_session,
+        empresa,
+        status="encerrada",
+        duracao_segundos=900,
+        inicio_em=_PERIODO_INICIO_TRAFEGO,
+    )
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == pytest.approx(0.25)
+
+
+def test_resumo_trafego_cancelada_nunca_conta(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    # `_sessao` só marca `duracao_segundos` quando status == "encerrada" — ajustamos direto
+    # no objeto pra simular uma cancelada com duração persistida (cenário mais rigoroso: se
+    # a exclusão de status não existisse, isso seria contado).
+    cancelada = _sessao(db_session, empresa, status="ativa", inicio_em=_PERIODO_INICIO_TRAFEGO)
+    cancelada.status = "cancelada"
+    cancelada.duracao_segundos = 7200
+    db_session.flush()
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == 0.0
+
+
+def test_resumo_trafego_sem_paginacao(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    """Prova conceitual do cap 100: cria mais sessões do que um `limit` pequeno cobriria e
+    confirma que a soma agregada inclui TODAS — a nova rota nunca pagina."""
+    for _ in range(5):
+        _sessao(
+            db_session,
+            empresa,
+            status="encerrada",
+            duracao_segundos=3600,
+            inicio_em=_PERIODO_INICIO_TRAFEGO + timedelta(hours=1),
+        )
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == pytest.approx(5.0)
+
+
+def test_resumo_trafego_uma_query_estrutural(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    """Mesma técnica de `test_criacao_com_projeto_compativel_nao_gera_segunda_consulta_a_projetos`
+    (test_d1_2a_cliente_projeto.py): prova por contagem real de SQL que a agregação é 1
+    consulta, nunca uma varredura de página."""
+    for _ in range(4):
+        _sessao(
+            db_session,
+            empresa,
+            status="encerrada",
+            duracao_segundos=1800,
+            inicio_em=_PERIODO_INICIO_TRAFEGO + timedelta(hours=1),
+        )
+
+    chamadas: list[str] = []
+
+    def _contar(conn, cursor, statement, parameters, context, executemany):
+        if "FROM sessoes_trabalho" in statement:
+            chamadas.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", _contar)
+    try:
+        resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    finally:
+        event.remove(engine, "before_cursor_execute", _contar)
+
+    assert resposta.status_code == 200, resposta.text
+    assert len(chamadas) == 1, f"esperada exatamente 1 consulta a sessoes_trabalho, houve {len(chamadas)}"
+
+
+def test_resumo_trafego_precisao_fracionaria(app, db_session: Session, empresa: Empresa, token_admin: str) -> None:
+    _sessao(
+        db_session,
+        empresa,
+        status="encerrada",
+        duracao_segundos=5400,
+        inicio_em=_PERIODO_INICIO_TRAFEGO + timedelta(hours=1),
+    )
+
+    resposta = get(TestClient(app), _url_resumo_trafego(), token=token_admin)
+    assert resposta.json()["horasExecutadas"] == pytest.approx(1.5)
+
+
+def test_resumo_trafego_periodo_naive_e_422(app, token_admin: str) -> None:
+    resposta = get(TestClient(app), "/sessoes-trabalho/trafego/resumo?periodoInicio=2026-05-01T12:00:00", token=token_admin)
+    assert resposta.status_code == 422, resposta.text

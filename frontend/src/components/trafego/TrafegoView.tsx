@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { listSessoesTrabalho } from "@/lib/api";
+import { getResumoTrafegoSessoes, listSessoesTrabalho } from "@/lib/api";
 import { getDemandasPorIds, getResumoOperacional, listDiretorioDemandas, type ResumoOperacional } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
@@ -62,6 +62,12 @@ export function TrafegoView() {
   // "zero confirmado" — nunca fabricado no `TrafegoIndicadoresDemandas`.
   const [resumoOperacional, setResumoOperacional] = useState<ResumoOperacional | null>(null);
   const [erroResumoOperacional, setErroResumoOperacional] = useState<string | null>(null);
+  // D2-D3B — "Horas executadas", agregado no servidor sobre o universo INTEGRAL de
+  // SessaoTrabalho (sem cap de 100) — nunca mais `horasExecutadasPorEscopo(sessoes, {})`.
+  // Estado independente do resumo de Demandas acima: falha de um não afeta o outro.
+  // `horasExecutadas === null` distingue "carregando" de "zero confirmado".
+  const [horasExecutadas, setHorasExecutadas] = useState<number | null>(null);
+  const [erroHorasExecutadas, setErroHorasExecutadas] = useState<string | null>(null);
   const now = useNow(1000);
 
   const carregar = useCallback(async () => {
@@ -111,6 +117,28 @@ export function TrafegoView() {
       .catch((error) => {
         if (!cancelado) {
           setErroResumoOperacional(error instanceof Error ? error.message : "Não foi possível carregar os indicadores.");
+        }
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [filters.periodo]);
+
+  // D2-D3B — "Horas executadas", refeito a cada troca de período (mesma dependência de
+  // `resumoOperacional` acima — o servidor só recebe `periodoInicio`). `cancelado` evita que
+  // uma resposta de um período antigo sobrescreva a mais nova.
+  useEffect(() => {
+    let cancelado = false;
+    getResumoTrafegoSessoes(periodoParaDataInicio[filters.periodo]())
+      .then((resultado) => {
+        if (!cancelado) {
+          setHorasExecutadas(resultado.horasExecutadas);
+          setErroHorasExecutadas(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelado) {
+          setErroHorasExecutadas(error instanceof Error ? error.message : "Não foi possível carregar as horas executadas.");
         }
       });
     return () => {
@@ -198,7 +226,8 @@ export function TrafegoView() {
           <TrafegoIndicadoresDemandas
             resumo={resumoOperacional}
             erro={erroResumoOperacional}
-            sessoes={[...ativasFiltradas, ...encerradasFiltradas]}
+            horasExecutadas={horasExecutadas}
+            erroHorasExecutadas={erroHorasExecutadas}
           />
           <TrafegoAgoraTable
               sessoes={ativasFiltradas}

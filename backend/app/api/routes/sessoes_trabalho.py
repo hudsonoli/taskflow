@@ -35,6 +35,7 @@ from app.schemas.sessao_trabalho import (
     SessaoTrabalhoFechar,
     SessaoTrabalhoHorasRead,
     SessaoTrabalhoRead,
+    SessaoTrabalhoTrafegoResumoRead,
 )
 from app.services.evento_service import EventoService
 from app.services.sessao_trabalho_service import SessaoTrabalhoDepartamentoNaoEncontradoError, SessaoTrabalhoService
@@ -207,6 +208,26 @@ def horas_departamento(
     return SessaoTrabalhoHorasRead(
         departamento_id=str(departamento_id), horas_consumidas=horas, sessoes_consideradas=sessoes
     )
+
+
+@router.get("/trafego/resumo", response_model=SessaoTrabalhoTrafegoResumoRead)
+def resumo_trafego(
+    periodo_inicio: datetime = Query(..., alias="periodoInicio"),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
+    db: Session = Depends(get_db),
+):
+    """D2-D3B — "Horas executadas" da Central de Tráfego. Registrada ANTES de
+    `/{sessao_id}` (mesmo motivo de `/horas`: sem isso, `trafego` casaria com o path param
+    UUID). Mesmo piso de autorização de `GET /sessoes-trabalho` — `require_trafego_gerenciar`
+    (`perfil_base in {"admin","gestor"}`, nunca liberado a operador mesmo com concessão
+    granular) — não o mais permissivo `pode_consultar_horas_departamento` de `/horas`.
+
+    `periodoInicio` obrigatório, timezone-aware (naive → 422). Sem `periodoFim`: mesma
+    semântica de `dataInicio` em `list_sessoes_trabalho` acima."""
+    horas = sessao_service.resumo_trafego(
+        db, empresa_id=current_user.empresa_id, periodo_inicio=normalize_datetime(periodo_inicio)
+    )
+    return SessaoTrabalhoTrafegoResumoRead(horas_executadas=horas)
 
 
 @router.get("/{sessao_id}", response_model=SessaoTrabalhoRead)
