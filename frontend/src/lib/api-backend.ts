@@ -1475,6 +1475,10 @@ export async function listDemandasReais(params?: {
   // D2-B5: período "Atrasadas" — `!finalizada && prazo IS NOT NULL && prazo < agora`,
   // mesma fórmula do resumo de Atendimento (D2-B4), agora também filtrável na lista.
   atrasada?: boolean;
+  // D2-D1 (NotificationBell): `status NOT IN (concluida, cancelada)` — não reabre arquivada
+  // (independente da exclusão default de arquivada, que já vale quando `status` não é
+  // passado explicitamente).
+  naoFinalizada?: boolean;
 }): Promise<Demanda[]> {
   const query = new URLSearchParams({ limit: String(params?.limit ?? 200) });
   if (params?.offset) query.set("offset", String(params.offset));
@@ -1492,6 +1496,7 @@ export async function listDemandasReais(params?: {
   if (params?.prioridade) query.set("prioridade", params.prioridade);
   if (params?.origem) query.set("origem", params.origem);
   if (params?.atrasada) query.set("atrasada", "true");
+  if (params?.naoFinalizada) query.set("naoFinalizada", "true");
   const data = await request<DemandaReadApi[]>(`/demandas?${query.toString()}`);
   return data.map(mapDemandaReadToDemanda);
 }

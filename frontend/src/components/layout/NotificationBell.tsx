@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, ClipboardList } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { listDemandasReais } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
-import { demandaTemResponsavel } from "@/lib/demandas";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
 
@@ -18,8 +17,7 @@ import type { Demanda } from "@/types/demanda";
 type TarefaNotificacao = { tipo: "tarefa"; demanda: Demanda };
 
 export function NotificationBell() {
-  const { demandas, usuarioAtual, setDemandaParaAbrir } = useAppData();
-  const { usuarios: diretorio } = useDiretorioUsuarios();
+  const { usuarioAtual, setDemandaParaAbrir } = useAppData();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -34,18 +32,29 @@ export function NotificationBell() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const tarefasAtribuidas = useMemo<TarefaNotificacao[]>(() => {
-    if (!usuarioAtual) return [];
-    return demandas
-      .filter(
-        (demanda) =>
-          demandaTemResponsavel(demanda, usuarioAtual.id, diretorio) &&
-          demanda.status !== "concluida" &&
-          demanda.status !== "cancelada",
-      )
-      .slice(0, 5)
-      .map((demanda) => ({ tipo: "tarefa", demanda }));
-  }, [demandas, usuarioAtual, diretorio]);
+  // D2-D1 — deixa de depender de `AppDataContext.demandas` (até 200 mais recentes da
+  // empresa, não do usuário): uma demanda aberta atribuída a este usuário, mas fora dessa
+  // janela global, nunca aparecia aqui. Filtro e `limit=5` agora são server-side
+  // (`responsavelId` + `naoFinalizada`, ambos já existentes/reaproveitados) — nunca busca 200
+  // pra cortar em 5 no cliente. Sem polling: recarrega quando `usuarioAtual.id` muda (login),
+  // não em resposta a mutations em outras telas — esta onda corrige completude, não
+  // real-time.
+  const [tarefasAtribuidas, setTarefasAtribuidas] = useState<TarefaNotificacao[]>([]);
+  useEffect(() => {
+    if (!usuarioAtual) return;
+    let cancelado = false;
+    listDemandasReais({ responsavelId: usuarioAtual.id, naoFinalizada: true, limit: 5 })
+      .then((demandas) => {
+        if (!cancelado) setTarefasAtribuidas(demandas.map((demanda) => ({ tipo: "tarefa" as const, demanda })));
+      })
+      .catch(() => {
+        // Falha de rede não deve derrubar a navbar — degrada em silêncio (sem notificação
+        // exibida), sem toast global novo.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [usuarioAtual]);
 
   const totalNotificacoes = tarefasAtribuidas.length;
 

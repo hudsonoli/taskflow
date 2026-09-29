@@ -2613,3 +2613,173 @@ def test_por_ids_inexistente_outra_empresa_e_fora_do_escopo_sao_indistinguiveis(
         resposta = client_operador.get(f"/demandas/por-ids?ids={id_testado}")
         assert resposta.status_code == 200
         assert resposta.json() == []
+
+
+# --------------------------------------------------------------------------------------
+# naoFinalizada (D2-D1) — GET /demandas?naoFinalizada=
+# --------------------------------------------------------------------------------------
+
+
+def test_nao_finalizada_inclui_todos_os_status_abertos(
+    client_admin: TestClient, usuario_operador: Usuario
+) -> None:
+    status_abertos = ("rascunho", "planejada", "em_execucao", "pausada", "bloqueada", "aguardando_cliente")
+    ids_esperados = {
+        _criar(
+            client_admin,
+            status=status,
+            usuarioResponsavelIds=[usuario_operador.id],
+            **({"motivoBloqueio": "Falta arte"} if status == "bloqueada" else {}),
+        )["id"]
+        for status in status_abertos
+    }
+
+    achados = client_admin.get(
+        f"/demandas?responsavelId={usuario_operador.id}&naoFinalizada=true&limit=200"
+    ).json()
+
+    assert {d["id"] for d in achados} == ids_esperados
+
+
+def test_nao_finalizada_exclui_concluida(client_admin: TestClient, usuario_operador: Usuario) -> None:
+    _criar(client_admin, status="concluida", usuarioResponsavelIds=[usuario_operador.id])
+    achados = client_admin.get(f"/demandas?responsavelId={usuario_operador.id}&naoFinalizada=true").json()
+    assert achados == []
+
+
+def test_nao_finalizada_exclui_cancelada(client_admin: TestClient, usuario_operador: Usuario) -> None:
+    _criar(client_admin, status="cancelada", usuarioResponsavelIds=[usuario_operador.id])
+    achados = client_admin.get(f"/demandas?responsavelId={usuario_operador.id}&naoFinalizada=true").json()
+    assert achados == []
+
+
+def test_nao_finalizada_exclui_arquivada(client_admin: TestClient, usuario_operador: Usuario) -> None:
+    """`naoFinalizada=true` não deve reabrir arquivada — a exclusão default (sem `status=`
+    explícito) continua valendo, independente deste filtro."""
+    criada = _criar(client_admin, usuarioResponsavelIds=[usuario_operador.id])
+    client_admin.post(f"/demandas/{criada['id']}/arquivar", json={"motivoArquivamento": "Motivo"})
+
+    achados = client_admin.get(f"/demandas?responsavelId={usuario_operador.id}&naoFinalizada=true").json()
+    assert achados == []
+
+
+def test_nao_finalizada_combina_com_responsavel_id(
+    client_admin: TestClient, usuario_operador: Usuario
+) -> None:
+    minha = _criar(client_admin, status="em_execucao", usuarioResponsavelIds=[usuario_operador.id])
+    _criar(client_admin, status="em_execucao")  # de outro responsável — não deve aparecer
+
+    achados = client_admin.get(f"/demandas?responsavelId={usuario_operador.id}&naoFinalizada=true").json()
+    assert [d["id"] for d in achados] == [minha["id"]]
+
+
+def test_nao_finalizada_aplica_filtro_antes_do_limit(
+    client_admin: TestClient, usuario_operador: Usuario
+) -> None:
+    """`limit` pequeno não pode cortar ANTES do filtro `naoFinalizada` — senão uma demanda
+    concluída recente ocuparia vaga de uma aberta mais antiga."""
+    for _ in range(3):
+        _criar(client_admin, status="concluida", usuarioResponsavelIds=[usuario_operador.id])
+    abertas = {
+        _criar(client_admin, status="em_execucao", usuarioResponsavelIds=[usuario_operador.id])["id"]
+        for _ in range(4)
+    }
+
+    achados = client_admin.get(
+        f"/demandas?responsavelId={usuario_operador.id}&naoFinalizada=true&limit=5"
+    ).json()
+
+    assert {d["id"] for d in achados} == abertas
+
+
+def test_status_explicito_concluida_com_nao_finalizada_devolve_vazio(
+    client_admin: TestClient, usuario_operador: Usuario
+) -> None:
+    """AND puro, não "corrigido": combinação contraditória devolve vazio por construção."""
+    _criar(client_admin, status="concluida", usuarioResponsavelIds=[usuario_operador.id])
+    achados = client_admin.get(
+        f"/demandas?responsavelId={usuario_operador.id}&status=concluida&naoFinalizada=true"
+    ).json()
+    assert achados == []
+
+
+def test_nao_finalizada_outra_empresa_nao_aparece(
+    client_admin: TestClient, db_session: Session, usuario_operador: Usuario
+) -> None:
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-D1",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26999001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=999001,
+        nome="Intrusa",
+        status="em_execucao",
+        prioridade="media",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.add(
+        DemandaResponsavel(demanda_id=intrusa.id, usuario_id=usuario_operador.id, created_at=agora)
+    )
+    db_session.flush()
+
+    achados = client_admin.get(f"/demandas?responsavelId={usuario_operador.id}&naoFinalizada=true").json()
+    assert achados == []
+
+
+def test_nao_finalizada_fora_do_escopo_nao_aparece(
+    client_operador: TestClient, client_admin: TestClient
+) -> None:
+    """Operador sem relação nenhuma com a demanda — `responsavelId` é filtro funcional, não
+    amplia o escopo de quem está pedindo."""
+    alheia = _criar(client_admin, status="em_execucao")
+    achados = client_operador.get(f"/demandas?responsavelId={alheia['id']}&naoFinalizada=true").json()
+    assert achados == []
+
+
+def test_nao_finalizada_ausente_preserva_comportamento_anterior(
+    client_admin: TestClient, usuario_operador: Usuario
+) -> None:
+    """Sem o parâmetro (default False), concluída continua aparecendo — nenhum caller
+    existente muda de comportamento."""
+    concluida = _criar(client_admin, status="concluida", usuarioResponsavelIds=[usuario_operador.id])
+    achados = client_admin.get(f"/demandas?responsavelId={usuario_operador.id}").json()
+    assert [d["id"] for d in achados] == [concluida["id"]]
+
+
+def test_nao_finalizada_boolean_invalido_e_422(client_admin: TestClient) -> None:
+    resposta = client_admin.get("/demandas?naoFinalizada=nao-e-boolean")
+    assert resposta.status_code == 422, resposta.text
+
+
+def test_nao_finalizada_encontra_item_alem_de_janela_pequena(
+    client_admin: TestClient, usuario_operador: Usuario
+) -> None:
+    """Prova conceitual do bug do NotificationBell: a demanda do usuário é criada PRIMEIRO
+    (mais antiga, ficaria fora de uma janela pequena global por `numero_operacional_desc`),
+    e um ruído mais recente e maior que o limit é criado depois. Com `responsavelId` +
+    `naoFinalizada` + `limit` pequeno aplicados no servidor, ela continua aparecendo — ao
+    contrário do que acontecia lendo só os N mais recentes de `AppDataContext.demandas`."""
+    minha = _criar(client_admin, status="em_execucao", usuarioResponsavelIds=[usuario_operador.id])
+    for _ in range(5):
+        _criar(client_admin, status="em_execucao")  # ruído, criado depois — mais recente
+
+    achados = client_admin.get(
+        f"/demandas?responsavelId={usuario_operador.id}&naoFinalizada=true&limit=5"
+    ).json()
+
+    assert [d["id"] for d in achados] == [minha["id"]]

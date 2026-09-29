@@ -263,6 +263,7 @@ class DemandaRepository:
         prazo_inicio: datetime | None = None,
         prazo_fim: datetime | None = None,
         atrasada: bool = False,
+        nao_finalizada: bool = False,
         sort: SortDemandas = SortDemandas.NUMERO_OPERACIONAL_DESC,
         limit: int = 50,
         offset: int = 0,
@@ -354,6 +355,16 @@ class DemandaRepository:
             # (AND), não é "corrigido" aqui — preserva a UI atual.
             finalizada, prazo_vencido = self._finalizada_e_prazo_vencido(agora_utc())
             statement = statement.where(and_(~finalizada, prazo_vencido))
+
+        if nao_finalizada:
+            # D2-D1 (NotificationBell): "aberta" para quem é responsável — reaproveita
+            # `_STATUS_FINALIZADOS` (mesma constante de `atrasada`/`resumo_*`), nunca um
+            # literal `("concluida", "cancelada")` novo. Independente de `status=` (AND puro):
+            # `status=concluida&naoFinalizada=true` devolve vazio por construção, não é
+            # "corrigido" aqui. Independente também da exclusão de arquivada acima — arquivada
+            # já está fora quando `status` não é passado explicitamente; este filtro não a
+            # reintroduz nem duplica essa exclusão.
+            statement = statement.where(Demanda.status.not_in(self._STATUS_FINALIZADOS))
 
         # A decisão "isto é texto, documento ou número?" mora INTEIRA em app/core/busca.py.
         # Este repository não extrai dígitos nem decide nada sobre o termo — reimplementar a
