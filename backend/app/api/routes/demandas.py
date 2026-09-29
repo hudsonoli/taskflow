@@ -25,6 +25,7 @@ from app.schemas.demanda import (
     DemandaRead,
     DemandaResumoAtendimentoRead,
     DemandaResumoDepartamentoRead,
+    DemandaResumoMinhaHomeRead,
     DemandaUpdate,
 )
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
@@ -305,6 +306,43 @@ def resumo_meu_departamento(
         db, escopo=escopo, departamento_id=str(departamento_id), empresa_id=current_user.empresa_id
     )
     return DemandaResumoDepartamentoRead.model_validate(resumo)
+
+
+@router.get("/minha-home/resumo", response_model=DemandaResumoMinhaHomeRead)
+def resumo_minha_home(
+    agora: datetime = Query(...),
+    hoje_inicio: datetime = Query(..., alias="hojeInicio"),
+    hoje_fim: datetime = Query(..., alias="hojeFim"),
+    semana_inicio: datetime = Query(..., alias="semanaInicio"),
+    semana_fim: datetime = Query(..., alias="semanaFim"),
+    ontem_inicio: datetime = Query(..., alias="ontemInicio"),
+    ontem_fim: datetime = Query(..., alias="ontemFim"),
+    current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
+    db: Session = Depends(get_db),
+):
+    """D2-D2 — os 11 indicadores do Dashboard pessoal (`/meu-dia`), sobre o universo INTEGRAL
+    permitido do usuário (escopo normal AND responsável N:N == `current_user.id`) — nunca as
+    200 demandas globais de `AppDataContext`. Sem restrição de perfil: qualquer usuário com
+    `demandas.visualizar` recebe o PRÓPRIO resumo, nunca 403 (diferente de
+    `/minhas/resumo`/`/meu-departamento/resumo`, que exigem Atendimento/Head — aqui não há
+    recorte de papel, só "sou responsável").
+
+    Todas as fronteiras temporais são obrigatórias e vêm do cliente (mesma fotografia de
+    `new Date()`, ver DashboardView.tsx) — esta rota não calcula "hoje"/"ontem"/"semana"."""
+    escopo = _escopo(db, current_user)
+    resumo = demanda_service.resumo_minha_home(
+        db,
+        escopo=escopo,
+        usuario_id=current_user.id,
+        agora=_normalize_datetime(agora),
+        hoje_inicio=_normalize_datetime(hoje_inicio),
+        hoje_fim=_normalize_datetime(hoje_fim),
+        semana_inicio=_normalize_datetime(semana_inicio),
+        semana_fim=_normalize_datetime(semana_fim),
+        ontem_inicio=_normalize_datetime(ontem_inicio),
+        ontem_fim=_normalize_datetime(ontem_fim),
+    )
+    return DemandaResumoMinhaHomeRead.model_validate(resumo)
 
 
 @router.get("/por-ids", response_model=list[DemandaDiretorioRead])

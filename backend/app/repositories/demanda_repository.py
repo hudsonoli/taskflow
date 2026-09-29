@@ -33,10 +33,14 @@ DIAS_UTEIS_SEMANA = 5
 
 class SortDemandas(StrEnum):
     """Ordenação de `list()` — D2-B3. Default preserva o comportamento de todo caller
-    existente (DemandasView, ProjetoDemandasSection); `PRAZO_ASC` é usado pela Pauta."""
+    existente (DemandasView, ProjetoDemandasSection); `PRAZO_ASC` é usado pela Pauta.
+    `SINALIZADA_DESC` (D2-D2) é o Dashboard pessoal — reproduz o `.sort()` estável do
+    frontend pré-migração (sinalizada primeiro, resto na ordem de chegada), agora explícito
+    como desempate."""
 
     NUMERO_OPERACIONAL_DESC = "numero_operacional_desc"
     PRAZO_ASC = "prazo_asc"
+    SINALIZADA_DESC = "sinalizada_desc"
 
 
 class OrigemDemanda(StrEnum):
@@ -410,6 +414,11 @@ class DemandaRepository:
             statement = statement.order_by(
                 Demanda.prazo_etapa_atual.asc().nulls_last(), Demanda.numero_operacional.desc()
             )
+        elif sort == SortDemandas.SINALIZADA_DESC:
+            # D2-D2 (Dashboard pessoal): mesmo motivo de desempate do PRAZO_ASC acima.
+            statement = statement.order_by(
+                Demanda.sinalizada.desc(), Demanda.numero_operacional.desc()
+            )
         else:
             statement = statement.order_by(Demanda.numero_operacional.desc())
 
@@ -490,6 +499,122 @@ class DemandaRepository:
         if predicado is not None:
             statement = statement.where(predicado)
         statement = statement.where(Demanda.status != STATUS_ARQUIVADO)
+
+        resultado = db.execute(statement).one()
+        return dict(resultado._mapping)
+
+    def resumo_minha_home(
+        self,
+        db: Session,
+        *,
+        escopo: EscopoDemanda,
+        usuario_id: str,
+        agora: datetime,
+        hoje_inicio: datetime,
+        hoje_fim: datetime,
+        semana_inicio: datetime,
+        semana_fim: datetime,
+        ontem_inicio: datetime,
+        ontem_fim: datetime,
+    ) -> dict[str, int]:
+        """D2-D2 — os 11 indicadores do Dashboard pessoal (`/meu-dia`), sobre o universo
+        INTEGRAL permitido: escopo normal (`_predicado_escopo`, o MESMO de `list()` sem
+        override) **AND** responsável N:N == `usuario_id` — nunca `empresa_id` + responsável
+        isolados, o que ampliaria acesso para quem tem escopo normal mais restrito que "toda
+        demanda onde é responsável". Sem restrição de perfil: qualquer usuário com
+        `demandas.visualizar` chega até aqui, igual à listagem.
+
+        Todas as fronteiras temporais vêm do cliente, calculadas a partir de UMA única
+        referência (`new Date()` em DashboardView.tsx) — este método não recalcula
+        "hoje"/"ontem"/"semana", mesma razão de `prazoInicio`/`prazoFim` em `list()`.
+        """
+        zero: dict[str, int] = {
+            "ativas": 0,
+            "novas": 0,
+            "andamento": 0,
+            "pausadas": 0,
+            "aguardando": 0,
+            "atrasadas": 0,
+            "concluidas": 0,
+            "previstas_hoje": 0,
+            "previstas_semana": 0,
+            "concluidas_semana": 0,
+            "concluidas_ontem": 0,
+        }
+        if escopo.vazio:
+            return zero
+
+        finalizada, prazo_vencido = self._finalizada_e_prazo_vencido(agora)
+        prazo_valido = Demanda.prazo_etapa_atual.is_not(None)
+
+        statement = (
+            select(
+                # ativas = !finalizada (concluída/cancelada) — mesma expressão, sem repetir o
+                # literal ("concluida", "cancelada") fora de `_STATUS_FINALIZADOS`.
+                func.count(case((~finalizada, 1))).label("ativas"),
+                func.count(case((Demanda.status.in_(("rascunho", "planejada")), 1))).label("novas"),
+                func.count(case((Demanda.status == "em_execucao", 1))).label("andamento"),
+                func.count(case((Demanda.status.in_(("pausada", "bloqueada")), 1))).label("pausadas"),
+                func.count(case((Demanda.status == "aguardando_cliente", 1))).label("aguardando"),
+                func.count(case((and_(~finalizada, prazo_vencido), 1))).label("atrasadas"),
+                func.count(case((Demanda.status == "concluida", 1))).label("concluidas"),
+                func.count(
+                    case(
+                        (
+                            and_(
+                                ~finalizada,
+                                prazo_valido,
+                                Demanda.prazo_etapa_atual >= hoje_inicio,
+                                Demanda.prazo_etapa_atual <= hoje_fim,
+                            ),
+                            1,
+                        )
+                    )
+                ).label("previstas_hoje"),
+                func.count(
+                    case(
+                        (
+                            and_(
+                                ~finalizada,
+                                prazo_valido,
+                                Demanda.prazo_etapa_atual >= semana_inicio,
+                                Demanda.prazo_etapa_atual <= semana_fim,
+                            ),
+                            1,
+                        )
+                    )
+                ).label("previstas_semana"),
+                # concluidasSemana: SEM limite superior — mesma fórmula do frontend
+                # pré-migração (`updatedAt >= inicioDaSemana(agora)`, sem teto).
+                func.count(
+                    case((and_(Demanda.status == "concluida", Demanda.updated_at >= semana_inicio), 1))
+                ).label("concluidas_semana"),
+                func.count(
+                    case(
+                        (
+                            and_(
+                                Demanda.status == "concluida",
+                                Demanda.updated_at >= ontem_inicio,
+                                Demanda.updated_at <= ontem_fim,
+                            ),
+                            1,
+                        )
+                    )
+                ).label("concluidas_ontem"),
+            )
+            .select_from(Demanda)
+            .where(Demanda.empresa_id == escopo.empresa_id)
+        )
+
+        predicado = self._predicado_escopo(escopo)
+        if predicado is not None:
+            statement = statement.where(predicado)
+        statement = statement.where(Demanda.status != STATUS_ARQUIVADO)
+        statement = statement.where(
+            Demanda.id.in_(
+                select(DemandaResponsavel.demanda_id).where(DemandaResponsavel.usuario_id == usuario_id)
+            )
+        )
 
         resultado = db.execute(statement).one()
         return dict(resultado._mapping)

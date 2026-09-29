@@ -503,6 +503,33 @@ class DemandaService:
     def resumo_atendimento(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
         return self.repository.resumo_atendimento(db, escopo=escopo)
 
+    def resumo_minha_home(
+        self,
+        db: Session,
+        *,
+        escopo: EscopoDemanda,
+        usuario_id: str,
+        agora: datetime,
+        hoje_inicio: datetime,
+        hoje_fim: datetime,
+        semana_inicio: datetime,
+        semana_fim: datetime,
+        ontem_inicio: datetime,
+        ontem_fim: datetime,
+    ) -> dict[str, int]:
+        return self.repository.resumo_minha_home(
+            db,
+            escopo=escopo,
+            usuario_id=usuario_id,
+            agora=agora,
+            hoje_inicio=hoje_inicio,
+            hoje_fim=hoje_fim,
+            semana_inicio=semana_inicio,
+            semana_fim=semana_fim,
+            ontem_inicio=ontem_inicio,
+            ontem_fim=ontem_fim,
+        )
+
     def resumo_departamento(
         self, db: Session, *, escopo: EscopoDemanda, departamento_id: str, empresa_id: str
     ) -> dict[str, float | int]:

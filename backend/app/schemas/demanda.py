@@ -365,6 +365,29 @@ class DemandaResumoAtendimentoRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class DemandaResumoMinhaHomeRead(BaseModel):
+    """D2-D2 — os 11 indicadores do Dashboard pessoal (`/meu-dia`), agregados no servidor
+    sobre o universo INTEGRAL permitido do usuário (escopo normal AND responsável N:N),
+    nunca as 200 demandas globais de `AppDataContext`. Reproduz `classificarTarefa` +
+    os dois números do resumo textual de `DashboardView.tsx` (frontend, pré-migração), não
+    uma aproximação nova. Sem `horas`/percentuais/dados de lista — só o que este endpoint é
+    responsável por fornecer."""
+
+    ativas: int
+    novas: int
+    andamento: int
+    pausadas: int
+    aguardando: int
+    atrasadas: int
+    concluidas: int
+    previstas_hoje: int = Field(alias="previstasHoje")
+    previstas_semana: int = Field(alias="previstasSemana")
+    concluidas_semana: int = Field(alias="concluidasSemana")
+    concluidas_ontem: int = Field(alias="concluidasOntem")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class DemandaResumoDepartamentoRead(BaseModel):
     """D2-B5 — indicadores de MeuDepartamentoView, agregados no servidor sobre o universo
     INTEGRAL do departamento (nunca a página filtrada). Não inclui `horasConsumidas`

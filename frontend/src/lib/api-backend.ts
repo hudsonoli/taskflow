@@ -1439,7 +1439,7 @@ function demandaDraftParaPayload(draft: DemandaFormDraft) {
   };
 }
 
-export type DemandaSort = "numero_operacional_desc" | "prazo_asc";
+export type DemandaSort = "numero_operacional_desc" | "prazo_asc" | "sinalizada_desc";
 
 // D2-B5: mesmo par de `OrigemDemanda` (lib/escopo-operacional.ts) — definido aqui de novo
 // (não importado de lá) porque escopo-operacional.ts já importa DESTE arquivo; importar na
@@ -1586,6 +1586,44 @@ export type ResumoDepartamento = {
 export async function getResumoDepartamento(departamentoId: string): Promise<ResumoDepartamento> {
   const query = new URLSearchParams({ departamentoId });
   return request<ResumoDepartamento>(`/demandas/meu-departamento/resumo?${query.toString()}`);
+}
+
+/**
+ * D2-D2 — os 11 indicadores do Dashboard pessoal (`/meu-dia`), agregados no servidor sobre
+ * o universo INTEGRAL permitido do usuário (escopo normal + responsável N:N) — nunca as 200
+ * demandas globais de `AppDataContext`. Sem restrição de perfil, ao contrário de
+ * `getResumoAtendimento`/`getResumoDepartamento`.
+ */
+export type ResumoMinhaHome = {
+  ativas: number;
+  novas: number;
+  andamento: number;
+  pausadas: number;
+  aguardando: number;
+  atrasadas: number;
+  concluidas: number;
+  previstasHoje: number;
+  previstasSemana: number;
+  concluidasSemana: number;
+  concluidasOntem: number;
+};
+
+/**
+ * Todas as fronteiras temporais são obrigatórias e devem vir da MESMA referência de
+ * `new Date()` no caller (ver DashboardView.tsx) — este client não recalcula nada, só
+ * repassa.
+ */
+export async function getResumoMinhaHome(limites: {
+  agora: string;
+  hojeInicio: string;
+  hojeFim: string;
+  semanaInicio: string;
+  semanaFim: string;
+  ontemInicio: string;
+  ontemFim: string;
+}): Promise<ResumoMinhaHome> {
+  const query = new URLSearchParams(limites);
+  return request<ResumoMinhaHome>(`/demandas/minha-home/resumo?${query.toString()}`);
 }
 
 export async function criarDemandaReal(draft: DemandaFormDraft): Promise<Demanda> {

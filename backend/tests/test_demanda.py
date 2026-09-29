@@ -2783,3 +2783,304 @@ def test_nao_finalizada_encontra_item_alem_de_janela_pequena(
     ).json()
 
     assert [d["id"] for d in achados] == [minha["id"]]
+
+
+# --------------------------------------------------------------------------------------
+# sinalizada_desc (D2-D2) — GET /demandas?sort=sinalizada_desc
+# --------------------------------------------------------------------------------------
+
+
+def test_sort_sinalizada_desc_sinalizadas_primeiro_desempate_numero_operacional(
+    client_admin: TestClient,
+) -> None:
+    nao_sinalizada_1 = _criar(client_admin)
+    sinalizada_1 = _criar(client_admin, sinalizada=True)
+    nao_sinalizada_2 = _criar(client_admin)
+    sinalizada_2 = _criar(client_admin, sinalizada=True)
+
+    achados = client_admin.get("/demandas?sort=sinalizada_desc&limit=200").json()
+    ids = [d["id"] for d in achados if d["id"] in {
+        nao_sinalizada_1["id"], sinalizada_1["id"], nao_sinalizada_2["id"], sinalizada_2["id"]
+    }]
+
+    # Sinalizadas primeiro (numero_operacional DESC entre elas: criada por último vem antes),
+    # depois não-sinalizadas (mesmo desempate).
+    assert ids == [sinalizada_2["id"], sinalizada_1["id"], nao_sinalizada_2["id"], nao_sinalizada_1["id"]]
+
+
+def test_sort_sinalizada_desc_paginacao_deterministica(client_admin: TestClient) -> None:
+    ids_criados = [_criar(client_admin)["id"] for _ in range(3)]
+    pagina1 = client_admin.get("/demandas?sort=sinalizada_desc&limit=2&offset=0").json()
+    pagina2 = client_admin.get("/demandas?sort=sinalizada_desc&limit=2&offset=2").json()
+    todos = [d["id"] for d in pagina1] + [d["id"] for d in pagina2]
+    # Sem sobreposição/lacuna entre páginas para os itens que criamos.
+    assert [i for i in reversed(ids_criados)] == [i for i in todos if i in ids_criados]
+
+
+# --------------------------------------------------------------------------------------
+# Dashboard pessoal (D2-D2) — GET /demandas/minha-home/resumo
+# --------------------------------------------------------------------------------------
+
+_AGORA_HOME = datetime(2026, 6, 17, 12, 0, 0, tzinfo=timezone.utc)  # referência fixa, longe de "agora" real
+_HOJE_INICIO_HOME = datetime(2026, 6, 17, 0, 0, 0, tzinfo=timezone.utc)
+_HOJE_FIM_HOME = datetime(2026, 6, 17, 23, 59, 59, 999000, tzinfo=timezone.utc)
+_SEMANA_INICIO_HOME = datetime(2026, 6, 15, 0, 0, 0, tzinfo=timezone.utc)  # segunda-feira
+_SEMANA_FIM_HOME = datetime(2026, 6, 21, 23, 59, 59, 999000, tzinfo=timezone.utc)  # domingo
+_ONTEM_INICIO_HOME = datetime(2026, 6, 16, 0, 0, 0, tzinfo=timezone.utc)
+_ONTEM_FIM_HOME = datetime(2026, 6, 16, 23, 59, 59, 999000, tzinfo=timezone.utc)
+
+
+def _iso_home(dt: datetime) -> str:
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _url_minha_home_resumo(
+    *,
+    agora: datetime = _AGORA_HOME,
+    hoje_inicio: datetime = _HOJE_INICIO_HOME,
+    hoje_fim: datetime = _HOJE_FIM_HOME,
+    semana_inicio: datetime = _SEMANA_INICIO_HOME,
+    semana_fim: datetime = _SEMANA_FIM_HOME,
+    ontem_inicio: datetime = _ONTEM_INICIO_HOME,
+    ontem_fim: datetime = _ONTEM_FIM_HOME,
+) -> str:
+    return (
+        "/demandas/minha-home/resumo?"
+        f"agora={_iso_home(agora)}&hojeInicio={_iso_home(hoje_inicio)}&hojeFim={_iso_home(hoje_fim)}"
+        f"&semanaInicio={_iso_home(semana_inicio)}&semanaFim={_iso_home(semana_fim)}"
+        f"&ontemInicio={_iso_home(ontem_inicio)}&ontemFim={_iso_home(ontem_fim)}"
+    )
+
+
+def test_resumo_minha_home_calcula_contadores_de_status(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    resp = [usuario_operador.id]
+    _criar(client_admin, status="rascunho", usuarioResponsavelIds=resp)
+    _criar(client_admin, status="planejada", usuarioResponsavelIds=resp)
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp)
+    _criar(client_admin, status="pausada", usuarioResponsavelIds=resp)
+    _criar(client_admin, status="bloqueada", usuarioResponsavelIds=resp, motivoBloqueio="Falta arte")
+    _criar(client_admin, status="aguardando_cliente", usuarioResponsavelIds=resp)
+    _criar(client_admin, status="concluida", usuarioResponsavelIds=resp)
+    _criar(client_admin, status="cancelada", usuarioResponsavelIds=resp)
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+
+    assert resumo["ativas"] == 6
+    assert resumo["novas"] == 2
+    assert resumo["andamento"] == 1
+    assert resumo["pausadas"] == 2
+    assert resumo["aguardando"] == 1
+    assert resumo["concluidas"] == 1
+    assert resumo["atrasadas"] == 0
+    assert resumo["previstasHoje"] == 0
+    assert resumo["previstasSemana"] == 0
+
+
+def test_resumo_minha_home_atrasadas(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    resp = [usuario_operador.id]
+    passado = _iso_home(_AGORA_HOME - timedelta(days=1))
+    futuro = _iso_home(_AGORA_HOME + timedelta(days=1))
+
+    aberta_passado = _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp, prazoEtapaAtual=passado)
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp, prazoEtapaAtual=futuro)
+    _criar(client_admin, status="concluida", usuarioResponsavelIds=resp, prazoEtapaAtual=passado)
+    _criar(client_admin, status="cancelada", usuarioResponsavelIds=resp, prazoEtapaAtual=passado)
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp)  # sem prazo
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["atrasadas"] == 1
+    assert aberta_passado["id"] is not None  # só documentando qual é a discriminante
+
+
+def test_resumo_minha_home_previstas_hoje_boundary(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    resp = [usuario_operador.id]
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp, prazoEtapaAtual=_iso_home(_HOJE_INICIO_HOME))
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp, prazoEtapaAtual=_iso_home(_HOJE_FIM_HOME))
+    _criar(
+        client_admin,
+        status="em_execucao",
+        usuarioResponsavelIds=resp,
+        prazoEtapaAtual=_iso_home(_HOJE_INICIO_HOME - timedelta(microseconds=1)),
+    )
+    _criar(
+        client_admin,
+        status="em_execucao",
+        usuarioResponsavelIds=resp,
+        prazoEtapaAtual=_iso_home(_HOJE_FIM_HOME + timedelta(microseconds=1)),
+    )
+    _criar(
+        client_admin,
+        status="concluida",
+        usuarioResponsavelIds=resp,
+        prazoEtapaAtual=_iso_home(_HOJE_INICIO_HOME),
+    )
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["previstasHoje"] == 2
+
+
+def test_resumo_minha_home_previstas_semana_boundary(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    resp = [usuario_operador.id]
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp, prazoEtapaAtual=_iso_home(_SEMANA_INICIO_HOME))
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp, prazoEtapaAtual=_iso_home(_SEMANA_FIM_HOME))
+    _criar(
+        client_admin,
+        status="em_execucao",
+        usuarioResponsavelIds=resp,
+        prazoEtapaAtual=_iso_home(_SEMANA_INICIO_HOME - timedelta(microseconds=1)),
+    )
+    _criar(
+        client_admin,
+        status="em_execucao",
+        usuarioResponsavelIds=resp,
+        prazoEtapaAtual=_iso_home(_SEMANA_FIM_HOME + timedelta(microseconds=1)),
+    )
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["previstasSemana"] == 2
+
+
+def test_resumo_minha_home_concluidas_semana_sem_teto_superior(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, usuario_operador: Usuario
+) -> None:
+    resp = [usuario_operador.id]
+    dentro = _criar(client_admin, status="concluida", usuarioResponsavelIds=resp)
+    muito_depois = _criar(client_admin, status="concluida", usuarioResponsavelIds=resp)
+    antes = _criar(client_admin, status="concluida", usuarioResponsavelIds=resp)
+    nao_concluida = _criar(client_admin, status="em_execucao", usuarioResponsavelIds=resp)
+
+    db_session.get(Demanda, dentro["id"]).updated_at = _SEMANA_INICIO_HOME
+    # Muito depois do fim da semana de referência — SEM teto superior, deve continuar contando.
+    db_session.get(Demanda, muito_depois["id"]).updated_at = _SEMANA_FIM_HOME + timedelta(days=365)
+    db_session.get(Demanda, antes["id"]).updated_at = _SEMANA_INICIO_HOME - timedelta(microseconds=1)
+    db_session.get(Demanda, nao_concluida["id"]).updated_at = _SEMANA_INICIO_HOME
+    db_session.flush()
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["concluidasSemana"] == 2
+
+
+def test_resumo_minha_home_concluidas_ontem_boundary(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, usuario_operador: Usuario
+) -> None:
+    resp = [usuario_operador.id]
+    inicio = _criar(client_admin, status="concluida", usuarioResponsavelIds=resp)
+    fim = _criar(client_admin, status="concluida", usuarioResponsavelIds=resp)
+    antes = _criar(client_admin, status="concluida", usuarioResponsavelIds=resp)
+    depois = _criar(client_admin, status="concluida", usuarioResponsavelIds=resp)
+
+    db_session.get(Demanda, inicio["id"]).updated_at = _ONTEM_INICIO_HOME
+    db_session.get(Demanda, fim["id"]).updated_at = _ONTEM_FIM_HOME
+    db_session.get(Demanda, antes["id"]).updated_at = _ONTEM_INICIO_HOME - timedelta(microseconds=1)
+    db_session.get(Demanda, depois["id"]).updated_at = _ONTEM_FIM_HOME + timedelta(microseconds=1)
+    db_session.flush()
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["concluidasOntem"] == 2
+
+
+def test_resumo_minha_home_responsavel_multiplos_conta_uma_vez(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario, db_session: Session, empresa
+) -> None:
+    outro = _usuario_com_nome(db_session, empresa, "Outro Responsável Home")
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=[usuario_operador.id, outro.id])
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=[outro.id])  # não é do operador
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["ativas"] == 1
+
+
+def test_resumo_minha_home_tenant_isolado(
+    client_admin: TestClient, client_operador: TestClient, db_session: Session, usuario_operador: Usuario
+) -> None:
+    agora = datetime.now(timezone.utc)
+    outra_empresa = Empresa(
+        id=str(uuid.uuid4()),
+        nome="Outra Empresa D2-D2",
+        documento=None,
+        codigo_interno=f"OUT-{uuid.uuid4().hex[:8]}".upper(),
+        status="ativa",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(outra_empresa)
+    db_session.flush()
+    intrusa = Demanda(
+        id=str(uuid.uuid4()),
+        empresa_id=outra_empresa.id,
+        codigo_referencia="T26995001",
+        ano_referencia=26,
+        sequencial_referencia=1,
+        numero_operacional=995001,
+        nome="Intrusa D2-D2",
+        status="em_execucao",
+        prioridade="media",
+        created_at=agora,
+        updated_at=agora,
+    )
+    db_session.add(intrusa)
+    db_session.add(
+        DemandaResponsavel(demanda_id=intrusa.id, usuario_id=usuario_operador.id, created_at=agora)
+    )
+    db_session.flush()
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["ativas"] == 0
+
+
+def test_resumo_minha_home_arquivada_nao_entra_em_nenhum_indicador(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    criada = _criar(client_admin, status="em_execucao", usuarioResponsavelIds=[usuario_operador.id])
+    client_admin.post(f"/demandas/{criada['id']}/arquivar", json={"motivoArquivamento": "Motivo"})
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert all(valor == 0 for valor in resumo.values())
+
+
+def test_resumo_minha_home_sem_restricao_de_perfil(
+    client_operador: TestClient,
+) -> None:
+    """Diferente de `/minhas/resumo` (só Atendimento) e `/meu-departamento/resumo` (só Head):
+    qualquer usuário autenticado com `demandas.visualizar` recebe o PRÓPRIO resumo, nunca
+    403 — mesmo sem departamento, sem ser Head e sem ser Atendimento."""
+    resposta = client_operador.get(_url_minha_home_resumo())
+    assert resposta.status_code == 200, resposta.text
+
+
+def test_resumo_minha_home_operador_sem_departamento_ainda_ve_proprio_responsavel(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    """Prova que o escopo normal (`_predicado_escopo`) não estreita o universo além do
+    filtro de responsável: `usuario_operador` não tem departamento, não é Head nem
+    Atendimento (fixture `usuario_operador` não define nenhuma dessas relações), e mesmo
+    assim vê a própria demanda. Sob resolução de escopo PADRÃO (sem override de
+    `EscopoSolicitado`), `usuario_responsavel=True` é sempre parte do escopo-base — logo
+    "responsável mas fora do escopo normal" não é um estado alcançável nesta composição;
+    o que este teste prova é que a composição não introduz nenhuma restrição adicional além
+    dessa, documentado explicitamente por não haver cenário que a contradiga."""
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=[usuario_operador.id])
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["ativas"] == 1
+
+
+def test_resumo_minha_home_alem_de_janela_global_pequena(
+    client_admin: TestClient, client_operador: TestClient, usuario_operador: Usuario
+) -> None:
+    """Mesmo padrão B1-B5/D2-C/D2-D1: a demanda do usuário é criada primeiro (mais antiga);
+    ruído mais recente é criado depois. O resumo (agregação sobre o universo integral, não
+    uma janela) continua contando corretamente."""
+    _criar(client_admin, status="em_execucao", usuarioResponsavelIds=[usuario_operador.id])
+    for _ in range(5):
+        _criar(client_admin, status="em_execucao")  # ruído, mais recente
+
+    resumo = client_operador.get(_url_minha_home_resumo()).json()
+    assert resumo["ativas"] == 1
