@@ -36,9 +36,16 @@ export function NotificationBell() {
   // empresa, não do usuário): uma demanda aberta atribuída a este usuário, mas fora dessa
   // janela global, nunca aparecia aqui. Filtro e `limit=5` agora são server-side
   // (`responsavelId` + `naoFinalizada`, ambos já existentes/reaproveitados) — nunca busca 200
-  // pra cortar em 5 no cliente. Sem polling: recarrega quando `usuarioAtual.id` muda (login),
-  // não em resposta a mutations em outras telas — esta onda corrige completude, não
-  // real-time.
+  // pra cortar em 5 no cliente. Sem polling.
+  //
+  // `open` entra nas dependências (não só `usuarioAtual`) porque, antes desta migração, o
+  // sino lia `AppDataContext.demandas` — uma referência nova a cada mutation bem-sucedida em
+  // DemandasView/PautaView/MinhasDemandasView/Dashboard (todas chamam `setDemandas`), o que
+  // mantinha o sino fresco durante a mesma sessão sem nenhum código dedicado. Sem essa fonte,
+  // um efeito preso só a `usuarioAtual` (estável a sessão inteira) buscaria uma vez e nunca
+  // mais — concluir a própria tarefa em outra tela não atualizaria o sino até recarregar a
+  // página. Refazer a busca a cada abertura do dropdown corrige isso sem polling, sem SSE e
+  // sem novo estado global: o dado fica fresco no momento em que é de fato consultado.
   const [tarefasAtribuidas, setTarefasAtribuidas] = useState<TarefaNotificacao[]>([]);
   useEffect(() => {
     if (!usuarioAtual) return;
@@ -54,7 +61,7 @@ export function NotificationBell() {
     return () => {
       cancelado = true;
     };
-  }, [usuarioAtual]);
+  }, [usuarioAtual, open]);
 
   const totalNotificacoes = tarefasAtribuidas.length;
 
