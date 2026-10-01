@@ -150,16 +150,19 @@ class AuthService:
 
         Camadas de validação, nessa ordem:
         1. Token/identidade (assinatura, issuer, audience, expiração via `verify_google_id_token`;
-           `email_verified`, `sub`/`email` presentes, e-mail do claim == e-mail digitado, `hd`
-           quando a allowlist está configurada) — falha aqui é `AuthUnauthorizedError` (401):
-           o token em si não é confiável o bastante pra decidir qualquer coisa sobre autorização.
+           `email_verified`, `sub`/`email` presentes, `hd` quando a allowlist está configurada)
+           — falha aqui é `AuthUnauthorizedError` (401): o token em si não é confiável o
+           bastante pra decidir qualquer coisa sobre autorização. Aplicada SEMPRE, independente
+           de já existir vínculo ou não.
         2. Autorização TaskFloww (empresa ativa, usuário existe/ativo/`acesso_sistema`, sem
            conflito de vínculo, sem cross-tenant) — falha aqui é `AuthGoogleAccessDeniedError`
            (403 genérico): a identidade É confiável, só não está autorizada.
 
-        `google_sub` é a chave preferencial (login seguintes não dependem mais do e-mail
-        continuar igual). Primeiro vínculo é por `empresa_id` + e-mail normalizado — e só
-        ocorre se `usuario.google_sub` ainda estiver vazio (nunca sobrescreve/revincula).
+        `google_sub` é a chave preferencial: login com sub já vinculado NUNCA recompara
+        e-mail digitado com o claim (ver bloco abaixo) — só o primeiro vínculo depende disso,
+        porque é o único momento em que o e-mail decide a quem vincular o sub. Depois do
+        vínculo, o e-mail salvo no TaskFloww (ou mesmo o e-mail real da conta Google) pode
+        divergir do que foi digitado sem quebrar o login.
         """
         empresa_codigo_normalizado = self._normalize_empresa_codigo(empresa_codigo)
         email_digitado = self._normalize_email(email)
@@ -175,10 +178,6 @@ class AuthService:
         if not claims.get("email_verified") or not sub or not email_claim:
             raise AuthUnauthorizedError("Token Google inválido")
 
-        email_claim_normalizado = self._normalize_email(email_claim)
-        if email_claim_normalizado != email_digitado:
-            raise AuthUnauthorizedError("Token Google inválido")
-
         if self.settings.google_workspace_allowed_domain:
             if claims.get("hd") != self.settings.google_workspace_allowed_domain:
                 raise AuthUnauthorizedError("Token Google inválido")
@@ -192,14 +191,22 @@ class AuthService:
 
             usuario = self.usuario_repository.get_by_google_sub(db, sub)
             if usuario is not None:
-                # Logins seguintes: sub já vinculado. Cross-tenant nunca é aceito, mesmo que
-                # a mesma conta Google exista em outra empresa (não é o caso hoje — sub é
-                # global — mas a checagem fica explícita, não implícita).
+                # Login seguinte: sub já vinculado é a identidade primária — e-mail digitado
+                # NUNCA é recomparado aqui, e NUNCA cai pra busca por e-mail. Cross-tenant
+                # nunca é aceito, mesmo que a mesma conta Google exista em outra empresa.
                 if usuario.empresa_id != empresa.id:
                     self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
                     db.commit()
                     raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
             else:
+                # Primeiro vínculo: aqui, e SÓ aqui, o e-mail digitado precisa bater com o
+                # claim do Google — é o que ancora a quem o sub será vinculado.
+                email_claim_normalizado = self._normalize_email(email_claim)
+                if email_claim_normalizado != email_digitado:
+                    self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                    db.commit()
+                    raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
+
                 usuario = self.usuario_repository.get_by_email(db, empresa_id=empresa.id, email=email_claim_normalizado)
                 if usuario is None:
                     self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
@@ -219,9 +226,11 @@ class AuthService:
             if usuario.google_sub is None:
                 usuario.google_sub = sub
                 usuario.google_linked_at = now
-                picture = claims.get("picture")
-                if picture and not usuario.foto_url:
-                    usuario.foto_url = picture
+            # `foto_url` vazia recebe a foto do Google em QUALQUER login (não só o primeiro
+            # vínculo) — nunca sobrescreve uma foto já definida, em nenhum dos dois casos.
+            picture = claims.get("picture")
+            if picture and not usuario.foto_url:
+                usuario.foto_url = picture
             usuario.google_given_name = claims.get("given_name")
             usuario.google_family_name = claims.get("family_name")
             usuario.google_locale = claims.get("locale")

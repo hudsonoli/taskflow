@@ -169,11 +169,15 @@ def test_email_nao_verificado_401(client, db_session, empresa, monkeypatch):
 
 
 # 9 — email do claim != email digitado → 401
-def test_email_claim_diferente_do_digitado_401(client, db_session, empresa, monkeypatch):
+def test_primeiro_vinculo_email_claim_diferente_do_digitado_nega(client, db_session, empresa, monkeypatch):
+    """Essa comparação só existe no caminho de PRIMEIRO VÍNCULO (usuário ainda sem
+    google_sub) — por isso é uma recusa de negócio (403 genérico), não de token (401). Ver
+    test_login_ja_vinculado_ignora_email_digitado_diferente_do_claim para o caso oposto."""
     _usuario_pre_cadastrado(db_session, empresa=empresa)
     _mock_verify_sucesso(monkeypatch, _mock_claims(email="outro@empresa-teste.com"))
     resposta = _post_google(client, empresa=empresa, email=EMAIL_PRE_CADASTRADO)
-    assert resposta.status_code == 401, resposta.text
+    assert resposta.status_code == 403, resposta.text
+    assert resposta.json()["detail"] == "Acesso não autorizado."
 
 
 # 10 — domínio hd inválido quando GOOGLE_WORKSPACE_ALLOWED_DOMAIN está configurado → 401
@@ -235,6 +239,20 @@ def test_foto_existente_nao_sobrescrita(client, db_session, empresa, monkeypatch
     assert usuario.foto_url == "https://cdn.taskfloww.local/foto-pessoal.jpg"
 
 
+# Correção pós-revisão: foto_url vazia é preenchida em QUALQUER login (não só o primeiro
+# vínculo) — o usuário pode ter apagado a própria foto depois de já estar vinculado.
+def test_foto_vazia_recebe_picture_tambem_em_login_ja_vinculado(client, db_session, empresa, monkeypatch):
+    usuario = _usuario_pre_cadastrado(db_session, empresa=empresa, google_sub="sub-ja-vinculado", foto_url=None)
+    claims = _mock_claims(sub="sub-ja-vinculado", picture="https://lh3.googleusercontent.com/foto-tardia")
+    _mock_verify_sucesso(monkeypatch, claims)
+
+    resposta = _post_google(client, empresa=empresa, email=EMAIL_PRE_CADASTRADO)
+    assert resposta.status_code == 200, resposta.text
+
+    db_session.refresh(usuario)
+    assert usuario.foto_url == "https://lh3.googleusercontent.com/foto-tardia"
+
+
 # 15 + 16 — segundo login usa google_sub; alteração de e-mail no TaskFloww não quebra login
 def test_segundo_login_usa_google_sub_mesmo_apos_mudanca_de_email(client, db_session, empresa, monkeypatch):
     usuario = _usuario_pre_cadastrado(db_session, empresa=empresa, google_sub="sub-ja-vinculado")
@@ -254,6 +272,25 @@ def test_segundo_login_usa_google_sub_mesmo_apos_mudanca_de_email(client, db_ses
     db_session.refresh(usuario)
     assert usuario.google_sub == "sub-ja-vinculado"
     assert usuario.email == "novo-email-taskfloww@empresa-teste.com"  # não foi revertido
+
+
+# Correção pós-revisão: login com google_sub já vinculado NUNCA recompara e-mail digitado
+# com o claim — só o primeiro vínculo depende dessa comparação. Prova explícita: digitado e
+# claim DIVERGEM entre si (não só do que está salvo no TaskFloww) e o login é permitido
+# mesmo assim, desde que sub/tenant/status estejam corretos.
+def test_login_ja_vinculado_ignora_email_digitado_diferente_do_claim(client, db_session, empresa, monkeypatch):
+    usuario = _usuario_pre_cadastrado(db_session, empresa=empresa, google_sub="sub-ja-vinculado")
+
+    claims = _mock_claims(sub="sub-ja-vinculado", email="email-atual-da-conta-google@empresa-teste.com")
+    _mock_verify_sucesso(monkeypatch, claims)
+
+    # Digitado no formulário é DIFERENTE do e-mail do claim (login_hint desatualizado, por
+    # exemplo) — isso nunca deveria barrar um login via sub já vinculado.
+    resposta = _post_google(client, empresa=empresa, email="email-digitado-diferente@empresa-teste.com")
+    assert resposta.status_code == 200, resposta.text
+
+    db_session.refresh(usuario)
+    assert usuario.google_sub == "sub-ja-vinculado"
 
 
 # 17 — sub já vinculado a outro usuário: a UNIQUE constraint é a garantia final (defesa em
