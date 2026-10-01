@@ -9,3 +9,5 @@ psycopg[binary]==3.2.3
 alembic==1.14.0
 python-dotenv==1.0.1
 cryptography==50.0.1
+google-auth==2.59.1
+requests==2.34.2

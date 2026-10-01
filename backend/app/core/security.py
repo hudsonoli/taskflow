@@ -3,6 +3,8 @@ from typing import Any
 from uuid import UUID
 
 import jwt
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from jwt import ExpiredSignatureError, InvalidAlgorithmError, InvalidSignatureError, InvalidTokenError
 from pwdlib import PasswordHash
 
@@ -116,6 +118,31 @@ def decode_access_token(
     _validate_perfil_base(payload.get("perfil_base"))
 
     return payload
+
+
+def verify_google_id_token(id_token_value: str, *, settings: Settings | None = None) -> dict[str, Any]:
+    """Valida um ID Token do Google Identity Services usando a biblioteca oficial
+    (`google-auth`), que verifica assinatura (contra o JWKS público do Google), issuer
+    (`accounts.google.com`/`https://accounts.google.com`), audience (contra
+    `GOOGLE_OAUTH_CLIENT_ID`) e expiração — nunca reimplementar essa checagem manualmente.
+
+    NÃO valida aqui: `email_verified`, `hd` (domínio Workspace) nem correspondência com o
+    e-mail digitado pelo usuário — essas são regras de negócio do TaskFloww, verificadas em
+    `AuthService.login_google` (não desta função, que só decide "o token é autêntico?").
+
+    Qualquer falha vira `AuthTokenError` — nunca deixa escapar o motivo exato (biblioteca
+    Google tem suas próprias exceções internas, que não precisam vazar para o chamador)."""
+    resolved_settings = settings or get_settings()
+    if not resolved_settings.google_oauth_client_id:
+        raise AuthConfigurationError("GOOGLE_OAUTH_CLIENT_ID não configurado")
+    try:
+        return google_id_token.verify_oauth2_token(
+            id_token_value,
+            google_requests.Request(),
+            resolved_settings.google_oauth_client_id,
+        )
+    except Exception as exc:
+        raise AuthTokenError("Token Google inválido") from exc
 
 
 def _require_auth_secret(settings: Settings) -> str:

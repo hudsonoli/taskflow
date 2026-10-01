@@ -5,6 +5,10 @@ import "server-only";
 
 export const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8010";
 export const EMPRESA_CODIGO = process.env.EMPRESA_CODIGO ?? "DEMO";
+// Público (vai para o navegador) — client_id não é segredo. Lido no servidor (não
+// NEXT_PUBLIC_*) pra não ficar fixado em build time: um valor novo em produção só exige
+// trocar a variável de ambiente do container, sem rebuild — ver app/login/page.tsx.
+export const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID ?? null;
 
 export const SESSION_COOKIE_NAME = "tf_session";
 // Alinhado ao default de AUTH_ACCESS_TOKEN_EXPIRE_MINUTES no backend (30min) — se o token

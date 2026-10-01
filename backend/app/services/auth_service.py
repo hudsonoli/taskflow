@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import AuthTokenError, create_access_token, hash_password, verify_google_id_token, verify_password
 from app.domain.event_types import DomainEventType
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
@@ -19,6 +20,11 @@ from app.services.usuario_permissao_service import UsuarioPermissaoService
 from app.services.usuario_service import STATUS_ATIVO as USUARIO_STATUS_ATIVO
 
 INVALID_CREDENTIALS_MESSAGE = "Credenciais inválidas"
+# Mesma mensagem para TODO motivo de recusa do login Google (usuário inexistente, inativo,
+# bloqueado, sub já vinculado a outro usuário, outro sub já vinculado a este usuário,
+# cross-tenant, domínio Workspace fora da allowlist, conflito de concorrência) — nunca
+# diferenciar, para não revelar se um e-mail existe ou qual regra específica barrou o acesso.
+GOOGLE_ACCESS_DENIED_MESSAGE = "Acesso não autorizado."
 
 
 class AuthInvalidCredentialsError(ValueError):
@@ -30,6 +36,13 @@ class AuthUnauthorizedError(ValueError):
 
 
 class AuthPasswordValidationError(ValueError):
+    pass
+
+
+class AuthGoogleAccessDeniedError(ValueError):
+    """Identidade Google autêntica (token válido), mas sem autorização no TaskFloww — sempre
+    403 genérico no router, nunca diferenciado (ver GOOGLE_ACCESS_DENIED_MESSAGE)."""
+
     pass
 
 
@@ -119,6 +132,123 @@ class AuthService:
             return AccessTokenResponse(accessToken=token, mustChangePassword=credencial.senha_deve_ser_alterada)
         except AuthInvalidCredentialsError:
             raise
+        except Exception:
+            db.rollback()
+            raise
+
+    def login_google(
+        self,
+        db: Session,
+        *,
+        empresa_codigo: str,
+        email: str,
+        id_token: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> AccessTokenResponse:
+        """Login Google Workspace para usuário PRÉ-CADASTRADO — nunca cria usuário novo.
+
+        Camadas de validação, nessa ordem:
+        1. Token/identidade (assinatura, issuer, audience, expiração via `verify_google_id_token`;
+           `email_verified`, `sub`/`email` presentes, e-mail do claim == e-mail digitado, `hd`
+           quando a allowlist está configurada) — falha aqui é `AuthUnauthorizedError` (401):
+           o token em si não é confiável o bastante pra decidir qualquer coisa sobre autorização.
+        2. Autorização TaskFloww (empresa ativa, usuário existe/ativo/`acesso_sistema`, sem
+           conflito de vínculo, sem cross-tenant) — falha aqui é `AuthGoogleAccessDeniedError`
+           (403 genérico): a identidade É confiável, só não está autorizada.
+
+        `google_sub` é a chave preferencial (login seguintes não dependem mais do e-mail
+        continuar igual). Primeiro vínculo é por `empresa_id` + e-mail normalizado — e só
+        ocorre se `usuario.google_sub` ainda estiver vazio (nunca sobrescreve/revincula).
+        """
+        empresa_codigo_normalizado = self._normalize_empresa_codigo(empresa_codigo)
+        email_digitado = self._normalize_email(email)
+        now = datetime.now(timezone.utc)
+
+        try:
+            claims = verify_google_id_token(id_token, settings=self.settings)
+        except AuthTokenError as exc:
+            raise AuthUnauthorizedError("Token Google inválido") from exc
+
+        sub = claims.get("sub")
+        email_claim = claims.get("email")
+        if not claims.get("email_verified") or not sub or not email_claim:
+            raise AuthUnauthorizedError("Token Google inválido")
+
+        email_claim_normalizado = self._normalize_email(email_claim)
+        if email_claim_normalizado != email_digitado:
+            raise AuthUnauthorizedError("Token Google inválido")
+
+        if self.settings.google_workspace_allowed_domain:
+            if claims.get("hd") != self.settings.google_workspace_allowed_domain:
+                raise AuthUnauthorizedError("Token Google inválido")
+
+        try:
+            empresa = self.empresa_repository.get_by_codigo_interno(db, empresa_codigo_normalizado)
+            if empresa is None or empresa.status != EMPRESA_STATUS_ATIVA:
+                self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                db.commit()
+                raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
+
+            usuario = self.usuario_repository.get_by_google_sub(db, sub)
+            if usuario is not None:
+                # Logins seguintes: sub já vinculado. Cross-tenant nunca é aceito, mesmo que
+                # a mesma conta Google exista em outra empresa (não é o caso hoje — sub é
+                # global — mas a checagem fica explícita, não implícita).
+                if usuario.empresa_id != empresa.id:
+                    self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                    db.commit()
+                    raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
+            else:
+                usuario = self.usuario_repository.get_by_email(db, empresa_id=empresa.id, email=email_claim_normalizado)
+                if usuario is None:
+                    self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                    db.commit()
+                    raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
+                if usuario.google_sub is not None:
+                    # Já vinculado a OUTRO sub — nunca revincula/sobrescreve automaticamente.
+                    self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                    db.commit()
+                    raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
+
+            if not self._usuario_can_authenticate(usuario):
+                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                db.commit()
+                raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
+
+            if usuario.google_sub is None:
+                usuario.google_sub = sub
+                usuario.google_linked_at = now
+                picture = claims.get("picture")
+                if picture and not usuario.foto_url:
+                    usuario.foto_url = picture
+            usuario.google_given_name = claims.get("given_name")
+            usuario.google_family_name = claims.get("family_name")
+            usuario.google_locale = claims.get("locale")
+            usuario.last_google_login_at = now
+            usuario.updated_at = now
+            db.flush()
+
+            self._publish_login_sucesso(db, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+            token = create_access_token(
+                sub=usuario.id,
+                empresa_id=usuario.empresa_id,
+                perfil_base=usuario.perfil_base,
+                settings=self.settings,
+                now=now,
+            )
+            credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)
+            db.commit()
+            return AccessTokenResponse(accessToken=token, mustChangePassword=bool(credencial and credencial.senha_deve_ser_alterada))
+        except AuthGoogleAccessDeniedError:
+            # Toda recusa de negócio já publicou o evento de falha e commitou antes de chegar
+            # aqui — mesmo padrão de `login()` (AuthInvalidCredentialsError): nada a reverter.
+            raise
+        except IntegrityError:
+            # Corrida de dois primeiros-logins concorrentes pro mesmo `sub` — a UNIQUE
+            # constraint pega, nunca vira 500 nem revela detalhe (ver migration 0035).
+            db.rollback()
+            raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
         except Exception:
             db.rollback()
             raise

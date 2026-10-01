@@ -34,6 +34,18 @@ class AuthLoginRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+# `email` aqui é o digitado pelo usuário no formulário (login_hint), não extraído do token —
+# AuthService.login_google confirma que bate com o claim do Google antes de qualquer vínculo
+# (ver docstring do método). Nunca usar só o claim: o e-mail digitado é o que ancora a
+# intenção do usuário de entrar como aquela conta específica.
+class AuthGoogleLoginRequest(BaseModel):
+    empresa_codigo: str = Field(alias="empresaCodigo", min_length=1, max_length=64)
+    email: str = Field(min_length=1, max_length=255)
+    id_token: str = Field(alias="idToken", min_length=1)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class AuthAlterarSenhaRequest(BaseModel):
     senha_atual: str = Field(alias="senhaAtual", min_length=1)
     nova_senha: str = Field(alias="novaSenha", min_length=8)

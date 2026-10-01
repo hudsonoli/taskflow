@@ -54,6 +54,8 @@ services:
       BACKEND_URL: http://taskfloww_api:8000
       EMPRESA_CODIGO: ${EMPRESA_CODIGO}
       NODE_ENV: production
+      # Público (não é segredo) — ver frontend/src/lib/server/backend.ts e app/login/page.tsx.
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
     depends_on:
       taskfloww_api:
         condition: service_healthy

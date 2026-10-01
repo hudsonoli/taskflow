@@ -41,6 +41,13 @@ class UsuarioRepository:
         )
         return db.scalars(statement).first()
 
+    def get_by_google_sub(self, db: Session, google_sub: str) -> Usuario | None:
+        """Busca global (sem filtro de empresa) — `google_sub` é único no mundo todo, ver
+        migration 0035. O chamador (AuthService.login_google) ainda confirma a empresa do
+        usuário encontrado bate com a de `empresaCodigo` antes de autenticar."""
+        statement = select(Usuario).where(Usuario.google_sub == google_sub)
+        return db.scalars(statement).first()
+
     def list(
         self,
         db: Session,

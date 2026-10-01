@@ -4,11 +4,20 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.usuario import Usuario
-from app.schemas.auth import AccessTokenResponse, AuthAlterarSenhaRequest, AuthLoginRequest, AuthMeResponse
+from app.schemas.auth import (
+    AccessTokenResponse,
+    AuthAlterarSenhaRequest,
+    AuthGoogleLoginRequest,
+    AuthLoginRequest,
+    AuthMeResponse,
+)
 from app.services.auth_service import (
+    AuthGoogleAccessDeniedError,
     AuthInvalidCredentialsError,
     AuthPasswordValidationError,
     AuthService,
+    AuthUnauthorizedError,
+    GOOGLE_ACCESS_DENIED_MESSAGE,
     INVALID_CREDENTIALS_MESSAGE,
 )
 
@@ -36,6 +45,28 @@ def login(payload: AuthLoginRequest, request: Request, db: Session = Depends(get
         )
     except AuthInvalidCredentialsError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_CREDENTIALS_MESSAGE) from exc
+
+
+@router.post("/google", response_model=AccessTokenResponse)
+def login_google(payload: AuthGoogleLoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Login Google Workspace para usuário PRÉ-CADASTRADO — ver docstring de
+    `AuthService.login_google`. Duas camadas de erro, nunca confundidas: token/identidade
+    Google não confiável → 401 (`AuthUnauthorizedError`); identidade confiável mas sem
+    autorização no TaskFloww (inexistente, inativo, conflito de vínculo, cross-tenant,
+    domínio fora da allowlist) → 403 genérico, sempre a mesma mensagem."""
+    try:
+        return auth_service.login_google(
+            db,
+            empresa_codigo=payload.empresa_codigo,
+            email=payload.email,
+            id_token=payload.id_token,
+            ip_address=extract_client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        )
+    except AuthUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Google inválido") from exc
+    except AuthGoogleAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=GOOGLE_ACCESS_DENIED_MESSAGE) from exc
 
 
 @router.get("/me", response_model=AuthMeResponse)

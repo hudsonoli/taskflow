@@ -27,6 +27,22 @@ export async function login(email: string, senha: string): Promise<{ mustChangeP
   return response.json();
 }
 
+// Login Google Workspace — mesmo contrato de `login()` (BFF trata o idToken, grava o mesmo
+// cookie tf_session). `email` é o que o usuário digitou (login_hint), confirmado no backend
+// contra o claim do token antes de qualquer vínculo — ver AuthService.login_google.
+export async function loginGoogle(email: string, idToken: string): Promise<{ mustChangePassword: boolean }> {
+  const response = await fetch("/api/auth/google", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, idToken }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.message ?? "Não foi possível entrar com Google");
+  }
+  return response.json();
+}
+
 export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST" });
 }

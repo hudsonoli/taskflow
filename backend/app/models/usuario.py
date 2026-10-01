@@ -37,6 +37,8 @@ class Usuario(Base):
         ),
         UniqueConstraint("empresa_id", "codigo_interno", name="uq_usuarios_empresa_codigo_interno"),
         UniqueConstraint("empresa_id", "email", name="uq_usuarios_empresa_email"),
+        # Global, não por empresa: um `sub` do Google é único no mundo — ver migration 0035.
+        UniqueConstraint("google_sub", name="uq_usuarios_google_sub"),
         Index("ix_usuarios_empresa_id", "empresa_id"),
         Index("ix_usuarios_status", "status"),
         Index("ix_usuarios_perfil_base", "perfil_base"),
@@ -105,3 +107,14 @@ class Usuario(Base):
     restaurado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     restaurado_por_usuario_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status_anterior_arquivamento: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # Login Google Workspace — vínculo com identidade pré-cadastrada (ver AuthService.login_google).
+    # Nenhum destes campos é aceito via UsuarioCreate/UsuarioUpdate nem participa de RBAC: são
+    # auxiliares, preenchidos somente pelo próprio fluxo de login Google. `google_sub` é a
+    # chave estável de logins seguintes (não o e-mail, que pode mudar depois do vínculo).
+    google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_google_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    google_given_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_family_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_locale: Mapped[str | None] = mapped_column(String(32), nullable=True)

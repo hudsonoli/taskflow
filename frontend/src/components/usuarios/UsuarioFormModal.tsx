@@ -79,9 +79,16 @@ export function UsuarioFormModal({
   const { usuarioAtual } = useAppData();
   const [draft, setDraft] = useState<UsuarioFormDraft>(() => createInitialDraft(usuario));
   const [activeTab, setActiveTab] = useState("dados");
+  // Pré-cadastro (criação): nome e sobrenome em campos separados, só pra facilitar a
+  // digitação — concatenados em `nome` (campo único, igual já era) no momento de salvar.
+  // Login Google Workspace confirma identidade pelo e-mail pré-cadastrado aqui, nunca cria
+  // usuário novo. Na edição, mantém o campo "Nome" único de sempre: separar um nome já
+  // salvo em nome/sobrenome seria uma suposição, não um fato.
+  const [sobrenome, setSobrenome] = useState("");
 
   const editing = usuario !== undefined;
-  const canSave = draft.nome.trim().length > 0 && draft.email.trim().length > 0;
+  const canSave =
+    draft.nome.trim().length > 0 && draft.email.trim().length > 0 && (editing || sobrenome.trim().length > 0);
   const podeVerFinanceiro = usuarioAtual ? podeVerFinanceiroEfetivo(usuarioAtual) : false;
 
   const tabs = [
@@ -152,7 +159,14 @@ export function UsuarioFormModal({
       <div className="mt-5 flex flex-col gap-4">
         {effectiveTab === "dados" && (
           <>
-            <Input label="Nome" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
+            {editing ? (
+              <Input label="Nome" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <Input label="Nome" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
+                <Input label="Sobrenome" value={sobrenome} onChange={(event) => setSobrenome(event.target.value)} />
+              </div>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2">
               <Input label="E-mail" type="email" value={draft.email} onChange={(event) => updateDraft({ email: event.target.value })} placeholder="pessoa@agencia.com.br" />
@@ -363,7 +377,14 @@ export function UsuarioFormModal({
         <Button type="button" variant="secondary" onClick={onClose} disabled={salvando}>
           Cancelar
         </Button>
-        <Button type="button" disabled={!canSave || salvando} onClick={() => onSave(draft, usuario?.id)}>
+        <Button
+          type="button"
+          disabled={!canSave || salvando}
+          onClick={() => {
+            const nomeFinal = editing ? draft.nome.trim() : `${draft.nome.trim()} ${sobrenome.trim()}`.trim();
+            onSave({ ...draft, nome: nomeFinal }, usuario?.id);
+          }}
+        >
           {salvando ? "Salvando…" : "Salvar alterações"}
         </Button>
       </div>

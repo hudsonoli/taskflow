@@ -56,6 +56,15 @@ class Settings:
     email_config_encryption_key: str | None = field(
         default_factory=lambda: os.getenv("EMAIL_CONFIG_ENCRYPTION_KEY")
     )
+    # Login Google Workspace — client_id é público (vai para o navegador), não é segredo.
+    # Sem client secret: o fluxo de ID Token (Google Identity Services) não precisa dele.
+    google_oauth_client_id: str | None = field(default_factory=lambda: os.getenv("GOOGLE_OAUTH_CLIENT_ID"))
+    # Opcional: quando definido, exige que o claim `hd` do token bata exatamente com este
+    # domínio — ver AuthService.login_google. Ausente = sem checagem extra de domínio (o
+    # usuário já precisa existir pré-cadastrado de qualquer forma).
+    google_workspace_allowed_domain: str | None = field(
+        default_factory=lambda: os.getenv("GOOGLE_WORKSPACE_ALLOWED_DOMAIN")
+    )
 
     def __post_init__(self) -> None:
         # Falha no boot, não na primeira emissão de código: um APP_TIMEZONE inválido só
