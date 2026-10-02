@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Archive, FileText, History, Plus, Trash2, UsersRound } from "lucide-react";
+import { FileText, History, Plus, Trash2, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -292,14 +292,6 @@ export function EquipeProjetoSection({ projeto, onChange, somenteLeitura }: Proj
           })}
         </div>
       )}
-    </SectionShell>
-  );
-}
-
-export function ArquivosProjetoSection() {
-  return (
-    <SectionShell title="Arquivos" description="Área reservada para anexos futuros do projeto." icon={<Archive className="h-5 w-5" />}>
-      <EmptyState title="Nenhum arquivo anexado" description="O upload real de arquivos será tratado em fase futura." icon={<Archive size={16} />} />
     </SectionShell>
   );
 }

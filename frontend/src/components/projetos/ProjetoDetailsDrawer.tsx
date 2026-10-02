@@ -11,8 +11,8 @@ import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type { Projeto, ProjetoStatus } from "@/types/projeto";
+import { ArquivosContextView } from "@/components/arquivos/ArquivosContextView";
 import {
-  ArquivosProjetoSection,
   DadosProjetoSection,
   EquipeProjetoSection,
   HistoricoProjetoSection,
@@ -146,7 +146,7 @@ export function ProjetoDetailsDrawer({
               se aplica, então fica interativa mesmo dentro do painel de inspeção. */}
           {activeTab === "modelo" && <ModeloCampanhaSection projeto={projeto} />}
           {activeTab === "equipe" && <EquipeProjetoSection projeto={projeto} somenteLeitura />}
-          {activeTab === "arquivos" && <ArquivosProjetoSection />}
+          {activeTab === "arquivos" && <ArquivosContextView projetoId={projeto.id} compacto />}
           {activeTab === "historico" && <HistoricoProjetoSection />}
         </div>
       )}

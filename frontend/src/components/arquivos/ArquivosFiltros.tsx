@@ -27,6 +27,9 @@ export function ArquivosFiltros({
   projetos,
   demandas,
   usuarios,
+  ocultarCliente = false,
+  ocultarProjeto = false,
+  compacto = false,
 }: {
   filtros: ArquivosCentralFiltros;
   onChange: (filtros: ArquivosCentralFiltros) => void;
@@ -34,6 +37,11 @@ export function ArquivosFiltros({
   projetos: ProjetoDiretorioItem[];
   demandas: DemandaDiretorio[];
   usuarios: UsuarioDiretorioItem[];
+  // Contexto fixo (aba de Projeto/Cliente): o recorte já vem definido por quem monta a tela.
+  ocultarCliente?: boolean;
+  ocultarProjeto?: boolean;
+  // Dentro de modal/drawer: menos colunas (a largura útil é a do painel, não a da viewport).
+  compacto?: boolean;
 }) {
   function atualizar<K extends keyof ArquivosCentralFiltros>(chave: K, valor: ArquivosCentralFiltros[K]) {
     // Trocar Cliente/Projeto limpa o filtro de Demanda se ela não pertencer mais ao recorte
@@ -79,19 +87,23 @@ export function ArquivosFiltros({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Select
-          label="Cliente"
-          value={filtros.clienteId ?? ""}
-          onChange={(event) => atualizar("clienteId", event.target.value)}
-          options={[{ value: "", label: "Todos" }, ...clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))]}
-        />
-        <Select
-          label="Projeto"
-          value={filtros.projetoId ?? ""}
-          onChange={(event) => atualizar("projetoId", event.target.value)}
-          options={[{ value: "", label: "Todos" }, ...projetosFiltrados.map((projeto) => ({ value: projeto.id, label: projeto.nome }))]}
-        />
+      <div className={compacto ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-4"}>
+        {!ocultarCliente && (
+          <Select
+            label="Cliente"
+            value={filtros.clienteId ?? ""}
+            onChange={(event) => atualizar("clienteId", event.target.value)}
+            options={[{ value: "", label: "Todos" }, ...clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))]}
+          />
+        )}
+        {!ocultarProjeto && (
+          <Select
+            label="Projeto"
+            value={filtros.projetoId ?? ""}
+            onChange={(event) => atualizar("projetoId", event.target.value)}
+            options={[{ value: "", label: "Todos" }, ...projetosFiltrados.map((projeto) => ({ value: projeto.id, label: projeto.nome }))]}
+          />
+        )}
         <Select
           label="Demanda"
           value={filtros.demandaId ?? ""}

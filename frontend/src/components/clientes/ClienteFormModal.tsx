@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Mail, Plus, Search, Trash2, User, X } from "lucide-react";
+import { ArquivosContextView } from "@/components/arquivos/ArquivosContextView";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -96,6 +97,9 @@ export function ClienteFormModal({
     { id: "endereco", label: "Endereço" },
     { id: "contatos", label: "Contatos" },
     ...(podeVerComercial ? [{ id: "comercial", label: "Comercial" }] : []),
+    // Só existe para um Cliente já salvo (precisa do id) — aba de consulta/envio imediato, fora
+    // do rascunho do formulário.
+    ...(editing ? [{ id: "arquivos", label: "Arquivos" }] : []),
   ];
 
   // Se a permissão mudar (ex.: troca de usuário simulado) enquanto a aba Comercial está
@@ -394,15 +398,26 @@ export function ClienteFormModal({
             />
           </>
         )}
+
+        {effectiveTab === "arquivos" && cliente && <ArquivosContextView clienteId={cliente.id} compacto />}
       </div>
 
       <div className="mt-6 flex flex-col justify-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800 sm:flex-row">
-        <Button type="button" variant="secondary" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button type="button" disabled={!canSave || salvando} onClick={() => onSave(draft, cliente?.id)}>
-          Salvar alterações
-        </Button>
+        {effectiveTab === "arquivos" ? (
+          // A aba de arquivos age direto no servidor — não há rascunho a salvar nem a descartar.
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Fechar
+          </Button>
+        ) : (
+          <>
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="button" disabled={!canSave || salvando} onClick={() => onSave(draft, cliente?.id)}>
+              Salvar alterações
+            </Button>
+          </>
+        )}
       </div>
     </Modal>
   );

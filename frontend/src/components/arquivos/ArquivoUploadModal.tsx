@@ -26,6 +26,8 @@ export function ArquivoUploadModal({
   projetos,
   demandas,
   onCreated,
+  clienteFixoId,
+  projetoFixoId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -33,9 +35,13 @@ export function ArquivoUploadModal({
   projetos: ProjetoDiretorioItem[];
   demandas: DemandaDiretorio[];
   onCreated: (arquivo: DemandaArquivo) => void;
+  // Aba de Cliente/Projeto: o recorte já é conhecido — não é perguntado de novo. A Demanda
+  // continua obrigatória (nunca um arquivo ligado só ao Cliente/Projeto).
+  clienteFixoId?: string;
+  projetoFixoId?: string;
 }) {
-  const [clienteId, setClienteId] = useState("");
-  const [projetoId, setProjetoId] = useState("");
+  const [clienteId, setClienteId] = useState(clienteFixoId ?? "");
+  const [projetoId, setProjetoId] = useState(projetoFixoId ?? "");
   const [demandaId, setDemandaId] = useState("");
   const [tipo, setTipo] = useState<DemandaArquivoTipo>("anexo");
   const [linkTitulo, setLinkTitulo] = useState("");
@@ -51,8 +57,8 @@ export function ArquivoUploadModal({
   );
 
   function fechar() {
-    setClienteId("");
-    setProjetoId("");
+    setClienteId(clienteFixoId ?? "");
+    setProjetoId(projetoFixoId ?? "");
     setDemandaId("");
     setTipo("anexo");
     setLinkTitulo("");
@@ -106,25 +112,29 @@ export function ArquivoUploadModal({
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
-        <Select
-          label="Cliente (opcional)"
-          value={clienteId}
-          onChange={(event) => {
-            setClienteId(event.target.value);
-            setProjetoId("");
-            setDemandaId("");
-          }}
-          options={[{ value: "", label: "Todos" }, ...clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))]}
-        />
-        <Select
-          label="Projeto (opcional)"
-          value={projetoId}
-          onChange={(event) => {
-            setProjetoId(event.target.value);
-            setDemandaId("");
-          }}
-          options={[{ value: "", label: "Todos" }, ...projetosFiltrados.map((projeto) => ({ value: projeto.id, label: projeto.nome }))]}
-        />
+        {!clienteFixoId && !projetoFixoId && (
+          <Select
+            label="Cliente (opcional)"
+            value={clienteId}
+            onChange={(event) => {
+              setClienteId(event.target.value);
+              setProjetoId("");
+              setDemandaId("");
+            }}
+            options={[{ value: "", label: "Todos" }, ...clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))]}
+          />
+        )}
+        {!projetoFixoId && (
+          <Select
+            label="Projeto (opcional)"
+            value={projetoId}
+            onChange={(event) => {
+              setProjetoId(event.target.value);
+              setDemandaId("");
+            }}
+            options={[{ value: "", label: "Todos" }, ...projetosFiltrados.map((projeto) => ({ value: projeto.id, label: projeto.nome }))]}
+          />
+        )}
         <Select
           label="Demanda"
           value={demandaId}
@@ -134,6 +144,9 @@ export function ArquivoUploadModal({
             ...demandasFiltradas.map((demanda) => ({ value: demanda.id, label: `#${demanda.numeroOperacional} — ${demanda.nome}` })),
           ]}
         />
+        {demandasFiltradas.length === 0 && (
+          <p className="text-xs text-zinc-400">Nenhuma demanda neste recorte — um arquivo sempre pertence a uma Demanda.</p>
+        )}
 
         <div className="mt-1 flex items-center gap-1.5">
           {(["anexo", "layout", "link"] as const).map((valor) => (
