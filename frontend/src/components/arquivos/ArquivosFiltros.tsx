@@ -4,6 +4,7 @@ import { Search, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import type { ClienteDiretorioItem, ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import { STATUS_LAYOUT_OPTIONS } from "@/lib/arquivo-status-layout";
 import type { ArquivosCentralFiltros } from "@/types/arquivo";
 import type { DemandaDiretorio } from "@/types/demanda";
 
@@ -11,13 +12,6 @@ const TIPO_LABELS: Record<NonNullable<ArquivosCentralFiltros["tipo"]>, string> =
   anexo: "Anexo",
   layout: "Layout",
   link: "Link",
-};
-
-const STATUS_LABELS: Record<NonNullable<ArquivosCentralFiltros["status"]>, string> = {
-  novo: "Novo",
-  aprovado: "Aprovado",
-  reprovado: "Reprovado",
-  solicitar_alteracao: "Solicitar alteração",
 };
 
 export function ArquivosFiltros({
@@ -129,7 +123,7 @@ export function ArquivosFiltros({
           label="Status (layout)"
           value={filtros.status ?? ""}
           onChange={(event) => atualizar("status", (event.target.value || undefined) as ArquivosCentralFiltros["status"])}
-          options={[{ value: "", label: "Todos" }, ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))]}
+          options={[{ value: "", label: "Todos" }, ...STATUS_LAYOUT_OPTIONS]}
         />
         <Input
           label="De"

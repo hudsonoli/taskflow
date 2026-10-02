@@ -1,23 +1,9 @@
 "use client";
 
 import { FileText, Link2 } from "lucide-react";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
+import { STATUS_LAYOUT_LABELS, STATUS_LAYOUT_TONE } from "@/lib/arquivo-status-layout";
 import type { ArquivoCentral } from "@/types/arquivo";
-import type { DemandaArquivoStatusLayout } from "@/types/demanda";
-
-const STATUS_LAYOUT_LABELS: Record<DemandaArquivoStatusLayout, string> = {
-  novo: "Novo",
-  aprovado: "Aprovado",
-  reprovado: "Reprovado",
-  solicitar_alteracao: "Solicitar alteração",
-};
-
-const STATUS_LAYOUT_TONE: Record<DemandaArquivoStatusLayout, BadgeTone> = {
-  novo: "neutral",
-  aprovado: "green",
-  reprovado: "red",
-  solicitar_alteracao: "amber",
-};
 
 function formatarTamanho(bytes: number | null): string | null {
   if (bytes === null) return null;

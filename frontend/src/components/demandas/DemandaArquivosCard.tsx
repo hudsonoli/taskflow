@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, FileText, Image as ImageIcon, Link2, Paperclip, Trash2, Upload } from "lucide-react";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -14,26 +14,13 @@ import {
   uploadArquivoDemanda,
   urlDownloadArquivoDemanda,
 } from "@/lib/api-backend";
+import { STATUS_LAYOUT_LABELS, STATUS_LAYOUT_OPTIONS, STATUS_LAYOUT_TONE } from "@/lib/arquivo-status-layout";
 import type { DemandaArquivo, DemandaArquivoStatusLayout, DemandaArquivoTipo } from "@/types/demanda";
 
 // Espelha ALLOWED_EXTENSIONS de backend/app/services/demanda_arquivo_service.py — só filtra o
 // seletor nativo de arquivo (UX). O backend é quem decide de verdade: enviar uma extensão fora
 // desta lista ainda é 422 no servidor, mesmo contornando este atributo.
 const EXTENSOES_ACEITAS = ".png,.jpg,.jpeg,.pdf";
-
-const STATUS_LAYOUT_LABELS: Record<DemandaArquivoStatusLayout, string> = {
-  novo: "Novo",
-  aprovado: "Aprovado",
-  reprovado: "Reprovado",
-  solicitar_alteracao: "Solicitar alteração",
-};
-
-const STATUS_LAYOUT_TONE: Record<DemandaArquivoStatusLayout, BadgeTone> = {
-  novo: "neutral",
-  aprovado: "green",
-  reprovado: "red",
-  solicitar_alteracao: "amber",
-};
 
 function formatarTamanho(bytes: number | null): string | null {
   if (bytes === null) return null;
@@ -276,7 +263,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
                       value={arquivo.statusLayout ?? "novo"}
                       disabled={atualizandoStatusId === arquivo.id}
                       onChange={(event) => void alterarStatus(arquivo.id, event.target.value as DemandaArquivoStatusLayout)}
-                      options={Object.entries(STATUS_LAYOUT_LABELS).map(([value, label]) => ({ value, label }))}
+                      options={STATUS_LAYOUT_OPTIONS}
                     />
                   </div>
                 )}

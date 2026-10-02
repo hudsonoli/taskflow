@@ -3,26 +3,14 @@
 import { useState } from "react";
 import { Download, ExternalLink, FileText, Link2, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { Select } from "@/components/ui/Select";
 import { useAppData } from "@/lib/AppDataContext";
+import { STATUS_LAYOUT_LABELS, STATUS_LAYOUT_OPTIONS, STATUS_LAYOUT_TONE } from "@/lib/arquivo-status-layout";
 import type { ArquivoCentral } from "@/types/arquivo";
 import type { DemandaArquivoStatusLayout } from "@/types/demanda";
-
-const STATUS_LAYOUT_LABELS: Record<DemandaArquivoStatusLayout, string> = {
-  novo: "Novo",
-  aprovado: "Aprovado",
-  reprovado: "Reprovado",
-  solicitar_alteracao: "Solicitar alteração",
-};
-
-const STATUS_LAYOUT_TONE: Record<DemandaArquivoStatusLayout, BadgeTone> = {
-  novo: "neutral",
-  aprovado: "green",
-  reprovado: "red",
-  solicitar_alteracao: "amber",
-};
 
 function formatarTamanho(bytes: number | null): string {
   if (bytes === null) return "—";
@@ -47,6 +35,7 @@ export function ArquivoPreviewModal({
   onFechar,
   onNavegar,
   onExcluir,
+  onAlterarStatus,
   podeExcluir,
 }: {
   itens: ArquivoCentral[];
@@ -54,9 +43,14 @@ export function ArquivoPreviewModal({
   onFechar: () => void;
   onNavegar: (indice: number) => void;
   onExcluir: (arquivo: ArquivoCentral) => Promise<void>;
+  // Persiste o novo status e atualiza `itens` no dono da lista; rejeita se o servidor recusar.
+  onAlterarStatus: (arquivo: ArquivoCentral, status: DemandaArquivoStatusLayout) => Promise<void>;
   podeExcluir: boolean;
 }) {
   const [excluindo, setExcluindo] = useState(false);
+  const [salvandoStatus, setSalvandoStatus] = useState(false);
+  // Atrelado ao arquivo: ao navegar para outro item o erro do anterior não aparece nele.
+  const [erroStatus, setErroStatus] = useState<{ arquivoId: string; mensagem: string } | null>(null);
   const { setDemandaParaAbrir } = useAppData();
   const router = useRouter();
   const arquivo = indiceAtual !== null ? itens[indiceAtual] : null;
@@ -71,6 +65,24 @@ export function ArquivoPreviewModal({
     // Demanda na aba "atividade" (onde DemandaArquivosCard vive) ao montar.
     setDemandaParaAbrir({ demandaId: arquivo.demandaId, aba: "atividade" });
     router.push("/tarefas");
+  }
+
+  async function handleAlterarStatus(status: DemandaArquivoStatusLayout) {
+    if (!arquivo || status === arquivo.statusLayout) return;
+    setSalvandoStatus(true);
+    setErroStatus(null);
+    try {
+      await onAlterarStatus(arquivo, status);
+    } catch (error) {
+      // O select é controlado pelo status do servidor (`arquivo.statusLayout`): sem sucesso, ele
+      // continua mostrando o status anterior — a tela nunca afirma o que não foi persistido.
+      setErroStatus({
+        arquivoId: arquivo.id,
+        mensagem: error instanceof Error ? error.message : "Não foi possível atualizar o status do layout.",
+      });
+    } finally {
+      setSalvandoStatus(false);
+    }
   }
 
   async function handleExcluir() {
@@ -119,6 +131,21 @@ export function ArquivoPreviewModal({
               <Badge tone={STATUS_LAYOUT_TONE[arquivo.statusLayout]}>{STATUS_LAYOUT_LABELS[arquivo.statusLayout]}</Badge>
             )}
           </div>
+
+          {arquivo.tipo === "layout" && (
+            <div>
+              <Select
+                label="Status do layout"
+                value={arquivo.statusLayout ?? "novo"}
+                disabled={salvandoStatus}
+                onChange={(event) => void handleAlterarStatus(event.target.value as DemandaArquivoStatusLayout)}
+                options={STATUS_LAYOUT_OPTIONS}
+              />
+              {erroStatus?.arquivoId === arquivo.id && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{erroStatus.mensagem}</p>
+              )}
+            </div>
+          )}
 
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
             <dt className="text-zinc-400">Tamanho</dt>

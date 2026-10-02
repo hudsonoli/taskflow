@@ -5,6 +5,7 @@ import { FolderOpen, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
+  atualizarStatusLayoutArquivo,
   excluirArquivoDemanda,
   listArquivosCentral,
   listDiretorioClientes,
@@ -14,7 +15,7 @@ import {
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type { ClienteDiretorioItem, ProjetoDiretorioItem } from "@/lib/api-backend";
-import type { DemandaDiretorio } from "@/types/demanda";
+import type { DemandaArquivoStatusLayout, DemandaDiretorio } from "@/types/demanda";
 import { ArquivoCard } from "./ArquivoCard";
 import { ArquivoPreviewModal } from "./ArquivoPreviewModal";
 import { ArquivosFiltros } from "./ArquivosFiltros";
@@ -139,6 +140,17 @@ export function ArquivosContextView({
       .finally(() => setCarregandoMais(false));
   }
 
+  // O PATCH devolve o registro persistido: o status do servidor é a fonte da verdade (não o
+  // que foi enviado). O mesmo `itens` alimenta o card e o preview — um único estado.
+  async function alterarStatus(arquivo: ArquivoCentral, status: DemandaArquivoStatusLayout) {
+    const atualizado = await atualizarStatusLayoutArquivo(arquivo.demandaId, arquivo.id, status);
+    setItens((atual) =>
+      atual.map((existente) =>
+        existente.id === atualizado.id ? { ...existente, statusLayout: atualizado.statusLayout } : existente,
+      ),
+    );
+  }
+
   async function excluir(arquivo: ArquivoCentral) {
     await excluirArquivoDemanda(arquivo.demandaId, arquivo.id);
     setItens((atual) => atual.filter((existente) => existente.id !== arquivo.id));
@@ -210,6 +222,7 @@ export function ArquivosContextView({
         onFechar={() => setIndicePreview(null)}
         onNavegar={setIndicePreview}
         onExcluir={excluir}
+        onAlterarStatus={alterarStatus}
         podeExcluir
       />
 
