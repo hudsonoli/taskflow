@@ -6,6 +6,7 @@ import {
   BarChart3,
   Building2,
   CalendarClock,
+  FolderOpen,
   Headset,
   Kanban,
   ListChecks,
@@ -38,6 +39,10 @@ const NAV_ITEMS_BASE = [
   { label: "Meu dia", href: "/meu-dia", icon: Sun },
   { label: "Tarefas", href: "/tarefas", icon: ListChecks },
   { label: "Pauta", href: "/pauta", icon: CalendarClock },
+  // Mesmo escopo de Demanda do resto do app (backend: get_current_user_password_ready +
+  // resolver_escopo_demanda) — sem gate extra de menu, cada um só vê o que já veria em
+  // Tarefas/Pauta/Minhas Demandas.
+  { label: "Arquivos", href: "/arquivos", icon: FolderOpen },
 ];
 
 /**

@@ -54,19 +54,31 @@ export type DemandaChecklistItem = {
   updatedAt: string;
 };
 
+export type DemandaArquivoTipo = "anexo" | "layout" | "link";
+export type DemandaArquivoStatusLayout = "novo" | "aprovado" | "reprovado" | "solicitar_alteracao";
+
 /**
- * Metadado de arquivo (Fase 2E.3) — sem `url`: baixar exige o endpoint autenticado
- * (`/demandas/{id}/arquivos/{id}/download`), nunca um caminho estático (ver
- * docs/pendencias-arquiteturais.md item 9, resolvido nesta fase).
+ * Metadado de arquivo (Fase 2E.3; Gerenciador de Arquivos — Fase 2H.1). Sem URL de download
+ * físico: baixar exige o endpoint autenticado (`/demandas/{id}/arquivos/{id}/download`),
+ * nunca um caminho estático (ver docs/pendencias-arquiteturais.md item 9). `url` aqui é só o
+ * destino externo de um registro `tipo:"link"`.
+ *
+ * `nomeOriginal`/`tamanhoBytes` são `null` exatamente quando `tipo === "link"` — reflete o
+ * CHECK `ck_demanda_arquivos_fisico_ou_link` do backend, nunca um estado inesperado.
  */
 export type DemandaArquivo = {
   id: string;
   demandaId: string;
-  nomeOriginal: string;
+  nomeOriginal: string | null;
   contentType: string | null;
-  tamanhoBytes: number;
+  tamanhoBytes: number | null;
   enviadoPorUsuarioId: string | null;
   createdAt: string;
+  tipo: DemandaArquivoTipo;
+  statusLayout: DemandaArquivoStatusLayout | null;
+  url: string | null;
+  titulo: string | null;
+  descricao: string | null;
 };
 
 /**

@@ -2,17 +2,34 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
+from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
+from app.core.escopo import EscopoDemanda
 from app.core.relogio import agora_utc
 from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
 from app.models.demanda_arquivo import DemandaArquivo
 from app.repositories.demanda_arquivo_repository import DemandaArquivoRepository
-from app.schemas.demanda_arquivo import DemandaArquivoRead
+from app.schemas.demanda_arquivo import (
+    ArquivoCentralDemandaRead,
+    ArquivoCentralRead,
+    DemandaArquivoRead,
+    validar_url_http_https,
+)
 from app.services.domain_event_publisher import DomainEventPublisher
 
 TIPO_ENTIDADE = "demanda"
+
+# Gerenciador de Arquivos (migration 0036). `link` nunca é aceito no upload multipart
+# (ALLOWED_TIPOS_UPLOAD) — tem endpoint dedicado (`criar_link`), porque não compartilha nada
+# do fluxo de disco/assinatura/tamanho.
+ALLOWED_TIPOS_UPLOAD = frozenset({"anexo", "layout"})
+STATUS_LAYOUT_VALORES = frozenset({"novo", "aprovado", "reprovado", "solicitar_alteracao"})
+STATUS_LAYOUT_DEFAULT = "novo"
+# Preview inline no grid central — só imagem. PDF nunca é inline (ver _DISPOSITION_INLINE
+# abaixo, decisão de segurança da Fase S1-B, não alterada aqui); link não tem conteúdo físico.
+_CONTENT_TYPES_PREVIEW = frozenset({"image/png", "image/jpeg"})
 
 UPLOADS_ROOT = Path("uploads")
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".pdf"}
@@ -78,6 +95,32 @@ class DemandaArquivoMuitoGrandeError(ValueError):
 class DemandaArquivoConteudoInvalidoError(ValueError):
     """Bytes reais não começam com a assinatura da extensão declarada (Fase S1-B) — Content-
     Type do cliente nunca decide isto, só a checagem de assinatura em `_validar_assinatura`."""
+
+
+class DemandaArquivoTipoInvalidoError(ValueError):
+    """`tipo` fora de `anexo`/`layout` no upload multipart — mais comum: alguém tentando
+    enviar `link` por aqui, que tem endpoint dedicado (`POST .../arquivos/link`)."""
+
+
+class DemandaArquivoUrlInvalidaError(ValueError):
+    """URL de link fora de `http`/`https` (`javascript:`, `data:`, `file:`, etc.) — mesma
+    validação do schema (`validar_url_http_https`), reaplicada aqui porque o service nunca
+    confia só na borda Pydantic para uma regra de segurança."""
+
+
+class DemandaArquivoSemConteudoFisicoError(ValueError):
+    """Tentativa de baixar um registro `tipo='link'` pelo endpoint de download físico — ele
+    não tem `nome_fisico`/conteúdo em disco por definição (ver CHECK
+    `ck_demanda_arquivos_fisico_ou_link`)."""
+
+
+class DemandaArquivoStatusLayoutForaDeTipoError(ValueError):
+    """PATCH de `statusLayout` num arquivo que não é `tipo='layout'` — nunca aceito, mesmo
+    que o valor de status seja válido."""
+
+
+class DemandaArquivoStatusLayoutInvalidoError(ValueError):
+    pass
 
 
 def _bytes_correspondem_a_assinatura(conteudo_inicial: bytes, extensao: str) -> bool:
@@ -146,6 +189,12 @@ class DemandaArquivoService:
 
     def obter_para_download(self, db: Session, demanda: Demanda, arquivo_id: str) -> tuple[DemandaArquivo, Path]:
         arquivo = self._get_arquivo_da_demanda(db, demanda.id, arquivo_id)
+        if arquivo.tipo == "link":
+            # Sem nome_fisico por definição (CHECK ck_demanda_arquivos_fisico_ou_link) — o
+            # frontend abre `arquivo.url` direto, nunca chama este endpoint pra link.
+            raise DemandaArquivoSemConteudoFisicoError(
+                "Este registro é um link, não um arquivo físico — não há conteúdo para baixar."
+            )
         caminho = self.caminho_fisico(demanda.id, arquivo.nome_fisico)
         # Metadado sem arquivo físico correspondente é uma anomalia de integridade, não uma
         # pergunta de autorização diferente — devolve o mesmo 404 de "não encontrado" em vez
@@ -155,8 +204,19 @@ class DemandaArquivoService:
         return arquivo, caminho
 
     async def upload(
-        self, db: Session, demanda: Demanda, file: UploadFile, *, actor_usuario_id: str | None
+        self,
+        db: Session,
+        demanda: Demanda,
+        file: UploadFile,
+        *,
+        tipo: str = "anexo",
+        actor_usuario_id: str | None,
     ) -> DemandaArquivo:
+        if tipo not in ALLOWED_TIPOS_UPLOAD:
+            raise DemandaArquivoTipoInvalidoError(
+                "tipo deve ser 'anexo' ou 'layout' — use POST .../arquivos/link para links."
+            )
+
         nome_original = Path((file.filename or "").strip()).name.strip()
         if not nome_original:
             raise DemandaArquivoVazioError("Nome de arquivo inválido")
@@ -202,6 +262,8 @@ class DemandaArquivoService:
                 content_type=mime_canonico,
                 tamanho_bytes=len(conteudo),
                 enviado_por_usuario_id=actor_usuario_id,
+                tipo=tipo,
+                status_layout=STATUS_LAYOUT_DEFAULT if tipo == "layout" else None,
                 created_at=now,
             )
             self.repository.create(db, arquivo)
@@ -221,22 +283,118 @@ class DemandaArquivoService:
         self, db: Session, demanda: Demanda, arquivo_id: str, *, actor_usuario_id: str | None
     ) -> None:
         arquivo = self._get_arquivo_da_demanda(db, demanda.id, arquivo_id)
-        caminho = self.caminho_fisico(demanda.id, arquivo.nome_fisico)
+        # `link` não tem nome_fisico (CHECK ck_demanda_arquivos_fisico_ou_link) — não há
+        # caminho nenhum a calcular nem arquivo físico a tentar remover.
+        caminho = self.caminho_fisico(demanda.id, arquivo.nome_fisico) if arquivo.nome_fisico else None
 
         try:
             now = agora_utc()
             self.repository.delete(db, arquivo)
             self._publish_event(
                 db, demanda, DomainEventType.DEMANDA_ARQUIVO_REMOVIDO, actor_usuario_id,
-                extra_payload={"arquivoId": arquivo_id, "nomeOriginal": arquivo.nome_original}, occurred_at=now,
+                extra_payload={
+                    "arquivoId": arquivo_id,
+                    "nomeOriginal": arquivo.nome_original or arquivo.titulo,
+                },
+                occurred_at=now,
             )
             db.commit()
         except Exception:
             db.rollback()
             raise
 
-        # Melhor esforço, depois do commit — ver docstring da classe.
-        caminho.unlink(missing_ok=True)
+        if caminho is not None:
+            # Melhor esforço, depois do commit — ver docstring da classe.
+            caminho.unlink(missing_ok=True)
+
+    def criar_link(
+        self,
+        db: Session,
+        demanda: Demanda,
+        *,
+        titulo: str,
+        url: str,
+        descricao: str | None,
+        actor_usuario_id: str | None,
+    ) -> DemandaArquivo:
+        """`tipo='link'` — nunca escreve em disco, nunca passa pelas validações de
+        extensão/assinatura/tamanho do upload físico (não se aplicam)."""
+        titulo = titulo.strip()
+        if not titulo:
+            raise DemandaArquivoVazioError("Título do link é obrigatório")
+        # Revalidado aqui mesmo já validado no schema — o service nunca confia só na borda
+        # Pydantic para uma regra de segurança (mesmo princípio de `_validar_assinatura`).
+        try:
+            url = validar_url_http_https(url)
+        except ValueError as exc:
+            raise DemandaArquivoUrlInvalidaError(str(exc)) from exc
+
+        try:
+            now = agora_utc()
+            arquivo = DemandaArquivo(
+                id=str(uuid4()),
+                demanda_id=demanda.id,
+                nome_original=None,
+                nome_fisico=None,
+                content_type=None,
+                tamanho_bytes=None,
+                enviado_por_usuario_id=actor_usuario_id,
+                tipo="link",
+                status_layout=None,
+                url=url,
+                titulo=titulo,
+                descricao=(descricao or "").strip() or None,
+                created_at=now,
+            )
+            self.repository.create(db, arquivo)
+            self._publish_event(
+                db, demanda, DomainEventType.DEMANDA_ARQUIVO_ENVIADO, actor_usuario_id,
+                extra_payload={"arquivoId": arquivo.id, "nomeOriginal": titulo, "tipo": "link"}, occurred_at=now,
+            )
+            db.commit()
+            db.refresh(arquivo)
+            return arquivo
+        except Exception:
+            db.rollback()
+            raise
+
+    def atualizar_status_layout(
+        self,
+        db: Session,
+        demanda: Demanda,
+        arquivo_id: str,
+        *,
+        status_layout: str,
+        actor_usuario_id: str | None,
+    ) -> DemandaArquivo:
+        arquivo = self._get_arquivo_da_demanda(db, demanda.id, arquivo_id)
+        if arquivo.tipo != "layout":
+            raise DemandaArquivoStatusLayoutForaDeTipoError(
+                "Só arquivos do tipo 'layout' têm status de aprovação."
+            )
+        if status_layout not in STATUS_LAYOUT_VALORES:
+            raise DemandaArquivoStatusLayoutInvalidoError("Status de layout inválido")
+
+        try:
+            now = agora_utc()
+            status_anterior = arquivo.status_layout
+            arquivo.status_layout = status_layout
+            self.repository.update(db, arquivo)
+            self._publish_event(
+                db, demanda, DomainEventType.DEMANDA_ARQUIVO_STATUS_ALTERADO, actor_usuario_id,
+                extra_payload={
+                    "arquivoId": arquivo_id,
+                    "statusAnterior": status_anterior,
+                    "statusNovo": status_layout,
+                },
+                occurred_at=now,
+            )
+            db.commit()
+            db.refresh(arquivo)
+            return arquivo
+        except Exception:
+            db.rollback()
+            raise
 
     @staticmethod
     def resolver_download_seguro(nome_fisico: str, caminho: Path) -> tuple[str, bool]:
@@ -282,6 +440,78 @@ class DemandaArquivoService:
             tamanhoBytes=arquivo.tamanho_bytes,
             enviadoPorUsuarioId=arquivo.enviado_por_usuario_id,
             createdAt=arquivo.created_at,
+            tipo=arquivo.tipo,
+            statusLayout=arquivo.status_layout,
+            url=arquivo.url,
+            titulo=arquivo.titulo,
+            descricao=arquivo.descricao,
+        )
+
+    def list_central(
+        self,
+        db: Session,
+        *,
+        escopo: EscopoDemanda,
+        search: str | None = None,
+        cliente_id: str | None = None,
+        projeto_id: str | None = None,
+        demanda_id: str | None = None,
+        tipo: str | None = None,
+        status_layout: str | None = None,
+        usuario_id: str | None = None,
+        data_inicio=None,
+        data_fim=None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ArquivoCentralRead]:
+        linhas = self.repository.list_central(
+            db,
+            escopo=escopo,
+            search=search,
+            cliente_id=cliente_id,
+            projeto_id=projeto_id,
+            demanda_id=demanda_id,
+            tipo=tipo,
+            status_layout=status_layout,
+            usuario_id=usuario_id,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            limit=limit,
+            offset=offset,
+        )
+        return [self._to_central_read(linha) for linha in linhas]
+
+    @staticmethod
+    def _to_central_read(linha: Row) -> ArquivoCentralRead:
+        """Monta o item autossuficiente a partir da Row já com todos os JOINs resolvidos
+        (ver `DemandaArquivoRepository.list_central`) — nenhum fetch adicional aqui."""
+        arquivo: DemandaArquivo = linha[0]
+        nome = arquivo.nome_original if arquivo.tipo != "link" else arquivo.titulo
+        preview_disponivel = arquivo.tipo in ("anexo", "layout") and arquivo.content_type in _CONTENT_TYPES_PREVIEW
+        return ArquivoCentralRead(
+            id=arquivo.id,
+            demandaId=arquivo.demanda_id,
+            nome=nome or "",
+            mimeType=arquivo.content_type,
+            tamanhoBytes=arquivo.tamanho_bytes,
+            tipo=arquivo.tipo,
+            statusLayout=arquivo.status_layout,
+            url=arquivo.url,
+            descricao=arquivo.descricao,
+            createdAt=arquivo.created_at,
+            enviadoPorUsuarioId=arquivo.enviado_por_usuario_id,
+            usuarioNome=linha.usuario_nome,
+            demanda=ArquivoCentralDemandaRead(
+                id=arquivo.demanda_id,
+                numeroOperacional=linha.numero_operacional,
+                codigoReferencia=linha.demanda_codigo_referencia,
+                nome=linha.demanda_nome,
+            ),
+            projetoId=linha.projeto_id,
+            projetoNome=linha.projeto_nome,
+            clienteId=linha.cliente_id,
+            clienteNome=linha.cliente_nome,
+            previewDisponivel=preview_disponivel,
         )
 
     def _publish_event(

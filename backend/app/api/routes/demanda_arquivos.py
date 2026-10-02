@@ -9,7 +9,7 @@ quem pede antes de tocar em disco. Não há mais caminho público para arquivo d
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -18,13 +18,22 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.models.demanda import Demanda
 from app.models.usuario import Usuario
-from app.schemas.demanda_arquivo import DemandaArquivoRead
+from app.schemas.demanda_arquivo import (
+    DemandaArquivoLinkCreate,
+    DemandaArquivoRead,
+    DemandaArquivoStatusLayoutUpdate,
+)
 from app.services.demanda_arquivo_service import (
     DemandaArquivoConteudoInvalidoError,
     DemandaArquivoExtensaoInvalidaError,
     DemandaArquivoMuitoGrandeError,
     DemandaArquivoNotFoundError,
+    DemandaArquivoSemConteudoFisicoError,
     DemandaArquivoService,
+    DemandaArquivoStatusLayoutForaDeTipoError,
+    DemandaArquivoStatusLayoutInvalidoError,
+    DemandaArquivoTipoInvalidoError,
+    DemandaArquivoUrlInvalidaError,
     DemandaArquivoVazioError,
 )
 from app.services.demanda_service import DemandaNotFoundError, DemandaService
@@ -41,7 +50,9 @@ arquivo_service = DemandaArquivoService()
 
 
 def handle_arquivo_error(exc: Exception) -> None:
-    if isinstance(exc, (DemandaNotFoundError, DemandaArquivoNotFoundError)):
+    if isinstance(exc, (DemandaNotFoundError, DemandaArquivoNotFoundError, DemandaArquivoSemConteudoFisicoError)):
+        # Link sem conteúdo físico recebe o mesmo 404 de "arquivo não encontrado" pelo
+        # endpoint de download — não existe conteúdo pra baixar, mesma família de resposta.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     if isinstance(
         exc,
@@ -50,6 +61,10 @@ def handle_arquivo_error(exc: Exception) -> None:
             DemandaArquivoVazioError,
             DemandaArquivoMuitoGrandeError,
             DemandaArquivoConteudoInvalidoError,
+            DemandaArquivoTipoInvalidoError,
+            DemandaArquivoUrlInvalidaError,
+            DemandaArquivoStatusLayoutForaDeTipoError,
+            DemandaArquivoStatusLayoutInvalidoError,
         ),
     ):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
@@ -81,12 +96,67 @@ def listar_arquivos(
 async def upload_arquivo(
     demanda_id: UUID,
     file: UploadFile = File(...),
+    # multipart, não JSON — por isso Form(), não um schema Pydantic no corpo. Default "anexo"
+    # preserva 100% o contrato de quem já chama sem mandar `tipo` (frontend atual, testes
+    # legados). "link" nunca é aceito aqui — ver DemandaArquivoService.upload.
+    tipo: str = Form(default="anexo"),
     current_user: Usuario = Depends(get_current_user_password_ready),
     db: Session = Depends(get_db),
 ):
     try:
         demanda = _demanda_no_escopo(demanda_id, current_user, db)
-        arquivo = await arquivo_service.upload(db, demanda, file, actor_usuario_id=current_user.id)
+        arquivo = await arquivo_service.upload(db, demanda, file, tipo=tipo, actor_usuario_id=current_user.id)
+        return arquivo_service.to_read(arquivo)
+    except Exception as exc:
+        handle_arquivo_error(exc)
+
+
+@router.post(
+    "/{demanda_id}/arquivos/link", response_model=DemandaArquivoRead, status_code=status.HTTP_201_CREATED
+)
+def criar_link(
+    demanda_id: UUID,
+    payload: DemandaArquivoLinkCreate,
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Registro `tipo='link'` — mesmo escopo/tenant/autorização do upload físico, sem
+    tocar em disco. Endpoint separado de propósito: nada do fluxo de arquivo físico
+    (extensão, assinatura, tamanho, nome_fisico) se aplica aqui."""
+    try:
+        demanda = _demanda_no_escopo(demanda_id, current_user, db)
+        arquivo = arquivo_service.criar_link(
+            db,
+            demanda,
+            titulo=payload.titulo,
+            url=payload.url,
+            descricao=payload.descricao,
+            actor_usuario_id=current_user.id,
+        )
+        return arquivo_service.to_read(arquivo)
+    except Exception as exc:
+        handle_arquivo_error(exc)
+
+
+@router.patch("/{demanda_id}/arquivos/{arquivo_id}", response_model=DemandaArquivoRead)
+def atualizar_status_layout(
+    demanda_id: UUID,
+    arquivo_id: UUID,
+    payload: DemandaArquivoStatusLayoutUpdate,
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Só altera `statusLayout`, só em arquivo `tipo='layout'` — não é um update genérico de
+    arquivo (ver DemandaArquivoService.atualizar_status_layout)."""
+    try:
+        demanda = _demanda_no_escopo(demanda_id, current_user, db)
+        arquivo = arquivo_service.atualizar_status_layout(
+            db,
+            demanda,
+            str(arquivo_id),
+            status_layout=payload.status_layout,
+            actor_usuario_id=current_user.id,
+        )
         return arquivo_service.to_read(arquivo)
     except Exception as exc:
         handle_arquivo_error(exc)

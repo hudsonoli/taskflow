@@ -91,6 +91,8 @@ class DomainEventType(StrEnum):
     DEMANDA_CHECKLIST_ITEM_EXCLUIDO = "demanda.checklist_item_excluido"
     DEMANDA_ARQUIVO_ENVIADO = "demanda.arquivo_enviado"
     DEMANDA_ARQUIVO_REMOVIDO = "demanda.arquivo_removido"
+    # Gerenciador de Arquivos (migration 0036) — só para tipo='layout'.
+    DEMANDA_ARQUIVO_STATUS_ALTERADO = "demanda.arquivo_status_alterado"
 
     # Comentários (Fase 2E.4) — mesma entidade_tipo/entidade_id da Demanda-mãe.
     DEMANDA_COMENTARIO_CRIADO = "demanda.comentario_criado"

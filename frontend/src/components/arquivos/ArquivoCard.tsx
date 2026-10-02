@@ -1,0 +1,77 @@
+"use client";
+
+import { FileText, Link2 } from "lucide-react";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import type { ArquivoCentral } from "@/types/arquivo";
+import type { DemandaArquivoStatusLayout } from "@/types/demanda";
+
+const STATUS_LAYOUT_LABELS: Record<DemandaArquivoStatusLayout, string> = {
+  novo: "Novo",
+  aprovado: "Aprovado",
+  reprovado: "Reprovado",
+  solicitar_alteracao: "Solicitar alteração",
+};
+
+const STATUS_LAYOUT_TONE: Record<DemandaArquivoStatusLayout, BadgeTone> = {
+  novo: "neutral",
+  aprovado: "green",
+  reprovado: "red",
+  solicitar_alteracao: "amber",
+};
+
+function formatarTamanho(bytes: number | null): string | null {
+  if (bytes === null) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatarData(iso: string): string {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(new Date(iso));
+}
+
+export function ArquivoCard({ arquivo, onAbrir }: { arquivo: ArquivoCentral; onAbrir: () => void }) {
+  const tamanho = formatarTamanho(arquivo.tamanhoBytes);
+
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white p-3 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-indigo-500/50"
+    >
+      <div className="flex h-24 items-center justify-center overflow-hidden rounded-xl bg-zinc-50 dark:bg-zinc-950/40">
+        {arquivo.previewDisponivel ? (
+          // eslint-disable-next-line @next/next/no-img-element -- miniatura autenticada via proxy, não um asset estático elegível a otimização do next/image
+          <img
+            src={`/api/backend/demandas/${arquivo.demandaId}/arquivos/${arquivo.id}/download`}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        ) : arquivo.tipo === "link" ? (
+          <Link2 className="h-8 w-8 text-zinc-300 dark:text-zinc-700" />
+        ) : (
+          <FileText className="h-8 w-8 text-zinc-300 dark:text-zinc-700" />
+        )}
+      </div>
+
+      <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={arquivo.nome}>
+        {arquivo.nome}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge tone="neutral">{arquivo.tipo === "anexo" ? "Anexo" : arquivo.tipo === "layout" ? "Layout" : "Link"}</Badge>
+        {arquivo.tipo === "layout" && arquivo.statusLayout && (
+          <Badge tone={STATUS_LAYOUT_TONE[arquivo.statusLayout]}>{STATUS_LAYOUT_LABELS[arquivo.statusLayout]}</Badge>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-zinc-400">
+        <span className="truncate">#{arquivo.demanda.numeroOperacional} — {arquivo.demanda.nome}</span>
+      </div>
+      <div className="flex items-center justify-between text-[11px] text-zinc-400">
+        <span>{arquivo.usuarioNome ?? "—"}</span>
+        <span>{tamanho ? `${tamanho} · ` : ""}{formatarData(arquivo.createdAt)}</span>
+      </div>
+    </button>
+  );
+}

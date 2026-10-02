@@ -1,4 +1,5 @@
 import type { PerfilUsuario, Usuario, UsuarioFormDraft } from "@/types/usuario";
+import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type { PermissaoAdminItem, PermissaoOverride } from "@/types/permissao";
 import type { GrupoCliente, GrupoClienteStatus } from "@/types/grupo-cliente";
 import type { Departamento, DepartamentoFormDraft, DepartamentoStatus } from "@/types/departamento";
@@ -1811,11 +1812,16 @@ export async function excluirItemChecklist(demandaId: string, itemId: string): P
 export type DemandaArquivoReadApi = {
   id: string;
   demandaId: string;
-  nomeOriginal: string;
+  nomeOriginal: string | null;
   contentType: string | null;
-  tamanhoBytes: number;
+  tamanhoBytes: number | null;
   enviadoPorUsuarioId: string | null;
   createdAt: string;
+  tipo: DemandaArquivo["tipo"];
+  statusLayout: DemandaArquivo["statusLayout"];
+  url: string | null;
+  titulo: string | null;
+  descricao: string | null;
 };
 
 function mapArquivoReadToArquivo(data: DemandaArquivoReadApi): DemandaArquivo {
@@ -1830,9 +1836,15 @@ export async function listArquivosDemanda(demandaId: string): Promise<DemandaArq
 // Upload é multipart — `request()` força `Content-Type: application/json`, o que destruiria
 // o boundary do FormData (mesma razão documentada no proxy, ver
 // src/app/api/backend/[...path]/route.ts). Por isso fala com `fetch` diretamente.
-export async function uploadArquivoDemanda(demandaId: string, file: File): Promise<DemandaArquivo> {
+// `tipo` default "anexo" preserva o contrato de quem já chama sem especificar.
+export async function uploadArquivoDemanda(
+  demandaId: string,
+  file: File,
+  tipo: "anexo" | "layout" = "anexo",
+): Promise<DemandaArquivo> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("tipo", tipo);
   const response = await fetch(`/api/backend/demandas/${demandaId}/arquivos`, {
     method: "POST",
     body: formData,
@@ -1847,14 +1859,60 @@ export async function uploadArquivoDemanda(demandaId: string, file: File): Promi
   return mapArquivoReadToArquivo(await response.json());
 }
 
+export async function criarLinkArquivoDemanda(
+  demandaId: string,
+  payload: { titulo: string; url: string; descricao?: string },
+): Promise<DemandaArquivo> {
+  const data = await request<DemandaArquivoReadApi>(`/demandas/${demandaId}/arquivos/link`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return mapArquivoReadToArquivo(data);
+}
+
+export async function atualizarStatusLayoutArquivo(
+  demandaId: string,
+  arquivoId: string,
+  statusLayout: NonNullable<DemandaArquivo["statusLayout"]>,
+): Promise<DemandaArquivo> {
+  const data = await request<DemandaArquivoReadApi>(`/demandas/${demandaId}/arquivos/${arquivoId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ statusLayout }),
+  });
+  return mapArquivoReadToArquivo(data);
+}
+
 export async function excluirArquivoDemanda(demandaId: string, arquivoId: string): Promise<void> {
   await request<null>(`/demandas/${demandaId}/arquivos/${arquivoId}`, { method: "DELETE" });
 }
 
 // Usada direto num `<a href>` — o proxy lê o cookie de sessão, então o navegador autentica
-// a navegação normalmente, sem JS extra. Nunca aponta pro FastAPI direto.
+// a navegação normalmente, sem JS extra. Nunca aponta pro FastAPI direto. Nunca para
+// `tipo:"link"` — link abre `arquivo.url` direto, não tem conteúdo físico pra baixar.
 export function urlDownloadArquivoDemanda(demandaId: string, arquivoId: string): string {
   return `/api/backend/demandas/${demandaId}/arquivos/${arquivoId}/download`;
+}
+
+// ---------------------------------------------------------------------------------------
+// Gerenciador central de Arquivos (Fase 2H.1) — visão transversal sobre demanda_arquivos,
+// sem duplicação física. Resposta já vem com cliente/projeto/demanda/usuário resolvidos —
+// nunca depende de AppDataContext/diretório global (ver docstring do schema no backend).
+// ---------------------------------------------------------------------------------------
+
+export async function listArquivosCentral(filtros: ArquivosCentralFiltros = {}): Promise<ArquivoCentral[]> {
+  const search = new URLSearchParams();
+  if (filtros.search) search.set("search", filtros.search);
+  if (filtros.clienteId) search.set("clienteId", filtros.clienteId);
+  if (filtros.projetoId) search.set("projetoId", filtros.projetoId);
+  if (filtros.demandaId) search.set("demandaId", filtros.demandaId);
+  if (filtros.tipo) search.set("tipo", filtros.tipo);
+  if (filtros.status) search.set("status", filtros.status);
+  if (filtros.usuarioId) search.set("usuarioId", filtros.usuarioId);
+  if (filtros.dataInicio) search.set("dataInicio", filtros.dataInicio);
+  if (filtros.dataFim) search.set("dataFim", filtros.dataFim);
+  search.set("limit", String(filtros.limit ?? 50));
+  search.set("offset", String(filtros.offset ?? 0));
+  return request<ArquivoCentral[]>(`/arquivos?${search.toString()}`);
 }
 
 // ---------------------------------------------------------------------------------------

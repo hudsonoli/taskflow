@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    arquivos,
     categorias_peca,
     clientes,
     auth,
@@ -70,6 +71,7 @@ app.include_router(relatorios.router)
 app.include_router(demandas.router)
 app.include_router(demanda_checklist.router)
 app.include_router(demanda_arquivos.router)
+app.include_router(arquivos.router)
 app.include_router(demanda_comentarios.router)
 app.include_router(demanda_historico.router)
 app.include_router(departamentos.router)

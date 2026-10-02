@@ -92,8 +92,11 @@ def test_upload_valido_persiste_metadado(client_admin: TestClient) -> None:
     assert corpo["tamanhoBytes"] == len(b"%PDF-1.4 conteudo de teste")
     assert corpo["contentType"] == "application/pdf"
     assert corpo["enviadoPorUsuarioId"] is not None
-    # Sem `url` no payload — download é só pelo endpoint autenticado (ver docstring do schema).
-    assert "url" not in corpo
+    assert corpo["tipo"] == "anexo"
+    # `url` existe no schema desde o Gerenciador de Arquivos (migration 0036, suporte a
+    # tipo='link'), mas continua None pra anexo — download é só pelo endpoint autenticado
+    # (ver docstring do schema), nunca um link estático.
+    assert corpo["url"] is None
 
 
 def test_arquivo_fisico_gravado_com_nome_derivado_do_id(client_admin: TestClient) -> None:
