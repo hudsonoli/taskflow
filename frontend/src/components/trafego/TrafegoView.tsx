@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getResumoTrafegoSessoes, listSessoesTrabalho } from "@/lib/api";
+import { getIndicadoresTrafegoSessoes, getResumoTrafegoSessoes, listSessoesTrabalho } from "@/lib/api";
 import { getDemandasPorIds, getResumoOperacional, listDiretorioDemandas, type ResumoOperacional } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
@@ -11,14 +11,14 @@ import { podeAcessarCentralTrafego } from "@/lib/escopo-operacional";
 import {
   buildCarga,
   buildCargaEquipe,
-  buildResumo,
   filterSessoes,
   periodoParaDataInicio,
+  resumoDeIndicadores,
 } from "@/lib/trafego";
 import { useNow } from "@/lib/useNow";
 import type { DemandaDiretorio } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
-import type { TrafegoFiltersState } from "@/types/trafego";
+import type { TrafegoFiltersState, TrafegoIndicadores } from "@/types/trafego";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { TempoOperacionalCard } from "./TempoOperacionalCard";
 import { TrafegoAgoraTable } from "./TrafegoAgoraTable";
@@ -68,6 +68,15 @@ export function TrafegoView() {
   // `horasExecutadas === null` distingue "carregando" de "zero confirmado".
   const [horasExecutadas, setHorasExecutadas] = useState<number | null>(null);
   const [erroHorasExecutadas, setErroHorasExecutadas] = useState<string | null>(null);
+  // D2-D3C1 — métricas de `TrafegoResumoCards`/`TempoOperacionalCard`, agregadas no servidor
+  // (`/sessoes-trabalho/trafego/indicadores`) sobre o universo INTEGRAL e já com TODOS os filtros
+  // da tela — nunca mais derivadas de `sessoesAtivas`/`sessoesEncerradas` (limit=100). Estado
+  // independente das listas: falha de um lado não derruba o outro. `indicadores === null`
+  // distingue "carregando" de "zero confirmado". `recebidoEm` ancora o relógio das sessões
+  // ativas entre dois fetches (ver `resumoDeIndicadores`).
+  const [indicadores, setIndicadores] = useState<{ dados: TrafegoIndicadores; recebidoEm: number } | null>(null);
+  const [erroIndicadores, setErroIndicadores] = useState<string | null>(null);
+  const [versaoIndicadores, setVersaoIndicadores] = useState(0);
   const now = useNow(1000);
 
   const carregar = useCallback(async () => {
@@ -146,6 +155,43 @@ export function TrafegoView() {
     };
   }, [filters.periodo]);
 
+  // D2-D3C1 — indicadores, refeitos quando QUALQUER filtro muda (período, status, usuários,
+  // departamentos, busca de demanda) ou quando uma sessão é aberta/fechada/atualizada
+  // (`versaoIndicadores`). Debounce curto por causa da busca digitada. `cancelado` evita que uma
+  // resposta antiga (troca rápida de filtro) sobrescreva a mais nova.
+  useEffect(() => {
+    let cancelado = false;
+    const timeout = setTimeout(() => {
+      getIndicadoresTrafegoSessoes({
+        periodoInicio: periodoParaDataInicio[filters.periodo](),
+        status: filters.status,
+        usuarioIds: filters.usuarioIds,
+        departamentoIds: filters.departamentoIds,
+        demandaQuery: filters.demandaQuery,
+      })
+        .then((dados) => {
+          if (cancelado) return;
+          setIndicadores({ dados, recebidoEm: Date.now() });
+          setErroIndicadores(null);
+        })
+        .catch((error) => {
+          if (cancelado) return;
+          setErroIndicadores(error instanceof Error ? error.message : "Não foi possível carregar os indicadores.");
+        });
+    }, 250);
+    return () => {
+      cancelado = true;
+      clearTimeout(timeout);
+    };
+  }, [filters.periodo, filters.status, filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
+
+  // Atualização completa: listas + indicadores. Usada pelo botão de refresh e por toda ação que
+  // muda sessões (iniciar, fechar) — os indicadores não podem ficar para trás da lista.
+  const atualizar = useCallback(() => {
+    setVersaoIndicadores((versao) => versao + 1);
+    void carregar();
+  }, [carregar]);
+
   // D2-C — diretório de vínculo (autocomplete de "Iniciar sessão"): não arquivada, escopo
   // padrão da listagem, carregado uma vez — não depende de filtro/período de sessões.
   useEffect(() => {
@@ -189,8 +235,9 @@ export function TrafegoView() {
   }, [sessoesAtivas, sessoesEncerradas]);
 
   const ativasFiltradas = filterSessoes(sessoesAtivas, filters, diretorioHistorico);
-  const encerradasFiltradas = filterSessoes(sessoesEncerradas, filters, diretorioHistorico);
-  const resumo = buildResumo(ativasFiltradas, encerradasFiltradas, now);
+  const resumo = indicadores
+    ? resumoDeIndicadores(indicadores.dados, (now.getTime() - indicadores.recebidoEm) / 1000)
+    : null;
   const cargaUsuarios = buildCarga(ativasFiltradas, "usuario", now);
   const cargaDepartamentos = buildCarga(ativasFiltradas, "departamento", now);
   const cargaEquipes = buildCargaEquipe(ativasFiltradas, equipes, now);
@@ -200,7 +247,7 @@ export function TrafegoView() {
   if (!podeAcessarCentralTrafego(usuarioAtual)) {
     return (
       <div className="flex flex-col gap-6">
-        <TrafegoHeader onRefresh={carregar} refreshing={loading} />
+        <TrafegoHeader onRefresh={atualizar} refreshing={loading} />
         <AcessoNegado
           titulo="Central de Tráfego restrita à gestão autorizada"
           descricao="Esta visão reúne carga, capacidade e demandas de toda a operação — disponível apenas para perfis de gestão autorizados nesta fase."
@@ -211,9 +258,17 @@ export function TrafegoView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TrafegoHeader onRefresh={carregar} refreshing={loading} />
-      <TrafegoIniciarSessao onCreated={carregar} demandas={diretorioNovaSessao} />
+      <TrafegoHeader onRefresh={atualizar} refreshing={loading} />
+      <TrafegoIniciarSessao onCreated={atualizar} demandas={diretorioNovaSessao} />
       <TrafegoFilters filters={filters} onChange={setFilters} usuarios={usuarios} departamentos={departamentos} />
+
+      {erroIndicadores && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+          {erroIndicadores}
+        </div>
+      )}
+      <TrafegoResumoCards resumo={resumo} erro={erroIndicadores} />
+      <TempoOperacionalCard resumo={resumo} erro={erroIndicadores} />
 
       {erro ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
@@ -221,8 +276,6 @@ export function TrafegoView() {
         </div>
       ) : (
         <>
-          <TrafegoResumoCards resumo={resumo} />
-          <TempoOperacionalCard resumo={resumo} />
           <TrafegoIndicadoresDemandas
             resumo={resumoOperacional}
             erro={erroResumoOperacional}
@@ -232,7 +285,7 @@ export function TrafegoView() {
           <TrafegoAgoraTable
               sessoes={ativasFiltradas}
               now={now}
-              onChanged={carregar}
+              onChanged={atualizar}
               diretorioDemandas={diretorioHistorico}
               diretorioUsuarios={usuarios}
               diretorioDepartamentos={departamentos}

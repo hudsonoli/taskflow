@@ -19,6 +19,7 @@ desse enforcement — continua com `get_current_user_password_ready` +
 """
 
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -35,6 +36,7 @@ from app.schemas.sessao_trabalho import (
     SessaoTrabalhoFechar,
     SessaoTrabalhoHorasRead,
     SessaoTrabalhoRead,
+    SessaoTrabalhoTrafegoIndicadoresRead,
     SessaoTrabalhoTrafegoResumoRead,
 )
 from app.services.evento_service import EventoService
@@ -68,6 +70,23 @@ def normalize_datetime(value: datetime | None) -> datetime | None:
             detail="Filtros de data devem incluir timezone",
         )
     return value.astimezone(timezone.utc)
+
+
+def _parse_uuid_csv(raw: str | None, campo: str) -> list[str] | None:
+    """CSV de UUIDs (mesma convenção de `departamentoId` em demandas): segmentos vazios são
+    descartados; um segmento que não é UUID é 422, nunca ignorado em silêncio."""
+    if raw is None:
+        return None
+    segmentos = [segmento.strip() for segmento in raw.split(",") if segmento.strip()]
+    for segmento in segmentos:
+        try:
+            UUID(segmento)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{campo} inválido: '{segmento}' não é um UUID",
+            ) from exc
+    return segmentos or None
 
 
 @router.post("/abrir", response_model=SessaoTrabalhoRead, status_code=status.HTTP_201_CREATED)
@@ -228,6 +247,39 @@ def resumo_trafego(
         db, empresa_id=current_user.empresa_id, periodo_inicio=normalize_datetime(periodo_inicio)
     )
     return SessaoTrabalhoTrafegoResumoRead(horas_executadas=horas)
+
+
+@router.get("/trafego/indicadores", response_model=SessaoTrabalhoTrafegoIndicadoresRead)
+def indicadores_trafego(
+    periodo_inicio: datetime = Query(..., alias="periodoInicio"),
+    status_filtro: Literal["todos", "ativa", "encerrada"] = Query(default="todos", alias="status"),
+    usuario_ids: str | None = Query(default=None, alias="usuarioIds"),
+    departamento_ids: str | None = Query(default=None, alias="departamentoIds"),
+    demanda_query: str | None = Query(default=None, alias="demandaQuery"),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
+    db: Session = Depends(get_db),
+):
+    """D2-D3C1 — métricas de `TrafegoResumoCards`/`TempoOperacionalCard`, agregadas no
+    servidor sobre o universo INTEGRAL (sem o cap de 100 da listagem). Mesmo piso de
+    autorização de `GET /sessoes-trabalho` e de `/trafego/resumo` — `require_trafego_gerenciar`;
+    a empresa vem sempre do token. Registrada ANTES de `/{sessao_id}` (mesmo motivo de
+    `/trafego/resumo`).
+
+    Os filtros são exatamente os da tela de Tráfego: `periodoInicio` (obrigatório,
+    timezone-aware), `status` (`todos`/`ativa`/`encerrada`), `usuarioIds`/`departamentoIds`
+    (CSV de UUID) e `demandaQuery`. A semântica de cada um — inclusive a assimetria de `status`
+    — está em `SessaoTrabalhoRepository.indicadores_trafego`."""
+    return SessaoTrabalhoTrafegoIndicadoresRead(
+        **sessao_service.indicadores_trafego(
+            db,
+            empresa_id=current_user.empresa_id,
+            periodo_inicio=normalize_datetime(periodo_inicio),
+            status=status_filtro,
+            usuario_ids=_parse_uuid_csv(usuario_ids, "usuarioIds"),
+            departamento_ids=_parse_uuid_csv(departamento_ids, "departamentoIds"),
+            demanda_query=demanda_query,
+        )
+    )
 
 
 @router.get("/{sessao_id}", response_model=SessaoTrabalhoRead)

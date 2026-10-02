@@ -6,12 +6,46 @@ Departamento por nome, `0008`; aqui sempre foi id). Pós expand/contract (`0015`
 `app/models/sessao_trabalho.py`): não há mais coluna textual legada para confundir com a FK.
 """
 
+import unicodedata
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models.sessao_trabalho import SessaoTrabalho
+
+
+def _remove_acentos(texto: str) -> str:
+    """Mesma regra de `normalize()` em frontend/src/lib/trafego.ts: minúsculas + NFD sem as
+    marcas combinantes U+0300–U+036F."""
+    decomposto = unicodedata.normalize("NFD", texto.lower())
+    return "".join(c for c in decomposto if not 0x300 <= ord(c) <= 0x36F)
+
+
+def _mapa_acentos() -> tuple[str, str]:
+    """Tabela para `translate()` do Postgres (o banco não tem a extensão `unaccent` e esta
+    entrega não cria migration): cada letra latina que o NFD decompõe em base ASCII + marcas
+    vira a base em minúscula. Gerada do próprio `unicodedata`, então bate com `_remove_acentos`
+    para todo o Latin-1 Suplemento/Latin Estendido-A/B e Latin Estendido Adicional."""
+    origem: list[str] = []
+    destino: list[str] = []
+    for codigo in (*range(0x00C0, 0x0250), *range(0x1E00, 0x1F00)):
+        caractere = chr(codigo)
+        decomposto = unicodedata.normalize("NFD", caractere)
+        base = decomposto[0]
+        if (
+            len(decomposto) > 1
+            and base.isascii()
+            and base.isalpha()
+            and all(0x300 <= ord(c) <= 0x36F for c in decomposto[1:])
+        ):
+            origem.append(caractere)
+            destino.append(base.lower())
+    return "".join(origem), "".join(destino)
+
+
+_ACENTOS_ORIGEM, _ACENTOS_DESTINO = _mapa_acentos()
 
 
 class SessaoTrabalhoRepository:
@@ -185,3 +219,128 @@ class SessaoTrabalhoRepository:
             statement, {"empresa_id": empresa_id, "periodo_inicio": periodo_inicio}
         ).one()
         return float(resultado.segundos_totais) / 3600
+
+    def indicadores_trafego(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        periodo_inicio: datetime,
+        status: str = "todos",
+        usuario_ids: Sequence[str] | None = None,
+        departamento_ids: Sequence[str] | None = None,
+        demanda_query: str | None = None,
+    ) -> dict[str, int]:
+        """D2-D3C1 — métricas de `TrafegoResumoCards`/`TempoOperacionalCard`, UMA consulta
+        agregada sobre o universo INTEGRAL (nunca a listagem paginada de 100). Reproduz, campo
+        a campo, o que `TrafegoView` fazia no cliente com `listSessoesTrabalho` +
+        `filterSessoes` + `buildResumo` (comparado antes de implementar):
+
+        ## Universo (mesmo de `resumo_trafego`, D3B)
+        - `ativa` entra SEMPRE, sem filtro de período (tempo decorrido real, não recortado);
+        - `encerrada` entra se `inicio_em >= periodo_inicio` (campo `inicio_em`, nunca `fim_em`);
+        - `cancelada` nunca entra.
+
+        ## Status (semântica atual, preservada — NÃO simplificada)
+        `status == "ativa"` → as encerradas deixam de ser buscadas. `"todos"` e `"encerrada"`
+        → AMBAS entram: no cliente, as ativas eram buscadas sempre (`listSessoesTrabalho({status:
+        "ativa"})` incondicional), então escolher "encerrada" nunca escondeu sessão ativa.
+
+        ## Filtros de sessão (client-side antes, `filterSessoes`)
+        - `usuario_ids`/`departamento_ids`: o campo DA SESSÃO está na lista (sessão sem usuário/
+          departamento nunca casa quando o filtro está ativo); vazio/None = sem filtro;
+        - `demanda_query`: a mesma string de busca do cliente — `"<demandaId> #<número> —
+          <nome>"` (ou `"<demandaId> <demandaId>"` quando a Demanda não existe), comparada sem
+          acento/caixa, SEM aparar a consulta (o cliente só usa `trim()` para decidir se há
+          filtro, não para casar). Só aplicada se `demanda_query.strip()` não for vazio.
+
+        ## Duração
+        Encerrada: `duracao_segundos`. Ativa: `GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() -
+        inicio_em))))` — mesma de `horas_departamento`/`resumo_trafego`. Média = arredondada
+        (meio sobe, como `Math.round`) sobre sessões ativas + encerradas.
+
+        Contagens distintas ignoram NULL por natureza (`COUNT(DISTINCT x)`) — o mesmo que o
+        cliente fazia ao descartar `usuarioId`/`departamentoId` nulos.
+        """
+        incluir_encerradas = status != "ativa"
+        clausulas = ["s.empresa_id = :empresa_id"]
+        parametros: dict = {"empresa_id": empresa_id}
+
+        if incluir_encerradas:
+            clausulas.append("(s.status = 'ativa' OR (s.status = 'encerrada' AND s.inicio_em >= :periodo_inicio))")
+            parametros["periodo_inicio"] = periodo_inicio
+        else:
+            clausulas.append("s.status = 'ativa'")
+
+        if usuario_ids:
+            clausulas.append("s.usuario_id = ANY(:usuario_ids)")
+            parametros["usuario_ids"] = list(usuario_ids)
+        if departamento_ids:
+            clausulas.append("s.departamento_id = ANY(:departamento_ids)")
+            parametros["departamento_ids"] = list(departamento_ids)
+
+        juncao_demanda = ""
+        if demanda_query is not None and demanda_query.strip():
+            # Demanda é junção À ESQUERDA: sessão cuja Demanda não existe continua no universo
+            # (o cliente também a mantinha, casando só pelo próprio `demandaId`). `d.empresa_id`
+            # na junção impede cruzar tenants por um id colidente.
+            juncao_demanda = "LEFT JOIN demandas d ON d.id = s.demanda_id AND d.empresa_id = s.empresa_id"
+            clausulas.append(
+                """strpos(
+                    lower(translate(
+                        s.demanda_id || ' ' || COALESCE('#' || CAST(d.numero_operacional AS text) || ' — ' || d.nome, s.demanda_id),
+                        :acentos_origem, :acentos_destino
+                    )),
+                    :demanda_query
+                ) > 0"""
+            )
+            parametros["demanda_query"] = _remove_acentos(demanda_query)
+            parametros["acentos_origem"] = _ACENTOS_ORIGEM
+            parametros["acentos_destino"] = _ACENTOS_DESTINO
+
+        statement = text(
+            f"""
+            WITH base AS (
+                SELECT
+                    s.status,
+                    s.demanda_id,
+                    s.usuario_id,
+                    s.departamento_id,
+                    CASE
+                        WHEN s.duracao_segundos IS NOT NULL THEN s.duracao_segundos
+                        ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - s.inicio_em))))
+                    END AS duracao
+                FROM sessoes_trabalho s
+                {juncao_demanda}
+                WHERE {" AND ".join(clausulas)}
+            )
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'ativa') AS sessoes_ativas,
+                COUNT(*) FILTER (WHERE status = 'encerrada') AS sessoes_encerradas,
+                COUNT(DISTINCT demanda_id) AS demandas_distintas,
+                COUNT(DISTINCT usuario_id) AS usuarios_distintos,
+                COUNT(DISTINCT departamento_id) AS departamentos_distintos,
+                COALESCE(SUM(duracao), 0) AS tempo_total,
+                COALESCE(MAX(duracao), 0) AS maior_sessao,
+                COALESCE(MAX(duracao) FILTER (WHERE status = 'ativa'), 0) AS maior_sessao_ativa
+            FROM base
+            """
+        )
+        linha = db.execute(statement, parametros).one()
+
+        total_sessoes = int(linha.sessoes_ativas) + int(linha.sessoes_encerradas)
+        tempo_total = int(linha.tempo_total)
+        return {
+            "sessoes_ativas": int(linha.sessoes_ativas),
+            "sessoes_encerradas": int(linha.sessoes_encerradas),
+            "demandas_distintas": int(linha.demandas_distintas),
+            "usuarios_distintos": int(linha.usuarios_distintos),
+            "departamentos_distintos": int(linha.departamentos_distintos),
+            "tempo_operacional_estimado_segundos": tempo_total,
+            # `Math.round` do cliente: meio sobe (valores sempre ≥ 0 aqui) — em inteiros, sem float.
+            "tempo_medio_sessao_segundos": (2 * tempo_total + total_sessoes) // (2 * total_sessoes)
+            if total_sessoes
+            else 0,
+            "maior_sessao_segundos": int(linha.maior_sessao),
+            "maior_sessao_ativa_segundos": int(linha.maior_sessao_ativa),
+        }

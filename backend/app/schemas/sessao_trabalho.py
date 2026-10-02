@@ -98,6 +98,29 @@ class SessaoTrabalhoHorasRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class SessaoTrabalhoTrafegoIndicadoresRead(BaseModel):
+    """D2-D3C1 — métricas de `TrafegoResumoCards` + `TempoOperacionalCard`
+    (`/trafego/indicadores`), agregadas no servidor sobre o universo INTEGRAL filtrado — nunca
+    a listagem paginada (cap de 100). Nomes iguais aos de `TrafegoResumo` no frontend.
+
+    As durações são "as of" o instante da consulta (`NOW()`): sessão ATIVA conta o tempo
+    decorrido. `maiorSessaoAtivaSegundos` existe só para o frontend continuar fazendo o
+    contador das sessões ativas andar a cada segundo sem novo fetch (soma = `tempoOperacional
+    + sessoesAtivas × Δ`; maior = `max(maiorSessao, maiorSessaoAtiva + Δ)`)."""
+
+    sessoes_ativas: int = Field(alias="sessoesAtivas")
+    sessoes_encerradas: int = Field(alias="sessoesEncerradas")
+    demandas_distintas: int = Field(alias="demandasDistintas")
+    usuarios_distintos: int = Field(alias="usuariosDistintos")
+    departamentos_distintos: int = Field(alias="departamentosDistintos")
+    tempo_operacional_estimado_segundos: int = Field(alias="tempoOperacionalEstimadoSegundos")
+    tempo_medio_sessao_segundos: int = Field(alias="tempoMedioSessaoSegundos")
+    maior_sessao_segundos: int = Field(alias="maiorSessaoSegundos")
+    maior_sessao_ativa_segundos: int = Field(alias="maiorSessaoAtivaSegundos")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class SessaoTrabalhoTrafegoResumoRead(BaseModel):
     """D2-D3B — "Horas executadas" da Central de Tráfego (`/trafego/resumo`), agregado no
     servidor sobre o universo INTEGRAL permitido — nunca a listagem paginada de

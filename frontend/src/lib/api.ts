@@ -1,4 +1,5 @@
 import type { SessaoTrabalho, SessaoTrabalhoStatus } from "@/types/sessao-trabalho";
+import type { TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
 import type { DemandaArquivo } from "@/types/demanda";
 import type { EventoApi } from "@/types/acesso";
 
@@ -177,6 +178,34 @@ export async function getResumoTrafegoSessoes(periodoInicio: string): Promise<{ 
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
     throw new Error(detail?.detail ?? "Falha ao carregar horas executadas do Tráfego");
+  }
+  return response.json();
+}
+
+/**
+ * D2-D3C1 — métricas de `TrafegoResumoCards`/`TempoOperacionalCard`, agregadas no servidor
+ * sobre o universo INTEGRAL (nunca a lista de `listSessoesTrabalho`, com `limit=100`). Os
+ * filtros são os da própria tela: o servidor aplica a mesma regra que `filterSessoes` aplicava
+ * aqui. `demandaQuery` vai como digitada (a regra de casamento não apara).
+ */
+export async function getIndicadoresTrafegoSessoes(filtros: {
+  periodoInicio: string;
+  status: TrafegoStatusFiltro;
+  usuarioIds: string[];
+  departamentoIds: string[];
+  demandaQuery: string;
+}): Promise<TrafegoIndicadores> {
+  const search = new URLSearchParams({ periodoInicio: filtros.periodoInicio, status: filtros.status });
+  if (filtros.usuarioIds.length > 0) search.set("usuarioIds", filtros.usuarioIds.join(","));
+  if (filtros.departamentoIds.length > 0) search.set("departamentoIds", filtros.departamentoIds.join(","));
+  if (filtros.demandaQuery.trim()) search.set("demandaQuery", filtros.demandaQuery);
+
+  const response = await fetch(`${API_PROXY}/sessoes-trabalho/trafego/indicadores?${search.toString()}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.detail === "string" ? detail.detail : "Falha ao carregar os indicadores do Tráfego");
   }
   return response.json();
 }

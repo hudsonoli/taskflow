@@ -261,6 +261,27 @@ class SessaoTrabalhoService:
     def resumo_trafego(self, db: Session, *, empresa_id: str, periodo_inicio: datetime) -> float:
         return self.repository.resumo_trafego(db, empresa_id=empresa_id, periodo_inicio=periodo_inicio)
 
+    def indicadores_trafego(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        periodo_inicio: datetime,
+        status: str = "todos",
+        usuario_ids: list[str] | None = None,
+        departamento_ids: list[str] | None = None,
+        demanda_query: str | None = None,
+    ) -> dict[str, int]:
+        return self.repository.indicadores_trafego(
+            db,
+            empresa_id=empresa_id,
+            periodo_inicio=periodo_inicio,
+            status=status,
+            usuario_ids=usuario_ids,
+            departamento_ids=departamento_ids,
+            demanda_query=demanda_query,
+        )
+
     def get_session(self, db: Session, sessao_id: str) -> SessaoTrabalho | None:
         return self.repository.get_by_id(db, sessao_id)
 

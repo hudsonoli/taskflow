@@ -2,7 +2,7 @@ import { normalizarUsuarioId } from "@/lib/demandas";
 import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { DemandaDiretorio } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
-import type { TrafegoCargaItem, TrafegoFiltersState, TrafegoResumo } from "@/types/trafego";
+import type { TrafegoCargaItem, TrafegoFiltersState, TrafegoIndicadores, TrafegoResumo } from "@/types/trafego";
 
 // `EMPRESA_TRAFEGO_PADRAO_ID` saiu: era a string mock "empresa-principal", enviada como
 // `empresaId` para a API real. Agora a empresa vem do token, no servidor.
@@ -151,23 +151,31 @@ export function buildCargaEquipe(
     .sort((first, second) => second.tempoAtivoTotalSegundos - first.tempoAtivoTotalSegundos);
 }
 
-export function buildResumo(sessoesAtivas: SessaoTrabalho[], sessoesEncerradas: SessaoTrabalho[], now: Date): TrafegoResumo {
-  const todasSessoes = [...sessoesAtivas, ...sessoesEncerradas];
-  const usuarioIds = new Set(todasSessoes.map((sessao) => sessao.usuarioId).filter((id): id is string => id !== null));
-  const departamentoIds = new Set(todasSessoes.map((sessao) => sessao.departamentoId).filter((id): id is string => id !== null));
-  const demandaIds = new Set(todasSessoes.map((sessao) => sessao.demandaId));
-  const duracoes = todasSessoes.map((sessao) => elapsedSeconds(sessao, now));
-  const tempoTotal = duracoes.reduce((sum, value) => sum + value, 0);
+/**
+ * D2-D3C1 — o resumo vem do servidor (`GET /sessoes-trabalho/trafego/indicadores`), agregado
+ * sobre o universo integral. Aqui só se faz o "relógio" das sessões ATIVAS andar entre dois
+ * fetches, como o antigo `buildResumo(…, now)` fazia a cada segundo: passados `deltaSegundos`
+ * desde a resposta, cada ativa ganhou `delta` segundos — soma = servidor + ativas × delta;
+ * maior = máx(maior do servidor, maior ativa + delta); média = soma / (ativas + encerradas),
+ * arredondada. Contagens e distintos não dependem do relógio.
+ */
+export function resumoDeIndicadores(indicadores: TrafegoIndicadores, deltaSegundos: number): TrafegoResumo {
+  const delta = Math.max(0, Math.floor(deltaSegundos));
+  const tempoTotal = indicadores.tempoOperacionalEstimadoSegundos + indicadores.sessoesAtivas * delta;
+  const quantidade = indicadores.sessoesAtivas + indicadores.sessoesEncerradas;
 
   return {
-    sessoesAtivas: sessoesAtivas.length,
-    sessoesEncerradas: sessoesEncerradas.length,
-    demandasDistintas: demandaIds.size,
-    usuariosDistintos: usuarioIds.size,
-    departamentosDistintos: departamentoIds.size,
+    sessoesAtivas: indicadores.sessoesAtivas,
+    sessoesEncerradas: indicadores.sessoesEncerradas,
+    demandasDistintas: indicadores.demandasDistintas,
+    usuariosDistintos: indicadores.usuariosDistintos,
+    departamentosDistintos: indicadores.departamentosDistintos,
     tempoOperacionalEstimadoSegundos: tempoTotal,
-    tempoMedioSessaoSegundos: duracoes.length > 0 ? Math.round(tempoTotal / duracoes.length) : 0,
-    maiorSessaoSegundos: duracoes.length > 0 ? Math.max(...duracoes) : 0,
+    tempoMedioSessaoSegundos: quantidade > 0 ? Math.round(tempoTotal / quantidade) : 0,
+    maiorSessaoSegundos:
+      indicadores.sessoesAtivas > 0
+        ? Math.max(indicadores.maiorSessaoSegundos, indicadores.maiorSessaoAtivaSegundos + delta)
+        : indicadores.maiorSessaoSegundos,
   };
 }
 

@@ -31,3 +31,13 @@ export type TrafegoResumo = {
   tempoMedioSessaoSegundos: number;
   maiorSessaoSegundos: number;
 };
+
+/**
+ * `GET /sessoes-trabalho/trafego/indicadores` (D2-D3C1): o `TrafegoResumo` já agregado no
+ * servidor, "as of" o instante da resposta. `maiorSessaoAtivaSegundos` existe só para o contador
+ * das sessões ativas continuar andando a cada segundo sem novo fetch
+ * (ver `resumoDeIndicadores` em lib/trafego.ts).
+ */
+export type TrafegoIndicadores = TrafegoResumo & {
+  maiorSessaoAtivaSegundos: number;
+};
