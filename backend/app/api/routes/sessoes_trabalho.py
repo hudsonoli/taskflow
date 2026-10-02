@@ -36,6 +36,7 @@ from app.schemas.sessao_trabalho import (
     SessaoTrabalhoFechar,
     SessaoTrabalhoHorasRead,
     SessaoTrabalhoRead,
+    SessaoTrabalhoTrafegoCargaRead,
     SessaoTrabalhoTrafegoIndicadoresRead,
     SessaoTrabalhoTrafegoResumoRead,
 )
@@ -275,6 +276,34 @@ def indicadores_trafego(
             empresa_id=current_user.empresa_id,
             periodo_inicio=normalize_datetime(periodo_inicio),
             status=status_filtro,
+            usuario_ids=_parse_uuid_csv(usuario_ids, "usuarioIds"),
+            departamento_ids=_parse_uuid_csv(departamento_ids, "departamentoIds"),
+            demanda_query=demanda_query,
+        )
+    )
+
+
+@router.get("/trafego/carga", response_model=SessaoTrabalhoTrafegoCargaRead)
+def carga_trafego(
+    usuario_ids: str | None = Query(default=None, alias="usuarioIds"),
+    departamento_ids: str | None = Query(default=None, alias="departamentoIds"),
+    demanda_query: str | None = Query(default=None, alias="demandaQuery"),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
+    db: Session = Depends(get_db),
+):
+    """D2-D3C2 — "Carga por usuário/departamento/equipe" da Central de Tráfego, agregada no
+    servidor sobre TODAS as sessões ativas (sem o cap de 100 da listagem). Mesmo piso de
+    autorização dos demais endpoints de Tráfego (`require_trafego_gerenciar`); a empresa vem do
+    token. Registrada ANTES de `/{sessao_id}`.
+
+    Só `usuarioIds`/`departamentoIds`/`demandaQuery`: período e status da tela NUNCA afetaram
+    estes rankings (as ativas eram buscadas sempre) — por isso não são parâmetros daqui. A
+    semântica de cada agrupamento, inclusive a regra de equipe, está em
+    `SessaoTrabalhoRepository.carga_trafego`."""
+    return SessaoTrabalhoTrafegoCargaRead(
+        **sessao_service.carga_trafego(
+            db,
+            empresa_id=current_user.empresa_id,
             usuario_ids=_parse_uuid_csv(usuario_ids, "usuarioIds"),
             departamento_ids=_parse_uuid_csv(departamento_ids, "departamentoIds"),
             demanda_query=demanda_query,

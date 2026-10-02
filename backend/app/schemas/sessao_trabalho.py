@@ -121,6 +121,31 @@ class SessaoTrabalhoTrafegoIndicadoresRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class SessaoTrabalhoTrafegoCargaItemRead(BaseModel):
+    """Um grupo (usuário, departamento ou equipe) do ranking de carga — só o que a tela exibe.
+    `tempoAtivoTotalSegundos` é "as of" `NOW()`: o frontend soma `sessoesAtivas × Δ` para o
+    contador continuar andando entre dois fetches (mesma técnica de `resumoDeIndicadores`)."""
+
+    id: str
+    nome: str
+    sessoes_ativas: int = Field(alias="sessoesAtivas")
+    demandas_distintas: int = Field(alias="demandasDistintas")
+    tempo_ativo_total_segundos: int = Field(alias="tempoAtivoTotalSegundos")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class SessaoTrabalhoTrafegoCargaRead(BaseModel):
+    """D2-D3C2 — `/trafego/carga`: os três rankings já ordenados (maior carga primeiro), agregados
+    no servidor sobre TODAS as sessões ativas filtradas — nunca a lista de 100 do cliente."""
+
+    usuarios: list[SessaoTrabalhoTrafegoCargaItemRead]
+    departamentos: list[SessaoTrabalhoTrafegoCargaItemRead]
+    equipes: list[SessaoTrabalhoTrafegoCargaItemRead]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class SessaoTrabalhoTrafegoResumoRead(BaseModel):
     """D2-D3B — "Horas executadas" da Central de Tráfego (`/trafego/resumo`), agregado no
     servidor sobre o universo INTEGRAL permitido — nunca a listagem paginada de

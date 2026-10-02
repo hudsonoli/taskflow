@@ -10,15 +10,23 @@ export type TrafegoFiltersState = {
   periodo: TrafegoPeriodoFiltro;
 };
 
-export type TrafegoAgrupamentoTipo = "usuario" | "departamento" | "equipe";
-
-export type TrafegoCargaItem = {
-  agrupamentoId: string;
-  tipoAgrupamento: TrafegoAgrupamentoTipo;
+/**
+ * Um grupo do ranking de carga (usuário, departamento ou equipe) — D2-D3C2. Vem pronto do
+ * servidor (`GET /sessoes-trabalho/trafego/carga`): nome já resolvido, lista já ordenada.
+ * `tempoAtivoTotalSegundos` é "as of" a resposta (ver `cargaComRelogio` em lib/trafego.ts).
+ */
+export type TrafegoCargaAgregada = {
+  id: string;
+  nome: string;
   sessoesAtivas: number;
   demandasDistintas: number;
   tempoAtivoTotalSegundos: number;
-  inicioMaisAntigo: string;
+};
+
+export type TrafegoCarga = {
+  usuarios: TrafegoCargaAgregada[];
+  departamentos: TrafegoCargaAgregada[];
+  equipes: TrafegoCargaAgregada[];
 };
 
 export type TrafegoResumo = {

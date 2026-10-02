@@ -1,8 +1,7 @@
-import { normalizarUsuarioId } from "@/lib/demandas";
 import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { DemandaDiretorio } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
-import type { TrafegoCargaItem, TrafegoFiltersState, TrafegoIndicadores, TrafegoResumo } from "@/types/trafego";
+import type { TrafegoCargaAgregada, TrafegoFiltersState, TrafegoIndicadores, TrafegoResumo } from "@/types/trafego";
 
 // `EMPRESA_TRAFEGO_PADRAO_ID` saiu: era a string mock "empresa-principal", enviada como
 // `empresaId` para a API real. Agora a empresa vem do token, no servidor.
@@ -84,71 +83,18 @@ export function filterSessoes(
   });
 }
 
-export function buildCarga(sessoesAtivas: SessaoTrabalho[], tipoAgrupamento: "usuario" | "departamento", now: Date): TrafegoCargaItem[] {
-  const groups = new Map<string, SessaoTrabalho[]>();
-
-  sessoesAtivas.forEach((sessao) => {
-    const agrupamentoId = tipoAgrupamento === "usuario" ? sessao.usuarioId : sessao.departamentoId;
-    if (!agrupamentoId) return;
-    groups.set(agrupamentoId, [...(groups.get(agrupamentoId) ?? []), sessao]);
-  });
-
-  return Array.from(groups.entries())
-    .map(([agrupamentoId, groupSessions]) => {
-      const demandIds = new Set(groupSessions.map((sessao) => sessao.demandaId));
-      const oldestStart = groupSessions.reduce((oldest, sessao) =>
-        new Date(sessao.inicioEm).getTime() < new Date(oldest.inicioEm).getTime() ? sessao : oldest,
-      );
-
-      return {
-        agrupamentoId,
-        tipoAgrupamento,
-        sessoesAtivas: groupSessions.length,
-        demandasDistintas: demandIds.size,
-        tempoAtivoTotalSegundos: groupSessions.reduce((sum, sessao) => sum + elapsedSeconds(sessao, now), 0),
-        inicioMaisAntigo: oldestStart.inicioEm,
-      };
-    })
-    .sort((first, second) => second.tempoAtivoTotalSegundos - first.tempoAtivoTotalSegundos);
-}
-
 /**
- * Carga agrupada por equipe — não existe `equipeId` na sessão, então o vínculo é inferido a
- * partir de `Equipe.membroIds` (normalizando o id do usuário, mesma ponte usada no restante
- * do app entre as famílias históricas de id `user-N` / `usuario-N`).
+ * D2-D3C2 — a carga vem agrupada e ordenada do servidor. Aqui só se faz o "relógio" das sessões
+ * ativas andar entre dois fetches, como `buildCarga(…, now)` fazia a cada segundo: passados
+ * `deltaSegundos` desde a resposta, cada sessão ativa ganhou `delta` segundos, então o total do
+ * grupo sobe `sessoesAtivas × delta`. Reordena (maior carga primeiro) porque grupos com mais
+ * sessões ultrapassam os demais com o tempo; empate mantém a ordem do servidor (sort estável).
  */
-export function buildCargaEquipe(
-  sessoesAtivas: SessaoTrabalho[],
-  equipes: { id: string; membroIds: string[] }[],
-  now: Date,
-): TrafegoCargaItem[] {
-  const groups = new Map<string, SessaoTrabalho[]>();
-
-  sessoesAtivas.forEach((sessao) => {
-    if (!sessao.usuarioId) return;
-    const usuarioIdNormalizado = normalizarUsuarioId(sessao.usuarioId);
-    const equipe = equipes.find((item) => item.membroIds.includes(usuarioIdNormalizado));
-    if (!equipe) return;
-    groups.set(equipe.id, [...(groups.get(equipe.id) ?? []), sessao]);
-  });
-
-  return Array.from(groups.entries())
-    .map(([agrupamentoId, groupSessions]) => {
-      const demandIds = new Set(groupSessions.map((sessao) => sessao.demandaId));
-      const oldestStart = groupSessions.reduce((oldest, sessao) =>
-        new Date(sessao.inicioEm).getTime() < new Date(oldest.inicioEm).getTime() ? sessao : oldest,
-      );
-
-      return {
-        agrupamentoId,
-        tipoAgrupamento: "equipe" as const,
-        sessoesAtivas: groupSessions.length,
-        demandasDistintas: demandIds.size,
-        tempoAtivoTotalSegundos: groupSessions.reduce((sum, sessao) => sum + elapsedSeconds(sessao, now), 0),
-        inicioMaisAntigo: oldestStart.inicioEm,
-      };
-    })
-    .sort((first, second) => second.tempoAtivoTotalSegundos - first.tempoAtivoTotalSegundos);
+export function cargaComRelogio(itens: TrafegoCargaAgregada[], deltaSegundos: number): TrafegoCargaAgregada[] {
+  const delta = Math.max(0, Math.floor(deltaSegundos));
+  return itens
+    .map((item) => ({ ...item, tempoAtivoTotalSegundos: item.tempoAtivoTotalSegundos + item.sessoesAtivas * delta }))
+    .sort((primeiro, segundo) => segundo.tempoAtivoTotalSegundos - primeiro.tempoAtivoTotalSegundos);
 }
 
 /**

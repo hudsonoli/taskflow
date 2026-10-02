@@ -1,5 +1,5 @@
 import type { SessaoTrabalho, SessaoTrabalhoStatus } from "@/types/sessao-trabalho";
-import type { TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
+import type { TrafegoCarga, TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
 import type { DemandaArquivo } from "@/types/demanda";
 import type { EventoApi } from "@/types/acesso";
 
@@ -206,6 +206,33 @@ export async function getIndicadoresTrafegoSessoes(filtros: {
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
     throw new Error(typeof detail?.detail === "string" ? detail.detail : "Falha ao carregar os indicadores do Tráfego");
+  }
+  return response.json();
+}
+
+/**
+ * D2-D3C2 — "Carga por usuário/departamento/equipe", agregada no servidor sobre TODAS as
+ * sessões ativas (nunca a lista de `listSessoesTrabalho`, com `limit=100`). Só os filtros que
+ * sempre afetaram esses rankings (usuários, departamentos, busca de demanda): período e status
+ * da tela nunca os mudaram, então não são enviados.
+ */
+export async function getCargaTrafegoSessoes(filtros: {
+  usuarioIds: string[];
+  departamentoIds: string[];
+  demandaQuery: string;
+}): Promise<TrafegoCarga> {
+  const search = new URLSearchParams();
+  if (filtros.usuarioIds.length > 0) search.set("usuarioIds", filtros.usuarioIds.join(","));
+  if (filtros.departamentoIds.length > 0) search.set("departamentoIds", filtros.departamentoIds.join(","));
+  if (filtros.demandaQuery.trim()) search.set("demandaQuery", filtros.demandaQuery);
+
+  const consulta = search.toString();
+  const response = await fetch(`${API_PROXY}/sessoes-trabalho/trafego/carga${consulta ? `?${consulta}` : ""}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.detail === "string" ? detail.detail : "Falha ao carregar a carga do Tráfego");
   }
   return response.json();
 }

@@ -1,24 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getIndicadoresTrafegoSessoes, getResumoTrafegoSessoes, listSessoesTrabalho } from "@/lib/api";
+import { getCargaTrafegoSessoes, getIndicadoresTrafegoSessoes, getResumoTrafegoSessoes, listSessoesTrabalho } from "@/lib/api";
 import { getDemandasPorIds, getResumoOperacional, listDiretorioDemandas, type ResumoOperacional } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { podeAcessarCentralTrafego } from "@/lib/escopo-operacional";
-import {
-  buildCarga,
-  buildCargaEquipe,
-  filterSessoes,
-  periodoParaDataInicio,
-  resumoDeIndicadores,
-} from "@/lib/trafego";
+import { cargaComRelogio, filterSessoes, periodoParaDataInicio, resumoDeIndicadores } from "@/lib/trafego";
 import { useNow } from "@/lib/useNow";
 import type { DemandaDiretorio } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
-import type { TrafegoFiltersState, TrafegoIndicadores } from "@/types/trafego";
+import type { TrafegoCarga, TrafegoFiltersState, TrafegoIndicadores } from "@/types/trafego";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { TempoOperacionalCard } from "./TempoOperacionalCard";
 import { TrafegoAgoraTable } from "./TrafegoAgoraTable";
@@ -41,12 +34,10 @@ const initialFilters: TrafegoFiltersState = {
 
 export function TrafegoView() {
   const { usuarioAtual } = useAppData();
-  const { equipes } = useDiretorioEquipes();
   const { usuarios } = useDiretorioUsuarios();
   const { departamentos } = useDiretorioDepartamentos();
   const [filters, setFilters] = useState<TrafegoFiltersState>(initialFilters);
   const [sessoesAtivas, setSessoesAtivas] = useState<SessaoTrabalho[]>([]);
-  const [sessoesEncerradas, setSessoesEncerradas] = useState<SessaoTrabalho[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   // D2-C — diretório para vincular uma sessão NOVA: semântica de `/diretorio` (não
@@ -76,31 +67,31 @@ export function TrafegoView() {
   // ativas entre dois fetches (ver `resumoDeIndicadores`).
   const [indicadores, setIndicadores] = useState<{ dados: TrafegoIndicadores; recebidoEm: number } | null>(null);
   const [erroIndicadores, setErroIndicadores] = useState<string | null>(null);
+  // D2-D3C2 — cargas por usuário/departamento/equipe: agregadas no servidor sobre TODAS as ativas
+  // (nunca agrupadas aqui a partir de `sessoesAtivas`, que é a lista de 100). Só usuários,
+  // departamentos e busca de demanda as afetam — período e status nunca afetaram. Mesmo contrato
+  // de estados dos indicadores acima (`null` = carregando, erro independente, `recebidoEm`
+  // ancora o relógio das sessões ativas).
+  const [carga, setCarga] = useState<{ dados: TrafegoCarga; recebidoEm: number } | null>(null);
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
+  // Incrementado por `atualizar` (botão Atualizar, iniciar/fechar sessão): refaz indicadores E carga.
   const [versaoIndicadores, setVersaoIndicadores] = useState(0);
   const now = useNow(1000);
 
+  // Só as sessões ATIVAS: `TrafegoAgoraTable` (D3C3 ainda não migrada) é o único consumidor da
+  // lista. A lista de ENCERRADAS saiu em D2-D3C2 — depois que resumo, tempo operacional e as três
+  // cargas passaram a vir do servidor, nada mais a lia (só alimentava a resolução de nomes).
   const carregar = useCallback(async () => {
     setLoading(true);
     setErro(null);
     try {
-      const ativasPromise = listSessoesTrabalho({ status: "ativa" });
-      const encerradasPromise =
-        filters.status === "ativa"
-          ? Promise.resolve([])
-          : listSessoesTrabalho({
-              status: "encerrada",
-              dataInicio: periodoParaDataInicio[filters.periodo](),
-            });
-
-      const [ativas, encerradas] = await Promise.all([ativasPromise, encerradasPromise]);
-      setSessoesAtivas(ativas);
-      setSessoesEncerradas(encerradas);
+      setSessoesAtivas(await listSessoesTrabalho({ status: "ativa" }));
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível conectar à API (http://localhost:8010).");
     } finally {
       setLoading(false);
     }
-  }, [filters.status, filters.periodo]);
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -185,7 +176,34 @@ export function TrafegoView() {
     };
   }, [filters.periodo, filters.status, filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
 
-  // Atualização completa: listas + indicadores. Usada pelo botão de refresh e por toda ação que
+  // D2-D3C2 — carga, refeita quando usuários, departamentos ou a busca de demanda mudam, ou em
+  // `atualizar`. NÃO depende de período/status (nunca afetaram os rankings). Debounce e
+  // `cancelado` pelas mesmas razões do efeito dos indicadores.
+  useEffect(() => {
+    let cancelado = false;
+    const timeout = setTimeout(() => {
+      getCargaTrafegoSessoes({
+        usuarioIds: filters.usuarioIds,
+        departamentoIds: filters.departamentoIds,
+        demandaQuery: filters.demandaQuery,
+      })
+        .then((dados) => {
+          if (cancelado) return;
+          setCarga({ dados, recebidoEm: Date.now() });
+          setErroCarga(null);
+        })
+        .catch((error) => {
+          if (cancelado) return;
+          setErroCarga(error instanceof Error ? error.message : "Não foi possível carregar a carga.");
+        });
+    }, 250);
+    return () => {
+      cancelado = true;
+      clearTimeout(timeout);
+    };
+  }, [filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
+
+  // Atualização completa: listas + indicadores + carga. Usada pelo botão de refresh e por toda ação que
   // muda sessões (iniciar, fechar) — os indicadores não podem ficar para trás da lista.
   const atualizar = useCallback(() => {
     setVersaoIndicadores((versao) => versao + 1);
@@ -209,15 +227,13 @@ export function TrafegoView() {
   }, []);
 
   // D2-C — diretório histórico: extrai os `demandaId` realmente presentes nas sessões
-  // carregadas (ativas + encerradas, deduplicado) e resolve em lote via `/demandas/por-ids`
+  // carregadas (ativas, deduplicado) e resolve em lote via `/demandas/por-ids`
   // (arquivada incluída). `cancelado` evita que um lote antigo, ainda em voo quando o
   // usuário troca o período/filtro e novas sessões chegam, sobrescreva o diretório mais
   // novo.
   useEffect(() => {
     let cancelado = false;
-    const idsUnicos = Array.from(
-      new Set([...sessoesAtivas, ...sessoesEncerradas].map((sessao) => sessao.demandaId)),
-    );
+    const idsUnicos = Array.from(new Set(sessoesAtivas.map((sessao) => sessao.demandaId)));
     // Sem sessões, não há `demandaId` pra resolver — nenhuma linha vai consultar o
     // diretório mesmo, então não há necessidade de zerar o estado (e fazer isso aqui
     // dispararia setState síncrono no corpo do efeito).
@@ -232,15 +248,16 @@ export function TrafegoView() {
     return () => {
       cancelado = true;
     };
-  }, [sessoesAtivas, sessoesEncerradas]);
+  }, [sessoesAtivas]);
 
   const ativasFiltradas = filterSessoes(sessoesAtivas, filters, diretorioHistorico);
   const resumo = indicadores
     ? resumoDeIndicadores(indicadores.dados, (now.getTime() - indicadores.recebidoEm) / 1000)
     : null;
-  const cargaUsuarios = buildCarga(ativasFiltradas, "usuario", now);
-  const cargaDepartamentos = buildCarga(ativasFiltradas, "departamento", now);
-  const cargaEquipes = buildCargaEquipe(ativasFiltradas, equipes, now);
+  const deltaCarga = carga ? (now.getTime() - carga.recebidoEm) / 1000 : 0;
+  const cargaUsuarios = carga ? cargaComRelogio(carga.dados.usuarios, deltaCarga) : null;
+  const cargaDepartamentos = carga ? cargaComRelogio(carga.dados.departamentos, deltaCarga) : null;
+  const cargaEquipes = carga ? cargaComRelogio(carga.dados.equipes, deltaCarga) : null;
 
   if (!usuarioAtual) return null;
 
@@ -283,21 +300,21 @@ export function TrafegoView() {
             erroHorasExecutadas={erroHorasExecutadas}
           />
           <TrafegoAgoraTable
-              sessoes={ativasFiltradas}
-              now={now}
-              onChanged={atualizar}
-              diretorioDemandas={diretorioHistorico}
-              diretorioUsuarios={usuarios}
-              diretorioDepartamentos={departamentos}
-            />
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <TrafegoCargaUsuarios cargas={cargaUsuarios} diretorio={usuarios} />
-            <TrafegoCargaDepartamentos cargas={cargaDepartamentos} diretorio={departamentos} />
-            <TrafegoCargaEquipes cargas={cargaEquipes} equipes={equipes} />
-          </div>
+            sessoes={ativasFiltradas}
+            now={now}
+            onChanged={atualizar}
+            diretorioDemandas={diretorioHistorico}
+            diretorioUsuarios={usuarios}
+            diretorioDepartamentos={departamentos}
+          />
         </>
       )}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <TrafegoCargaUsuarios cargas={cargaUsuarios} erro={erroCarga} />
+        <TrafegoCargaDepartamentos cargas={cargaDepartamentos} erro={erroCarga} />
+        <TrafegoCargaEquipes cargas={cargaEquipes} erro={erroCarga} />
+      </div>
     </div>
   );
 }
