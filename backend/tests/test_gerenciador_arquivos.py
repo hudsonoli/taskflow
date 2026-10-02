@@ -18,10 +18,13 @@ from sqlalchemy.orm import Session
 
 import app.services.demanda_arquivo_service as servico
 from app.models.cliente import Cliente
+from app.models.demanda import Demanda
+from app.models.demanda_arquivo import DemandaArquivo
 from app.models.departamento import Departamento
 from app.models.empresa import Empresa
 from app.models.projeto import Projeto
 from app.models.usuario import Usuario
+from app.schemas.demanda_arquivo import validar_url_http_https
 
 PNG_VALIDO = b"\x89PNG\r\n\x1a\n" + b"conteudo-png-de-teste"
 PDF_VALIDO = b"%PDF-1.4\nconteudo-pdf-de-teste"
@@ -179,20 +182,75 @@ def test_link_https_valido(client_admin: TestClient) -> None:
     assert resposta.json()["url"] == "https://exemplo.com/pasta"
 
 
-@pytest.mark.parametrize(
-    "url_perigosa",
-    [
-        "javascript:alert(1)",
-        "data:text/html,<script>alert(1)</script>",
-        "file:///etc/passwd",
-        "nao-e-uma-url",
-        "ftp://exemplo.com/arquivo",
-    ],
-)
-def test_link_scheme_perigoso_ou_invalido_rejeitado(client_admin: TestClient, url_perigosa: str) -> None:
+URLS_VALIDAS = [
+    "http://example.com",
+    "https://example.com",
+    "HTTP://example.com",
+    "HtTpS://example.com",
+    "https://sub.example.com/path?x=1",
+]
+
+URLS_INVALIDAS = [
+    # sem hostname — scheme correto não basta
+    "http:",
+    "https:",
+    "http://",
+    "https://",
+    "http:foo",
+    "https:foo",
+    # relativa, protocol-relative e sem scheme
+    "/x",
+    "//example.com",
+    "example.com",
+    "nao-e-uma-url",
+    # schemes que não são http/https
+    "javascript:alert(1)",
+    "JaVaScRiPt:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///etc/passwd",
+    "ftp://example.com/arquivo",
+    "mailto:a@example.com",
+    "vbscript:msgbox(1)",
+]
+
+
+@pytest.mark.parametrize("url", URLS_VALIDAS)
+def test_validador_url_aceita(url: str) -> None:
+    assert validar_url_http_https(url) == url
+
+
+@pytest.mark.parametrize("url", URLS_INVALIDAS)
+def test_validador_url_rejeita(url: str) -> None:
+    with pytest.raises(ValueError):
+        validar_url_http_https(url)
+
+
+@pytest.mark.parametrize("url", URLS_VALIDAS)
+def test_link_url_valida_aceita_na_api(client_admin: TestClient, url: str) -> None:
     demanda = _criar_demanda(client_admin)
-    resposta = _link(client_admin, demanda["id"], url=url_perigosa)
+    resposta = _link(client_admin, demanda["id"], url=url)
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["url"] == url
+
+
+@pytest.mark.parametrize("url_invalida", URLS_INVALIDAS)
+def test_link_scheme_perigoso_ou_invalido_rejeitado(client_admin: TestClient, url_invalida: str) -> None:
+    demanda = _criar_demanda(client_admin)
+    resposta = _link(client_admin, demanda["id"], url=url_invalida)
     assert resposta.status_code == 422, resposta.text
+
+
+@pytest.mark.parametrize("url_sem_host", ["http://", "https://", "http:foo", "https:foo"])
+def test_service_revalida_url_sem_hostname(client_admin: TestClient, db_session: Session, url_sem_host: str) -> None:
+    """O service nunca confia só na borda Pydantic: mesmo chamado direto (sem passar pelo
+    schema), uma URL sem hostname é recusada e nada é persistido."""
+    demanda_id = _criar_demanda(client_admin)["id"]
+    demanda = db_session.get(Demanda, demanda_id)
+    with pytest.raises(servico.DemandaArquivoUrlInvalidaError):
+        servico.DemandaArquivoService().criar_link(
+            db_session, demanda, titulo="Link", url=url_sem_host, descricao=None, actor_usuario_id=None
+        )
+    assert db_session.query(DemandaArquivo).filter(DemandaArquivo.demanda_id == demanda_id).count() == 0
 
 
 def test_exclusao_de_link_nao_toca_filesystem(client_admin: TestClient, db_session: Session) -> None:

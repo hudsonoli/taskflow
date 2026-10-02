@@ -24,9 +24,9 @@ def ensure_timezone_aware(value: datetime | None) -> datetime | None:
 
 def validar_url_http_https(url: str) -> str:
     url = url.strip()
-    scheme = urlsplit(url).scheme.lower()
-    if scheme not in _ESQUEMAS_URL_PERMITIDOS:
-        raise ValueError("URL deve começar com http:// ou https://")
+    partes = urlsplit(url)
+    if partes.scheme.lower() not in _ESQUEMAS_URL_PERMITIDOS or not partes.hostname:
+        raise ValueError("URL deve ser http:// ou https:// e conter um domínio válido")
     return url
 
 

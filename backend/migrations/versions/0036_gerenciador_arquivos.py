@@ -19,6 +19,9 @@ CHECK `ck_demanda_arquivos_fisico_ou_link` abaixo, mesmo padrão de
 `app/models/sessao_trabalho.py`: coerência entre colunas garantida no banco, não só no
 service).
 
+Downgrade: só é possível enquanto não existir nenhum registro `tipo='link'` (o schema
+anterior não consegue representá-lo) — caso contrário aborta explicitamente, sem alterar nada.
+
 Revision ID: e4464f8f7bb9
 Revises: 57c9ac75e1bc
 Create Date: 2026-10-02 00:25:07.187917
@@ -84,6 +87,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # O schema anterior exige arquivo físico em toda linha; um `link` não tem como ser
+    # representado nele. Nunca apagar, converter em anexo ou inventar nome_fisico/tamanho —
+    # aborta ANTES de qualquer ALTER/DROP, para falhar de forma explícita e não por um
+    # NotNullViolation incidental no meio do rollback.
+    links = op.get_bind().execute(sa.text("SELECT count(*) FROM demanda_arquivos WHERE tipo = 'link'")).scalar_one()
+    if links:
+        raise RuntimeError(
+            f"Cannot downgrade 0036 while link records exist ({links} found in demanda_arquivos). "
+            "Remove or migrate them explicitly before downgrading."
+        )
+
     op.drop_constraint('ck_demanda_arquivos_fisico_ou_link', 'demanda_arquivos', type_='check')
     op.drop_constraint('ck_demanda_arquivos_status_layout_so_em_layout', 'demanda_arquivos', type_='check')
     op.drop_constraint('ck_demanda_arquivos_status_layout', 'demanda_arquivos', type_='check')
