@@ -140,10 +140,26 @@ export function ArquivosContextView({
       .finally(() => setCarregandoMais(false));
   }
 
+  // Refaz a consulta atual (mesmos filtros) — o servidor volta a ser a fonte da lista.
+  function recarregar() {
+    setItens([]);
+    setTemMais(false);
+    setErro(null);
+    setCarregandoInicial(true);
+    setRefreshNonce((atual) => atual + 1); // força nova busca mesmo com os mesmos filtros
+  }
+
   // O PATCH devolve o registro persistido: o status do servidor é a fonte da verdade (não o
   // que foi enviado). O mesmo `itens` alimenta o card e o preview — um único estado.
   async function alterarStatus(arquivo: ArquivoCentral, status: DemandaArquivoStatusLayout) {
     const atualizado = await atualizarStatusLayoutArquivo(arquivo.demandaId, arquivo.id, status);
+    if (filtros.status && atualizado.statusLayout !== filtros.status) {
+      // Com filtro de status ativo, o item deixou de pertencer à lista: reconcilia com o servidor
+      // em vez de manter na tela algo que a própria consulta não devolveria mais.
+      setIndicePreview(null);
+      recarregar();
+      return;
+    }
     setItens((atual) =>
       atual.map((existente) =>
         existente.id === atualizado.id ? { ...existente, statusLayout: atualizado.statusLayout } : existente,
@@ -236,11 +252,7 @@ export function ArquivosContextView({
         projetoFixoId={projetoId}
         onCreated={() => {
           setUploadAberto(false);
-          setItens([]);
-          setTemMais(false);
-          setErro(null);
-          setCarregandoInicial(true);
-          setRefreshNonce((atual) => atual + 1); // força nova busca mesmo com os mesmos filtros
+          recarregar();
         }}
       />
     </div>

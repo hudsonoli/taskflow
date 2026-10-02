@@ -62,8 +62,8 @@ export function ArquivoPreviewModal({
   function abrirDemanda() {
     if (!arquivo) return;
     // Mesmo padrão de NotificationBell: Tarefas lê `demandaParaAbrir` do contexto e abre a
-    // Demanda na aba "atividade" (onde DemandaArquivosCard vive) ao montar.
-    setDemandaParaAbrir({ demandaId: arquivo.demandaId, aba: "atividade" });
+    // Demanda na aba "briefing" (onde DemandaArquivosCard vive) ao montar.
+    setDemandaParaAbrir({ demandaId: arquivo.demandaId, aba: "briefing" });
     router.push("/tarefas");
   }
 
