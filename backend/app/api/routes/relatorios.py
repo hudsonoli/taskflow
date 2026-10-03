@@ -20,10 +20,16 @@ from app.models.usuario import Usuario
 from app.schemas.relatorio import (
     RelatorioAjustesProjetoRead,
     RelatorioAnaliseProjetoRead,
+    RelatorioColaboradorOpcaoRead,
+    RelatorioFatiaRead,
     RelatorioPecasProjetoRead,
+    RelatorioPerformanceColaboradorRead,
+    RelatorioPontoSemanalRead,
+    RelatorioSerieBarraRead,
 )
+from app.services.cliente_service import ClienteNotFoundError
 from app.services.projeto_service import ProjetoNotFoundError
-from app.services.relatorio_service import RelatorioService
+from app.services.relatorio_service import ColaboradorNotFoundError, RelatorioService
 
 router = APIRouter(
     prefix="/relatorios",
@@ -81,3 +87,57 @@ def get_pecas_projeto(
         )
     except ProjetoNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+# D4B — Performance de colaborador e gráficos de Relatórios. Mesma autorização e mesmo escopo
+# do D4A (`require_admin_or_gestor` + `resolver_escopo_demanda`); empresa sempre do token.
+@router.get("/colaboradores", response_model=list[RelatorioColaboradorOpcaoRead])
+def list_colaboradores(
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    return relatorio_service.listar_colaboradores(db, empresa_id=current_user.empresa_id)
+
+
+@router.get("/colaboradores/performance", response_model=RelatorioPerformanceColaboradorRead)
+def get_performance_colaborador(
+    colaborador_id: UUID = Query(alias="colaboradorId"),
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    escopo = resolver_escopo_demanda(db, current_user)
+    try:
+        return relatorio_service.performance_colaborador(db, escopo=escopo, colaborador_id=str(colaborador_id))
+    except ColaboradorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/graficos/abertas-por-projeto", response_model=list[RelatorioFatiaRead])
+def get_abertas_por_projeto(
+    cliente_id: UUID = Query(alias="clienteId"),
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    escopo = resolver_escopo_demanda(db, current_user)
+    try:
+        return relatorio_service.abertas_por_projeto(db, escopo=escopo, cliente_id=str(cliente_id))
+    except ClienteNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/graficos/volume-por-colaborador", response_model=list[RelatorioSerieBarraRead])
+def get_volume_por_projeto_e_colaborador(
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    escopo = resolver_escopo_demanda(db, current_user)
+    return relatorio_service.volume_por_projeto_e_colaborador(db, escopo=escopo)
+
+
+@router.get("/graficos/volume-semanal", response_model=list[RelatorioPontoSemanalRead])
+def get_volume_semanal(
+    current_user: Usuario = Depends(require_admin_or_gestor),
+    db: Session = Depends(get_db),
+):
+    escopo = resolver_escopo_demanda(db, current_user)
+    return relatorio_service.volume_semanal(db, escopo=escopo)

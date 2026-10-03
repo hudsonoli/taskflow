@@ -1,7 +1,7 @@
 "use client";
 
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { SerieBarraEmpilhada } from "@/lib/relatorios";
+import type { SerieBarraEmpilhada } from "@/types/relatorios";
 import { seriesColor } from "@/lib/vizPalette";
 
 const CHART_HEIGHT = 220;

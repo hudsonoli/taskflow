@@ -1,6 +1,6 @@
 "use client";
 
-import type { PontoLinha } from "@/lib/relatorios";
+import type { PontoLinha } from "@/types/relatorios";
 
 const CHART_HEIGHT = 200;
 const PADDING_LEFT = 32;

@@ -36,3 +36,43 @@ export type RelatorioPecasPagina = {
   limit: number;
   offset: number;
 };
+
+// ---------------------------------------------------------------------------------------
+// D4B — Performance de colaborador e gráficos (GET /relatorios/colaboradores/**, /graficos/**)
+// ---------------------------------------------------------------------------------------
+
+/** Fatia de pizza/donut: usada pelos gráficos e pela participação por etapa. */
+export interface FatiaPizza {
+  id: string;
+  label: string;
+  value: number;
+}
+
+export interface SerieBarraEmpilhada {
+  categoria: string;
+  categoriaId: string;
+  segmentos: { seriesId: string; label: string; value: number }[];
+}
+
+export interface PontoLinha {
+  semanaLabel: string;
+  inicioSemana: string;
+  value: number;
+}
+
+/** Opção do seletor de colaborador — todos os status, sem conta de sistema, sem o `limit=200`. */
+export type RelatorioColaboradorOpcao = { id: string; nome: string };
+
+export type RelatorioPerformanceColaborador = {
+  colaboradorId: string;
+  colaboradorNome: string;
+  /** Demandas `concluida` em que ele é responsável (a Demanda conta para CADA responsável). */
+  demandasEntregues: number;
+  entreguesNoPrazo: number;
+  entreguesEmAtraso: number;
+  /** Já na ordem de primeira aparição. */
+  participacaoPorEtapa: FatiaPizza[];
+};
+
+/** Semana de `volume-semanal`: `inicioSemana` é a segunda-feira ("YYYY-MM-DD", fuso da aplicação). */
+export type RelatorioPontoSemanal = { inicioSemana: string; value: number };

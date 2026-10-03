@@ -1,7 +1,7 @@
 "use client";
 
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { FatiaPizza } from "@/lib/relatorios";
+import type { FatiaPizza } from "@/types/relatorios";
 import { seriesColor } from "@/lib/vizPalette";
 
 const SIZE = 200;

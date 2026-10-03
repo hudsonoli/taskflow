@@ -1,20 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { BarChart3 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
-import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { demandasAbertasPorProjeto, resolveClientesComProjeto, volumePorProjetoEColaborador, volumeSemanal } from "@/lib/relatorios";
+import { getRelatorioAbertasPorProjeto, getRelatorioVolumePorColaborador, getRelatorioVolumeSemanal } from "@/lib/api-backend";
+import { pontoDaSemana, resolveClientesComProjeto } from "@/lib/relatorios";
+import { useConsultaRelatorio } from "@/lib/useConsultaRelatorio";
 import { AnalisePecasReport } from "./AnalisePecasReport";
 import { AnaliseProjetoReport } from "./AnaliseProjetoReport";
 import { DemandasPorProjetoDonut, DemandasPorProjetoTable } from "./DemandasPorProjetoDonut";
+import { GraficoEstado } from "./GraficoEstado";
 import { PerformanceColaboradorReport } from "./PerformanceColaboradorReport";
 import { VolumeColaboradorBars, VolumeColaboradorTable } from "./VolumeColaboradorBars";
 import { VolumeSemanalLine, VolumeSemanalTable } from "./VolumeSemanalLine";
@@ -25,10 +26,8 @@ const SECOES = [
 ];
 
 export function RelatoriosView() {
-  const { demandas } = useAppData();
   const { projetos } = useDiretorioProjetos();
   const { clientes } = useDiretorioClientes();
-  const { usuarios } = useDiretorioUsuarios();
   const clientesComProjeto = useMemo(() => resolveClientesComProjeto(projetos, clientes), [projetos, clientes]);
   const [secao, setSecao] = useState("graficos");
   const [clienteIdSelecionado, setClienteIdSelecionado] = useState("");
@@ -37,12 +36,19 @@ export function RelatoriosView() {
   // cada render em vez de sincronizar com `useEffect` + `setState`.
   const clienteId = clienteIdSelecionado || clientesComProjeto[0]?.id || "";
 
-  const fatiasPizza = useMemo(() => demandasAbertasPorProjeto(clienteId, demandas, projetos), [clienteId, demandas, projetos]);
-  const seriesColaborador = useMemo(
-    () => volumePorProjetoEColaborador(demandas, projetos, usuarios),
-    [demandas, projetos, usuarios],
+  // D4B — os três gráficos vêm agregados do servidor, cada um com seu loading/erro (antes: calculados
+  // sobre `AppDataContext.demandas`, as 200 Demandas mais recentes da empresa). A pizza depende do
+  // Cliente selecionado; sem Cliente não há consulta (fatias vazias, como sempre).
+  const buscarAbertas = useCallback(() => getRelatorioAbertasPorProjeto(clienteId), [clienteId]);
+  const abertas = useConsultaRelatorio(clienteId ? buscarAbertas : null);
+  const volume = useConsultaRelatorio(getRelatorioVolumePorColaborador);
+  const semanal = useConsultaRelatorio(getRelatorioVolumeSemanal);
+  const fatiasPizza = abertas.resultado ?? [];
+  const seriesColaborador = volume.resultado ?? [];
+  const pontosSemanais = useMemo(
+    () => (semanal.resultado ?? []).map((ponto) => pontoDaSemana(ponto.inicioSemana, ponto.value)),
+    [semanal.resultado],
   );
-  const pontosSemanais = useMemo(() => volumeSemanal(new Date(), demandas), [demandas]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -88,7 +94,9 @@ export function RelatoriosView() {
                     }))}
                   />
                 </div>
-                <DemandasPorProjetoDonut fatias={fatiasPizza} />
+                <GraficoEstado carregando={abertas.carregando} erro={abertas.erro}>
+                  <DemandasPorProjetoDonut fatias={fatiasPizza} />
+                </GraficoEstado>
               </div>
             }
             table={
@@ -104,7 +112,9 @@ export function RelatoriosView() {
                     }))}
                   />
                 </div>
-                <DemandasPorProjetoTable fatias={fatiasPizza} />
+                <GraficoEstado carregando={abertas.carregando} erro={abertas.erro}>
+                  <DemandasPorProjetoTable fatias={fatiasPizza} />
+                </GraficoEstado>
               </div>
             }
           />
@@ -112,15 +122,31 @@ export function RelatoriosView() {
           <ChartCard
             title="Volume de demandas por projeto e colaborador"
             description="Quantas demandas cada colaborador toca em cada projeto."
-            chart={<VolumeColaboradorBars series={seriesColaborador} />}
-            table={<VolumeColaboradorTable series={seriesColaborador} />}
+            chart={
+              <GraficoEstado carregando={volume.carregando} erro={volume.erro}>
+                <VolumeColaboradorBars series={seriesColaborador} />
+              </GraficoEstado>
+            }
+            table={
+              <GraficoEstado carregando={volume.carregando} erro={volume.erro}>
+                <VolumeColaboradorTable series={seriesColaborador} />
+              </GraficoEstado>
+            }
           />
 
           <ChartCard
             title="Volume de demandas em fluxo"
             description="Demandas criadas por semana, últimas 12 semanas."
-            chart={<VolumeSemanalLine pontos={pontosSemanais} />}
-            table={<VolumeSemanalTable pontos={pontosSemanais} />}
+            chart={
+              <GraficoEstado carregando={semanal.carregando} erro={semanal.erro}>
+                <VolumeSemanalLine pontos={pontosSemanais} />
+              </GraficoEstado>
+            }
+            table={
+              <GraficoEstado carregando={semanal.carregando} erro={semanal.erro}>
+                <VolumeSemanalTable pontos={pontosSemanais} />
+              </GraficoEstado>
+            }
           />
         </div>
       )}

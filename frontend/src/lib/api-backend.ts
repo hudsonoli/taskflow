@@ -1,6 +1,14 @@
 import type { PerfilUsuario, Usuario, UsuarioFormDraft } from "@/types/usuario";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
-import type { RelatorioAnaliseProjeto, RelatorioPecasPagina } from "@/types/relatorios";
+import type {
+  FatiaPizza,
+  RelatorioAnaliseProjeto,
+  RelatorioColaboradorOpcao,
+  RelatorioPecasPagina,
+  RelatorioPerformanceColaborador,
+  RelatorioPontoSemanal,
+  SerieBarraEmpilhada,
+} from "@/types/relatorios";
 import type { PermissaoAdminItem, PermissaoOverride } from "@/types/permissao";
 import type { GrupoCliente, GrupoClienteStatus } from "@/types/grupo-cliente";
 import type { Departamento, DepartamentoFormDraft, DepartamentoStatus } from "@/types/departamento";
@@ -2244,6 +2252,36 @@ export async function getRelatorioAjustesPorProjeto(projetoId: string): Promise<
  */
 export async function getRelatorioAnaliseProjeto(projetoId: string): Promise<RelatorioAnaliseProjeto> {
   return request<RelatorioAnaliseProjeto>(`/relatorios/projetos/analise?projetoId=${encodeURIComponent(projetoId)}`);
+}
+
+/**
+ * D4B — opções do seletor de "Performance de colaborador": o mesmo conjunto do diretório de
+ * usuários (todos os status, sem conta de sistema, `nome ASC`), mas sem o `limit=200`.
+ */
+export async function getRelatorioColaboradores(): Promise<RelatorioColaboradorOpcao[]> {
+  return request<RelatorioColaboradorOpcao[]>("/relatorios/colaboradores");
+}
+
+/** D4B — "Performance de colaborador" no servidor, sobre TODAS as Demandas dele (nunca `AppDataContext.demandas`). */
+export async function getRelatorioPerformanceColaborador(colaboradorId: string): Promise<RelatorioPerformanceColaborador> {
+  return request<RelatorioPerformanceColaborador>(
+    `/relatorios/colaboradores/performance?colaboradorId=${encodeURIComponent(colaboradorId)}`,
+  );
+}
+
+/** D4B — gráfico "Demandas em aberto por projeto" de um Cliente. */
+export async function getRelatorioAbertasPorProjeto(clienteId: string): Promise<FatiaPizza[]> {
+  return request<FatiaPizza[]>(`/relatorios/graficos/abertas-por-projeto?clienteId=${encodeURIComponent(clienteId)}`);
+}
+
+/** D4B — gráfico "Volume de demandas por projeto e colaborador". */
+export async function getRelatorioVolumePorColaborador(): Promise<SerieBarraEmpilhada[]> {
+  return request<SerieBarraEmpilhada[]>("/relatorios/graficos/volume-por-colaborador");
+}
+
+/** D4B — gráfico "Volume de demandas em fluxo": 12 semanas (a corrente + 11), da mais antiga à mais nova. */
+export async function getRelatorioVolumeSemanal(): Promise<RelatorioPontoSemanal[]> {
+  return request<RelatorioPontoSemanal[]>("/relatorios/graficos/volume-semanal");
 }
 
 /** D4A — "Análise de peças" paginada no servidor (`limit`/`offset`, com `total`), mais recente primeiro. */

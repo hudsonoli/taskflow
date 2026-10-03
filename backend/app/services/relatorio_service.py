@@ -1,7 +1,9 @@
+from datetime import timedelta
+
 from sqlalchemy.orm import Session
 
 from app.core.escopo import EscopoDemanda
-from app.core.relogio import fuso_aplicacao
+from app.core.relogio import agora_local, fuso_aplicacao
 from app.domain.event_types import DomainEventType
 from app.models.projeto import Projeto
 from app.repositories.demanda_repository import DemandaRepository
@@ -13,10 +15,24 @@ from app.schemas.relatorio import (
     ContagemPrioridadeRead,
     RelatorioAjustesProjetoRead,
     RelatorioAnaliseProjetoRead,
+    RelatorioColaboradorOpcaoRead,
+    RelatorioFatiaRead,
     RelatorioPecaRead,
     RelatorioPecasProjetoRead,
+    RelatorioPerformanceColaboradorRead,
+    RelatorioPontoSemanalRead,
+    RelatorioSegmentoRead,
+    RelatorioSerieBarraRead,
 )
+from app.services.cliente_service import ClienteNotFoundError, ClienteService
 from app.services.projeto_service import ProjetoNotFoundError, ProjetoService
+
+# Janela do gráfico "Volume de demandas em fluxo": a semana corrente + as 11 anteriores.
+SEMANAS_DO_GRAFICO = 12
+
+
+class ColaboradorNotFoundError(ValueError):
+    pass
 
 TIPO_ENTIDADE_DEMANDA = "demanda"
 
@@ -38,7 +54,9 @@ class RelatorioService:
         demanda_repository: DemandaRepository | None = None,
         evento_repository: EventoRepository | None = None,
         relatorio_repository: RelatorioRepository | None = None,
+        cliente_service: ClienteService | None = None,
     ) -> None:
+        self.cliente_service = cliente_service or ClienteService()
         self.projeto_service = projeto_service or ProjetoService()
         self.demanda_repository = demanda_repository or DemandaRepository()
         self.evento_repository = evento_repository or EventoRepository()
@@ -104,6 +122,81 @@ class RelatorioService:
             limit=limit,
             offset=offset,
         )
+
+    # ----------------------------------------------------------------------------------
+    # D4B — Performance de colaborador e gráficos
+    # ----------------------------------------------------------------------------------
+
+    def listar_colaboradores(self, db: Session, *, empresa_id: str) -> list[RelatorioColaboradorOpcaoRead]:
+        linhas = self.relatorio_repository.listar_colaboradores(db, empresa_id=empresa_id)
+        return [RelatorioColaboradorOpcaoRead(id=usuario_id, nome=nome) for usuario_id, nome in linhas]
+
+    def performance_colaborador(
+        self, db: Session, *, escopo: EscopoDemanda, colaborador_id: str
+    ) -> RelatorioPerformanceColaboradorRead:
+        """Levanta `ColaboradorNotFoundError` para usuário inexistente, de outra empresa ou conta
+        de sistema (fora do diretório que alimenta o seletor) — mesmo 404 na rota."""
+        colaborador = self.relatorio_repository.obter_colaborador(
+            db, empresa_id=escopo.empresa_id, colaborador_id=colaborador_id
+        )
+        if colaborador is None:
+            raise ColaboradorNotFoundError("Colaborador não encontrado")
+        dados = self.relatorio_repository.performance_colaborador(
+            db, escopo=escopo, colaborador_id=colaborador_id, fuso=fuso_aplicacao().key
+        )
+        return RelatorioPerformanceColaboradorRead(
+            colaborador_id=colaborador.id,
+            colaborador_nome=colaborador.nome,
+            demandas_entregues=dados["entregues"],
+            entregues_no_prazo=dados["no_prazo"],
+            entregues_em_atraso=dados["entregues"] - dados["no_prazo"],
+            participacao_por_etapa=[
+                RelatorioFatiaRead(id=nome, label=nome, value=quantidade) for nome, quantidade in dados["etapas"]
+            ],
+        )
+
+    def abertas_por_projeto(
+        self, db: Session, *, escopo: EscopoDemanda, cliente_id: str
+    ) -> list[RelatorioFatiaRead]:
+        """Levanta `ClienteNotFoundError` se o Cliente não existir OU for de outra empresa."""
+        cliente = self.cliente_service.get_cliente(db, cliente_id)
+        if cliente.empresa_id != escopo.empresa_id:
+            raise ClienteNotFoundError("Cliente não encontrado")
+        linhas = self.relatorio_repository.abertas_por_projeto(db, escopo=escopo, cliente_id=cliente.id)
+        return [RelatorioFatiaRead(id=projeto_id, label=nome, value=quantidade) for projeto_id, nome, quantidade in linhas]
+
+    def volume_por_projeto_e_colaborador(
+        self, db: Session, *, escopo: EscopoDemanda
+    ) -> list[RelatorioSerieBarraRead]:
+        projetos, pares = self.relatorio_repository.volume_por_projeto_e_colaborador(db, escopo=escopo)
+        segmentos: dict[str, list[RelatorioSegmentoRead]] = {projeto_id: [] for projeto_id, _ in projetos}
+        for projeto_id, usuario_id, nome, quantidade in pares:
+            if projeto_id in segmentos:
+                segmentos[projeto_id].append(RelatorioSegmentoRead(series_id=usuario_id, label=nome, value=quantidade))
+        return [
+            RelatorioSerieBarraRead(categoria=nome, categoria_id=projeto_id, segmentos=segmentos[projeto_id])
+            for projeto_id, nome in projetos
+        ]
+
+    def volume_semanal(self, db: Session, *, escopo: EscopoDemanda) -> list[RelatorioPontoSemanalRead]:
+        """Demandas criadas por semana, da mais antiga à corrente, com zeros nas semanas vazias.
+        "Hoje" e o início da semana (segunda) são do fuso da aplicação — o que o navegador de
+        quem está no Brasil sempre fez."""
+        hoje = agora_local().date()
+        semana_corrente = hoje - timedelta(days=hoje.weekday())
+        primeira = semana_corrente - timedelta(weeks=SEMANAS_DO_GRAFICO - 1)
+        contagens = self.relatorio_repository.volume_semanal(
+            db,
+            escopo=escopo,
+            primeira_semana=primeira,
+            fim_exclusivo=semana_corrente + timedelta(weeks=1),
+            fuso=fuso_aplicacao().key,
+        )
+        pontos = []
+        for indice in range(SEMANAS_DO_GRAFICO):
+            inicio = primeira + timedelta(weeks=indice)
+            pontos.append(RelatorioPontoSemanalRead(inicio_semana=inicio, value=contagens.get(inicio, 0)))
+        return pontos
 
     def ajustes_por_projeto(
         self, db: Session, *, empresa_id: str, projeto_id: str
