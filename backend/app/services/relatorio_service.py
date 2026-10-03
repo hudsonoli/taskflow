@@ -1,9 +1,21 @@
 from sqlalchemy.orm import Session
 
+from app.core.escopo import EscopoDemanda
+from app.core.relogio import fuso_aplicacao
 from app.domain.event_types import DomainEventType
+from app.models.projeto import Projeto
 from app.repositories.demanda_repository import DemandaRepository
 from app.repositories.evento_repository import EventoRepository
-from app.schemas.relatorio import ContagemAjustesRead, RelatorioAjustesProjetoRead
+from app.repositories.relatorio_repository import RelatorioRepository
+from app.schemas.relatorio import (
+    ColaboradorContagemRead,
+    ContagemAjustesRead,
+    ContagemPrioridadeRead,
+    RelatorioAjustesProjetoRead,
+    RelatorioAnaliseProjetoRead,
+    RelatorioPecaRead,
+    RelatorioPecasProjetoRead,
+)
 from app.services.projeto_service import ProjetoNotFoundError, ProjetoService
 
 TIPO_ENTIDADE_DEMANDA = "demanda"
@@ -25,14 +37,14 @@ class RelatorioService:
         projeto_service: ProjetoService | None = None,
         demanda_repository: DemandaRepository | None = None,
         evento_repository: EventoRepository | None = None,
+        relatorio_repository: RelatorioRepository | None = None,
     ) -> None:
         self.projeto_service = projeto_service or ProjetoService()
         self.demanda_repository = demanda_repository or DemandaRepository()
         self.evento_repository = evento_repository or EventoRepository()
+        self.relatorio_repository = relatorio_repository or RelatorioRepository()
 
-    def ajustes_por_projeto(
-        self, db: Session, *, empresa_id: str, projeto_id: str
-    ) -> RelatorioAjustesProjetoRead:
+    def _projeto_da_empresa(self, db: Session, *, empresa_id: str, projeto_id: str) -> Projeto:
         """Levanta `ProjetoNotFoundError` (mesma exceção de `ProjetoService`, não uma nova) se
         o Projeto não existir OU pertencer a outra empresa — as duas situações viram o mesmo
         404 na rota, para não confirmar a outro tenant que um UUID existe em outra empresa.
@@ -42,6 +54,63 @@ class RelatorioService:
         projeto = self.projeto_service.get_projeto(db, projeto_id)
         if projeto.empresa_id != empresa_id:
             raise ProjetoNotFoundError("Projeto não encontrado")
+        return projeto
+
+    def analise_projeto(
+        self, db: Session, *, escopo: EscopoDemanda, projeto_id: str
+    ) -> RelatorioAnaliseProjetoRead:
+        """D4A — "Análise de projeto" calculada no servidor (ver `RelatorioRepository`)."""
+        projeto = self._projeto_da_empresa(db, empresa_id=escopo.empresa_id, projeto_id=projeto_id)
+        dados = self.relatorio_repository.analise_projeto(
+            db, escopo=escopo, projeto_id=projeto.id, fuso=fuso_aplicacao().key
+        )
+        return RelatorioAnaliseProjetoRead(
+            projeto_id=projeto.id,
+            projeto_nome=projeto.nome,
+            total_demandas=dados["total"],
+            prioridade=ContagemPrioridadeRead(baixa=dados["baixa"], media=dados["media"], alta=dados["alta"]),
+            tempo_medio_abertura_ate_inicio_dias=dados["abertura"],
+            tempo_medio_retorno_cliente_dias=dados["retorno"],
+            colaboradores=[
+                ColaboradorContagemRead(id=usuario_id, nome=nome, demandas=quantidade)
+                for usuario_id, nome, quantidade in dados["colaboradores"]
+            ],
+        )
+
+    def pecas_projeto(
+        self, db: Session, *, escopo: EscopoDemanda, projeto_id: str, limit: int, offset: int
+    ) -> RelatorioPecasProjetoRead:
+        """D4A — "Análise de peças" paginada no servidor (a "peça" é a Demanda do Projeto)."""
+        projeto = self._projeto_da_empresa(db, empresa_id=escopo.empresa_id, projeto_id=projeto_id)
+        linhas, total = self.relatorio_repository.pecas_projeto(
+            db, escopo=escopo, projeto_id=projeto.id, limit=limit, offset=offset
+        )
+        finalizadas = DemandaRepository._STATUS_FINALIZADOS
+        return RelatorioPecasProjetoRead(
+            items=[
+                RelatorioPecaRead(
+                    demanda_id=linha.id,
+                    nome=linha.nome,
+                    numero_operacional=linha.numero_operacional,
+                    redator_nome=linha.redator_nome,
+                    tempo_em_pauta_dias=(
+                        float(linha.tempo_em_pauta_dias) if linha.tempo_em_pauta_dias is not None else None
+                    ),
+                    em_andamento=linha.status not in finalizadas,
+                )
+                for linha in linhas
+            ],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    def ajustes_por_projeto(
+        self, db: Session, *, empresa_id: str, projeto_id: str
+    ) -> RelatorioAjustesProjetoRead:
+        """Contagem real de eventos de ajuste/refação por Projeto (Fase 2F.4); 404 como em
+        `_projeto_da_empresa`."""
+        self._projeto_da_empresa(db, empresa_id=empresa_id, projeto_id=projeto_id)
 
         demanda_ids = self.demanda_repository.listar_ids_por_projeto(
             db, empresa_id=empresa_id, projeto_id=projeto_id

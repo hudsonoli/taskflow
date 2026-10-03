@@ -1,5 +1,6 @@
 import type { PerfilUsuario, Usuario, UsuarioFormDraft } from "@/types/usuario";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
+import type { RelatorioAnaliseProjeto, RelatorioPecasPagina } from "@/types/relatorios";
 import type { PermissaoAdminItem, PermissaoOverride } from "@/types/permissao";
 import type { GrupoCliente, GrupoClienteStatus } from "@/types/grupo-cliente";
 import type { Departamento, DepartamentoFormDraft, DepartamentoStatus } from "@/types/departamento";
@@ -2234,6 +2235,25 @@ export type RelatorioAjustesProjeto = {
  * chama trata como qualquer outra falha, não como "zero real". */
 export async function getRelatorioAjustesPorProjeto(projetoId: string): Promise<RelatorioAjustesProjeto> {
   return request<RelatorioAjustesProjeto>(`/relatorios/demandas/ajustes?projetoId=${encodeURIComponent(projetoId)}`);
+}
+
+/**
+ * D4A — "Análise de projeto" agregada no servidor sobre o universo INTEGRAL do Projeto (nunca
+ * `AppDataContext.demandas`, que é `GET /demandas?limit=200` da empresa inteira). Só o Projeto
+ * é filtro: a tela nunca teve período/status/cliente.
+ */
+export async function getRelatorioAnaliseProjeto(projetoId: string): Promise<RelatorioAnaliseProjeto> {
+  return request<RelatorioAnaliseProjeto>(`/relatorios/projetos/analise?projetoId=${encodeURIComponent(projetoId)}`);
+}
+
+/** D4A — "Análise de peças" paginada no servidor (`limit`/`offset`, com `total`), mais recente primeiro. */
+export async function getRelatorioPecasProjeto(
+  projetoId: string,
+  limit: number,
+  offset: number,
+): Promise<RelatorioPecasPagina> {
+  const search = new URLSearchParams({ projetoId, limit: String(limit), offset: String(offset) });
+  return request<RelatorioPecasPagina>(`/relatorios/projetos/pecas?${search.toString()}`);
 }
 
 // ---------------------------------------------------------------------------------

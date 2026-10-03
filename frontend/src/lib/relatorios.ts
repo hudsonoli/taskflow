@@ -1,6 +1,5 @@
 import type { ClienteDiretorioItem, ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
-import { fimDaDataLocal, parseDataLocal } from "@/lib/data-local";
-import { rotuloDemanda } from "@/lib/referencias";
+import { fimDaDataLocal } from "@/lib/data-local";
 import type { Demanda } from "@/types/demanda";
 
 // Todos os helpers deste módulo recebem o diretório real como argumento (Cliente/Usuário/
@@ -105,109 +104,6 @@ export function volumeSemanal(referenceDate: Date, demandas: Demanda[], semanas 
  */
 export function resolveClientesComProjeto(projetos: ProjetoDiretorioItem[], clientes: ClienteDiretorioItem[]) {
   return clientes.filter((cliente) => projetos.some((projeto) => projeto.clienteId === cliente.id));
-}
-
-function diffEmDiasEntreDatas(inicio: Date, fim: Date): number {
-  return (fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24);
-}
-
-function diffEmDias(inicioIso: string, fimIso: string): number {
-  return diffEmDiasEntreDatas(new Date(inicioIso), new Date(fimIso));
-}
-
-function media(valores: number[]): number {
-  if (valores.length === 0) return 0;
-  return valores.reduce((sum, value) => sum + value, 0) / valores.length;
-}
-
-export interface AnaliseProjeto {
-  projetoId: string;
-  projetoNome: string;
-  totalDemandas: number;
-  prioridade: { baixa: number; media: number; alta: number };
-  tempoMedioAberturaAteInicioDias: number | null;
-  tempoMedioRetornoClienteDias: number | null;
-  colaboradores: { id: string; nome: string; demandas: number }[];
-}
-
-export function analisarProjeto(
-  projetoId: string,
-  demandasTodas: Demanda[],
-  projetos: ProjetoDiretorioItem[],
-  usuarios: UsuarioDiretorioItem[],
-): AnaliseProjeto {
-  const projeto = projetos.find((item) => item.id === projetoId);
-  const demandas = demandasTodas.filter((demanda) => demanda.projetoId === projetoId);
-
-  // `dataInicio` é data pura (`DATE`, sem hora) e pode ser `null` — hoje nenhuma UI escreve
-  // nele, então normalmente está ausente. `demanda.dataInicio ?? ""` alimentava `new
-  // Date("")` (Invalid Date), e um único NaN nesse array contaminava `media()` inteira (soma
-  // via reduce), estourando "NaNd" em Análise de Projeto mesmo com outras demandas válidas.
-  // Demandas sem `dataInicio` ficam de fora do cálculo — mesmo padrão já usado abaixo para
-  // `temposRetorno` — em vez de forçar 0d ou quebrar a média de todo o projeto.
-  const temposAbertura = demandas
-    .map((demanda) => {
-      const inicio = parseDataLocal(demanda.dataInicio);
-      return inicio ? diffEmDiasEntreDatas(new Date(demanda.createdAt), inicio) : null;
-    })
-    .filter((valor): valor is number => valor !== null);
-  const temposRetorno = demandas
-    .filter((demanda) => demanda.enviadoClienteEm && demanda.retornoRecebidoEm)
-    .map((demanda) => diffEmDias(demanda.enviadoClienteEm as string, demanda.retornoRecebidoEm as string));
-
-  const colaboradores = usuarios
-    .map((usuario) => ({
-      id: usuario.id,
-      nome: usuario.nome,
-      demandas: demandas.filter((demanda) => demanda.usuarioResponsavelIds.includes(usuario.id)).length,
-    }))
-    .filter((colaborador) => colaborador.demandas > 0);
-
-  return {
-    projetoId,
-    projetoNome: projeto?.nome ?? projetoId,
-    totalDemandas: demandas.length,
-    prioridade: {
-      baixa: demandas.filter((demanda) => demanda.prioridade === "baixa").length,
-      media: demandas.filter((demanda) => demanda.prioridade === "media").length,
-      alta: demandas.filter((demanda) => demanda.prioridade === "alta").length,
-    },
-    tempoMedioAberturaAteInicioDias: temposAbertura.length > 0 ? media(temposAbertura) : null,
-    tempoMedioRetornoClienteDias: temposRetorno.length > 0 ? media(temposRetorno) : null,
-    colaboradores,
-  };
-}
-
-export interface AnalisePeca {
-  demandaId: string;
-  nome: string;
-  codigoInterno: string;
-  redator: string;
-  tempoEmPautaDias: number | null;
-  emAndamento: boolean;
-}
-
-export function analisarPecasPorProjeto(
-  projetoId: string,
-  demandasTodas: Demanda[],
-  usuarios: UsuarioDiretorioItem[],
-): AnalisePeca[] {
-  const demandas = demandasTodas.filter((demanda) => demanda.projetoId === projetoId);
-
-  return demandas.map((demanda) => {
-    const redatorId = demanda.usuarioResponsavelIds[0];
-    const redator = usuarios.find((usuario) => usuario.id === redatorId)?.nome ?? "Sem responsável";
-    const emAndamento = demanda.status !== "concluida" && demanda.status !== "cancelada";
-
-    return {
-      demandaId: demanda.id,
-      nome: demanda.nome,
-      codigoInterno: rotuloDemanda(demanda),
-      redator,
-      tempoEmPautaDias: emAndamento ? null : diffEmDias(demanda.createdAt, demanda.updatedAt),
-      emAndamento,
-    };
-  });
 }
 
 export interface PerformanceColaborador {
