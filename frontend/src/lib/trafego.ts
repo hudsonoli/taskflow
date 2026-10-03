@@ -1,42 +1,5 @@
-import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
-import type { DemandaDiretorio } from "@/types/demanda";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import type { TrafegoCargaAgregada, TrafegoFiltersState, TrafegoIndicadores, TrafegoResumo } from "@/types/trafego";
-
-// `EMPRESA_TRAFEGO_PADRAO_ID` saiu: era a string mock "empresa-principal", enviada como
-// `empresaId` para a API real. Agora a empresa vem do token, no servidor.
-//
-// `trafegoUsuariosDisponiveis`/`trafegoDepartamentosDisponiveis` também saíram: eram as
-// listas mock (`user-1`…`user-5`) que `resolveTrafegoUsuarioNome`/`resolveTrafegoDepartamentoNome`
-// resolviam por baixo. Desde que `sessoes_trabalho.usuario_id`/`departamento_id` passaram a
-// carregar UUID real (ver docstring de `app/models/sessao_trabalho.py` no backend), essas
-// funções recebem o diretório real como argumento — mesmo padrão já usado por
-// `resolveTrafegoDemandaNome` abaixo. Uma constante de módulo não tem como refletir dado que
-// vem da API.
-
-export function resolveTrafegoUsuarioNome(usuarioId: string | null, diretorio: UsuarioDiretorioItem[]): string {
-  if (!usuarioId) return "Sem usuário";
-  return diretorio.find((usuario) => usuario.id === usuarioId)?.nome ?? usuarioId;
-}
-
-export function resolveTrafegoDepartamentoNome(
-  departamentoId: string | null,
-  diretorio: DepartamentoDiretorioItem[],
-): string {
-  if (!departamentoId) return "Sem departamento";
-  return diretorio.find((departamento) => departamento.id === departamentoId)?.nome ?? departamentoId;
-}
-
-/**
- * Nome da demanda para a tabela de sessões, no formato operacional `#2063 — Nome`.
- *
- * Recebe o diretório em vez de consultá-lo: quem o carregou já respeitou o escopo do usuário.
- * Demanda ausente do diretório cai no id — não inventa nome nem esconde a sessão.
- */
-export function resolveTrafegoDemandaNome(demandaId: string, diretorio: DemandaDiretorio[]): string {
-  const demanda = diretorio.find((item) => item.id === demandaId);
-  return demanda ? `#${demanda.numeroOperacional} — ${demanda.nome}` : demandaId;
-}
 
 export function formatTempoOperacional(seconds: number): string {
   const safeSeconds = Math.max(0, Math.round(seconds));
@@ -59,28 +22,6 @@ export function elapsedSeconds(sessao: SessaoTrabalho, now: Date): number {
   if (sessao.duracaoSegundos !== null) return sessao.duracaoSegundos;
   const inicio = new Date(sessao.inicioEm).getTime();
   return Math.max(0, Math.floor((now.getTime() - inicio) / 1000));
-}
-
-function normalize(value: string) {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
-
-export function filterSessoes(
-  sessoes: SessaoTrabalho[],
-  filters: TrafegoFiltersState,
-  diretorioDemandas: DemandaDiretorio[] = [],
-): SessaoTrabalho[] {
-  return sessoes.filter((sessao) => {
-    const usuarioMatches = filters.usuarioIds.length === 0 || (sessao.usuarioId !== null && filters.usuarioIds.includes(sessao.usuarioId));
-    const departamentoMatches =
-      filters.departamentoIds.length === 0 || (sessao.departamentoId !== null && filters.departamentoIds.includes(sessao.departamentoId));
-    const demandaNome = resolveTrafegoDemandaNome(sessao.demandaId, diretorioDemandas);
-    const demandaMatches = filters.demandaQuery.trim()
-      ? normalize(`${sessao.demandaId} ${demandaNome}`).includes(normalize(filters.demandaQuery))
-      : true;
-
-    return usuarioMatches && departamentoMatches && demandaMatches;
-  });
 }
 
 /**

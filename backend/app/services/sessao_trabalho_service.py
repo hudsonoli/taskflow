@@ -299,6 +299,27 @@ class SessaoTrabalhoService:
             demanda_query=demanda_query,
         )
 
+    def agora_trafego(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        usuario_ids: list[str] | None = None,
+        departamento_ids: list[str] | None = None,
+        demanda_query: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        return self.repository.agora_trafego(
+            db,
+            empresa_id=empresa_id,
+            usuario_ids=usuario_ids,
+            departamento_ids=departamento_ids,
+            demanda_query=demanda_query,
+            limit=limit,
+            offset=offset,
+        )
+
     def get_session(self, db: Session, sessao_id: str) -> SessaoTrabalho | None:
         return self.repository.get_by_id(db, sessao_id)
 

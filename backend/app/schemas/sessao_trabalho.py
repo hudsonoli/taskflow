@@ -121,6 +121,42 @@ class SessaoTrabalhoTrafegoIndicadoresRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class SessaoTrabalhoTrafegoAgoraItemRead(BaseModel):
+    """Uma linha de "Quem está trabalhando agora" — autossuficiente: usuário, departamento e Demanda
+    já resolvidos (nunca dependem de diretório do cliente). `decorridoSegundos` é "as of" `NOW()`:
+    o frontend soma o tempo desde que recebeu a resposta, sem novo fetch."""
+
+    sessao_id: str = Field(alias="sessaoId")
+    inicio_em: datetime = Field(alias="inicioEm")
+    decorrido_segundos: int = Field(alias="decorridoSegundos")
+    demanda_id: str = Field(alias="demandaId")
+    demanda_numero: int | None = Field(default=None, alias="demandaNumero")
+    demanda_nome: str | None = Field(default=None, alias="demandaNome")
+    usuario_id: str | None = Field(default=None, alias="usuarioId")
+    usuario_nome: str | None = Field(default=None, alias="usuarioNome")
+    departamento_id: str | None = Field(default=None, alias="departamentoId")
+    departamento_nome: str | None = Field(default=None, alias="departamentoNome")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("inicio_em")
+    @classmethod
+    def validate_timezone(cls, value: datetime) -> datetime:
+        return ensure_timezone_aware(value)
+
+
+class SessaoTrabalhoTrafegoAgoraRead(BaseModel):
+    """D2-D3C3 — `/trafego/agora`: uma página de sessões ativas + `total` do universo filtrado
+    (para o contador "N ativa(s)" e o "carregar mais")."""
+
+    items: list[SessaoTrabalhoTrafegoAgoraItemRead]
+    total: int
+    limit: int
+    offset: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class SessaoTrabalhoTrafegoCargaItemRead(BaseModel):
     """Um grupo (usuário, departamento ou equipe) do ranking de carga — só o que a tela exibe.
     `tempoAtivoTotalSegundos` é "as of" `NOW()`: o frontend soma `sessoesAtivas × Δ` para o

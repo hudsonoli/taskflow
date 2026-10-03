@@ -1,17 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { getCargaTrafegoSessoes, getIndicadoresTrafegoSessoes, getResumoTrafegoSessoes, listSessoesTrabalho } from "@/lib/api";
-import { getDemandasPorIds, getResumoOperacional, listDiretorioDemandas, type ResumoOperacional } from "@/lib/api-backend";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getAgoraTrafegoSessoes, getCargaTrafegoSessoes, getIndicadoresTrafegoSessoes, getResumoTrafegoSessoes } from "@/lib/api";
+import { getResumoOperacional, listDiretorioDemandas, type ResumoOperacional } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { podeAcessarCentralTrafego } from "@/lib/escopo-operacional";
-import { cargaComRelogio, filterSessoes, periodoParaDataInicio, resumoDeIndicadores } from "@/lib/trafego";
+import { cargaComRelogio, periodoParaDataInicio, resumoDeIndicadores } from "@/lib/trafego";
 import { useNow } from "@/lib/useNow";
 import type { DemandaDiretorio } from "@/types/demanda";
-import type { SessaoTrabalho } from "@/types/sessao-trabalho";
-import type { TrafegoCarga, TrafegoFiltersState, TrafegoIndicadores } from "@/types/trafego";
+import type { TrafegoAgoraLinha, TrafegoCarga, TrafegoFiltersState, TrafegoIndicadores } from "@/types/trafego";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { TempoOperacionalCard } from "./TempoOperacionalCard";
 import { TrafegoAgoraTable } from "./TrafegoAgoraTable";
@@ -23,6 +22,9 @@ import { TrafegoHeader } from "./TrafegoHeader";
 import { TrafegoIndicadoresDemandas } from "./TrafegoIndicadoresDemandas";
 import { TrafegoIniciarSessao } from "./TrafegoIniciarSessao";
 import { TrafegoResumoCards } from "./TrafegoResumoCards";
+
+// D2-D3C3 — tamanho da página de "Quem está trabalhando agora" (+ "Carregar mais").
+const TAMANHO_PAGINA_AGORA = 50;
 
 const initialFilters: TrafegoFiltersState = {
   usuarioIds: [],
@@ -37,16 +39,9 @@ export function TrafegoView() {
   const { usuarios } = useDiretorioUsuarios();
   const { departamentos } = useDiretorioDepartamentos();
   const [filters, setFilters] = useState<TrafegoFiltersState>(initialFilters);
-  const [sessoesAtivas, setSessoesAtivas] = useState<SessaoTrabalho[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
   // D2-C — diretório para vincular uma sessão NOVA: semântica de `/diretorio` (não
   // arquivada), carregado uma vez, independente de filtro/período.
   const [diretorioNovaSessao, setDiretorioNovaSessao] = useState<DemandaDiretorio[]>([]);
-  // D2-C — diretório para resolver o NOME de sessões já carregadas (ativas + encerradas):
-  // semântica de `GET /demandas/{id}` (arquivada incluída), resolvido em lote a partir dos
-  // `demandaId` realmente presentes nas sessões — nunca mais `AppDataContext.demandas`.
-  const [diretorioHistorico, setDiretorioHistorico] = useState<DemandaDiretorio[]>([]);
   // D2-D3A — indicadores baseados em Demanda, agregados no servidor sobre o universo
   // INTEGRAL permitido (admin/gestor via `require_admin_or_gestor`, nunca mais
   // `AppDataContext.demandas`). `resumoOperacional === null` distingue "carregando" de
@@ -74,31 +69,22 @@ export function TrafegoView() {
   // ancora o relógio das sessões ativas).
   const [carga, setCarga] = useState<{ dados: TrafegoCarga; recebidoEm: number } | null>(null);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
-  // Incrementado por `atualizar` (botão Atualizar, iniciar/fechar sessão): refaz indicadores E carga.
+  // D2-D3C3 — "Quem está trabalhando agora": listagem paginada no servidor (`/trafego/agora`), já com
+  // nomes de usuário/departamento/Demanda — nunca mais a lista de 100 sessões nem diretórios do
+  // cliente. `agora === null` é "carregando"; a falha da primeira página (`erroAgora`) e a do
+  // "carregar mais" (`erroMaisAgora`) são separadas para um erro de página não apagar a tabela.
+  // `chaveAgoraRef` identifica a consulta vigente (filtros + versão): resposta de uma consulta
+  // anterior — inclusive um "carregar mais" em voo quando os filtros mudam — é descartada.
+  const [agora, setAgora] = useState<{ linhas: TrafegoAgoraLinha[]; total: number } | null>(null);
+  const [erroAgora, setErroAgora] = useState<string | null>(null);
+  const [carregandoAgora, setCarregandoAgora] = useState(true);
+  const [carregandoMaisAgora, setCarregandoMaisAgora] = useState(false);
+  const [erroMaisAgora, setErroMaisAgora] = useState<string | null>(null);
+  const chaveAgoraRef = useRef("");
+  // Incrementado por `atualizar` (botão Atualizar, iniciar/fechar sessão): refaz indicadores,
+  // carga E "agora" (primeira página).
   const [versaoIndicadores, setVersaoIndicadores] = useState(0);
   const now = useNow(1000);
-
-  // Só as sessões ATIVAS: `TrafegoAgoraTable` (D3C3 ainda não migrada) é o único consumidor da
-  // lista. A lista de ENCERRADAS saiu em D2-D3C2 — depois que resumo, tempo operacional e as três
-  // cargas passaram a vir do servidor, nada mais a lia (só alimentava a resolução de nomes).
-  const carregar = useCallback(async () => {
-    setLoading(true);
-    setErro(null);
-    try {
-      setSessoesAtivas(await listSessoesTrabalho({ status: "ativa" }));
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível conectar à API (http://localhost:8010).");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      void carregar();
-    }, 0);
-    return () => clearTimeout(timeout);
-  }, [carregar]);
 
   // D2-D3A — resumo operacional de Demandas, refeito a cada troca de período (o servidor
   // não recebe filtro nenhum além de `periodoInicio`, então trocar usuário/departamento/
@@ -203,12 +189,78 @@ export function TrafegoView() {
     };
   }, [filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
 
-  // Atualização completa: listas + indicadores + carga. Usada pelo botão de refresh e por toda ação que
-  // muda sessões (iniciar, fechar) — os indicadores não podem ficar para trás da lista.
+  // D2-D3C3 — "agora" (primeira página), refeito quando usuários, departamentos ou a busca de
+  // demanda mudam, ou em `atualizar`. NÃO depende de período/status (nunca afetaram a tabela).
+  // Trocar filtro/atualizar volta à primeira página. Debounce e `cancelado` como nos efeitos acima.
+  useEffect(() => {
+    let cancelado = false;
+    chaveAgoraRef.current = JSON.stringify([filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
+    const timeout = setTimeout(() => {
+      setCarregandoAgora(true);
+      setErroMaisAgora(null);
+      getAgoraTrafegoSessoes({
+        usuarioIds: filters.usuarioIds,
+        departamentoIds: filters.departamentoIds,
+        demandaQuery: filters.demandaQuery,
+        limit: TAMANHO_PAGINA_AGORA,
+        offset: 0,
+      })
+        .then((pagina) => {
+          if (cancelado) return;
+          const recebidoEm = Date.now();
+          setAgora({ linhas: pagina.items.map((item) => ({ ...item, recebidoEm })), total: pagina.total });
+          setErroAgora(null);
+        })
+        .catch((error) => {
+          if (cancelado) return;
+          setErroAgora(error instanceof Error ? error.message : "Não foi possível carregar as sessões em execução.");
+        })
+        .finally(() => {
+          if (!cancelado) setCarregandoAgora(false);
+        });
+    }, 250);
+    return () => {
+      cancelado = true;
+      clearTimeout(timeout);
+    };
+  }, [filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
+
+  // "Carregar mais": próxima página a partir de quantas linhas já estão na tela. Se os filtros
+  // mudarem (ou houver `atualizar`) enquanto a página está em voo, ela é descartada.
+  const carregarMaisAgora = useCallback(() => {
+    if (!agora) return;
+    const chaveDoClique = chaveAgoraRef.current;
+    setCarregandoMaisAgora(true);
+    setErroMaisAgora(null);
+    getAgoraTrafegoSessoes({
+      usuarioIds: filters.usuarioIds,
+      departamentoIds: filters.departamentoIds,
+      demandaQuery: filters.demandaQuery,
+      limit: TAMANHO_PAGINA_AGORA,
+      offset: agora.linhas.length,
+    })
+      .then((pagina) => {
+        if (chaveAgoraRef.current !== chaveDoClique) return;
+        const recebidoEm = Date.now();
+        setAgora((atual) => {
+          if (!atual) return atual;
+          const jaNaTela = new Set(atual.linhas.map((linha) => linha.sessaoId));
+          const novas = pagina.items.filter((item) => !jaNaTela.has(item.sessaoId)).map((item) => ({ ...item, recebidoEm }));
+          return { linhas: [...atual.linhas, ...novas], total: pagina.total };
+        });
+      })
+      .catch((error) => {
+        if (chaveAgoraRef.current !== chaveDoClique) return;
+        setErroMaisAgora(error instanceof Error ? error.message : "Não foi possível carregar mais sessões.");
+      })
+      .finally(() => setCarregandoMaisAgora(false));
+  }, [agora, filters.usuarioIds, filters.departamentoIds, filters.demandaQuery]);
+
+  // Atualização completa: indicadores + carga + "agora". Usada pelo botão de refresh e por toda
+  // ação que muda sessões (iniciar, encerrar) — nada fica para trás do que o servidor tem.
   const atualizar = useCallback(() => {
     setVersaoIndicadores((versao) => versao + 1);
-    void carregar();
-  }, [carregar]);
+  }, []);
 
   // D2-C — diretório de vínculo (autocomplete de "Iniciar sessão"): não arquivada, escopo
   // padrão da listagem, carregado uma vez — não depende de filtro/período de sessões.
@@ -226,31 +278,6 @@ export function TrafegoView() {
     };
   }, []);
 
-  // D2-C — diretório histórico: extrai os `demandaId` realmente presentes nas sessões
-  // carregadas (ativas, deduplicado) e resolve em lote via `/demandas/por-ids`
-  // (arquivada incluída). `cancelado` evita que um lote antigo, ainda em voo quando o
-  // usuário troca o período/filtro e novas sessões chegam, sobrescreva o diretório mais
-  // novo.
-  useEffect(() => {
-    let cancelado = false;
-    const idsUnicos = Array.from(new Set(sessoesAtivas.map((sessao) => sessao.demandaId)));
-    // Sem sessões, não há `demandaId` pra resolver — nenhuma linha vai consultar o
-    // diretório mesmo, então não há necessidade de zerar o estado (e fazer isso aqui
-    // dispararia setState síncrono no corpo do efeito).
-    if (idsUnicos.length === 0) return;
-    getDemandasPorIds(idsUnicos)
-      .then((diretorio) => {
-        if (!cancelado) setDiretorioHistorico(diretorio);
-      })
-      .catch(() => {
-        // Falha aqui degrada para o fallback de `resolveTrafegoDemandaNome` (mostra o id).
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, [sessoesAtivas]);
-
-  const ativasFiltradas = filterSessoes(sessoesAtivas, filters, diretorioHistorico);
   const resumo = indicadores
     ? resumoDeIndicadores(indicadores.dados, (now.getTime() - indicadores.recebidoEm) / 1000)
     : null;
@@ -264,7 +291,7 @@ export function TrafegoView() {
   if (!podeAcessarCentralTrafego(usuarioAtual)) {
     return (
       <div className="flex flex-col gap-6">
-        <TrafegoHeader onRefresh={atualizar} refreshing={loading} />
+        <TrafegoHeader onRefresh={atualizar} refreshing={carregandoAgora} />
         <AcessoNegado
           titulo="Central de Tráfego restrita à gestão autorizada"
           descricao="Esta visão reúne carga, capacidade e demandas de toda a operação — disponível apenas para perfis de gestão autorizados nesta fase."
@@ -275,7 +302,7 @@ export function TrafegoView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TrafegoHeader onRefresh={atualizar} refreshing={loading} />
+      <TrafegoHeader onRefresh={atualizar} refreshing={carregandoAgora} />
       <TrafegoIniciarSessao onCreated={atualizar} demandas={diretorioNovaSessao} />
       <TrafegoFilters filters={filters} onChange={setFilters} usuarios={usuarios} departamentos={departamentos} />
 
@@ -287,28 +314,22 @@ export function TrafegoView() {
       <TrafegoResumoCards resumo={resumo} erro={erroIndicadores} />
       <TempoOperacionalCard resumo={resumo} erro={erroIndicadores} />
 
-      {erro ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-          {erro}
-        </div>
-      ) : (
-        <>
-          <TrafegoIndicadoresDemandas
-            resumo={resumoOperacional}
-            erro={erroResumoOperacional}
-            horasExecutadas={horasExecutadas}
-            erroHorasExecutadas={erroHorasExecutadas}
-          />
-          <TrafegoAgoraTable
-            sessoes={ativasFiltradas}
-            now={now}
-            onChanged={atualizar}
-            diretorioDemandas={diretorioHistorico}
-            diretorioUsuarios={usuarios}
-            diretorioDepartamentos={departamentos}
-          />
-        </>
-      )}
+      <TrafegoIndicadoresDemandas
+        resumo={resumoOperacional}
+        erro={erroResumoOperacional}
+        horasExecutadas={horasExecutadas}
+        erroHorasExecutadas={erroHorasExecutadas}
+      />
+      <TrafegoAgoraTable
+        linhas={agora?.linhas ?? null}
+        total={agora?.total ?? 0}
+        erro={erroAgora}
+        now={now}
+        onChanged={atualizar}
+        onCarregarMais={carregarMaisAgora}
+        carregandoMais={carregandoMaisAgora}
+        erroMais={erroMaisAgora}
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <TrafegoCargaUsuarios cargas={cargaUsuarios} erro={erroCarga} />

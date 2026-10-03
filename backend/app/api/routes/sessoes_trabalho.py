@@ -36,6 +36,7 @@ from app.schemas.sessao_trabalho import (
     SessaoTrabalhoFechar,
     SessaoTrabalhoHorasRead,
     SessaoTrabalhoRead,
+    SessaoTrabalhoTrafegoAgoraRead,
     SessaoTrabalhoTrafegoCargaRead,
     SessaoTrabalhoTrafegoIndicadoresRead,
     SessaoTrabalhoTrafegoResumoRead,
@@ -279,6 +280,38 @@ def indicadores_trafego(
             usuario_ids=_parse_uuid_csv(usuario_ids, "usuarioIds"),
             departamento_ids=_parse_uuid_csv(departamento_ids, "departamentoIds"),
             demanda_query=demanda_query,
+        )
+    )
+
+
+@router.get("/trafego/agora", response_model=SessaoTrabalhoTrafegoAgoraRead)
+def agora_trafego(
+    usuario_ids: str | None = Query(default=None, alias="usuarioIds"),
+    departamento_ids: str | None = Query(default=None, alias="departamentoIds"),
+    demanda_query: str | None = Query(default=None, alias="demandaQuery"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
+    db: Session = Depends(get_db),
+):
+    """D2-D3C3 — "Quem está trabalhando agora": sessões ATIVAS paginadas no servidor
+    (`limit`/`offset`, com `total`), com usuário, departamento e Demanda já resolvidos — sem o cap
+    de 100 da listagem genérica e sem depender de diretórios do cliente. Mesmo piso de autorização
+    dos demais endpoints de Tráfego (`require_trafego_gerenciar`); a empresa vem do token.
+    Registrada ANTES de `/{sessao_id}`.
+
+    Só `usuarioIds`/`departamentoIds`/`demandaQuery`: período e status da tela nunca afetaram esta
+    tabela. Ordem (mais tempo em execução primeiro) e semântica em
+    `SessaoTrabalhoRepository.agora_trafego`."""
+    return SessaoTrabalhoTrafegoAgoraRead(
+        **sessao_service.agora_trafego(
+            db,
+            empresa_id=current_user.empresa_id,
+            usuario_ids=_parse_uuid_csv(usuario_ids, "usuarioIds"),
+            departamento_ids=_parse_uuid_csv(departamento_ids, "departamentoIds"),
+            demanda_query=demanda_query,
+            limit=limit,
+            offset=offset,
         )
     )
 

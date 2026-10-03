@@ -49,3 +49,31 @@ export type TrafegoResumo = {
 export type TrafegoIndicadores = TrafegoResumo & {
   maiorSessaoAtivaSegundos: number;
 };
+
+/**
+ * Uma linha de "Quem está trabalhando agora" (D2-D3C3) — `GET /sessoes-trabalho/trafego/agora`.
+ * Autossuficiente: usuário, departamento e Demanda já resolvidos pelo servidor (nunca dependem de
+ * diretório do cliente). `decorridoSegundos` é "as of" a resposta.
+ */
+export type TrafegoAgoraItem = {
+  sessaoId: string;
+  inicioEm: string;
+  decorridoSegundos: number;
+  demandaId: string;
+  demandaNumero: number | null;
+  demandaNome: string | null;
+  usuarioId: string | null;
+  usuarioNome: string | null;
+  departamentoId: string | null;
+  departamentoNome: string | null;
+};
+
+export type TrafegoAgoraPagina = {
+  items: TrafegoAgoraItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+/** Linha na tela: cada página tem o seu `recebidoEm`, âncora do relógio da própria linha. */
+export type TrafegoAgoraLinha = TrafegoAgoraItem & { recebidoEm: number };

@@ -499,3 +499,105 @@ class SessaoTrabalhoRepository:
                 for linha in linhas
             ]
         return resultado
+
+    def agora_trafego(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        usuario_ids: Sequence[str] | None = None,
+        departamento_ids: Sequence[str] | None = None,
+        demanda_query: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Mapping[str, object]:
+        """D2-D3C3 — "Quem está trabalhando agora" (`TrafegoAgoraTable`): sessões ATIVAS
+        paginadas no servidor, com usuário/departamento/Demanda JÁ resolvidos na mesma consulta —
+        nunca a lista de 100 do cliente nem os diretórios globais (o de usuários cortado em 200).
+        2 consultas (página + total), sempre, independente de quantas sessões existam.
+
+        ## Universo e filtros (comparados, campo a campo, com `TrafegoView`/`filterSessoes`)
+        - só `ativa` (a tela buscava `listSessoesTrabalho({status: "ativa"})`): encerrada e
+          cancelada nunca aparecem;
+        - SEM período e SEM `status` da tela — nunca afetaram esta tabela (mesma conclusão de D3C2);
+        - `usuario_ids`/`departamento_ids`/`demanda_query`: os MESMOS de D3C1/D3C2
+          (`_filtros_sessao`, regra única, sem terceira versão).
+
+        ## Ordem
+        A tabela ordenava por tempo decorrido DECRESCENTE (`elapsedSeconds`, "maior tempo em
+        execução primeiro"). Tempo decorrido decrescente ≡ `inicio_em` CRESCENTE — chave que não
+        depende do relógio, então a paginação por offset é estável (ordenar por `FLOOR(NOW() −
+        inicio_em)` faria sessões de início sub-segundo mudarem de lado entre duas páginas).
+        Desempate: `created_at DESC` (a ordem em que a API entregava ao cliente, preservada pelo
+        sort estável) e depois `id`, para ser determinístico.
+
+        ## Resolução de nomes (LEFT JOIN, mesma empresa)
+        `usuario_nome`/`departamento_nome` são `None` só quando a sessão não tem o vínculo (FK
+        `ON DELETE SET NULL` garante que, se `usuario_id` existe, a linha existe) — o cliente
+        mostrava "Sem usuário"/"Sem departamento". Demanda inexistente → `demanda_numero`/
+        `demanda_nome` `None` (o cliente caía no `demandaId`); arquivada continua resolvida.
+        `decorrido_segundos`: mesmo cálculo de `elapsedSeconds` (`GREATEST(0, FLOOR(...))`),
+        "as of" `NOW()` — o frontend o faz andar sem novo fetch.
+        """
+        _, clausulas_filtros, parametros_filtros = _filtros_sessao(usuario_ids, departamento_ids, demanda_query)
+        clausulas = ["s.empresa_id = :empresa_id", "s.status = 'ativa'", *clausulas_filtros]
+        parametros = {"empresa_id": empresa_id, **parametros_filtros}
+
+        # A Demanda é SEMPRE unida aqui (nome na linha); `_filtros_sessao` referencia o mesmo alias
+        # `d` na busca de demanda, com a mesma condição de junção — por isso ignoramos a junção
+        # que ele devolve (evita juntar duas vezes).
+        juncoes = """
+            LEFT JOIN demandas d ON d.id = s.demanda_id AND d.empresa_id = s.empresa_id
+            LEFT JOIN usuarios u ON u.id = s.usuario_id AND u.empresa_id = s.empresa_id
+            LEFT JOIN departamentos dep ON dep.id = s.departamento_id AND dep.empresa_id = s.empresa_id
+        """
+        onde = " AND ".join(clausulas)
+
+        total = db.execute(
+            text(f"SELECT COUNT(*) FROM sessoes_trabalho s {juncoes} WHERE {onde}"), parametros
+        ).scalar_one()
+
+        linhas = db.execute(
+            text(
+                f"""
+                SELECT
+                    s.id AS sessao_id,
+                    s.inicio_em,
+                    GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - s.inicio_em)))) AS decorrido,
+                    s.demanda_id,
+                    d.numero_operacional AS demanda_numero,
+                    d.nome AS demanda_nome,
+                    s.usuario_id,
+                    u.nome AS usuario_nome,
+                    s.departamento_id,
+                    dep.nome AS departamento_nome
+                FROM sessoes_trabalho s
+                {juncoes}
+                WHERE {onde}
+                ORDER BY s.inicio_em ASC, s.created_at DESC, s.id ASC
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            {**parametros, "limit": limit, "offset": offset},
+        ).all()
+
+        return {
+            "items": [
+                {
+                    "sessao_id": linha.sessao_id,
+                    "inicio_em": linha.inicio_em,
+                    "decorrido_segundos": int(linha.decorrido),
+                    "demanda_id": linha.demanda_id,
+                    "demanda_numero": linha.demanda_numero,
+                    "demanda_nome": linha.demanda_nome,
+                    "usuario_id": linha.usuario_id,
+                    "usuario_nome": linha.usuario_nome,
+                    "departamento_id": linha.departamento_id,
+                    "departamento_nome": linha.departamento_nome,
+                }
+                for linha in linhas
+            ],
+            "total": int(total),
+            "limit": limit,
+            "offset": offset,
+        }

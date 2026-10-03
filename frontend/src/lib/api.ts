@@ -1,5 +1,5 @@
-import type { SessaoTrabalho, SessaoTrabalhoStatus } from "@/types/sessao-trabalho";
-import type { TrafegoCarga, TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
+import type { TrafegoAgoraPagina, TrafegoCarga, TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
+import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import type { DemandaArquivo } from "@/types/demanda";
 import type { EventoApi } from "@/types/acesso";
 
@@ -74,33 +74,6 @@ export async function excluirArquivoDemanda(codigo: string, nomeArquivo: string,
     const detail = await response.json().catch(() => null);
     throw new Error(detail?.detail ?? "Falha ao excluir arquivo");
   }
-}
-
-// Sem `empresaId`: a empresa vem do token no servidor. Mandá-la do cliente era um convite a
-// divergir — o valor em uso era a string mock "empresa-principal", que nem existe no banco.
-export interface ListSessoesTrabalhoParams {
-  usuarioId?: string;
-  departamentoId?: string;
-  status?: SessaoTrabalhoStatus;
-  dataInicio?: string;
-  limit?: number;
-}
-
-export async function listSessoesTrabalho(params: ListSessoesTrabalhoParams = {}): Promise<SessaoTrabalho[]> {
-  const search = new URLSearchParams();
-  if (params.usuarioId) search.set("usuarioId", params.usuarioId);
-  if (params.departamentoId) search.set("departamentoId", params.departamentoId);
-  if (params.status) search.set("status", params.status);
-  if (params.dataInicio) search.set("dataInicio", params.dataInicio);
-  search.set("limit", String(params.limit ?? 100));
-
-  const response = await fetch(`${API_PROXY}/sessoes-trabalho?${search.toString()}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new Error("Falha ao carregar sessões de trabalho");
-  }
-  return response.json();
 }
 
 export interface AbrirSessaoTrabalhoPayload {
@@ -233,6 +206,34 @@ export async function getCargaTrafegoSessoes(filtros: {
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
     throw new Error(typeof detail?.detail === "string" ? detail.detail : "Falha ao carregar a carga do Tráfego");
+  }
+  return response.json();
+}
+
+/**
+ * D2-D3C3 — "Quem está trabalhando agora", paginado no servidor (`limit`/`offset`, com `total`) e
+ * já com nomes de usuário/departamento/Demanda — nunca a lista de `listSessoesTrabalho` (cap de
+ * 100) nem diretórios do cliente. Só os filtros que sempre afetaram a tabela (usuários,
+ * departamentos, busca de demanda); período e status da tela nunca a mudaram.
+ */
+export async function getAgoraTrafegoSessoes(filtros: {
+  usuarioIds: string[];
+  departamentoIds: string[];
+  demandaQuery: string;
+  limit: number;
+  offset: number;
+}): Promise<TrafegoAgoraPagina> {
+  const search = new URLSearchParams({ limit: String(filtros.limit), offset: String(filtros.offset) });
+  if (filtros.usuarioIds.length > 0) search.set("usuarioIds", filtros.usuarioIds.join(","));
+  if (filtros.departamentoIds.length > 0) search.set("departamentoIds", filtros.departamentoIds.join(","));
+  if (filtros.demandaQuery.trim()) search.set("demandaQuery", filtros.demandaQuery);
+
+  const response = await fetch(`${API_PROXY}/sessoes-trabalho/trafego/agora?${search.toString()}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.detail === "string" ? detail.detail : "Falha ao carregar as sessões em execução");
   }
   return response.json();
 }
