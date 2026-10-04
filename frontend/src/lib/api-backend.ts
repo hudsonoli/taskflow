@@ -38,6 +38,7 @@ import type {
   DemandaChecklistItem,
   DemandaComentario,
   DemandaDiretorio,
+  DemandaEstatisticas,
   DemandaFormDraft,
   DemandaHistoricoEvento,
   DemandaPrioridade,
@@ -1538,6 +1539,15 @@ export type ResumoAtendimento = {
 
 export async function getResumoAtendimento(): Promise<ResumoAtendimento> {
   return request<ResumoAtendimento>("/demandas/minhas/resumo");
+}
+
+/**
+ * Cards de `DemandasStats` (tela Tarefas), agregados no servidor sobre o universo INTEGRAL do
+ * escopo de quem pede — nunca `AppDataContext.demandas` (`GET /demandas?limit=200`). Sem
+ * filtros: os cards nunca acompanharam a busca nem o filtro de status da tela.
+ */
+export async function getDemandasEstatisticas(): Promise<DemandaEstatisticas> {
+  return request<DemandaEstatisticas>("/demandas/estatisticas");
 }
 
 /**

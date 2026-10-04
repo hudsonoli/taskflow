@@ -388,6 +388,20 @@ class DemandaResumoMinhaHomeRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class DemandaEstatisticasRead(BaseModel):
+    """Cards de `DemandasStats` (tela Tarefas), agregados no servidor sobre o universo INTEGRAL
+    do escopo de quem pede — nunca as 200 Demandas de `AppDataContext`. Ver
+    `DemandaRepository.estatisticas`."""
+
+    total: int
+    em_execucao: int = Field(alias="emExecucao")
+    pausadas_ou_bloqueadas: int = Field(alias="pausadasOuBloqueadas")
+    aguardando_cliente: int = Field(alias="aguardandoCliente")
+    concluidas: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class DemandaResumoOperacionalRead(BaseModel):
     """D2-D3A — os 7 indicadores baseados em Demanda de `TrafegoIndicadoresDemandas`,
     agregados no servidor sobre o universo INTEGRAL permitido (escopo normal, default) —

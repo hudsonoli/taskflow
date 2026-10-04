@@ -697,6 +697,33 @@ class DemandaRepository:
             "em_andamento": contadores.em_andamento,
         }
 
+    def estatisticas(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
+        """Cards de `DemandasStats` (tela Tarefas), sobre o universo INTEGRAL do escopo de quem
+        pede — antes calculados no navegador sobre `AppDataContext.demandas`
+        (`GET /demandas?limit=200`, só as 200 mais recentes).
+
+        Mesmo universo da listagem (`list()` sem `status`): empresa + escopo normal + sem
+        arquivada (`_universo_operacional_ids`). Não acompanha busca nem filtro de status da
+        tela: `DemandasStats` sempre recebeu o array global, nunca a página filtrada.
+        `pausadas_ou_bloqueadas` junta os dois status, como o card "Pausadas/Bloqueadas".
+        """
+        zero = {"total": 0, "em_execucao": 0, "pausadas_ou_bloqueadas": 0, "aguardando_cliente": 0, "concluidas": 0}
+        if escopo.vazio:
+            return zero
+
+        linha = db.execute(
+            select(
+                func.count().label("total"),
+                func.count(case((Demanda.status == "em_execucao", 1))).label("em_execucao"),
+                func.count(case((Demanda.status.in_(("pausada", "bloqueada")), 1))).label("pausadas_ou_bloqueadas"),
+                func.count(case((Demanda.status == "aguardando_cliente", 1))).label("aguardando_cliente"),
+                func.count(case((Demanda.status == "concluida", 1))).label("concluidas"),
+            )
+            .select_from(Demanda)
+            .where(Demanda.id.in_(self._universo_operacional_ids(escopo)))
+        ).one()
+        return dict(linha._mapping)
+
     def count_em_andamento_operacional(self, db: Session, *, escopo: EscopoDemanda) -> int:
         """D2-D3A — RegraExpedienteView. Endpoint dedicado, não o resumo completo acima:
         `emAndamento` não depende de período nenhum (é filtro de status puro), e forçar essa

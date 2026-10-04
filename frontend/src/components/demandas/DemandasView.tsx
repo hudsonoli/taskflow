@@ -15,6 +15,7 @@ import {
   patchDemandaReal,
 } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
+import { useDemandasEstatisticas } from "@/lib/useDemandasEstatisticas";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { resolverDepartamentoNome } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
@@ -31,8 +32,8 @@ import { NovaDemandaModal } from "./NovaDemandaModal";
 // D2-B1: a lista visível de DemandasView deixa de vir de AppDataContext.demandas (array
 // carregado uma única vez, limit=200 fixo) e passa a buscar do servidor com search/status/
 // paginação reais — ver diagnóstico D2/D2-A. AppDataContext continua alimentando mutations e
-// outras telas ainda não migradas (DemandasStats inclusive, de propósito — é agregação,
-// fora do escopo do D2-B1, fica para D2-D).
+// outras telas ainda não migradas. DemandasStats, que era agregação sobre esse array, também
+// saiu dele: os cards vêm de GET /demandas/estatisticas (universo integral do escopo).
 const TAMANHO_PAGINA = 50;
 const DEBOUNCE_BUSCA_MS = 300;
 
@@ -92,6 +93,11 @@ export function DemandasView() {
   // Incrementado após mutation bem-sucedida (create/edit/status) pra forçar refetch da página
   // atual mesmo quando search/status/offset não mudaram — ver upsertDemand/aplicarStatus.
   const [refetchTick, setRefetchTick] = useState(0);
+  // Gatilho dos cards de DemandasStats: incrementado junto de toda mutation bem-sucedida (e de
+  // mudanças feitas no drawer), para os números serem reconciliados com o servidor — nunca
+  // dependem de atualização otimista do array do contexto.
+  const [estatisticasTick, setEstatisticasTick] = useState(0);
+  const { estatisticas, carregando: carregandoEstatisticas, erro: erroEstatisticas } = useDemandasEstatisticas(estatisticasTick);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -222,12 +228,14 @@ export function DemandasView() {
         // inserida manualmente na página, só refeita a busca a partir da primeira página.
         setOffset(0);
         setRefetchTick((tick) => tick + 1);
+        setEstatisticasTick((tick) => tick + 1);
         return criada.id;
       }
       const atualizada = await atualizarDemandaReal(demandaId, draft);
       setDemandas((current) => current.map((demanda) => (demanda.id === demandaId ? atualizada : demanda)));
       // Edição pode mudar status/nome e tirar/colocar o item dentro do filtro atual.
       setRefetchTick((tick) => tick + 1);
+      setEstatisticasTick((tick) => tick + 1);
       return demandaId;
     } catch (error) {
       setErro(mensagemDeErro(error));
@@ -253,6 +261,8 @@ export function DemandasView() {
   function handleDemandChange(nextDemand: Demanda) {
     setDemandas((current) => current.map((demanda) => (demanda.id === nextDemand.id ? nextDemand : demanda)));
     setDemandasPagina((current) => current.map((demanda) => (demanda.id === nextDemand.id ? nextDemand : demanda)));
+    // O drawer pode ter mudado o status: os cards precisam refletir o servidor.
+    setEstatisticasTick((tick) => tick + 1);
   }
 
   async function aplicarStatus(demandaId: string, novoStatus: DemandaStatusEditavel, motivoBloqueio?: string) {
@@ -266,6 +276,7 @@ export function DemandasView() {
       // Não confia em só mover o card localmente: a view é filtrada no servidor, e o novo
       // status pode tirar o item do filtro atual (ex.: filtro "Em execução" após concluir).
       setRefetchTick((tick) => tick + 1);
+      setEstatisticasTick((tick) => tick + 1);
     } catch (error) {
       // Inclui o 409 de expediente: a mensagem e a janela vêm do servidor, que é onde a regra
       // mora agora. A UI não recalcula horário nenhum.
@@ -329,7 +340,7 @@ export function DemandasView() {
         </div>
       )}
 
-      <DemandasStats demandas={demandas} />
+      <DemandasStats estatisticas={estatisticas} carregando={carregandoEstatisticas} erro={erroEstatisticas} />
 
       <DemandasToolbar
         query={query}

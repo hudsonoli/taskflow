@@ -535,6 +535,9 @@ class DemandaService:
     ) -> dict[str, float | int]:
         return self.repository.resumo_operacional(db, escopo=escopo, periodo_inicio=periodo_inicio)
 
+    def estatisticas(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
+        return self.repository.estatisticas(db, escopo=escopo)
+
     def count_em_andamento_operacional(self, db: Session, *, escopo: EscopoDemanda) -> int:
         return self.repository.count_em_andamento_operacional(db, escopo=escopo)
 

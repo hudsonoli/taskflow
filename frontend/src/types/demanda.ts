@@ -226,3 +226,14 @@ export type DemandaFormDraft = {
    * reaplica nem troca o workflow já materializado nesta fase. */
   workflowModeloId?: string | null;
 };
+
+/** Cards de `DemandasStats` — `GET /demandas/estatisticas` (camelCase direto do schema Pydantic). */
+export type DemandaEstatisticas = {
+  /** Todas as Demandas não arquivadas do escopo de quem pede (qualquer status). */
+  total: number;
+  emExecucao: number;
+  /** `pausada` + `bloqueada`. */
+  pausadasOuBloqueadas: number;
+  aguardandoCliente: number;
+  concluidas: number;
+};

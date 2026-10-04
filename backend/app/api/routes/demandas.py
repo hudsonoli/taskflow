@@ -22,6 +22,7 @@ from app.schemas.demanda import (
     DemandaConclusaoEmailRegistrar,
     DemandaCreate,
     DemandaDiretorioRead,
+    DemandaEstatisticasRead,
     DemandaOperacionalEmAndamentoRead,
     DemandaPrioridade,
     DemandaRead,
@@ -273,6 +274,20 @@ def list_diretorio(
     escopo = _escopo(db, current_user)
     demandas = demanda_service.list_demandas(db, escopo=escopo, limit=200)
     return [DemandaDiretorioRead.model_validate(demanda) for demanda in demandas]
+
+
+@router.get("/estatisticas", response_model=DemandaEstatisticasRead)
+def estatisticas_demandas(
+    current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
+    db: Session = Depends(get_db),
+):
+    """Cards de `DemandasStats` (tela Tarefas), sobre o universo INTEGRAL do escopo de quem
+    pede — nunca as 200 Demandas de `AppDataContext`. Mesma autoridade e mesmo escopo da
+    listagem (`require_permissao("demandas.visualizar")` + `_escopo(db, current_user)` default,
+    sem override): cada usuário vê os números do que a tela dele lista. Sem filtros: a tela
+    nunca amarrou os cards à busca nem ao filtro de status."""
+    escopo = _escopo(db, current_user)
+    return DemandaEstatisticasRead.model_validate(demanda_service.estatisticas(db, escopo=escopo))
 
 
 @router.get("/minhas/resumo", response_model=DemandaResumoAtendimentoRead)
