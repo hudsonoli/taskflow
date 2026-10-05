@@ -18,6 +18,9 @@ service devolve `smtp_senha`/ciphertext pra fora — só `ConfiguracaoEmailRead.
 from __future__ import annotations
 
 from datetime import datetime
+from email.headerregistry import Address
+from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
 from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -28,6 +31,7 @@ from app.domain.event_types import DomainEventType
 from app.models.configuracao_email import ConfiguracaoEmail
 from app.repositories.configuracao_email_repository import ConfiguracaoEmailRepository
 from app.schemas.configuracao_email import (
+    _EMAIL_FORMATO_REGEX,  # mesmo critério de formato já usado no remetente — nenhum validador novo
     ConfiguracaoEmailRead,
     ConfiguracaoEmailTesteResultado,
     ConfiguracaoEmailUpdate,
@@ -40,6 +44,7 @@ from app.services.configuracao_email_crypto_service import (
 )
 from app.services.configuracao_email_smtp_service import (
     ConfiguracaoEmailSmtpService,
+    MOTIVO_CONFIGURACAO_INCOMPLETA,
     MOTIVO_ERRO_DESCONHECIDO,
     ParametrosTesteSmtp,
 )
@@ -59,6 +64,43 @@ class ConfiguracaoEmailValidationError(ValueError):
     """Erro de validação de negócio que não cabe no schema Pydantic sozinho — hoje só o
     conflito TLS/SSL no ESTADO FINAL após merge (o schema já recusa os dois `True` no mesmo
     payload, mas não sabe o valor persistido do campo que não foi enviado)."""
+
+
+# --- Envio transacional --------------------------------------------------------------------
+# Motivos de a Empresa não poder enviar (além dos `MOTIVO_*` de transporte do módulo SMTP).
+MOTIVO_CONFIGURACAO_AUSENTE = "configuracao_ausente"
+MOTIVO_CONFIGURACAO_INATIVA = "configuracao_inativa"
+MOTIVO_REMETENTE_INVALIDO = "remetente_invalido"
+MOTIVO_SENHA_SMTP_ILEGIVEL = "senha_smtp_ilegivel"
+
+_TAMANHO_MAXIMO_EMAIL = 254
+_TAMANHO_MAXIMO_ASSUNTO = 255
+
+
+class EmailTransacionalError(RuntimeError):
+    """Base dos erros de envio. Carrega só contexto SEGURO: `motivo` (valor finito) e
+    `empresa_id`. A mensagem nunca inclui senha, host, usuário, destinatário nem a resposta do
+    servidor SMTP — quem consome (ex.: recuperação de senha) pode registrar `str(erro)`."""
+
+    def __init__(self, motivo: str, empresa_id: str) -> None:
+        super().__init__(f"Não foi possível enviar o e-mail ({motivo}).")
+        self.motivo = motivo
+        self.empresa_id = empresa_id
+
+
+class EmailNaoConfiguradoError(EmailTransacionalError):
+    """A Empresa não tem configuração SMTP utilizável (ausente, inativa, remetente inválido,
+    incompleta ou com senha ilegível). Sem fallback para SMTP global."""
+
+
+class EmailEnvioFalhouError(EmailTransacionalError):
+    """A configuração existe, mas o transporte falhou (DNS/rede, TLS, autenticação, destinatário
+    ou envio recusado, timeout) — `motivo` é um dos `MOTIVO_*` do módulo SMTP."""
+
+
+class EmailConteudoInvalidoError(ValueError):
+    """Destinatário/assunto/corpo inválidos — recusados ANTES de qualquer acesso à configuração
+    ou à rede (inclui tentativa de injeção de cabeçalho por quebra de linha)."""
 
 
 class ConfiguracaoEmailService:
@@ -279,6 +321,145 @@ class ConfiguracaoEmailService:
         return ConfiguracaoEmailTesteResultado(
             sucesso=resultado.sucesso, motivo=resultado.motivo, mensagem=resultado.mensagem
         )
+
+    # ----------------------------------------------------------------------------------
+    # Envio transacional — única porta de saída de e-mail do sistema
+    # ----------------------------------------------------------------------------------
+
+    def enviar_email_transacional(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        destinatario: str,
+        assunto: str,
+        texto: str,
+        html: str | None = None,
+    ) -> None:
+        """Envia UM e-mail a UM destinatário pela configuração SMTP da PRÓPRIA Empresa.
+
+        Não é endpoint e não é fila: é a função que fluxos transacionais (recuperação de senha,
+        notificações) chamam. Levanta `EmailConteudoInvalidoError` (conteúdo ruim),
+        `EmailNaoConfiguradoError` (Empresa sem SMTP utilizável) ou `EmailEnvioFalhouError`
+        (transporte); retorna `None` quando o servidor SMTP aceitou a mensagem. Nunca devolve nem
+        registra senha, corpo ou destinatário.
+
+        - Remetente: SEMPRE `remetente_email`/`remetente_nome` da configuração — o consumidor
+          não escolhe `From` (sem spoofing interno).
+        - Tenant: lê só a configuração de `empresa_id`; nunca outra Empresa, nunca SMTP global.
+        - Transação: só LÊ a configuração. Não faz `add`/`flush`/`commit`/`rollback`.
+        - Rede: passa pelas mesmas etapas do teste de conexão (gate de rede segura, TLS,
+          timeout, AUTH) — ver `ConfiguracaoEmailSmtpService`.
+        - Corpo: `texto` (text/plain) e, opcionalmente, `html` como alternativa; o texto sempre
+          existe como fallback.
+        """
+        destinatario_validado = self._validar_destinatario(destinatario)
+        assunto_validado = self._validar_assunto(assunto)
+        if not isinstance(texto, str) or not texto.strip():
+            raise EmailConteudoInvalidoError("O corpo do e-mail não pode ser vazio.")
+        if html is not None and (not isinstance(html, str) or not html.strip()):
+            raise EmailConteudoInvalidoError("O corpo HTML, quando informado, não pode ser vazio.")
+
+        registro = self.repository.get_by_empresa(db, empresa_id)
+        if registro is None:
+            raise EmailNaoConfiguradoError(MOTIVO_CONFIGURACAO_AUSENTE, empresa_id)
+        if not registro.ativo:
+            raise EmailNaoConfiguradoError(MOTIVO_CONFIGURACAO_INATIVA, empresa_id)
+
+        remetente_email = registro.remetente_email
+        remetente_nome = registro.remetente_nome
+        if not remetente_email or not self._endereco_valido(remetente_email) or self._tem_quebra_de_linha(remetente_nome):
+            raise EmailNaoConfiguradoError(MOTIVO_REMETENTE_INVALIDO, empresa_id)
+
+        senha_texto_claro: str | None = None
+        if registro.smtp_senha_criptografada is not None:
+            try:
+                senha_texto_claro = self.crypto.descriptografar(registro.smtp_senha_criptografada)
+            except (ChaveCriptografiaAusenteError, ChaveCriptografiaInvalidaError, CiphertextInvalidoError):
+                # Nunca propaga a exceção original: o erro público não carrega nada da cifra/chave.
+                raise EmailNaoConfiguradoError(MOTIVO_SENHA_SMTP_ILEGIVEL, empresa_id) from None
+
+        try:
+            mensagem = self._montar_mensagem(
+                remetente_email=remetente_email,
+                remetente_nome=remetente_nome,
+                destinatario=destinatario_validado,
+                assunto=assunto_validado,
+                texto=texto,
+                html=html,
+            )
+        except ValueError:
+            # Endereço/cabeçalho que o `email` recusa: configuração de remetente inutilizável.
+            raise EmailNaoConfiguradoError(MOTIVO_REMETENTE_INVALIDO, empresa_id) from None
+
+        parametros = ParametrosTesteSmtp(
+            smtp_host=registro.smtp_host,
+            smtp_port=registro.smtp_port,
+            smtp_usuario=registro.smtp_usuario,
+            smtp_senha=senha_texto_claro,
+            usar_tls=registro.usar_tls,
+            usar_ssl=registro.usar_ssl,
+        )
+        resultado = self.smtp_service.enviar(
+            parametros, mensagem, remetente=remetente_email, destinatario=destinatario_validado
+        )
+        if not resultado.sucesso:
+            if resultado.motivo == MOTIVO_CONFIGURACAO_INCOMPLETA:
+                raise EmailNaoConfiguradoError(resultado.motivo, empresa_id)
+            raise EmailEnvioFalhouError(resultado.motivo, empresa_id)
+
+    @staticmethod
+    def _tem_quebra_de_linha(valor: str | None) -> bool:
+        return valor is not None and ("\r" in valor or "\n" in valor)
+
+    @staticmethod
+    def _endereco_valido(endereco: str) -> bool:
+        # `_EMAIL_FORMATO_REGEX` usa `$`, que aceita um "\n" final: a quebra de linha é recusada
+        # à parte, ANTES de qualquer match.
+        return (
+            len(endereco) <= _TAMANHO_MAXIMO_EMAIL
+            and "\r" not in endereco
+            and "\n" not in endereco
+            and _EMAIL_FORMATO_REGEX.match(endereco) is not None
+        )
+
+    def _validar_destinatario(self, destinatario: str) -> str:
+        if not isinstance(destinatario, str) or self._tem_quebra_de_linha(destinatario):
+            raise EmailConteudoInvalidoError("Destinatário inválido.")
+        limpo = destinatario.strip()
+        if not self._endereco_valido(limpo):
+            raise EmailConteudoInvalidoError("Destinatário inválido.")
+        return limpo
+
+    def _validar_assunto(self, assunto: str) -> str:
+        if not isinstance(assunto, str) or self._tem_quebra_de_linha(assunto):
+            raise EmailConteudoInvalidoError("Assunto inválido.")
+        limpo = assunto.strip()
+        if not limpo or len(limpo) > _TAMANHO_MAXIMO_ASSUNTO:
+            raise EmailConteudoInvalidoError("Assunto inválido.")
+        return limpo
+
+    @staticmethod
+    def _montar_mensagem(
+        *,
+        remetente_email: str,
+        remetente_nome: str | None,
+        destinatario: str,
+        assunto: str,
+        texto: str,
+        html: str | None,
+    ) -> EmailMessage:
+        usuario, _, dominio = remetente_email.rpartition("@")
+        mensagem = EmailMessage()
+        mensagem["From"] = Address(display_name=remetente_nome or "", username=usuario, domain=dominio)
+        mensagem["To"] = Address(addr_spec=destinatario)
+        mensagem["Subject"] = assunto
+        mensagem["Date"] = formatdate(usegmt=True)
+        mensagem["Message-ID"] = make_msgid(domain=dominio)
+        mensagem.set_content(texto)
+        if html is not None:
+            mensagem.add_alternative(html, subtype="html")
+        return mensagem
 
     # ----------------------------------------------------------------------------------
     # Apresentação
