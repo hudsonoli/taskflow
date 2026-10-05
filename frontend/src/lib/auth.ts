@@ -43,6 +43,38 @@ export async function loginGoogle(email: string, idToken: string): Promise<{ mus
   return response.json();
 }
 
+// Recuperação de senha. O pedido NUNCA revela se a conta existe: sucesso é sempre a mesma mensagem.
+// `empresaCodigo` é do servidor (BFF) — nunca enviado daqui.
+export async function solicitarRedefinicaoSenha(email: string): Promise<string> {
+  const response = await fetch("/api/auth/password-reset/request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.message ?? "Não foi possível processar o pedido agora. Tente novamente em instantes.");
+  }
+  return data?.message as string;
+}
+
+/** Token de redefinição inexistente, expirado, já usado ou de outra empresa (o servidor nunca diz qual). */
+export class LinkRedefinicaoInvalidoError extends Error {}
+
+export async function confirmarRedefinicaoSenha(token: string, novaSenha: string, confirmacaoSenha: string): Promise<void> {
+  const response = await fetch("/api/auth/password-reset/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, novaSenha, confirmacaoSenha }),
+  });
+  if (response.ok) return;
+  const data = await response.json().catch(() => null);
+  if (response.status === 400) {
+    throw new LinkRedefinicaoInvalidoError(data?.message ?? "Este link é inválido ou expirou.");
+  }
+  throw new Error(data?.message ?? "Não foi possível redefinir a senha agora. Tente novamente em instantes.");
+}
+
 export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST" });
 }

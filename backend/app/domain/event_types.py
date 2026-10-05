@@ -168,6 +168,9 @@ class DomainEventType(StrEnum):
     AUTH_LOGIN_FALHA = "auth.login_falha"
     AUTH_SENHA_DEFINIDA = "auth.senha_definida"
     AUTH_SENHA_ALTERADA = "auth.senha_alterada"
+    # Só a CONCLUSÃO da recuperação de senha gera evento: o pedido não é auditado, para não abrir
+    # um canal de enumeração de contas nem registrar e-mail/token (ver AuthService).
+    AUTH_PASSWORD_RESET_COMPLETED = "auth.password_reset_completed"
 
 
 EVENT_TYPES = frozenset(event_type.value for event_type in DomainEventType)

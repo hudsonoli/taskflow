@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -38,6 +40,22 @@ def verify_password(password: str, hashed_password: str) -> bool:
         return password_hash.verify(password, hashed_password)
     except Exception:
         return False
+
+
+# Token de recuperação de senha: 32 bytes do CSPRNG (`secrets`), em base64 URL-safe (43 caracteres,
+# seguro para ir num fragmento de URL). Por ser aleatório de alta entropia, basta SHA-256 para
+# guardá-lo — um hash caro de senha (bcrypt/argon2) seria desperdício aqui e impediria o lookup
+# indexado pelo hash. O token em si só existe no e-mail enviado e na memória do navegador.
+PASSWORD_RESET_TOKEN_BYTES = 32
+
+
+def generate_password_reset_token() -> str:
+    return secrets.token_urlsafe(PASSWORD_RESET_TOKEN_BYTES)
+
+
+def hash_password_reset_token(token: str) -> str:
+    """SHA-256 em hexadecimal (64 caracteres) — a ÚNICA forma persistida do token."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_access_token(

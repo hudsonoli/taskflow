@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -5,7 +6,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.security import AuthTokenError, create_access_token, hash_password, verify_google_id_token, verify_password
+from app.core.security import (
+    AuthTokenError,
+    create_access_token,
+    generate_password_reset_token,
+    hash_password,
+    hash_password_reset_token,
+    verify_google_id_token,
+    verify_password,
+)
 from app.domain.event_types import DomainEventType
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
@@ -14,6 +23,7 @@ from app.repositories.empresa_repository import EmpresaRepository
 from app.repositories.usuario_credencial_repository import UsuarioCredencialRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.schemas.auth import AccessTokenResponse, AuthMeResponse
+from app.services.configuracao_email_service import ConfiguracaoEmailService
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.empresa_service import STATUS_ATIVA as EMPRESA_STATUS_ATIVA
 from app.services.usuario_permissao_service import UsuarioPermissaoService
@@ -26,6 +36,21 @@ INVALID_CREDENTIALS_MESSAGE = "Credenciais inválidas"
 # diferenciar, para não revelar se um e-mail existe ou qual regra específica barrou o acesso.
 GOOGLE_ACCESS_DENIED_MESSAGE = "Acesso não autorizado."
 
+logger = logging.getLogger(__name__)
+
+# --- Recuperação de senha self-service ------------------------------------------------------
+# Resposta pública ÚNICA do pedido: idêntica para conta elegível, e-mail inexistente, usuário
+# inativo/sem acesso/sem credencial local, conta de sistema, empresa errada, cooldown e falha de
+# envio. Nunca diferenciar — é o que impede enumerar contas.
+PASSWORD_RESET_REQUEST_MESSAGE = (
+    "Se existir uma conta habilitada para este e-mail, você receberá as instruções para redefinir a senha."
+)
+# Resposta ÚNICA do confirm para token inexistente, expirado, já usado ou de outra empresa.
+PASSWORD_RESET_INVALID_TOKEN_MESSAGE = "Este link é inválido ou expirou. Solicite uma nova redefinição de senha."
+PASSWORD_RESET_TOKEN_TTL = timedelta(minutes=30)
+PASSWORD_RESET_COOLDOWN = timedelta(seconds=60)
+PASSWORD_RESET_EMAIL_SUBJECT = "Redefinição de senha — TaskFloww"
+
 
 class AuthInvalidCredentialsError(ValueError):
     pass
@@ -37,6 +62,11 @@ class AuthUnauthorizedError(ValueError):
 
 class AuthPasswordValidationError(ValueError):
     pass
+
+
+class AuthPasswordResetTokenInvalidError(ValueError):
+    """Token de redefinição inexistente, expirado, já usado, de outra empresa ou de conta que
+    deixou de ser elegível. Sempre a mesma mensagem pública, nunca o motivo."""
 
 
 class AuthGoogleAccessDeniedError(ValueError):
@@ -55,6 +85,7 @@ class AuthService:
         event_publisher: DomainEventPublisher | None = None,
         settings: Settings | None = None,
         usuario_permissao_service: UsuarioPermissaoService | None = None,
+        configuracao_email_service: ConfiguracaoEmailService | None = None,
     ) -> None:
         self.usuario_repository = usuario_repository or UsuarioRepository()
         self.empresa_repository = empresa_repository or EmpresaRepository()
@@ -63,6 +94,8 @@ class AuthService:
         self.settings = settings or get_settings()
         # Fase 2G.10A — só usado para preencher AuthMeResponse.permissoes (informativo).
         self.usuario_permissao_service = usuario_permissao_service or UsuarioPermissaoService()
+        # Única porta de saída de e-mail do sistema — a recuperação de senha só a USA.
+        self.configuracao_email_service = configuracao_email_service or ConfiguracaoEmailService()
 
     def login(
         self,
@@ -317,6 +350,7 @@ class AuthService:
             credencial.tentativas_falhas = 0
             credencial.bloqueado_ate = None
             credencial.senha_deve_ser_alterada = False
+            self._limpar_reset_senha(credencial)
             credencial.updated_at = now
             self.credencial_repository.update(db, credencial)
             self._publish_senha_alterada(db, usuario=usuario, occurred_at=now)
@@ -324,6 +358,194 @@ class AuthService:
         except Exception:
             db.rollback()
             raise
+
+    # ----------------------------------------------------------------------------------
+    # Recuperação de senha self-service
+    # ----------------------------------------------------------------------------------
+
+    def solicitar_redefinicao_senha(self, db: Session, *, empresa_codigo: str, email: str) -> None:
+        """Pedido de "Esqueci minha senha". NÃO devolve nada e NÃO levanta por motivo de negócio:
+        quem chama responde sempre `PASSWORD_RESET_REQUEST_MESSAGE`, então nada aqui pode vazar
+        se a conta existe, está habilitada, tem senha local, está em cooldown ou se o e-mail saiu.
+
+        Elegível = empresa ativa + usuário da empresa, ativo, com acesso ao sistema, que NÃO é
+        conta de sistema, e que JÁ tem `UsuarioCredencial` (senha local). Nunca cria credencial:
+        recuperação de senha não vira um jeito de criar um método de autenticação novo.
+
+        Fluxo e transação (nenhum commit escondido dentro do sender SMTP):
+        1. cooldown de 60 s pelo `reset_senha_solicitado_em` (sem Redis) — dentro dele, nada é
+           gerado nem enviado;
+        2. gera o token (CSPRNG) e persiste SÓ o SHA-256 + validade (30 min) + instante do pedido,
+           substituindo qualquer token anterior; commit;
+        3. envia o link por `ConfiguracaoEmailService.enviar_email_transacional`;
+        4. se o envio falhar por QUALQUER motivo, o token é apagado e commitado — nunca sobra um
+           token aparentemente válido que o usuário nunca recebeu. `solicitado_em` é preservado
+           de propósito: o cooldown vale também para tentativas que falharam, limitando quantas
+           vezes um pedido repetido aciona o SMTP.
+        Nada do token, do link ou do corpo do e-mail é registrado.
+        """
+        now = datetime.now(timezone.utc)
+        empresa = self.empresa_repository.get_by_codigo_interno(db, self._normalize_empresa_codigo(empresa_codigo))
+        if empresa is None or empresa.status != EMPRESA_STATUS_ATIVA:
+            return
+        usuario = self.usuario_repository.get_by_email(db, empresa_id=empresa.id, email=self._normalize_email(email))
+        if usuario is None or usuario.is_system_account or not self._usuario_can_authenticate(usuario):
+            return
+        credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)
+        if credencial is None:
+            return
+
+        solicitado_em = self._as_utc(credencial.reset_senha_solicitado_em)
+        if solicitado_em is not None and now - solicitado_em < PASSWORD_RESET_COOLDOWN:
+            return
+
+        base_url = self._url_publica_base()
+        if base_url is None:
+            logger.warning("Recuperação de senha sem APP_PUBLIC_URL válida; e-mail não enviado (empresa_id=%s)", empresa.id)
+            return
+
+        token = generate_password_reset_token()
+        credencial.reset_senha_token_hash = hash_password_reset_token(token)
+        credencial.reset_senha_expira_em = now + PASSWORD_RESET_TOKEN_TTL
+        credencial.reset_senha_solicitado_em = now
+        credencial.updated_at = now
+        self.credencial_repository.update(db, credencial)
+        db.commit()
+
+        link = f"{base_url}/redefinir-senha#token={token}"
+        try:
+            self.configuracao_email_service.enviar_email_transacional(
+                db,
+                empresa_id=usuario.empresa_id,
+                destinatario=usuario.email,
+                assunto=PASSWORD_RESET_EMAIL_SUBJECT,
+                texto=self._texto_email_redefinicao(link),
+            )
+        except Exception as exc:  # EmailTransacionalError, EmailConteudoInvalidoError ou bug
+            logger.warning(
+                "Falha ao enviar e-mail de recuperação de senha (empresa_id=%s, motivo=%s)",
+                usuario.empresa_id,
+                getattr(exc, "motivo", type(exc).__name__),
+            )
+            credencial.reset_senha_token_hash = None
+            credencial.reset_senha_expira_em = None
+            credencial.updated_at = datetime.now(timezone.utc)
+            self.credencial_repository.update(db, credencial)
+            db.commit()
+
+    def confirmar_redefinicao_senha(
+        self,
+        db: Session,
+        *,
+        empresa_codigo: str,
+        token: str,
+        nova_senha: str,
+        confirmacao_senha: str,
+    ) -> None:
+        """Define a nova senha com o token do e-mail. NÃO autentica (o usuário volta ao login).
+
+        Token inexistente, expirado (no instante exato da expiração já é inválido), já usado, de
+        outra empresa ou de conta que deixou de ser elegível -> `AuthPasswordResetTokenInvalidError`
+        (sempre a mesma mensagem). Só com token válido a política de senha é avaliada
+        (`AuthPasswordValidationError`, sem consumir o token). No sucesso, numa transação só:
+        troca o hash, zera tentativas/bloqueio/flag de senha temporária, apaga o reset e registra
+        `auth.password_reset_completed` (sem token). A busca usa `FOR UPDATE`, então o mesmo
+        token nunca vale duas vezes, nem em confirmações simultâneas.
+
+        Não revoga access tokens JWT já emitidos: o projeto não tem `jti`/versão de senha/
+        blacklist. Dívida de segurança separada (ver relatório da feature).
+        """
+        now = datetime.now(timezone.utc)
+        try:
+            token_limpo = token.strip()
+            credencial = (
+                self.credencial_repository.get_by_reset_token_hash(db, hash_password_reset_token(token_limpo))
+                if token_limpo
+                else None
+            )
+            if credencial is None:
+                raise AuthPasswordResetTokenInvalidError(PASSWORD_RESET_INVALID_TOKEN_MESSAGE)
+
+            expira_em = self._as_utc(credencial.reset_senha_expira_em)
+            if expira_em is None or now >= expira_em:
+                raise AuthPasswordResetTokenInvalidError(PASSWORD_RESET_INVALID_TOKEN_MESSAGE)
+
+            empresa = self.empresa_repository.get_by_codigo_interno(db, self._normalize_empresa_codigo(empresa_codigo))
+            usuario = self.usuario_repository.get_by_id(db, credencial.usuario_id)
+            if (
+                empresa is None
+                or empresa.status != EMPRESA_STATUS_ATIVA
+                or usuario is None
+                or usuario.empresa_id != empresa.id
+                or usuario.is_system_account
+                or not self._usuario_can_authenticate(usuario)
+            ):
+                raise AuthPasswordResetTokenInvalidError(PASSWORD_RESET_INVALID_TOKEN_MESSAGE)
+
+            # Mesma política do resto do sistema (`_validate_new_password`): mínimo, confirmação e
+            # "diferente da senha atual" — aqui a atual é conferida contra o hash, pois o usuário
+            # esqueceu e não a informa.
+            senha_atual_se_igual = nova_senha if verify_password(nova_senha, credencial.senha_hash) else ""
+            self._validate_new_password(senha_atual_se_igual, nova_senha, confirmacao_senha)
+
+            credencial.senha_hash = hash_password(nova_senha)
+            credencial.senha_alterada_em = now
+            credencial.tentativas_falhas = 0
+            credencial.bloqueado_ate = None
+            credencial.senha_deve_ser_alterada = False
+            self._limpar_reset_senha(credencial)
+            credencial.updated_at = now
+            self.credencial_repository.update(db, credencial)
+            self._publish_password_reset_completed(db, usuario=usuario, occurred_at=now)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+    def _url_publica_base(self) -> str | None:
+        """`APP_PUBLIC_URL` sem barra final, só http(s) e sem espaço/quebra de linha; `None` se
+        ausente/inválida. NUNCA derivada de Host/Origin/Referer da requisição."""
+        bruto = (self.settings.app_public_url or "").strip()
+        if not bruto or any(c.isspace() for c in bruto) or not bruto.lower().startswith(("http://", "https://")):
+            return None
+        return bruto.rstrip("/")
+
+    @staticmethod
+    def _texto_email_redefinicao(link: str) -> str:
+        minutos = int(PASSWORD_RESET_TOKEN_TTL.total_seconds() // 60)
+        return (
+            "Olá,\n\n"
+            "Recebemos uma solicitação para redefinir a senha da sua conta no TaskFloww.\n\n"
+            f"Para criar uma nova senha, acesse o link abaixo (válido por {minutos} minutos):\n\n"
+            f"{link}\n\n"
+            "Se você não fez essa solicitação, ignore este e-mail: sua senha atual continua a mesma.\n"
+        )
+
+    @staticmethod
+    def _limpar_reset_senha(credencial: UsuarioCredencial) -> None:
+        """Apaga o token de recuperação pendente e o relógio do cooldown (uso com sucesso e troca/
+        definição de senha por outro caminho). A limpeza por falha de envio NÃO passa por aqui:
+        ela preserva `solicitado_em` de propósito."""
+        credencial.reset_senha_token_hash = None
+        credencial.reset_senha_expira_em = None
+        credencial.reset_senha_solicitado_em = None
+
+    def _publish_password_reset_completed(self, db: Session, *, usuario: Usuario, occurred_at: datetime) -> None:
+        self._publish_auth_event(
+            db,
+            tipo=DomainEventType.AUTH_PASSWORD_RESET_COMPLETED,
+            empresa_id=usuario.empresa_id,
+            entidade_id=usuario.id,
+            usuario_id=usuario.id,
+            payload={
+                "empresa_id": usuario.empresa_id,
+                "usuario_id": usuario.id,
+                "timestamp": occurred_at.isoformat(),
+                "actor_usuario_id": usuario.id,
+                "resultado": "sucesso",
+            },
+            occurred_at=occurred_at,
+        )
 
     def definir_senha_usuario(
         self,
@@ -373,6 +595,8 @@ class AuthService:
                 credencial.tentativas_falhas = 0
                 credencial.bloqueado_ate = None
                 credencial.senha_deve_ser_alterada = deve_alterar_senha
+                # Definição administrativa/CLI invalida qualquer link de recuperação pendente.
+                self._limpar_reset_senha(credencial)
                 credencial.updated_at = now
                 self.credencial_repository.update(db, credencial)
 

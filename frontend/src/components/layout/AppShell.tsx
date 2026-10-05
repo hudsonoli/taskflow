@@ -6,6 +6,9 @@ import { TopNav } from "@/components/layout/TopNav";
 import { useAppData } from "@/lib/AppDataContext";
 
 const ROTAS_PUBLICAS = ["/login"];
+// Recuperação de senha: telas públicas "nuas" que NÃO redirecionam quem já tem sessão nem quem
+// precisa trocar a senha — o link do e-mail (com o token no fragmento) tem de chegar até a tela.
+const ROTAS_RECUPERACAO_SENHA = ["/esqueci-senha", "/redefinir-senha"];
 const ROTA_TROCA_SENHA = "/trocar-senha-inicial";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -15,9 +18,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const rotaPublica = ROTAS_PUBLICAS.includes(pathname);
   const rotaTrocaSenha = pathname === ROTA_TROCA_SENHA;
+  const rotaRecuperacaoSenha = ROTAS_RECUPERACAO_SENHA.includes(pathname);
 
   useEffect(() => {
-    if (sessaoCarregando) return;
+    if (sessaoCarregando || rotaRecuperacaoSenha) return;
 
     if (!autenticado && !rotaPublica) {
       router.replace("/login");
@@ -30,10 +34,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (autenticado && !mustChangePassword && (rotaPublica || rotaTrocaSenha)) {
       router.replace("/meu-dia");
     }
-  }, [sessaoCarregando, autenticado, mustChangePassword, rotaPublica, rotaTrocaSenha, router]);
+  }, [sessaoCarregando, autenticado, mustChangePassword, rotaPublica, rotaTrocaSenha, rotaRecuperacaoSenha, router]);
 
-  // Login e troca de senha inicial são telas "nuas" — sem TopNav, sem exigir sessão.
-  if (rotaPublica || rotaTrocaSenha) {
+  // Login, recuperação e troca de senha inicial são telas "nuas" — sem TopNav, sem exigir sessão.
+  if (rotaPublica || rotaTrocaSenha || rotaRecuperacaoSenha) {
     return <>{children}</>;
   }
 

@@ -10,15 +10,21 @@ from app.schemas.auth import (
     AuthGoogleLoginRequest,
     AuthLoginRequest,
     AuthMeResponse,
+    AuthPasswordResetConfirm,
+    AuthPasswordResetRequest,
+    AuthPasswordResetRequestResponse,
 )
 from app.services.auth_service import (
     AuthGoogleAccessDeniedError,
     AuthInvalidCredentialsError,
+    AuthPasswordResetTokenInvalidError,
     AuthPasswordValidationError,
     AuthService,
     AuthUnauthorizedError,
     GOOGLE_ACCESS_DENIED_MESSAGE,
     INVALID_CREDENTIALS_MESSAGE,
+    PASSWORD_RESET_INVALID_TOKEN_MESSAGE,
+    PASSWORD_RESET_REQUEST_MESSAGE,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -67,6 +73,34 @@ def login_google(payload: AuthGoogleLoginRequest, request: Request, db: Session 
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Google inválido") from exc
     except AuthGoogleAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=GOOGLE_ACCESS_DENIED_MESSAGE) from exc
+
+
+@router.post("/password-reset/request", response_model=AuthPasswordResetRequestResponse)
+def password_reset_request(payload: AuthPasswordResetRequest, db: Session = Depends(get_db)):
+    """Público (sem autenticação). Responde SEMPRE o mesmo status e a mesma mensagem, para
+    qualquer pedido de formato válido — conta existente ou não, habilitada ou não, em cooldown,
+    com envio de e-mail falho ou não. Ver `AuthService.solicitar_redefinicao_senha`."""
+    auth_service.solicitar_redefinicao_senha(db, empresa_codigo=payload.empresa_codigo, email=payload.email)
+    return AuthPasswordResetRequestResponse(message=PASSWORD_RESET_REQUEST_MESSAGE)
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
+def password_reset_confirm(payload: AuthPasswordResetConfirm, db: Session = Depends(get_db)):
+    """Público. Token inválido/expirado/usado/de outra empresa -> 400 com mensagem única (nunca
+    o motivo); política de senha violada com token válido -> 422. Não autentica nem emite JWT."""
+    try:
+        auth_service.confirmar_redefinicao_senha(
+            db,
+            empresa_codigo=payload.empresa_codigo,
+            token=payload.token,
+            nova_senha=payload.nova_senha,
+            confirmacao_senha=payload.confirmacao_senha,
+        )
+    except AuthPasswordResetTokenInvalidError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=PASSWORD_RESET_INVALID_TOKEN_MESSAGE) from exc
+    except AuthPasswordValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return None
 
 
 @router.get("/me", response_model=AuthMeResponse)

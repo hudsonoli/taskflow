@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { Sparkles } from "lucide-react";
@@ -123,6 +124,11 @@ export function LoginView({ googleClientId }: { googleClientId: string | null })
             onChange={(event) => setSenha(event.target.value)}
             required
           />
+          <div className="-mt-2 text-right">
+            <Link href="/esqueci-senha" className="text-xs text-zinc-500 hover:text-indigo-600 hover:underline dark:text-zinc-400 dark:hover:text-indigo-400">
+              Esqueci minha senha
+            </Link>
+          </div>
 
           {erro && (
             <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">

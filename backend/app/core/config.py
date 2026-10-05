@@ -56,6 +56,11 @@ class Settings:
     email_config_encryption_key: str | None = field(
         default_factory=lambda: os.getenv("EMAIL_CONFIG_ENCRYPTION_KEY")
     )
+    # URL pública do frontend (ex.: https://taskflow.exemplo.com.br), usada SÓ para montar links
+    # enviados por e-mail (recuperação de senha). Sempre configurada — nunca derivada de Host/
+    # Origin/Referer da requisição, que o cliente controla. Ausente = o e-mail de recuperação
+    # simplesmente não é enviado (ver AuthService.solicitar_redefinicao_senha). Não é segredo.
+    app_public_url: str | None = field(default_factory=lambda: os.getenv("APP_PUBLIC_URL"))
     # Login Google Workspace — client_id é público (vai para o navegador), não é segredo.
     # Sem client secret: o fluxo de ID Token (Google Identity Services) não precisa dele.
     google_oauth_client_id: str | None = field(default_factory=lambda: os.getenv("GOOGLE_OAUTH_CLIENT_ID"))

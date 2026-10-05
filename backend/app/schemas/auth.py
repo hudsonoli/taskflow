@@ -46,6 +46,33 @@ class AuthGoogleLoginRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+# Recuperação de senha ("Esqueci minha senha"). `empresaCodigo` vem do BFF (EMPRESA_CODIGO do
+# servidor), nunca do navegador — mesmo desenho do login. O e-mail aqui é só o digitado.
+class AuthPasswordResetRequest(BaseModel):
+    empresa_codigo: str = Field(alias="empresaCodigo", min_length=1, max_length=64)
+    email: str = Field(min_length=1, max_length=255)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+# A resposta é SEMPRE esta, para qualquer pedido de formato válido (ver AuthService).
+class AuthPasswordResetRequestResponse(BaseModel):
+    message: str
+
+
+# `novaSenha`/`confirmacaoSenha` sem `min_length` de propósito: a política de senha é aplicada no
+# service, DEPOIS de validar o token — uma senha curta com token inválido recebe a mesma resposta
+# neutra de qualquer token inválido, e com token válido recebe a mensagem da política (sem
+# consumir o token, para o usuário poder tentar de novo).
+class AuthPasswordResetConfirm(BaseModel):
+    empresa_codigo: str = Field(alias="empresaCodigo", min_length=1, max_length=64)
+    token: str = Field(min_length=1, max_length=512)
+    nova_senha: str = Field(alias="novaSenha", min_length=1)
+    confirmacao_senha: str = Field(alias="confirmacaoSenha", min_length=1)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class AuthAlterarSenhaRequest(BaseModel):
     senha_atual: str = Field(alias="senhaAtual", min_length=1)
     nova_senha: str = Field(alias="novaSenha", min_length=8)
