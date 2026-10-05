@@ -4,15 +4,15 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { MemberSelector, type MemberOption } from "@/components/ui/MemberSelector";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioPecas } from "@/lib/diretorioPecas";
 import { useDiretorioTiposTarefa } from "@/lib/diretorioTiposTarefa";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { useDiretorioWorkflowModelos } from "@/lib/diretorioWorkflowModelos";
 import { criarItemModeloCampanhaVazio } from "@/lib/modeloCampanhaItens";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import { prioridadePadraoLabels, type ModeloCampanhaItemFormDraft, type PrioridadePadrao } from "@/types/modelo-campanha";
 
 /**
@@ -82,7 +82,9 @@ export function ModeloCampanhaItensEditor({
   const { pecas, carregando: carregandoPecas, erro: erroPecas } = useDiretorioPecas();
   const { tiposTarefa, carregando: carregandoTiposTarefa, erro: erroTiposTarefa } = useDiretorioTiposTarefa();
   const { workflowModelos, carregando: carregandoWorkflows, erro: erroWorkflows } = useDiretorioWorkflowModelos();
-  const { usuarios, carregando: carregandoUsuarios, erro: erroUsuarios } = useDiretorioUsuarios();
+  // Responsável sugerido: busca no servidor (sem o corte de 200). Usuário `ativo` para novo vínculo;
+  // o já gravado, se não estiver ativo, aparece como "<nome> (indisponível)".
+  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector({ marcarIndisponiveis: true });
   const { departamentos, carregando: carregandoDepartamentos, erro: erroDepartamentos } = useDiretorioDepartamentos();
 
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
@@ -93,10 +95,6 @@ export function ModeloCampanhaItensEditor({
   const [tipoResponsavelOverride, setTipoResponsavelOverride] = useState<Record<string, TipoResponsavel>>({});
 
   const todasExpandidas = itens.length > 0 && itens.every((item) => expandedKeys.has(item.clientKey));
-
-  const usuariosAtivos = usuarios
-    .filter((usuario) => usuario.status === "ativo")
-    .map((usuario) => ({ id: usuario.id, nome: usuario.nome, corIdentificacao: usuario.corIdentificacao, fotoUrl: usuario.fotoUrl }));
 
   // Departamento aceita ativo OU inativo em novo vínculo — só arquivado é recusado (mesma
   // regra do backend, tanto em ModeloCampanhaService quanto em ProjetoModeloCampanhaService).
@@ -158,19 +156,6 @@ export function ModeloCampanhaItensEditor({
     } else {
       updateItem(clientKey, { responsavelUsuarioId: null, responsavelUsuarioNome: null });
     }
-  }
-
-  function usuarioOptionsPara(item: ModeloCampanhaItemFormDraft): MemberOption[] {
-    const atualNaLista = item.responsavelUsuarioId
-      ? usuariosAtivos.some((option) => option.id === item.responsavelUsuarioId)
-      : true;
-    if (item.responsavelUsuarioId && !atualNaLista) {
-      return [
-        { id: item.responsavelUsuarioId, nome: `${item.responsavelUsuarioNome ?? "Usuário"} (indisponível)` },
-        ...usuariosAtivos,
-      ];
-    }
-    return usuariosAtivos;
   }
 
   return (
@@ -356,20 +341,19 @@ export function ModeloCampanhaItensEditor({
                           label="Usuário responsável sugerido"
                           multiple={false}
                           values={item.responsavelUsuarioId ? [item.responsavelUsuarioId] : []}
-                          onChange={(values) => {
+                          onChange={(values, selecionados) => {
                             const id = values[0] ?? null;
-                            const selecionado = usuariosAtivos.find((usuario) => usuario.id === id);
+                            const selecionado = selecionados?.find((usuario) => usuario.id === id);
                             updateItem(item.clientKey, {
                               responsavelUsuarioId: id,
                               responsavelUsuarioNome: id ? (selecionado?.nome ?? item.responsavelUsuarioNome) : null,
                             });
                           }}
-                          placeholder={carregandoUsuarios ? "Carregando…" : "Selecionar usuário…"}
-                          options={usuarioOptionsPara(item)}
+                          placeholder="Selecionar usuário…"
+                          buscarOpcoes={buscarOpcoes}
+                          resolverSelecionados={resolverSelecionados}
+                          emptyLabel="Nenhum usuário encontrado"
                         />
-                        {erroUsuarios && (
-                          <p className="mt-1 text-xs text-red-500 dark:text-red-400">Não foi possível carregar os usuários.</p>
-                        )}
                       </div>
                     )}
 

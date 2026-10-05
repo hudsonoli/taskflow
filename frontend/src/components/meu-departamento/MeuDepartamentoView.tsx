@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Select } from "@/components/ui/Select";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -34,6 +35,7 @@ import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { getHorasDepartamento } from "@/lib/api";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import { prioridadeDemandaLabels, statusDemandaLabels } from "@/lib/demandas";
 import {
   capacidadeAproximada,
@@ -108,6 +110,7 @@ export function MeuDepartamentoView() {
   const [erroHoras, setErroHoras] = useState<string | null>(null);
 
   const departamentoHead = usuarioAtual ? resolverHeadDepartamento(usuarioAtual, departamentos) : undefined;
+  const { buscarOpcoes: buscarColaboradores } = useUsuariosSelector({ departamentoId: departamentoHead?.id });
   const podeAcessar = usuarioAtual ? podeAcessarMeuDepartamento(usuarioAtual, departamentos) : false;
 
   // Página do servidor — fonte autoritativa da lista exibida.
@@ -152,9 +155,9 @@ export function MeuDepartamentoView() {
     };
   }
 
-  // Colaborador estrutural do departamento — vínculo organizacional, não responsabilidade
-  // em Demanda. Já vinha de diretório completo (useDiretorioUsuarios), nunca truncado —
-  // preservado sem alteração.
+  // Colaboradores ativos do departamento a partir do diretório (até 200): usado SÓ no cálculo de
+  // capacidade abaixo — a métrica segue exatamente como estava. O filtro "Colaborador" busca no
+  // servidor (`buscarColaboradores`).
   const colaboradoresOptions = departamentoHead
     ? usuarios.filter((usuario) => usuario.departamentoId === departamentoHead.id && usuario.status === "ativo")
     : [];
@@ -313,11 +316,16 @@ export function MeuDepartamentoView() {
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Filtros</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Select
+          {/* Filtro (não vínculo): colaboradores ATIVOS do departamento do Head, buscados no servidor
+              (sem o corte de 200). Clicar de novo no selecionado volta para "Todos". */}
+          <MemberSelector
             label="Colaborador"
-            value={colaboradorId}
-            onChange={(event) => alterarFiltro(setColaboradorId)(event.target.value)}
-            options={[{ value: "", label: "Todos" }, ...colaboradoresOptions.map((usuario) => ({ value: usuario.id, label: usuario.nome }))]}
+            multiple={false}
+            values={colaboradorId ? [colaboradorId] : []}
+            onChange={(values) => alterarFiltro(setColaboradorId)(values[0] ?? "")}
+            placeholder="Todos"
+            buscarOpcoes={buscarColaboradores}
+            emptyLabel="Nenhum colaborador encontrado"
           />
           <Select
             label="Equipe"

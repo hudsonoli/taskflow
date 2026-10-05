@@ -30,20 +30,6 @@ export function resolverUsuarioPorReferencia(
 }
 
 /**
- * Normaliza uma lista de referências (formato legado, UUID ou já codigoInterno) para
- * codigoInterno — usado antes de passar `values` a um picker genérico (MemberSelector),
- * cujas `options[].id` são sempre codigoInterno (ver política em
- * docs/padrao-arquivamento.md). Não resolvido = mantém o valor original (não descarta
- * silenciosamente uma referência histórica desconhecida).
- */
-export function normalizarReferenciasParaCodigoInterno(
-  referencias: string[],
-  diretorio: UsuarioDiretorioItem[],
-): string[] {
-  return referencias.map((referencia) => resolverUsuarioPorReferencia(referencia, diretorio)?.codigoInterno ?? referencia);
-}
-
-/**
  * Mesmo padrão acima, pra Grupo de Cliente: `Cliente.grupoClienteIds` já é UUID real, mas
  * guarda o `id` mock antigo (ex. "grupo-grupo-bretas"), que o backend real preservou como
  * `codigoInterno` do grupo (ver backend/app/cli/seed_grupos_cliente.py). Nenhum componente

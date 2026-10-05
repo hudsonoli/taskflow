@@ -56,7 +56,8 @@ export function MemberSelector({
   label: string;
   options?: MemberOption[];
   values: string[];
-  onChange: (values: string[]) => void;
+  /** `selecionados` (id + nome de quem ficou selecionado) é útil a quem grava o nome junto do id. */
+  onChange: (values: string[], selecionados?: MemberOption[]) => void;
   multiple?: boolean;
   placeholder?: string;
   emptyLabel?: string;
@@ -214,15 +215,25 @@ export function MemberSelector({
     return [...conhecidos, ...semNome];
   }
 
+  /** Id + nome de quem fica selecionado após uma mudança (cache do servidor ou `options`). */
+  function selecionadosDe(proximos: string[], escolhida?: MemberOption): MemberOption[] {
+    const conhecidos: Record<string, MemberOption> = remoto
+      ? { ...escolhidos, ...(escolhida ? { [escolhida.id]: escolhida } : {}) }
+      : Object.fromEntries(options.map((opcao) => [opcao.id, opcao]));
+    return proximos.flatMap((id) => (conhecidos[id] ? [conhecidos[id]] : []));
+  }
+
   function toggle(option: MemberOption) {
     const id = option.id;
     if (remoto && !values.includes(id)) {
       setEscolhidos((atual) => ({ ...atual, [id]: option }));
     }
     if (multiple) {
-      onChange(values.includes(id) ? values.filter((value) => value !== id) : [...values, id]);
+      const proximos = values.includes(id) ? values.filter((value) => value !== id) : [...values, id];
+      onChange(proximos, selecionadosDe(proximos, option));
     } else {
-      onChange(values.includes(id) ? [] : [id]);
+      const proximos = values.includes(id) ? [] : [id];
+      onChange(proximos, selecionadosDe(proximos, option));
       setOpen(false);
       setQuery("");
       setBuscaAplicada("");
@@ -231,7 +242,8 @@ export function MemberSelector({
 
   function remove(id: string, event: MouseEvent) {
     event.stopPropagation();
-    onChange(values.filter((value) => value !== id));
+    const proximos = values.filter((value) => value !== id);
+    onChange(proximos, selecionadosDe(proximos));
   }
 
   const carregandoPrimeiraPagina = remoto && carregando && resultados.length === 0;

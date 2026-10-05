@@ -6,45 +6,68 @@ import { buscarDiretorioUsuarios, type DepartamentoDiretorioItem, type UsuarioDi
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { resolverUsuariosPorIds } from "@/lib/usuariosPorIds";
 
-function paraOpcao(usuario: UsuarioDiretorioItem, departamentos: DepartamentoDiretorioItem[]): MemberOption {
+type OpcoesSeletor = {
+  /** Subtítulo = nome do departamento do usuário (Demandas). Sem isso, a opção só tem nome/avatar. */
+  comSubtitulo?: boolean;
+  /** Restringe as opções a um departamento (filtro exato do servidor). */
+  departamentoId?: string;
+  /** Selecionado que não está `ativo` aparece como "<nome> (indisponível)". */
+  marcarIndisponiveis?: boolean;
+};
+
+function paraOpcao(
+  usuario: UsuarioDiretorioItem,
+  departamentos: DepartamentoDiretorioItem[],
+  { comSubtitulo, marcarIndisponiveis }: OpcoesSeletor,
+): MemberOption {
   return {
     id: usuario.id,
-    nome: usuario.nome,
-    subtitulo: usuario.departamentoId
-      ? departamentos.find((departamento) => departamento.id === usuario.departamentoId)?.nome
-      : undefined,
+    nome: marcarIndisponiveis && usuario.status !== "ativo" ? `${usuario.nome} (indisponível)` : usuario.nome,
+    subtitulo:
+      comSubtitulo && usuario.departamentoId
+        ? departamentos.find((departamento) => departamento.id === usuario.departamentoId)?.nome
+        : undefined,
     corIdentificacao: usuario.corIdentificacao,
     fotoUrl: usuario.fotoUrl,
   };
 }
 
 /**
- * Fonte do seletor de "Usuários responsáveis" de uma Demanda (criação, edição e aba Responsáveis),
- * no modo servidor do `MemberSelector`.
+ * Fonte dos seletores de USUÁRIO no modo servidor do `MemberSelector` (identidade = UUID):
+ * responsáveis de Demanda, de Departamento, líder/membros de Equipe, responsáveis padrão de etapa de
+ * Workflow, responsável sugerido de Modelo de Campanha, responsáveis de Projeto e filtro de
+ * colaborador. Sem o corte do diretório de 200.
  *
- * Mesma semântica de antes (usuário `ativo` para NOVO vínculo; quem já é responsável aparece mesmo
- * se arquivado/inativo/bloqueado), agora sem o corte do diretório de 200:
+ * Mesma regra de todos eles (usuário `ativo` para NOVO vínculo; quem já está selecionado aparece
+ * mesmo se arquivado/inativo/bloqueado):
  * - `buscarOpcoes`: página do diretório filtrada no servidor por nome e por `status=ativo`;
- * - `resolverSelecionados`: nome (qualquer status) de quem já está selecionado, onde quer que esteja
- *   no diretório — é o que faz um responsável nº 201+ aparecer com nome ao abrir a Demanda.
+ * - `resolverSelecionados`: nome (qualquer status) de quem já está selecionado, via
+ *   `resolverUsuariosPorIds` (cache por id + lote único) — é o que faz o usuário nº 201+ aparecer com
+ *   nome ao abrir um registro existente, mesmo com vários seletores/etapas na mesma tela.
  */
-export function useResponsaveisSelector(): { buscarOpcoes: BuscarOpcoesMembros; resolverSelecionados: ResolverSelecionadosMembros } {
+export function useUsuariosSelector(opcoes: OpcoesSeletor = {}): { buscarOpcoes: BuscarOpcoesMembros; resolverSelecionados: ResolverSelecionadosMembros } {
   const { departamentos } = useDiretorioDepartamentos();
+  const { comSubtitulo = false, departamentoId, marcarIndisponiveis = false } = opcoes;
 
   const buscarOpcoes = useCallback<BuscarOpcoesMembros>(
     async ({ busca, limit, offset }) => {
-      const usuarios = await buscarDiretorioUsuarios({ search: busca, status: "ativo", limit, offset });
-      return usuarios.map((usuario) => paraOpcao(usuario, departamentos));
+      const usuarios = await buscarDiretorioUsuarios({ search: busca, status: "ativo", departamentoId, limit, offset });
+      return usuarios.map((usuario) => paraOpcao(usuario, departamentos, { comSubtitulo }));
     },
-    [departamentos],
+    [departamentos, comSubtitulo, departamentoId],
   );
 
   const resolverSelecionados = useCallback<ResolverSelecionadosMembros>(
-    async (ids) => (await resolverUsuariosPorIds(ids)).map((usuario) => paraOpcao(usuario, departamentos)),
-    [departamentos],
+    async (ids) => (await resolverUsuariosPorIds(ids)).map((usuario) => paraOpcao(usuario, departamentos, { comSubtitulo, marcarIndisponiveis })),
+    [departamentos, comSubtitulo, marcarIndisponiveis],
   );
 
   return { buscarOpcoes, resolverSelecionados };
+}
+
+/** Responsáveis de Demanda: o seletor genérico, com o departamento como subtítulo. */
+export function useResponsaveisSelector() {
+  return useUsuariosSelector({ comSubtitulo: true });
 }
 
 /** Nomes (só leitura) dos ids dados, resolvidos como acima. `null` enquanto carrega ou se a consulta falhar. */

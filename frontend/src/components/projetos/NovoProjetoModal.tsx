@@ -4,14 +4,15 @@ import { useState } from "react";
 import { FolderPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Modal } from "@/components/ui/Modal";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import type {
   Projeto,
   ProjetoFormDraft,
@@ -56,7 +57,7 @@ export function NovoProjetoModal({
 }) {
   const [draft, setDraft] = useState<ProjetoFormDraft>(() => createInitialDraft(projeto));
   const { clientes } = useDiretorioClientes();
-  const { usuarios } = useDiretorioUsuarios();
+  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector();
   const { departamentos } = useDiretorioDepartamentos();
 
   const editing = projeto !== undefined;
@@ -135,16 +136,16 @@ export function NovoProjetoModal({
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MultiSelect
+        {/* Busca no servidor (sem o corte de 200): usuário ativo para novo vínculo; o responsável já
+            persistido continua visível e removível mesmo se arquivado/inativo/bloqueado. */}
+        <MemberSelector
           label="Usuários responsáveis"
           values={draft.responsavelIds}
           onChange={(values) => updateDraft({ responsavelIds: values })}
-          // MultiSelect só mostra como chip quem está em `options` — sem o carve-out, um
-          // responsável arquivado/inativo/bloqueado já persistido some da tela sem nem
-          // aparecer removível. Novo vínculo continua restrito a ativo.
-          options={usuarios
-            .filter((usuario) => usuario.status === "ativo" || draft.responsavelIds.includes(usuario.id))
-            .map((usuario) => ({ value: usuario.id, label: usuario.nome }))}
+          placeholder="Selecionar responsáveis…"
+          buscarOpcoes={buscarOpcoes}
+          resolverSelecionados={resolverSelecionados}
+          emptyLabel="Nenhum usuário encontrado"
         />
         <MultiSelect
           label="Departamentos responsáveis"

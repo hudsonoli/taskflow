@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { generateId } from "@/lib/ids";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import {
   workflowEtapaTipoLabels,
   workflowUnidadePrazoLabels,
@@ -55,7 +55,9 @@ export function WorkflowModeloFormModal({
   onSave: (draft: WorkflowModeloFormDraft, modeloId?: string) => void;
   salvando?: boolean;
 }) {
-  const { usuarios } = useDiretorioUsuarios();
+  // Um único par de funções para todas as etapas: as consultas de nomes dos responsáveis já
+  // gravados saem agrupadas (cache por id + lote único), nunca uma por etapa.
+  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector();
   const { departamentos } = useDiretorioDepartamentos();
   const [draft, setDraft] = useState<WorkflowModeloFormDraft>(() => createInitialDraft(modelo));
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
@@ -64,20 +66,8 @@ export function WorkflowModeloFormModal({
   const canSave = draft.nome.trim().length > 0 && draft.etapas.length > 0;
   const todasExpandidas = draft.etapas.length > 0 && draft.etapas.every((etapa) => expandedIds.has(etapa.id));
 
-  // Picker oferece usuário ativo + os já responsáveis daquela etapa (mesmo se arquivado/
-  // inativo/bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o responsável
-  // padrão persistido some silenciosamente da etapa. Novo vínculo continua restrito a
-  // ativo. Grava usuario.id real (UUID), sem ponte de codigoInterno.
-  function buildMemberOptions(idsAtuais: string[]) {
-    return usuarios
-      .filter((usuario) => usuario.status === "ativo" || idsAtuais.includes(usuario.id))
-      .map((usuario) => ({
-        id: usuario.id,
-        nome: usuario.nome,
-        corIdentificacao: usuario.corIdentificacao,
-        fotoUrl: usuario.fotoUrl,
-      }));
-  }
+  // Responsáveis padrão: busca no servidor, usuário `ativo` para novo vínculo; os já responsáveis da
+  // etapa continuam visíveis mesmo se arquivado/inativo/bloqueado (resolvidos por id). Grava o UUID.
 
   // Mesmo critério: picker só oferece departamento ativo, grava departamento.id real.
   const departamentoOptions = departamentos
@@ -175,10 +165,6 @@ export function WorkflowModeloFormModal({
         <div className="space-y-3">
           {draft.etapas.map((etapa, index) => {
             const expanded = expandedIds.has(etapa.id);
-            const etapaMemberOptions = buildMemberOptions(etapa.usuarioResponsavelIds);
-            const responsaveisSelecionados = etapaMemberOptions.filter((option) =>
-              etapa.usuarioResponsavelIds.includes(option.id),
-            );
             const tone = etapa.tipo === "aprovacao" ? "amber" : "indigo";
 
             return (
@@ -280,9 +266,11 @@ export function WorkflowModeloFormModal({
                       values={etapa.usuarioResponsavelIds}
                       onChange={(values) => updateEtapa(etapa.id, { usuarioResponsavelIds: values })}
                       placeholder="Selecionar responsáveis…"
-                      options={etapaMemberOptions}
+                      buscarOpcoes={buscarOpcoes}
+                      resolverSelecionados={resolverSelecionados}
+                      emptyLabel="Nenhum usuário encontrado"
                     />
-                    {responsaveisSelecionados.length === 0 && (
+                    {etapa.usuarioResponsavelIds.length === 0 && (
                       <p className="text-xs text-zinc-400">Sem responsável padrão — definido na tarefa ao aplicar o modelo.</p>
                     )}
 

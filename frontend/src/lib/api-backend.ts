@@ -440,12 +440,15 @@ export async function listDiretorioUsuarios(): Promise<UsuarioDiretorioItem[]> {
 export async function buscarDiretorioUsuarios(params: {
   search?: string;
   status?: UsuarioDiretorioItem["status"];
+  /** Filtro exato do servidor (`departamentoId` do diretório). */
+  departamentoId?: string;
   limit: number;
   offset: number;
 }): Promise<UsuarioDiretorioItem[]> {
   const query = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
   if (params.search) query.set("search", params.search);
   if (params.status) query.set("status", params.status);
+  if (params.departamentoId) query.set("departamentoId", params.departamentoId);
   const data = await request<UsuarioDiretorioApi[]>(`/usuarios/diretorio?${query.toString()}`);
   return data.map(mapUsuarioDiretorio);
 }

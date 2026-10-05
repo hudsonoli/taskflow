@@ -6,12 +6,14 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type { Projeto, ProjetoEquipeMembro, ProjetoPrioridade, ProjetoStatusEditavel } from "@/types/projeto";
@@ -72,9 +74,8 @@ function updateProjeto(
 
 export function DadosProjetoSection({ projeto, onChange, somenteLeitura }: ProjetoSectionProps) {
   const { clientes } = useDiretorioClientes();
-  // `usuarios` só alimenta as OPÇÕES do seletor (continua o diretório de sempre); os nomes exibidos
-  // vêm de `useUsuariosComIds`, que completa quem está fora da janela de 200.
-  const { usuarios } = useDiretorioUsuarios();
+  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector();
+  // Nomes exibidos: completa quem está fora da janela de 200 do diretório.
   const { usuarios: usuariosDosNomes, resolvendo } = useUsuariosComIds(projeto.responsavelIds);
   const { departamentos } = useDiretorioDepartamentos();
 
@@ -147,13 +148,16 @@ export function DadosProjetoSection({ projeto, onChange, somenteLeitura }: Proje
             campos "selecionados" logo abaixo, então o seletor simplesmente não é montado. */}
         {!somenteLeitura && (
         <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <MultiSelect
+          {/* Busca no servidor (sem o corte de 200). Aqui, como antes, só `ativo` é oferecido; quem já
+              é responsável aparece pelo nome (resolvido por id) e pode ser removido. */}
+          <MemberSelector
             label="Usuários responsáveis"
             values={projeto.responsavelIds}
             onChange={(values) => updateProjeto(projeto, { responsavelIds: values }, onChange)}
-            options={usuarios
-              .filter((usuario) => usuario.status === "ativo")
-              .map((usuario) => ({ value: usuario.id, label: usuario.nome }))}
+            placeholder="Selecionar responsáveis…"
+            buscarOpcoes={buscarOpcoes}
+            resolverSelecionados={resolverSelecionados}
+            emptyLabel="Nenhum usuário encontrado"
           />
           <MultiSelect
             label="Departamentos responsáveis"

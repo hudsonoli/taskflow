@@ -9,8 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Switch } from "@/components/ui/Switch";
 import { Textarea } from "@/components/ui/Textarea";
 import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
-import { normalizarReferenciasParaCodigoInterno } from "@/lib/referencias";
-import type { UsuarioDiretorioItem } from "@/lib/api-backend";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import type { Departamento, DepartamentoFormDraft } from "@/types/departamento";
 
 function createInitialDraft(departamento?: Departamento): DepartamentoFormDraft {
@@ -26,19 +25,18 @@ function createInitialDraft(departamento?: Departamento): DepartamentoFormDraft 
 export function DepartamentoFormModal({
   open,
   departamento,
-  usuarios,
   onClose,
   onSave,
   salvando,
 }: {
   open: boolean;
   departamento?: Departamento;
-  usuarios: UsuarioDiretorioItem[];
   onClose: () => void;
   onSave: (draft: DepartamentoFormDraft, departamentoId?: string) => void;
   salvando?: boolean;
 }) {
   const [draft, setDraft] = useState<DepartamentoFormDraft>(() => createInitialDraft(departamento));
+  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector();
 
   const editing = departamento !== undefined;
   const canSave = draft.nome.trim().length > 0;
@@ -86,24 +84,17 @@ export function DepartamentoFormModal({
           onChange={(event) => updateDraft({ descricao: event.target.value })}
         />
 
+        {/* Busca no servidor (sem o corte de 200). Oferece usuário ativo; o já selecionado continua
+            visível mesmo se arquivado/inativo/bloqueado (resolvido por id). Identidade = UUID. */}
         <MemberSelector
           label="Responsável"
           multiple={false}
-          values={draft.responsavelId ? normalizarReferenciasParaCodigoInterno([draft.responsavelId], usuarios) : []}
+          values={draft.responsavelId ? [draft.responsavelId] : []}
           onChange={(values) => updateDraft({ responsavelId: values[0] ?? "" })}
           placeholder="Sem responsável"
-          // Picker oferece usuário ativo + o já selecionado (mesmo se arquivado/inativo/
-          // bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o valor
-          // persistido some silenciosamente da tela de edição. Grava codigoInterno porque
-          // MemberSelector usa codigoInterno como identidade de opção — ver lib/referencias.ts.
-          options={usuarios
-            .filter((usuario) => usuario.status === "ativo" || usuario.id === draft.responsavelId)
-            .map((usuario) => ({
-              id: usuario.codigoInterno,
-              nome: usuario.nome,
-              corIdentificacao: usuario.corIdentificacao,
-              fotoUrl: usuario.fotoUrl,
-            }))}
+          buscarOpcoes={buscarOpcoes}
+          resolverSelecionados={resolverSelecionados}
+          emptyLabel="Nenhum usuário encontrado"
         />
 
         <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">

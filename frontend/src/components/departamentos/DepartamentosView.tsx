@@ -16,7 +16,6 @@ import {
 } from "@/lib/api-backend";
 import { invalidarDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
 import type { Departamento, DepartamentoFormDraft } from "@/types/departamento";
 import { ArquivarDepartamentoModal } from "./ArquivarDepartamentoModal";
 import { DepartamentoFormModal } from "./DepartamentoFormModal";
@@ -71,20 +70,13 @@ export function DepartamentosView() {
     setSalvando(true);
     setErro(null);
     try {
-      // MemberSelector devolve `codigoInterno` como identidade de opção (ver
-      // lib/referencias.ts), não o UUID — sem resolver aqui, `responsavelUsuarioId` chega
-      // no backend como "U26000001"/"BOOTSTRAP" em vez de UUID e o Pydantic rejeita com 422.
-      // `resolverUsuarioPorReferencia` aceita qualquer um dos dois formatos.
-      const draftParaSalvar: DepartamentoFormDraft = {
-        ...draft,
-        responsavelId: draft.responsavelId
-          ? (resolverUsuarioPorReferencia(draft.responsavelId, usuarios)?.id ?? draft.responsavelId)
-          : draft.responsavelId,
-      };
+      // O seletor de Responsável já trabalha com o UUID do usuário (busca no servidor), então o
+      // draft segue direto para a API — sem a antiga ponte codigoInterno -> UUID pelo diretório
+      // de 200, que não alcançava o usuário 201+.
       if (!departamentoId) {
-        await criarDepartamentoReal(draftParaSalvar);
+        await criarDepartamentoReal(draft);
       } else {
-        await atualizarDepartamentoReal(departamentoId, draftParaSalvar);
+        await atualizarDepartamentoReal(departamentoId, draft);
       }
       await carregar();
       invalidarDiretorioDepartamentos();
@@ -185,7 +177,6 @@ export function DepartamentosView() {
       {creatingDepartamento && (
         <DepartamentoFormModal
           open
-          usuarios={usuarios}
           salvando={salvando}
           onClose={() => setCreatingDepartamento(false)}
           onSave={handleSave}
@@ -197,7 +188,6 @@ export function DepartamentosView() {
           key={editingDepartamento.id}
           open
           departamento={editingDepartamento}
-          usuarios={usuarios}
           salvando={salvando}
           onClose={() => setEditingDepartamentoId(null)}
           onSave={handleSave}

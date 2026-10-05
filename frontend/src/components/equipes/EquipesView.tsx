@@ -16,7 +16,6 @@ import {
 import { invalidarDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { resolverUsuarioPorReferencia } from "@/lib/referencias";
 import type { Equipe, EquipeFormDraft } from "@/types/equipe";
 import { ArquivarEquipeModal } from "./ArquivarEquipeModal";
 import { EquipeFormModal } from "./EquipeFormModal";
@@ -70,19 +69,12 @@ export function EquipesView() {
     setSalvando(true);
     setErro(null);
     try {
-      // MemberSelector devolve `codigoInterno` como identidade de opção (ver
-      // lib/referencias.ts), não o UUID — sem resolver aqui, `liderUsuarioId`/`membroIds`
-      // chegam no backend como "U26000001" em vez de UUID e o Pydantic rejeita com 422.
-      // `resolverUsuarioPorReferencia` aceita qualquer um dos dois formatos.
-      const draftParaSalvar: EquipeFormDraft = {
-        ...draft,
-        liderId: draft.liderId ? (resolverUsuarioPorReferencia(draft.liderId, usuarios)?.id ?? draft.liderId) : draft.liderId,
-        membroIds: draft.membroIds.map((id) => resolverUsuarioPorReferencia(id, usuarios)?.id ?? id),
-      };
+      // Líder/Membros já trabalham com o UUID do usuário (busca no servidor): o draft segue direto
+      // para a API, sem a antiga ponte codigoInterno -> UUID pelo diretório de 200.
       if (!equipeId) {
-        await criarEquipeReal(draftParaSalvar);
+        await criarEquipeReal(draft);
       } else {
-        await atualizarEquipeReal(equipeId, draftParaSalvar);
+        await atualizarEquipeReal(equipeId, draft);
       }
       await carregar();
       invalidarDiretorioEquipes();
@@ -165,7 +157,6 @@ export function EquipesView() {
       {creatingEquipe && (
         <EquipeFormModal
           open
-          usuarios={usuarios}
           departamentos={departamentos}
           salvando={salvando}
           onClose={() => setCreatingEquipe(false)}
@@ -178,7 +169,6 @@ export function EquipesView() {
           key={editingEquipe.id}
           open
           equipe={editingEquipe}
-          usuarios={usuarios}
           departamentos={departamentos}
           salvando={salvando}
           onClose={() => setEditingEquipeId(null)}
