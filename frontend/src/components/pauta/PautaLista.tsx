@@ -5,9 +5,9 @@ import { AvatarStack } from "@/components/ui/AvatarStack";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { normalizarUsuarioId, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import type { Demanda } from "@/types/demanda";
 
@@ -28,7 +28,7 @@ function tituloDoGrupo(chave: string): string {
 }
 
 export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; onOpenDetails: (demandaId: string) => void }) {
-  const { usuarios } = useDiretorioUsuarios();
+  const { usuarios } = useUsuariosComIds(demandas.flatMap((demanda) => demanda.usuarioResponsavelIds));
   const { projetos } = useDiretorioProjetos();
 
   if (demandas.length === 0) {

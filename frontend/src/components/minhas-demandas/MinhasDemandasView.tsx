@@ -15,7 +15,7 @@ import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer
 import { getResumoAtendimento, listDemandasReais, type ResumoAtendimento } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { resolverDepartamentoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import {
   formatPrazo,
@@ -50,7 +50,6 @@ export function MinhasDemandasView() {
   const { demandas, setDemandas, usuarioAtual, setDemandaParaAbrir } = useAppData();
   const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
-  const { usuarios } = useDiretorioUsuarios();
   const router = useRouter();
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("todos");
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
@@ -64,6 +63,7 @@ export function MinhasDemandasView() {
   const [buscandoPagina, setBuscandoPagina] = useState(true);
   const [temProximaPagina, setTemProximaPagina] = useState(false);
   const [erroPagina, setErroPagina] = useState<string | null>(null);
+  const { usuarios } = useUsuariosComIds(demandasPagina.flatMap((demanda) => demanda.usuarioResponsavelIds));
   // Incrementado após mutation bem-sucedida — força refetch da página atual E do resumo,
   // mesmo quando filtros não mudaram (ver handleDemandChange).
   const [refetchTick, setRefetchTick] = useState(0);

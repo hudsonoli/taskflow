@@ -94,13 +94,6 @@ export function demandaTemResponsavel(demanda: Demanda, usuarioId: string, diret
   });
 }
 
-export function resolveResponsaveisDemandaNomes(ids: string[], usuarios: UsuarioDiretorioItem[]): string {
-  if (ids.length === 0) return "-";
-  return ids
-    .map((id) => resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios)?.nome ?? id)
-    .join(", ");
-}
-
 /**
  * `value` pode ser data pura (`dataFimPrevista`/`dataInicio`, sem "T") ou timestamp real
  * (`prazoEtapaAtual` etc., com "T"). Data pura passa por `parseDataLocal` — nunca por

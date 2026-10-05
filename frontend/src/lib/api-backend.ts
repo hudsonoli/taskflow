@@ -450,6 +450,19 @@ export async function buscarDiretorioUsuarios(params: {
   return data.map(mapUsuarioDiretorio);
 }
 
+/**
+ * Resolução em lote id -> projeção de diretório (`GET /usuarios/diretorio/por-ids`): mesma
+ * autoridade e mesmos campos do diretório, qualquer status, sem conta de sistema, só a empresa
+ * do token. Id inexistente/de outra empresa simplesmente não volta. O servidor aceita no máximo
+ * 100 ids únicos por chamada (422 acima disso) — quem chama em volume usa `usuariosPorIds.ts`,
+ * que agrupa e divide em lotes.
+ */
+export async function buscarDiretorioUsuariosPorIds(ids: string[]): Promise<UsuarioDiretorioItem[]> {
+  const query = new URLSearchParams({ ids: ids.join(",") });
+  const data = await request<UsuarioDiretorioApi[]>(`/usuarios/diretorio/por-ids?${query.toString()}`);
+  return data.map(mapUsuarioDiretorio);
+}
+
 export async function criarUsuarioReal(draft: UsuarioFormDraft, empresaId: string): Promise<Usuario> {
   const created = await request<UsuarioReadApi>("/usuarios", {
     method: "POST",

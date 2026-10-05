@@ -122,6 +122,24 @@ class UsuarioRepository:
 
         return list(db.scalars(statement).all())
 
+    def list_diretorio_por_ids(self, db: Session, *, empresa_id: str, ids: list[str]) -> list[Usuario]:
+        # Resolução em lote id -> projeção de diretório: UMA query, escopo de empresa e exclusão
+        # da conta de sistema idênticos a list_diretorio. Sem filtro de status (quem já é
+        # referenciado pode estar inativo/bloqueado/arquivado). Id inexistente ou de outra
+        # empresa simplesmente não volta. Ordem determinística (nome, id).
+        if not ids:
+            return []
+        statement = (
+            select(Usuario)
+            .where(
+                Usuario.empresa_id == empresa_id,
+                Usuario.is_system_account.is_(False),
+                Usuario.id.in_(ids),
+            )
+            .order_by(Usuario.nome.asc(), Usuario.id.asc())
+        )
+        return list(db.scalars(statement).all())
+
     def update(self, db: Session, usuario: Usuario) -> Usuario:
         db.add(usuario)
         db.flush()

@@ -183,6 +183,53 @@ def list_diretorio(
     return [usuario_service.to_diretorio_read(usuario) for usuario in usuarios]
 
 
+MAX_IDS_LOTE = 100
+
+
+def _parse_ids_lote(raw: str) -> list[str]:
+    """`ids` de `/usuarios/diretorio/por-ids` — CSV obrigatório (mesmo contrato de
+    `/demandas/por-ids`): vazio/UUID inválido/mais de `MAX_IDS_LOTE` ids ÚNICOS é 422, nunca
+    processado em silêncio. Deduplicado preservando a primeira ocorrência."""
+    segmentos = [segmento.strip() for segmento in raw.split(",") if segmento.strip()]
+    if not segmentos:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ids não pode ser vazio")
+    unicos: list[str] = []
+    vistos: set[str] = set()
+    for segmento in segmentos:
+        try:
+            normalizado = str(UUID(segmento))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"ids inválido: '{segmento}' não é um UUID",
+            ) from exc
+        if normalizado not in vistos:
+            vistos.add(normalizado)
+            unicos.append(normalizado)
+    if len(unicos) > MAX_IDS_LOTE:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"ids aceita no máximo {MAX_IDS_LOTE} valores únicos, recebido {len(unicos)}",
+        )
+    return unicos
+
+
+@router.get("/diretorio/por-ids", response_model=list[UsuarioDiretorioRead])
+def list_diretorio_por_ids(
+    ids: str = Query(...),
+    # Mesma autoridade de /diretorio (qualquer autenticado com senha em dia) e a MESMA
+    # projeção mínima: não amplia acesso a dados de usuário (continua sem email/telefone/etc.).
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Resolução de nomes em lote. Id inexistente ou de outra empresa não aparece na resposta
+    (sem 404 por item: não permite mapear a base variando o UUID). Qualquer status; conta de
+    sistema nunca. Registrada antes de `/{usuario_id}` por consistência com `/diretorio`."""
+    ids_unicos = _parse_ids_lote(ids)
+    usuarios = usuario_service.list_diretorio_por_ids(db, empresa_id=current_user.empresa_id, ids=ids_unicos)
+    return [usuario_service.to_diretorio_read(usuario) for usuario in usuarios]
+
+
 @router.get("/{usuario_id}", response_model=UsuarioRead)
 def get_usuario(
     usuario_id: UUID,

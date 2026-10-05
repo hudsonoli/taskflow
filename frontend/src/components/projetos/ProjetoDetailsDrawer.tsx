@@ -8,7 +8,7 @@ import { DetailsModal } from "@/components/ui/DetailsModal";
 import { Tabs } from "@/components/ui/Tabs";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type { Projeto, ProjetoStatus } from "@/types/projeto";
 import { ArquivosContextView } from "@/components/arquivos/ArquivosContextView";
@@ -66,14 +66,14 @@ export function ProjetoDetailsDrawer({
 }) {
   const [activeTab, setActiveTab] = useState("dados");
   const { clientes } = useDiretorioClientes();
-  const { usuarios } = useDiretorioUsuarios();
+  const { usuarios, resolvendo } = useUsuariosComIds(projeto?.responsavelIds ?? []);
   const { departamentos } = useDiretorioDepartamentos();
 
   const nomeCliente =
     clientes.find((cliente) => cliente.id === projeto?.clienteId)?.nome ?? "Sem cliente";
   const nomesResponsaveis =
     (projeto?.responsavelIds ?? [])
-      .map((id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? id)
+      .map((id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido"))
       .join(", ") || "-";
   const nomesDepartamentos =
     (projeto?.departamentoResponsavelIds ?? [])

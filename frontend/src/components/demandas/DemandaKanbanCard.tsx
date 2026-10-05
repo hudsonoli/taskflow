@@ -7,9 +7,9 @@ import { motion } from "framer-motion";
 import { AvatarStack } from "@/components/ui/AvatarStack";
 import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels } from "@/lib/demandas";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 
 // Esquema pedido pelo time: alta = azul marinho, média = azul céu, baixa = azul bebê.
@@ -26,7 +26,7 @@ const prioridadeBorderClassNames: Record<DemandaPrioridade, string> = {
 };
 
 function CardContent({ demanda }: { demanda: Demanda }) {
-  const { usuarios } = useDiretorioUsuarios();
+  const { usuarios } = useUsuariosComIds(demanda.usuarioResponsavelIds);
   const { projetos } = useDiretorioProjetos();
   const responsaveis = demanda.usuarioResponsavelIds
     .map((id) => resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios))

@@ -10,7 +10,7 @@ import {
 } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeAcessarAreaAdministrativa } from "@/lib/escopo-operacional";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Demanda, DemandaComentario } from "@/types/demanda";
 
 function SectionShell({ children }: { children: ReactNode }) {
@@ -45,9 +45,8 @@ function formatarDataHora(iso: string): string {
  */
 export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
   const { usuarioAtual } = useAppData();
-  const { usuarios } = useDiretorioUsuarios();
-
   const [comentarios, setComentarios] = useState<DemandaComentario[]>([]);
+  const { usuarios, resolvendo } = useUsuariosComIds(comentarios.map((comentario) => comentario.autorUsuarioId));
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
@@ -76,7 +75,7 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
 
   function nomeAutor(autorUsuarioId: string | null): string {
     if (!autorUsuarioId) return "Usuário removido";
-    return usuarios.find((usuario) => usuario.id === autorUsuarioId)?.nome ?? "Usuário removido";
+    return usuarios.find((usuario) => usuario.id === autorUsuarioId)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido");
   }
 
   async function comentar() {

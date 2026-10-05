@@ -17,6 +17,7 @@ import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referen
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { ClienteDiretorioItem } from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Demanda } from "@/types/demanda";
 
 const prioridadeClassName: Record<Demanda["prioridade"], string> = {
@@ -28,19 +29,18 @@ const prioridadeClassName: Record<Demanda["prioridade"], string> = {
 /** Lista compacta de tarefas reutilizável entre Meu Departamento e Minhas Demandas. */
 export function TarefasLista({
   demandas,
-  usuarios,
   clientes,
   onOpenDetails,
   emptyTitle = "Nenhuma tarefa encontrada",
   emptyDescription = "Ajuste os filtros para visualizar tarefas.",
 }: {
   demandas: Demanda[];
-  usuarios: UsuarioDiretorioItem[];
   clientes: ClienteDiretorioItem[];
   onOpenDetails?: (demandaId: string) => void;
   emptyTitle?: string;
   emptyDescription?: string;
 }) {
+  const { usuarios } = useUsuariosComIds(demandas.flatMap((demanda) => demanda.usuarioResponsavelIds));
   const { projetos } = useDiretorioProjetos();
 
   if (demandas.length === 0) {

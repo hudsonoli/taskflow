@@ -16,8 +16,8 @@ import {
 } from "@/lib/demandas";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { useResponsaveisSelector, useUsuariosPorIds } from "@/lib/useResponsaveisSelector";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { corDoEventoHistorico, descreverEventoHistorico } from "@/lib/historicoDemandaLabels";
 import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
 import type { Demanda, DemandaHistoricoEvento, DemandaPrioridade, DemandaStatusEditavel } from "@/types/demanda";
@@ -294,7 +294,7 @@ const workflowEtapaStatusLabel = {
  * ausente com explicação" que o contrato transitório já usava aqui.
  */
 export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
-  const { usuarios } = useDiretorioUsuarios();
+  const { usuarios, resolvendo } = useUsuariosComIds(demanda.workflowEtapas.flatMap((etapa) => etapa.usuarioResponsavelIds));
   const { departamentos } = useDiretorioDepartamentos();
 
   if (demanda.workflowEtapas.length === 0) {
@@ -319,7 +319,7 @@ export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
           .map((etapa) => {
             const atual = etapa.id === demanda.etapaAtualId;
             const responsaveis = etapa.usuarioResponsavelIds
-              .map((id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? id)
+              .map((id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido"))
               .join(", ");
             const departamentosNomes = etapa.departamentoResponsavelIds
               .map((id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id)
@@ -420,9 +420,13 @@ export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSection
  * fallback para autor removido/inativado (ver `descreverEventoHistorico`).
  */
 export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
-  const { usuarios } = useDiretorioUsuarios();
-  const { departamentos } = useDiretorioDepartamentos();
   const [eventos, setEventos] = useState<DemandaHistoricoEvento[]>([]);
+  // Autor do evento e, nos eventos de responsável, o usuário citado em `dados` — qualquer um pode
+  // estar além da janela de 200 do diretório global.
+  const { usuarios, resolvendo } = useUsuariosComIds(
+    eventos.flatMap((evento) => [evento.usuarioId, typeof evento.dados.usuarioId === "string" ? evento.dados.usuarioId : null]),
+  );
+  const { departamentos } = useDiretorioDepartamentos();
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -445,7 +449,7 @@ export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
 
   function nomeUsuario(usuarioId: string | null): string {
     if (!usuarioId) return "Sistema";
-    return usuarios.find((usuario) => usuario.id === usuarioId)?.nome ?? "Usuário removido";
+    return usuarios.find((usuario) => usuario.id === usuarioId)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido");
   }
 
   return (
@@ -474,7 +478,7 @@ export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
                   />
                   <div>
                     <p className="font-semibold text-zinc-950 dark:text-zinc-50">
-                      {descreverEventoHistorico(evento, { usuarios, departamentos })}
+                      {descreverEventoHistorico(evento, { usuarios, departamentos, resolvendoUsuarios: resolvendo })}
                     </p>
                     <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                       {nomeUsuario(evento.usuarioId)} · {new Date(evento.occurredAt).toLocaleString("pt-BR")}

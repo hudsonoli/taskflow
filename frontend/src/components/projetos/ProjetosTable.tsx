@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type { Projeto, ProjetoPrioridade, ProjetoStatus } from "@/types/projeto";
 
@@ -29,9 +29,10 @@ function CompactList({ items }: { items: string[] }) {
 
   return (
     <div className="flex max-w-[220px] flex-wrap gap-1.5">
-      {visibleItems.map((item) => (
+      {visibleItems.map((item, indice) => (
         <span
-          key={item}
+          // Nomes podem repetir (ex.: dois placeholders "Carregando…" enquanto os ids resolvem).
+          key={`${indice}-${item}`}
           className="inline-flex max-w-[140px] items-center rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
           title={item}
         >
@@ -61,7 +62,7 @@ export function ProjetosTable({
   onRestaurar: (projetoId: string) => void;
 }) {
   const { clientes } = useDiretorioClientes();
-  const { usuarios } = useDiretorioUsuarios();
+  const { usuarios, resolvendo } = useUsuariosComIds(projetos.flatMap((projeto) => projeto.responsavelIds));
   const { departamentos } = useDiretorioDepartamentos();
 
   if (projetos.length === 0) {
@@ -96,7 +97,7 @@ export function ProjetosTable({
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {projetos.map((projeto) => {
               const responsaveis = projeto.responsavelIds.map(
-                (id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? id,
+                (id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido"),
               );
               const departamentosDoProjeto = projeto.departamentoResponsavelIds.map(
                 (id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id,

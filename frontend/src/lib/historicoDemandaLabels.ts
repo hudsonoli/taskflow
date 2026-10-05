@@ -14,6 +14,8 @@ import type { DemandaHistoricoEvento, DemandaStatus } from "@/types/demanda";
 type Contexto = {
   usuarios: UsuarioDiretorioItem[];
   departamentos: DepartamentoDiretorioItem[];
+  /** Há usuários ainda sendo resolvidos: nome ausente vira "Carregando…" em vez de "Usuário removido". */
+  resolvendoUsuarios?: boolean;
 };
 
 const CAMPO_LABEL: Record<string, string> = {
@@ -37,9 +39,9 @@ const CAMPO_LABEL: Record<string, string> = {
   vinculos: "responsáveis/departamentos",
 };
 
-function nomeUsuario(usuarioId: unknown, { usuarios }: Contexto): string {
+function nomeUsuario(usuarioId: unknown, { usuarios, resolvendoUsuarios }: Contexto): string {
   if (typeof usuarioId !== "string") return "Usuário removido";
-  return usuarios.find((usuario) => usuario.id === usuarioId)?.nome ?? "Usuário removido";
+  return usuarios.find((usuario) => usuario.id === usuarioId)?.nome ?? (resolvendoUsuarios ? "Carregando…" : "Usuário removido");
 }
 
 function nomeDepartamento(departamentoId: unknown, { departamentos }: Contexto): string {

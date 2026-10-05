@@ -216,6 +216,12 @@ class UsuarioService:
             offset=offset,
         )
 
+    def list_diretorio_por_ids(self, db: Session, *, empresa_id: str, ids: list[str]) -> list[Usuario]:
+        """Resolve nome/avatar de ids já conhecidos (responsável de Demanda, autor de evento…)
+        em lote. Mesma visibilidade do diretório: qualquer status, sem conta de sistema, só a
+        empresa do chamador."""
+        return self.repository.list_diretorio_por_ids(db, empresa_id=empresa_id, ids=ids)
+
     def get_usuario(self, db: Session, usuario_id: str) -> Usuario:
         """Busca administrativa (GET /usuarios/{id}) — a conta de sistema nunca é visível
         aqui, mesmo por ID direto."""

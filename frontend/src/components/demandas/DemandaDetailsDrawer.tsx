@@ -9,9 +9,9 @@ import { DetailsModal } from "@/components/ui/DetailsModal";
 import { Tabs } from "@/components/ui/Tabs";
 import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 import { AtividadeDemandaSection } from "./AtividadeDemandaSection";
 import { DemandaConclusaoBanner } from "./DemandaConclusaoBanner";
@@ -53,7 +53,7 @@ export function DemandaDetailsDrawer({
   initialTab?: string;
 }) {
   const [activeTab, setActiveTab] = useState(initialTab ?? "dados");
-  const { usuarios } = useDiretorioUsuarios();
+  const { usuarios } = useUsuariosComIds(demanda?.usuarioResponsavelIds ?? []);
   const { projetos } = useDiretorioProjetos();
 
   return (

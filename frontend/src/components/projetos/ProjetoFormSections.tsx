@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { prioridadeProjetoLabels, statusProjetoLabels } from "@/lib/projetos";
 import type { Projeto, ProjetoEquipeMembro, ProjetoPrioridade, ProjetoStatusEditavel } from "@/types/projeto";
 
@@ -71,14 +72,17 @@ function updateProjeto(
 
 export function DadosProjetoSection({ projeto, onChange, somenteLeitura }: ProjetoSectionProps) {
   const { clientes } = useDiretorioClientes();
+  // `usuarios` só alimenta as OPÇÕES do seletor (continua o diretório de sempre); os nomes exibidos
+  // vêm de `useUsuariosComIds`, que completa quem está fora da janela de 200.
   const { usuarios } = useDiretorioUsuarios();
+  const { usuarios: usuariosDosNomes, resolvendo } = useUsuariosComIds(projeto.responsavelIds);
   const { departamentos } = useDiretorioDepartamentos();
 
   const nomeCliente =
     clientes.find((cliente) => cliente.id === projeto.clienteId)?.nome ?? "Sem cliente";
   const nomesResponsaveis =
     projeto.responsavelIds
-      .map((id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? id)
+      .map((id) => usuariosDosNomes.find((usuario) => usuario.id === id)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido"))
       .join(", ") || "-";
   const nomesDepartamentos =
     projeto.departamentoResponsavelIds

@@ -379,7 +379,6 @@ export function MeuDepartamentoView() {
         <div className={buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}>
           <TarefasLista
             demandas={demandasPagina}
-            usuarios={usuarios}
             clientes={clientes}
             emptyTitle={erroPagina ? "Não foi possível carregar" : "Nenhuma tarefa encontrada"}
             emptyDescription={erroPagina ?? "Ajuste os filtros para visualizar tarefas do departamento."}

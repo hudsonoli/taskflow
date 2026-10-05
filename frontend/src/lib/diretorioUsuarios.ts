@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { listDiretorioUsuarios, type UsuarioDiretorioItem } from "@/lib/api-backend";
+import { limparUsuariosPorIds } from "@/lib/usuariosPorIds";
 
 /**
  * Cache remoto deduplicado do diretório de usuários — usado pelos seletores de
@@ -46,6 +47,7 @@ function buscar(): Promise<UsuarioDiretorioItem[]> {
 }
 
 export function invalidarDiretorioUsuarios(): void {
+  limparUsuariosPorIds();
   cache = null;
   emVoo = null;
   notificar();
