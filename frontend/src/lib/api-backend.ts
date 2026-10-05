@@ -412,17 +412,38 @@ type UsuarioDiretorioApi = {
   corIdentificacao: string | null;
 };
 
-export async function listDiretorioUsuarios(): Promise<UsuarioDiretorioItem[]> {
-  const data = await request<UsuarioDiretorioApi[]>("/usuarios/diretorio?limit=200");
-  // Normaliza null -> undefined pros componentes de UI (Avatar/MemberSelector etc.) que
-  // esperam `string | undefined`, não `string | null` — um só lugar, não em cada consumidor.
-  return data.map((usuario) => ({
+// Normaliza null -> undefined pros componentes de UI (Avatar/MemberSelector etc.) que
+// esperam `string | undefined`, não `string | null` — um só lugar, não em cada consumidor.
+function mapUsuarioDiretorio(usuario: UsuarioDiretorioApi): UsuarioDiretorioItem {
+  return {
     ...usuario,
     cargo: usuario.cargo ?? undefined,
     departamentoId: usuario.departamentoId ?? undefined,
     fotoUrl: usuario.fotoUrl ?? undefined,
     corIdentificacao: usuario.corIdentificacao ?? undefined,
-  }));
+  };
+}
+
+export async function listDiretorioUsuarios(): Promise<UsuarioDiretorioItem[]> {
+  const data = await request<UsuarioDiretorioApi[]>("/usuarios/diretorio?limit=200");
+  return data.map(mapUsuarioDiretorio);
+}
+
+/**
+ * Uma página do diretório de usuários, filtrada NO SERVIDOR (`search` casa o nome, sem
+ * diferenciar maiúsculas) — para seletores que não podem depender da lista inteira (a de
+ * `listDiretorioUsuarios` termina no usuário nº 200, por nome). Mesmo diretório: todos os status,
+ * sem conta de sistema, `nome ASC`, empresa do token. `limit` vai até 200 no servidor.
+ */
+export async function buscarDiretorioUsuarios(params: {
+  search?: string;
+  limit: number;
+  offset: number;
+}): Promise<UsuarioDiretorioItem[]> {
+  const query = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
+  if (params.search) query.set("search", params.search);
+  const data = await request<UsuarioDiretorioApi[]>(`/usuarios/diretorio?${query.toString()}`);
+  return data.map(mapUsuarioDiretorio);
 }
 
 export async function criarUsuarioReal(draft: UsuarioFormDraft, empresaId: string): Promise<Usuario> {

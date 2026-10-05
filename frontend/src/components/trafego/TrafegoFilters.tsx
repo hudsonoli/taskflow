@@ -6,18 +6,27 @@ import { Input } from "@/components/ui/Input";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
-import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import { buscarDiretorioUsuarios, type DepartamentoDiretorioItem } from "@/lib/api-backend";
 import type { TrafegoFiltersState } from "@/types/trafego";
+
+/**
+ * O filtro de usuário pesquisa NO SERVIDOR (uma página por busca, "Carregar mais") em vez de
+ * receber o diretório inteiro — esse terminava no usuário nº 200 por nome, e quem vinha depois
+ * nem aparecia para ser filtrado. O que sai do filtro continua sendo `usuarioIds` (UUIDs), os
+ * mesmos parâmetros de `/trafego/indicadores|carga|agora`.
+ */
+async function buscarUsuarios({ busca, limit, offset }: { busca: string; limit: number; offset: number }) {
+  const usuarios = await buscarDiretorioUsuarios({ search: busca, limit, offset });
+  return usuarios.map((usuario) => ({ id: usuario.id, nome: usuario.nome }));
+}
 
 export function TrafegoFilters({
   filters,
   onChange,
-  usuarios,
   departamentos,
 }: {
   filters: TrafegoFiltersState;
   onChange: (filters: TrafegoFiltersState) => void;
-  usuarios: UsuarioDiretorioItem[];
   departamentos: DepartamentoDiretorioItem[];
 }) {
   function updateFilter<Key extends keyof TrafegoFiltersState>(key: Key, value: TrafegoFiltersState[Key]) {
@@ -63,7 +72,8 @@ export function TrafegoFilters({
           values={filters.usuarioIds}
           onChange={(values) => updateFilter("usuarioIds", values)}
           placeholder="Selecionar usuários…"
-          options={usuarios.map((usuario) => ({ id: usuario.id, nome: usuario.nome }))}
+          buscarOpcoes={buscarUsuarios}
+          emptyLabel="Nenhum usuário encontrado"
         />
         <MultiSelect
           label="Departamento"

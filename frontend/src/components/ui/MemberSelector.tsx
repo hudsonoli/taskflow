@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 
 export interface MemberOption {
   id: string;
@@ -12,50 +13,173 @@ export interface MemberOption {
   fotoUrl?: string;
 }
 
+/**
+ * Busca de opções no servidor (modo opcional do `MemberSelector`). `busca` já vem aparada
+ * (vazia = primeira página sem filtro); `limit`/`offset` paginam. Devolve só a página pedida.
+ */
+export type BuscarOpcoesMembros = (params: { busca: string; limit: number; offset: number }) => Promise<MemberOption[]>;
+
+const TAMANHO_PAGINA_PADRAO = 30;
+const DEBOUNCE_PADRAO_MS = 300;
+
+/**
+ * Seletor de membros com dois modos:
+ *
+ * - **estático** (padrão, todos os usos antigos): recebe `options` já carregadas e filtra no
+ *   cliente. Comportamento inalterado.
+ * - **servidor**: com `buscarOpcoes`, NÃO recebe a lista toda — carrega a primeira página ao abrir,
+ *   busca no servidor conforme o usuário digita (debounce) e pagina com "Carregar mais". Os
+ *   selecionados ficam guardados localmente (id + nome), então uma nova busca nunca os faz sumir
+ *   dos chips. `buscarOpcoes` pode ser uma função inline: a versão mais recente é lida por ref.
+ */
 export function MemberSelector({
   label,
-  options,
+  options = [],
   values,
   onChange,
   multiple = true,
   placeholder = "Selecionar membros…",
   emptyLabel = "Nenhum membro encontrado",
+  buscarOpcoes,
+  tamanhoPagina = TAMANHO_PAGINA_PADRAO,
+  debounceMs = DEBOUNCE_PADRAO_MS,
 }: {
   label: string;
-  options: MemberOption[];
+  options?: MemberOption[];
   values: string[];
   onChange: (values: string[]) => void;
   multiple?: boolean;
   placeholder?: string;
   emptyLabel?: string;
+  buscarOpcoes?: BuscarOpcoesMembros;
+  tamanhoPagina?: number;
+  debounceMs?: number;
 }) {
+  const remoto = buscarOpcoes !== undefined;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // --- modo servidor -----------------------------------------------------------------
+  const [buscaAplicada, setBuscaAplicada] = useState("");
+  const [resultados, setResultados] = useState<MemberOption[]>([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [temMais, setTemMais] = useState(false);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [erroMais, setErroMais] = useState<string | null>(null);
+  // Id + nome de quem já foi escolhido: o resultado de uma busca nova não os contém.
+  const [escolhidos, setEscolhidos] = useState<Record<string, MemberOption>>({});
+  const buscarRef = useRef(buscarOpcoes);
+  const chaveVigenteRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    buscarRef.current = buscarOpcoes;
+  });
 
   useEffect(() => {
     function handleClickOutside(event: globalThis.MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false);
         setQuery("");
+        setBuscaAplicada("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selecionados = options.filter((option) => values.includes(option.id));
-  const filtrados = query.trim()
-    ? options.filter((option) => option.nome.toLowerCase().includes(query.trim().toLowerCase()))
-    : options;
+  // Debounce da digitação: só o texto "assentado" vira busca no servidor.
+  useEffect(() => {
+    if (!remoto) return;
+    const timeout = setTimeout(() => setBuscaAplicada(query.trim()), debounceMs);
+    return () => clearTimeout(timeout);
+  }, [query, remoto, debounceMs]);
 
-  function toggle(id: string) {
+  // Chave da consulta vigente: só existe com o dropdown aberto. Comparada durante o RENDER (não
+  // dentro do efeito) — mesmo padrão de DemandasView/useAjustesProjeto, por causa da regra
+  // react-hooks/set-state-in-effect deste projeto.
+  const chaveBusca = remoto && open ? buscaAplicada : null;
+  const [chaveConsultada, setChaveConsultada] = useState<string | null>(null);
+  if (chaveBusca !== chaveConsultada) {
+    setChaveConsultada(chaveBusca);
+    setCarregandoMais(false);
+    setErroMais(null);
+    if (chaveBusca !== null) {
+      setCarregando(true);
+      setErro(null);
+    }
+  }
+
+  useEffect(() => {
+    chaveVigenteRef.current = chaveBusca;
+    if (chaveBusca === null || !buscarRef.current) return;
+    let cancelado = false;
+    buscarRef.current({ busca: chaveBusca, limit: tamanhoPagina, offset: 0 })
+      .then((pagina) => {
+        if (cancelado) return; // resposta obsoleta: outra busca (ou fechar o dropdown) veio depois
+        setResultados(pagina);
+        setTemMais(pagina.length === tamanhoPagina);
+        setErro(null);
+        setCarregando(false);
+      })
+      .catch((error) => {
+        if (cancelado) return;
+        setResultados([]);
+        setTemMais(false);
+        setErro(error instanceof Error ? error.message : "Não foi possível buscar usuários.");
+        setCarregando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [chaveBusca, tamanhoPagina]);
+
+  function carregarMais() {
+    const chave = chaveVigenteRef.current;
+    if (chave === null || !buscarRef.current) return;
+    setCarregandoMais(true);
+    setErroMais(null);
+    buscarRef.current({ busca: chave, limit: tamanhoPagina, offset: resultados.length })
+      .then((pagina) => {
+        if (chaveVigenteRef.current !== chave) return; // a busca mudou enquanto esta página vinha
+        setResultados((atual) => {
+          const jaNaTela = new Set(atual.map((opcao) => opcao.id));
+          return [...atual, ...pagina.filter((opcao) => !jaNaTela.has(opcao.id))];
+        });
+        setTemMais(pagina.length === tamanhoPagina);
+      })
+      .catch((error) => {
+        if (chaveVigenteRef.current !== chave) return;
+        setErroMais(error instanceof Error ? error.message : "Não foi possível carregar mais usuários.");
+      })
+      .finally(() => {
+        if (chaveVigenteRef.current === chave) setCarregandoMais(false);
+      });
+  }
+
+  // --- seleção -----------------------------------------------------------------------
+  const selecionados = remoto
+    ? values.map((id) => escolhidos[id]).filter((opcao): opcao is MemberOption => opcao !== undefined)
+    : options.filter((option) => values.includes(option.id));
+  const filtrados = remoto
+    ? resultados
+    : query.trim()
+      ? options.filter((option) => option.nome.toLowerCase().includes(query.trim().toLowerCase()))
+      : options;
+
+  function toggle(option: MemberOption) {
+    const id = option.id;
+    if (remoto && !values.includes(id)) {
+      setEscolhidos((atual) => ({ ...atual, [id]: option }));
+    }
     if (multiple) {
       onChange(values.includes(id) ? values.filter((value) => value !== id) : [...values, id]);
     } else {
       onChange(values.includes(id) ? [] : [id]);
       setOpen(false);
       setQuery("");
+      setBuscaAplicada("");
     }
   }
 
@@ -63,6 +187,8 @@ export function MemberSelector({
     event.stopPropagation();
     onChange(values.filter((value) => value !== id));
   }
+
+  const carregandoPrimeiraPagina = remoto && carregando && resultados.length === 0;
 
   return (
     <div className="relative" ref={containerRef}>
@@ -126,8 +252,12 @@ export function MemberSelector({
               />
             </span>
           </div>
-          <div className="max-h-60 overflow-y-auto p-1.5">
-            {filtrados.length === 0 ? (
+          <div className={`max-h-60 overflow-y-auto p-1.5 ${remoto && carregando && resultados.length > 0 ? "opacity-60 transition-opacity" : ""}`}>
+            {carregandoPrimeiraPagina ? (
+              <p className="px-3 py-2 text-sm text-zinc-400">Carregando…</p>
+            ) : remoto && erro ? (
+              <p className="px-3 py-2 text-sm text-red-600 dark:text-red-400">{erro}</p>
+            ) : filtrados.length === 0 ? (
               <p className="px-3 py-2 text-sm text-zinc-400">{emptyLabel}</p>
             ) : (
               filtrados.map((option) => {
@@ -136,7 +266,7 @@ export function MemberSelector({
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => toggle(option.id)}
+                    onClick={() => toggle(option)}
                     className={
                       isSelected
                         ? "flex w-full items-center gap-2.5 rounded-lg bg-indigo-50/60 px-2.5 py-2 text-left text-sm transition dark:bg-indigo-500/10"
@@ -157,6 +287,14 @@ export function MemberSelector({
                   </button>
                 );
               })
+            )}
+            {remoto && !erro && temMais && (
+              <div className="flex flex-col items-center gap-1 p-1.5">
+                <Button type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={carregarMais} disabled={carregandoMais}>
+                  {carregandoMais ? "Carregando…" : "Carregar mais"}
+                </Button>
+                {erroMais && <p className="text-xs text-red-600 dark:text-red-400">{erroMais}</p>}
+              </div>
             )}
           </div>
         </div>

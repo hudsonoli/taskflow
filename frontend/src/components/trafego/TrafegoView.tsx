@@ -5,7 +5,6 @@ import { getAgoraTrafegoSessoes, getCargaTrafegoSessoes, getIndicadoresTrafegoSe
 import { getResumoOperacional, listDiretorioDemandas, type ResumoOperacional } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { podeAcessarCentralTrafego } from "@/lib/escopo-operacional";
 import { cargaComRelogio, periodoParaDataInicio, resumoDeIndicadores } from "@/lib/trafego";
 import { useNow } from "@/lib/useNow";
@@ -36,7 +35,6 @@ const initialFilters: TrafegoFiltersState = {
 
 export function TrafegoView() {
   const { usuarioAtual } = useAppData();
-  const { usuarios } = useDiretorioUsuarios();
   const { departamentos } = useDiretorioDepartamentos();
   const [filters, setFilters] = useState<TrafegoFiltersState>(initialFilters);
   // D2-C — diretório para vincular uma sessão NOVA: semântica de `/diretorio` (não
@@ -304,7 +302,7 @@ export function TrafegoView() {
     <div className="flex flex-col gap-6">
       <TrafegoHeader onRefresh={atualizar} refreshing={carregandoAgora} />
       <TrafegoIniciarSessao onCreated={atualizar} demandas={diretorioNovaSessao} />
-      <TrafegoFilters filters={filters} onChange={setFilters} usuarios={usuarios} departamentos={departamentos} />
+      <TrafegoFilters filters={filters} onChange={setFilters} departamentos={departamentos} />
 
       {erroIndicadores && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
