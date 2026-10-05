@@ -12,7 +12,6 @@ import {
   listDiretorioDemandas,
   listDiretorioProjetos,
 } from "@/lib/api-backend";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type { ClienteDiretorioItem, ProjetoDiretorioItem } from "@/lib/api-backend";
 import type { DemandaArquivoStatusLayout, DemandaDiretorio } from "@/types/demanda";
@@ -47,7 +46,6 @@ export function ArquivosContextView({
   projetoId?: string;
   compacto?: boolean;
 }) {
-  const { usuarios } = useDiretorioUsuarios();
   const [clientes, setClientes] = useState<ClienteDiretorioItem[]>([]);
   const [projetos, setProjetos] = useState<ProjetoDiretorioItem[]>([]);
   const [demandasDiretorio, setDemandasDiretorio] = useState<DemandaDiretorio[]>([]);
@@ -193,7 +191,6 @@ export function ArquivosContextView({
         clientes={clientes}
         projetos={projetosDoRecorte}
         demandas={demandasDoRecorte}
-        usuarios={usuarios}
         ocultarCliente={Boolean(clienteId || projetoId)}
         ocultarProjeto={Boolean(projetoId)}
         compacto={compacto}

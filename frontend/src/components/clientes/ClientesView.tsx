@@ -15,7 +15,6 @@ import {
 } from "@/lib/api-backend";
 import { invalidarDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioGruposCliente } from "@/lib/diretorioGruposCliente";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { useAppData } from "@/lib/AppDataContext";
 import type { Cliente, ClienteFormDraft, PossivelDuplicidadeCliente } from "@/types/cliente";
 import { ArquivarClienteModal } from "./ArquivarClienteModal";
@@ -28,7 +27,6 @@ import { type ClienteStatusFiltro, ClientesToolbar } from "./ClientesToolbar";
 export function ClientesView() {
   const { usuarioAtual } = useAppData();
   const { grupos: gruposCliente } = useDiretorioGruposCliente();
-  const { usuarios } = useDiretorioUsuarios();
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -164,7 +162,6 @@ export function ClientesView() {
         <ClientesTable
           clientes={clientes}
           grupos={gruposCliente}
-          usuarios={usuarios}
           onEdit={setEditingClienteId}
           onArquivar={setArquivarClienteId}
           onRestaurar={handleRestaurar}
@@ -175,7 +172,6 @@ export function ClientesView() {
         <ClienteFormModal
           open
           grupos={gruposCliente}
-          usuarios={usuarios}
           salvando={salvando}
           onClose={() => setCreatingCliente(false)}
           onSave={handleSave}
@@ -188,7 +184,6 @@ export function ClientesView() {
           open
           cliente={editingCliente}
           grupos={gruposCliente}
-          usuarios={usuarios}
           salvando={salvando}
           onClose={() => setEditingClienteId(null)}
           onSave={handleSave}

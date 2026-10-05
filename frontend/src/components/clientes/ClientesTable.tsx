@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { resolveCorIdentificacaoHex } from "@/lib/cores";
 import { resolverGrupoClienteNomes, resolverUsuarioPorReferencia } from "@/lib/referencias";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { statusClienteLabels, type Cliente, type ClienteStatus } from "@/types/cliente";
-import type { GrupoClienteDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import type { GrupoClienteDiretorioItem } from "@/lib/api-backend";
 
 const statusTone: Record<ClienteStatus, BadgeTone> = {
   ativo: "green",
@@ -17,18 +18,19 @@ const statusTone: Record<ClienteStatus, BadgeTone> = {
 export function ClientesTable({
   clientes,
   grupos,
-  usuarios,
   onEdit,
   onArquivar,
   onRestaurar,
 }: {
   clientes: Cliente[];
   grupos: GrupoClienteDiretorioItem[];
-  usuarios: UsuarioDiretorioItem[];
   onEdit: (clienteId: string) => void;
   onArquivar: (clienteId: string) => void;
   onRestaurar: (clienteId: string) => void;
 }) {
+  // Nome do responsável comercial: o diretório (até 200) completado, em lote, com quem ficou fora.
+  const { usuarios } = useUsuariosComIds(clientes.map((cliente) => cliente.responsavelComercialId));
+
   if (clientes.length === 0) {
     return <EmptyState title="Nenhum cliente encontrado" description="Ajuste a busca ou os filtros." />;
   }

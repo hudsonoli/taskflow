@@ -13,6 +13,11 @@ type OpcoesSeletor = {
   departamentoId?: string;
   /** Selecionado que não está `ativo` aparece como "<nome> (indisponível)". */
   marcarIndisponiveis?: boolean;
+  /**
+   * Oferece usuários de QUALQUER status (inclusive inativo/bloqueado/arquivado) — para filtros e telas
+   * administrativas que consultam registros históricos. Padrão: só `ativo` (novo vínculo).
+   */
+  todosStatus?: boolean;
 };
 
 function paraOpcao(
@@ -47,14 +52,20 @@ function paraOpcao(
  */
 export function useUsuariosSelector(opcoes: OpcoesSeletor = {}): { buscarOpcoes: BuscarOpcoesMembros; resolverSelecionados: ResolverSelecionadosMembros } {
   const { departamentos } = useDiretorioDepartamentos();
-  const { comSubtitulo = false, departamentoId, marcarIndisponiveis = false } = opcoes;
+  const { comSubtitulo = false, departamentoId, marcarIndisponiveis = false, todosStatus = false } = opcoes;
 
   const buscarOpcoes = useCallback<BuscarOpcoesMembros>(
     async ({ busca, limit, offset }) => {
-      const usuarios = await buscarDiretorioUsuarios({ search: busca, status: "ativo", departamentoId, limit, offset });
+      const usuarios = await buscarDiretorioUsuarios({
+        search: busca,
+        status: todosStatus ? undefined : "ativo",
+        departamentoId,
+        limit,
+        offset,
+      });
       return usuarios.map((usuario) => paraOpcao(usuario, departamentos, { comSubtitulo }));
     },
-    [departamentos, comSubtitulo, departamentoId],
+    [departamentos, comSubtitulo, departamentoId, todosStatus],
   );
 
   const resolverSelecionados = useCallback<ResolverSelecionadosMembros>(

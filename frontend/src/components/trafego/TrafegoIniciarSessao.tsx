@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Select } from "@/components/ui/Select";
 import { abrirSessaoTrabalho } from "@/lib/api";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import type { DemandaDiretorio } from "@/types/demanda";
 
 /**
@@ -23,7 +24,7 @@ export function TrafegoIniciarSessao({
   onCreated: () => void;
   demandas: DemandaDiretorio[];
 }) {
-  const { usuarios } = useDiretorioUsuarios();
+  const { buscarOpcoes } = useUsuariosSelector({ todosStatus: true });
   const [usuarioId, setUsuarioId] = useState("");
   const [demandaId, setDemandaId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,14 +50,16 @@ export function TrafegoIniciarSessao({
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="grid flex-1 gap-3 sm:grid-cols-2">
-          <Select
+          {/* Busca no servidor (sem o corte de 200); qualquer status, como a lista de antes. O `usuarioId`
+              enviado continua sendo o UUID real do usuário. */}
+          <MemberSelector
             label="Usuário"
-            value={usuarioId}
-            onChange={(event) => setUsuarioId(event.target.value)}
-            options={[
-              { value: "", label: "Selecionar…" },
-              ...usuarios.map((usuario) => ({ value: usuario.id, label: usuario.nome })),
-            ]}
+            multiple={false}
+            values={usuarioId ? [usuarioId] : []}
+            onChange={(values) => setUsuarioId(values[0] ?? "")}
+            placeholder="Selecionar…"
+            buscarOpcoes={buscarOpcoes}
+            emptyLabel="Nenhum usuário encontrado"
           />
           <Select
             label="Demanda"

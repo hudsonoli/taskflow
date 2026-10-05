@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { Combobox } from "@/components/ui/Combobox";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { useAppData } from "@/lib/AppDataContext";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import { definirPermissaoUsuario, herdarPermissaoUsuario, listarPermissoesUsuario } from "@/lib/api-backend";
 import { podeGerenciarPermissoes } from "@/lib/escopo-operacional";
 import type { PermissaoAdminItem, PermissaoEstadoUI } from "@/types/permissao";
@@ -30,7 +30,7 @@ const OPCOES_ESTADO: { value: PermissaoEstadoUI; label: string }[] = [
 
 export function PermissoesUsuarioView() {
   const { usuarioAtual, sessaoCarregando } = useAppData();
-  const { usuarios, carregando: diretorioCarregando, erro: diretorioErro } = useDiretorioUsuarios();
+  const { buscarOpcoes } = useUsuariosSelector({ todosStatus: true });
 
   const [usuarioId, setUsuarioId] = useState("");
   const [itens, setItens] = useState<PermissaoAdminItem[] | null>(null);
@@ -135,13 +135,16 @@ export function PermissoesUsuarioView() {
       />
 
       <div className="max-w-sm">
-        <Combobox
+        {/* Busca no servidor (sem o corte de 200); qualquer status, como a lista de antes. Clicar de
+            novo no usuário selecionado limpa a seleção. */}
+        <MemberSelector
           label="Usuário"
-          value={usuarioId}
-          onChange={setUsuarioId}
-          options={usuarios.map((usuario) => ({ value: usuario.id, label: usuario.nome }))}
-          placeholder={diretorioCarregando ? "Carregando usuários…" : "Buscar usuário…"}
-          emptyLabel={diretorioErro ?? "Nenhum usuário encontrado"}
+          multiple={false}
+          values={usuarioId ? [usuarioId] : []}
+          onChange={(values) => setUsuarioId(values[0] ?? "")}
+          placeholder="Buscar usuário…"
+          buscarOpcoes={buscarOpcoes}
+          emptyLabel="Nenhum usuário encontrado"
         />
       </div>
 

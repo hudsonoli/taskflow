@@ -5,6 +5,7 @@ import { Mail, Plus, Search, Trash2, User, X } from "lucide-react";
 import { ArquivosContextView } from "@/components/arquivos/ArquivosContextView";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Modal } from "@/components/ui/Modal";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
@@ -18,6 +19,7 @@ import { buscarDadosPorDocumento } from "@/lib/documento-lookup";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeVerFinanceiroEfetivo } from "@/lib/escopo-operacional";
 import { resolverGrupoClientePorReferencia } from "@/lib/referencias";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import {
   origensClienteDisponiveis,
   statusClienteLabels,
@@ -26,7 +28,7 @@ import {
   type ClienteFormDraft,
   type ClienteStatusEditavel,
 } from "@/types/cliente";
-import type { GrupoClienteDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import type { GrupoClienteDiretorioItem } from "@/lib/api-backend";
 
 const ufsDisponiveis = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB",
@@ -70,7 +72,6 @@ export function ClienteFormModal({
   open,
   cliente,
   grupos,
-  usuarios,
   salvando,
   onClose,
   onSave,
@@ -78,12 +79,12 @@ export function ClienteFormModal({
   open: boolean;
   cliente?: Cliente;
   grupos: GrupoClienteDiretorioItem[];
-  usuarios: UsuarioDiretorioItem[];
   salvando: boolean;
   onClose: () => void;
   onSave: (draft: ClienteFormDraft, clienteId?: string) => void;
 }) {
   const { usuarioAtual } = useAppData();
+  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector();
   const [draft, setDraft] = useState<ClienteFormDraft>(() => createInitialDraft(cliente));
   const [activeTab, setActiveTab] = useState("dados");
 
@@ -348,19 +349,18 @@ export function ClienteFormModal({
                 onChange={(event) => updateDraft({ origem: event.target.value })}
                 options={[{ value: "", label: "Não informado" }, ...origensClienteDisponiveis.map((origem) => ({ value: origem, label: origem }))]}
               />
-              <Select
+              {/* Busca no servidor (sem o corte de 200). Opcional, como antes: usuário ativo para novo
+                  vínculo; o já selecionado continua visível mesmo se arquivado/inativo/bloqueado.
+                  Clicar de novo no selecionado volta para "Selecionar…". */}
+              <MemberSelector
                 label="Responsável comercial"
-                value={draft.responsavelComercialId}
-                onChange={(event) => updateDraft({ responsavelComercialId: event.target.value })}
-                options={[
-                  { value: "", label: "Selecionar…" },
-                  ...usuarios
-                    .filter(
-                      (usuario) =>
-                        usuario.status === "ativo" || usuario.id === draft.responsavelComercialId,
-                    )
-                    .map((usuario) => ({ value: usuario.id, label: usuario.nome })),
-                ]}
+                multiple={false}
+                values={draft.responsavelComercialId ? [draft.responsavelComercialId] : []}
+                onChange={(values) => updateDraft({ responsavelComercialId: values[0] ?? "" })}
+                placeholder="Selecionar…"
+                buscarOpcoes={buscarOpcoes}
+                resolverSelecionados={resolverSelecionados}
+                emptyLabel="Nenhum usuário encontrado"
               />
             </div>
 

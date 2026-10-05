@@ -2,9 +2,11 @@
 
 import { Search, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/Input";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Select } from "@/components/ui/Select";
-import type { ClienteDiretorioItem, ProjetoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
+import type { ClienteDiretorioItem, ProjetoDiretorioItem } from "@/lib/api-backend";
 import { STATUS_LAYOUT_OPTIONS } from "@/lib/arquivo-status-layout";
+import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import type { ArquivosCentralFiltros } from "@/types/arquivo";
 import type { DemandaDiretorio } from "@/types/demanda";
 
@@ -20,7 +22,6 @@ export function ArquivosFiltros({
   clientes,
   projetos,
   demandas,
-  usuarios,
   ocultarCliente = false,
   ocultarProjeto = false,
   compacto = false,
@@ -30,13 +31,14 @@ export function ArquivosFiltros({
   clientes: ClienteDiretorioItem[];
   projetos: ProjetoDiretorioItem[];
   demandas: DemandaDiretorio[];
-  usuarios: UsuarioDiretorioItem[];
   // Contexto fixo (aba de Projeto/Cliente): o recorte já vem definido por quem monta a tela.
   ocultarCliente?: boolean;
   ocultarProjeto?: boolean;
   // Dentro de modal/drawer: menos colunas (a largura útil é a do painel, não a da viewport).
   compacto?: boolean;
 }) {
+  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector({ todosStatus: true });
+
   function atualizar<K extends keyof ArquivosCentralFiltros>(chave: K, valor: ArquivosCentralFiltros[K]) {
     // Trocar Cliente/Projeto limpa o filtro de Demanda se ela não pertencer mais ao recorte
     // — evita um filtro "fantasma" que a UI mostra selecionado mas que já não bate com nada.
@@ -107,11 +109,17 @@ export function ArquivosFiltros({
             ...demandasFiltradas.map((demanda) => ({ value: demanda.id, label: `#${demanda.numeroOperacional} — ${demanda.nome}` })),
           ]}
         />
-        <Select
+        {/* Busca no servidor (sem o corte de 200); qualquer status, como a lista de antes. O filtro
+            continua sendo `usuarioId` (UUID); clicar de novo no selecionado volta para "Todos". */}
+        <MemberSelector
           label="Usuário"
-          value={filtros.usuarioId ?? ""}
-          onChange={(event) => atualizar("usuarioId", event.target.value)}
-          options={[{ value: "", label: "Todos" }, ...usuarios.map((usuario) => ({ value: usuario.id, label: usuario.nome }))]}
+          multiple={false}
+          values={filtros.usuarioId ? [filtros.usuarioId] : []}
+          onChange={(values) => atualizar("usuarioId", values[0] ?? "")}
+          placeholder="Todos"
+          buscarOpcoes={buscarOpcoes}
+          resolverSelecionados={resolverSelecionados}
+          emptyLabel="Nenhum usuário encontrado"
         />
         <Select
           label="Tipo"
