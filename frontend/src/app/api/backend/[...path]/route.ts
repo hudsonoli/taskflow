@@ -72,6 +72,14 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   return proxy(request, path);
 }
 
+// PUT faltava: `PUT /usuarios/{id}/permissoes/{permissao}` (conceder/negar exceção de permissão) e
+// `PUT /demandas/{id}/checklist/reordenar` existem no backend e o frontend os chama por este proxy —
+// sem este handler o Next respondia 405 e as duas ações nunca chegavam ao FastAPI.
+export async function PUT(request: NextRequest, { params }: RouteContext) {
+  const { path } = await params;
+  return proxy(request, path);
+}
+
 // DELETE faltava, e era por isso que a exclusão de arquivo de Demanda ia direto ao FastAPI,
 // sem passar pelo cookie de sessão.
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
