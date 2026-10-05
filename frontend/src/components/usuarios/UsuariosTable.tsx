@@ -11,11 +11,14 @@ import type { DepartamentoDiretorioItem } from "@/lib/api-backend";
 export function UsuariosTable({
   usuarios,
   departamentos,
+  temMais = false,
   onEdit,
   onExcluir,
 }: {
   usuarios: Usuario[];
   departamentos: DepartamentoDiretorioItem[];
+  /** Há mais páginas no servidor: o contador mostra o que está carregado, com "+". */
+  temMais?: boolean;
   onEdit: (usuarioId: string) => void;
   onExcluir: (usuarioId: string) => void;
 }) {
@@ -31,7 +34,8 @@ export function UsuariosTable({
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Pessoas com acesso ao workspace.</p>
         </div>
         <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
-          {usuarios.length} registro(s)
+          {usuarios.length}
+          {temMais ? "+" : ""} registro(s)
         </span>
       </div>
 

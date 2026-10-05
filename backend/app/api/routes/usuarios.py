@@ -17,6 +17,7 @@ from app.schemas.usuario import (
     UsuarioExcluir,
     UsuarioInativar,
     UsuarioRead,
+    UsuarioResumoRead,
     UsuarioUpdate,
 )
 from app.services.usuario_permissao_service import UsuarioPermissaoService
@@ -121,6 +122,10 @@ def list_usuarios(
     status_usuario: str | None = Query(default=None, alias="status"),
     perfil_base: str | None = Query(default=None, alias="perfilBase"),
     search: str | None = Query(default=None, alias="search"),
+    departamento_id: UUID | None = Query(default=None, alias="departamentoId"),
+    # Situação da tela de Usuários: `ativo` = status ativo; `inativo` = tudo que NÃO é ativo
+    # (inativo + bloqueado). Independente de `status` (que continua filtro exato).
+    situacao: str | None = Query(default=None, pattern="^(ativo|inativo)$"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: Usuario = Depends(require_permissao("usuarios.visualizar")),
@@ -133,10 +138,25 @@ def list_usuarios(
         status=status_usuario,
         perfil_base=perfil_base,
         search=search,
+        departamento_id=str(departamento_id) if departamento_id else None,
+        situacao=situacao,
         limit=limit,
         offset=offset,
     )
     return usuario_service.to_read_lote(db, usuarios, actor=current_user)
+
+
+@router.get("/resumo", response_model=UsuarioResumoRead)
+def get_resumo_usuarios(
+    empresa_id: UUID = Query(alias="empresaId"),
+    # Mesma autorização de GET /usuarios (a tela de Usuários): não amplia acesso.
+    current_user: Usuario = Depends(require_permissao("usuarios.visualizar")),
+    db: Session = Depends(get_db),
+):
+    """Cards da tela de Usuários, agregados no servidor sobre a empresa inteira (sem filtros).
+    Registrada antes de `/{usuario_id}`."""
+    ensure_same_empresa(empresa_id, current_user)
+    return UsuarioResumoRead(**usuario_service.resumo(db, empresa_id=str(empresa_id)))
 
 
 @router.get("/me", response_model=UsuarioRead)

@@ -177,6 +177,8 @@ class UsuarioService:
         status: str | None = None,
         perfil_base: str | None = None,
         search: str | None = None,
+        departamento_id: str | None = None,
+        situacao: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Usuario]:
@@ -186,9 +188,15 @@ class UsuarioService:
             status=status,
             perfil_base=perfil_base,
             search=search,
+            departamento_id=departamento_id,
+            situacao=situacao,
             limit=limit,
             offset=offset,
         )
+
+    def resumo(self, db: Session, *, empresa_id: str) -> dict[str, int]:
+        """Cards da tela de Usuários, agregados no servidor sobre a empresa inteira."""
+        return self.repository.resumo(db, empresa_id=empresa_id)
 
     def list_diretorio(
         self,

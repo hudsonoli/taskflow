@@ -1,11 +1,37 @@
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+import unicodedata
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.models.departamento import Departamento
 from app.models.usuario import Usuario
 
 STATUS_ARQUIVADO = "arquivado"
+STATUS_ATIVO = "ativo"
+SITUACAO_ATIVO = "ativo"
+SITUACAO_INATIVO = "inativo"
+# Perfis que a tela de Usuários conta como "Gestão" (mesma lista do card do frontend).
+PERFIS_GESTAO = ("gestor", "admin", "superadmin", "diretoria")
+
+# Busca sem acento no próprio SQL (sem extensão `unaccent`, que exigiria migration): minúsculas +
+# `translate` dos caracteres acentuados mais comuns. O termo é dobrado em Python do mesmo jeito.
+_COM_ACENTO = "áàâãäåéèêëíìîïóòôõöúùûüýÿçñ"
+_SEM_ACENTO = "aaaaaaeeeeiiiiooooouuuuyycn"
+
+
+def _dobrar_coluna(coluna):
+    return func.translate(func.lower(coluna), _COM_ACENTO, _SEM_ACENTO)
+
+
+def _dobrar_termo(termo: str) -> str:
+    decomposto = unicodedata.normalize("NFD", termo.strip().lower())
+    return "".join(ch for ch in decomposto if unicodedata.category(ch) != "Mn")
+
+
+def _escapar_like(termo: str) -> str:
+    return termo.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class UsuarioRepository:
@@ -56,6 +82,8 @@ class UsuarioRepository:
         status: str | None = None,
         perfil_base: str | None = None,
         search: str | None = None,
+        departamento_id: str | None = None,
+        situacao: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Usuario]:
@@ -69,22 +97,59 @@ class UsuarioRepository:
             # paginação (ver docs/padrao-arquivamento.md). `status="arquivado"` explícito
             # continua consultando normalmente.
             statement = statement.where(Usuario.status != STATUS_ARQUIVADO)
+        if situacao == SITUACAO_ATIVO:
+            statement = statement.where(Usuario.status == STATUS_ATIVO)
+        elif situacao == SITUACAO_INATIVO:
+            # "Inativos" da tela de Usuários = tudo que NÃO é ativo (inativo + bloqueado; arquivado
+            # já está oculto acima, salvo `status="arquivado"` explícito).
+            statement = statement.where(Usuario.status != STATUS_ATIVO)
         if perfil_base:
             statement = statement.where(Usuario.perfil_base == perfil_base)
-        if search:
-            term = f"%{search.strip()}%"
+        if departamento_id:
+            statement = statement.where(Usuario.departamento_id == departamento_id)
+        if search and search.strip():
+            padrao = f"%{_escapar_like(_dobrar_termo(search))}%"
+            # Mesma busca da tela de Usuários: sem acento e sem diferenciar maiúsculas, em nome,
+            # e-mail, código interno e NOME DO DEPARTAMENTO (subconsulta da mesma empresa — sem JOIN
+            # que duplique linha nem N+1).
+            por_departamento = Usuario.departamento_id.in_(
+                select(Departamento.id).where(
+                    Departamento.empresa_id == empresa_id,
+                    _dobrar_coluna(Departamento.nome).like(padrao, escape="\\"),
+                )
+            )
             statement = statement.where(
                 or_(
-                    Usuario.nome.ilike(term),
-                    Usuario.email.ilike(term),
-                    Usuario.codigo_interno.ilike(term),
+                    _dobrar_coluna(Usuario.nome).like(padrao, escape="\\"),
+                    _dobrar_coluna(Usuario.email).like(padrao, escape="\\"),
+                    _dobrar_coluna(Usuario.codigo_interno).like(padrao, escape="\\"),
+                    por_departamento,
                 )
             )
 
-        statement = statement.order_by(Usuario.created_at.desc(), Usuario.nome.asc())
+        # `id` no fim: desempate estável, para a paginação (offset) nunca repetir/pular linha.
+        statement = statement.order_by(Usuario.created_at.desc(), Usuario.nome.asc(), Usuario.id.asc())
         statement = statement.limit(limit).offset(offset)
 
         return list(db.scalars(statement).all())
+
+    def resumo(self, db: Session, *, empresa_id: str) -> dict[str, int]:
+        """Agregados dos cards da tela de Usuários — UMA query, sempre sobre a empresa inteira
+        (nunca sobre filtros/página): mesma base de `list()` sem `status` (sem conta de sistema,
+        sem arquivado). `gestao` = perfis de gestão; `departamentos` = distintos com vínculo."""
+        linha = db.execute(
+            select(
+                func.count(Usuario.id),
+                func.count(Usuario.id).filter(Usuario.status == STATUS_ATIVO),
+                func.count(Usuario.id).filter(Usuario.perfil_base.in_(PERFIS_GESTAO)),
+                func.count(func.distinct(Usuario.departamento_id)),
+            ).where(
+                Usuario.empresa_id == empresa_id,
+                Usuario.is_system_account.is_(False),
+                Usuario.status != STATUS_ARQUIVADO,
+            )
+        ).one()
+        return {"total": linha[0], "ativos": linha[1], "gestao": linha[2], "departamentos": linha[3]}
 
     def list_diretorio(
         self,

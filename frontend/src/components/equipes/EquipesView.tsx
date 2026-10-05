@@ -15,7 +15,7 @@ import {
 } from "@/lib/api-backend";
 import { invalidarDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Equipe, EquipeFormDraft } from "@/types/equipe";
 import { ArquivarEquipeModal } from "./ArquivarEquipeModal";
 import { EquipeFormModal } from "./EquipeFormModal";
@@ -24,9 +24,10 @@ import { EquipesStats } from "./EquipesStats";
 import { EquipesToolbar } from "./EquipesToolbar";
 
 export function EquipesView() {
-  const { usuarios } = useDiretorioUsuarios();
   const { departamentos } = useDiretorioDepartamentos();
   const [equipes, setEquipes] = useState<Equipe[]>([]);
+  // Nome de líder e membros: o diretório (até 200) completado, em lote, com quem ficou fora dele.
+  const { usuarios } = useUsuariosComIds(equipes.flatMap((equipe) => [equipe.liderId, ...equipe.membroIds]));
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [query, setQuery] = useState("");

@@ -143,6 +143,15 @@ class UsuarioRead(BaseModel):
         return ensure_timezone_aware(value)
 
 
+class UsuarioResumoRead(BaseModel):
+    """Agregados dos cards da tela de Usuários (empresa inteira, nunca a página/filtros)."""
+
+    total: int
+    ativos: int
+    gestao: int
+    departamentos: int
+
+
 # Projeção mínima para seletores de responsável/membro (GET /usuarios/diretorio) — nunca
 # inclui cpf, endereço, data de nascimento, valores financeiros, contatos, observações ou
 # email. Exclui sempre a conta de sistema (ver UsuarioRepository.list_diretorio).

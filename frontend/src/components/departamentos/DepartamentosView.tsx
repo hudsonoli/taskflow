@@ -15,7 +15,7 @@ import {
   restaurarDepartamentoReal,
 } from "@/lib/api-backend";
 import { invalidarDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Departamento, DepartamentoFormDraft } from "@/types/departamento";
 import { ArquivarDepartamentoModal } from "./ArquivarDepartamentoModal";
 import { DepartamentoFormModal } from "./DepartamentoFormModal";
@@ -24,8 +24,9 @@ import { DepartamentosTable } from "./DepartamentosTable";
 import { DepartamentosToolbar } from "./DepartamentosToolbar";
 
 export function DepartamentosView() {
-  const { usuarios } = useDiretorioUsuarios();
   const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
+  // Nome dos responsáveis: o diretório (até 200) completado, em lote, com quem ficou fora dele.
+  const { usuarios } = useUsuariosComIds(departamentos.map((departamento) => departamento.responsavelId));
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [query, setQuery] = useState("");

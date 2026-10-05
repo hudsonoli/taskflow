@@ -367,9 +367,37 @@ function draftParaPayload(draft: UsuarioFormDraft) {
   };
 }
 
-export async function listUsuariosReais(empresaId: string): Promise<Usuario[]> {
-  const data = await request<UsuarioReadApi[]>(`/usuarios?empresaId=${encodeURIComponent(empresaId)}&limit=200`);
+/**
+ * Uma página da listagem administrativa de usuários (`GET /usuarios`), filtrada NO SERVIDOR.
+ * `search` casa nome, e-mail, código e nome do departamento (sem acento, sem diferenciar maiúsculas);
+ * `situacao` "ativo" = status ativo, "inativo" = tudo que não é ativo (inativo + bloqueado);
+ * `departamentoId` é filtro exato. Ordem do servidor (mais recentes primeiro), `limit` até 200.
+ */
+export async function listUsuariosPagina(params: {
+  empresaId: string;
+  search?: string;
+  situacao?: "ativo" | "inativo";
+  departamentoId?: string;
+  limit: number;
+  offset: number;
+}): Promise<Usuario[]> {
+  const query = new URLSearchParams({
+    empresaId: params.empresaId,
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.search) query.set("search", params.search);
+  if (params.situacao) query.set("situacao", params.situacao);
+  if (params.departamentoId) query.set("departamentoId", params.departamentoId);
+  const data = await request<UsuarioReadApi[]>(`/usuarios?${query.toString()}`);
   return data.map(mapUsuarioReadToUsuario);
+}
+
+/** Agregados dos cards da tela de Usuários — empresa inteira, independentes de filtros e de página. */
+export type UsuarioResumo = { total: number; ativos: number; gestao: number; departamentos: number };
+
+export async function getResumoUsuarios(empresaId: string): Promise<UsuarioResumo> {
+  return request<UsuarioResumo>(`/usuarios/resumo?empresaId=${encodeURIComponent(empresaId)}`);
 }
 
 // Autoedição de perfil (tela "Minha Conta") — PATCH direto, só os campos que a própria
