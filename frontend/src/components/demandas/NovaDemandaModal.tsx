@@ -19,7 +19,7 @@ import {
 import { obterWorkflowModeloReal } from "@/lib/api-backend";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useResponsaveisSelector } from "@/lib/useResponsaveisSelector";
 import { useDiretorioWorkflowModelos } from "@/lib/diretorioWorkflowModelos";
 import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
@@ -58,16 +58,12 @@ export function NovaDemandaModal({
   const { projetos } = useDiretorioProjetos();
   const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
-  const { usuarios: diretorio } = useDiretorioUsuarios();
+  const responsaveis = useResponsaveisSelector();
   const { workflowModelos } = useDiretorioWorkflowModelos();
   const [draft, setDraft] = useState<DemandaFormDraft>(() => createInitialDraft(demanda));
-  // Picker oferece usuário ativo + os já responsáveis (mesmo se arquivado/inativo/
-  // bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o responsável
-  // persistido some silenciosamente ao editar uma Demanda. Novo vínculo continua restrito
-  // a ativo, pois só entram aqui via a checagem `status === "ativo"`.
-  const usuarios = diretorio.filter(
-    (usuario) => usuario.status === "ativo" || draft.usuarioResponsavelIds.includes(usuario.id),
-  );
+  // Responsáveis: o seletor pesquisa usuários ATIVOS no servidor (sem o corte do diretório de 200) e
+  // resolve o nome de quem já é responsável — mesmo arquivado/inativo/bloqueado, ou além da primeira
+  // página — para o responsável persistido nunca sumir (nem virar UUID) ao editar uma Demanda.
   // Vínculo novo não pode ser um Projeto arquivado (mesma regra do backend, ver
   // `_ensure_projeto_valido`) — mas o Projeto já vinculado à Demanda continua aparecendo,
   // senão o campo mostraria vazio ao editar uma Demanda cujo Projeto foi arquivado depois.
@@ -232,15 +228,10 @@ export function NovaDemandaModal({
           values={draft.usuarioResponsavelIds}
           onChange={(values) => updateDraft({ usuarioResponsavelIds: values })}
           placeholder="Selecionar responsáveis…"
-          options={usuarios.map((usuario) => ({
-            id: usuario.id,
-            nome: usuario.nome,
-            subtitulo: usuario.departamentoId
-              ? departamentos.find((departamento) => departamento.id === usuario.departamentoId)?.nome
-              : undefined,
-            corIdentificacao: usuario.corIdentificacao,
-            fotoUrl: usuario.fotoUrl,
-          }))}
+          buscarOpcoes={responsaveis.buscarOpcoes}
+          resolverSelecionados={responsaveis.resolverSelecionados}
+          ordenarSelecionados="nome"
+          emptyLabel="Nenhum usuário encontrado"
         />
         <MultiSelect
           label="Departamentos responsáveis"

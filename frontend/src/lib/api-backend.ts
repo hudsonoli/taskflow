@@ -433,15 +433,19 @@ export async function listDiretorioUsuarios(): Promise<UsuarioDiretorioItem[]> {
  * Uma página do diretório de usuários, filtrada NO SERVIDOR (`search` casa o nome, sem
  * diferenciar maiúsculas) — para seletores que não podem depender da lista inteira (a de
  * `listDiretorioUsuarios` termina no usuário nº 200, por nome). Mesmo diretório: todos os status,
- * sem conta de sistema, `nome ASC`, empresa do token. `limit` vai até 200 no servidor.
+ * sem conta de sistema, `nome ASC`, empresa do token. `limit` vai até 200 no servidor. `status`
+ * (opcional, filtro exato do servidor) restringe a um status — filtrar no cliente quebraria a
+ * paginação, porque uma página "cheia" deixaria de parecer cheia.
  */
 export async function buscarDiretorioUsuarios(params: {
   search?: string;
+  status?: UsuarioDiretorioItem["status"];
   limit: number;
   offset: number;
 }): Promise<UsuarioDiretorioItem[]> {
   const query = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
   if (params.search) query.set("search", params.search);
+  if (params.status) query.set("status", params.status);
   const data = await request<UsuarioDiretorioApi[]>(`/usuarios/diretorio?${query.toString()}`);
   return data.map(mapUsuarioDiretorio);
 }

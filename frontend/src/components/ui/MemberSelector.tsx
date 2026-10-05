@@ -19,6 +19,13 @@ export interface MemberOption {
  */
 export type BuscarOpcoesMembros = (params: { busca: string; limit: number; offset: number }) => Promise<MemberOption[]>;
 
+/**
+ * Resolve id -> nome de quem JÁ está em `values` mas nunca passou pelo dropdown (ex.: os
+ * responsáveis de uma Demanda aberta para edição, que podem estar fora da primeira página de
+ * qualquer busca). Devolve só os que encontrou; um id ausente do resultado vira "indisponível".
+ */
+export type ResolverSelecionadosMembros = (ids: string[]) => Promise<MemberOption[]>;
+
 const TAMANHO_PAGINA_PADRAO = 30;
 const DEBOUNCE_PADRAO_MS = 300;
 
@@ -41,6 +48,8 @@ export function MemberSelector({
   placeholder = "Selecionar membros…",
   emptyLabel = "Nenhum membro encontrado",
   buscarOpcoes,
+  resolverSelecionados,
+  ordenarSelecionados = "selecao",
   tamanhoPagina = TAMANHO_PAGINA_PADRAO,
   debounceMs = DEBOUNCE_PADRAO_MS,
 }: {
@@ -52,6 +61,10 @@ export function MemberSelector({
   placeholder?: string;
   emptyLabel?: string;
   buscarOpcoes?: BuscarOpcoesMembros;
+  /** Só no modo servidor: nomes dos `values` que não vieram de uma busca (ver `ResolverSelecionadosMembros`). */
+  resolverSelecionados?: ResolverSelecionadosMembros;
+  /** Só no modo servidor: ordem dos chips — a da seleção (padrão) ou alfabética por nome. */
+  ordenarSelecionados?: "selecao" | "nome";
   tamanhoPagina?: number;
   debounceMs?: number;
 }) {
@@ -70,12 +83,36 @@ export function MemberSelector({
   const [erroMais, setErroMais] = useState<string | null>(null);
   // Id + nome de quem já foi escolhido: o resultado de uma busca nova não os contém.
   const [escolhidos, setEscolhidos] = useState<Record<string, MemberOption>>({});
+  // Ids já resolvidos por `resolverSelecionados` (com ou sem sucesso): enquanto um id sem nome não
+  // está aqui, o chip diz "Carregando…"; depois, "Usuário indisponível" — nunca o UUID cru.
+  const [resolvidos, setResolvidos] = useState<Record<string, true>>({});
   const buscarRef = useRef(buscarOpcoes);
+  const resolverRef = useRef(resolverSelecionados);
   const chaveVigenteRef = useRef<string | null>(null);
+  const tentadosRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     buscarRef.current = buscarOpcoes;
+    resolverRef.current = resolverSelecionados;
   });
+
+  // Nome dos selecionados que nunca passaram pelo dropdown (edição de um registro existente):
+  // pedido uma vez por id; falha libera nova tentativa na próxima mudança de `values`.
+  useEffect(() => {
+    if (!remoto || !resolverRef.current) return;
+    const faltando = values.filter((id) => !escolhidos[id] && !tentadosRef.current.has(id));
+    if (faltando.length === 0) return;
+    faltando.forEach((id) => tentadosRef.current.add(id));
+    resolverRef
+      .current(faltando)
+      .then((opcoes) => {
+        setEscolhidos((atual) => ({ ...atual, ...Object.fromEntries(opcoes.map((opcao) => [opcao.id, opcao])) }));
+        setResolvidos((atual) => ({ ...atual, ...Object.fromEntries(faltando.map((id) => [id, true as const])) }));
+      })
+      .catch(() => {
+        faltando.forEach((id) => tentadosRef.current.delete(id));
+      });
+  }, [remoto, values, escolhidos]);
 
   useEffect(() => {
     function handleClickOutside(event: globalThis.MouseEvent) {
@@ -159,14 +196,23 @@ export function MemberSelector({
   }
 
   // --- seleção -----------------------------------------------------------------------
-  const selecionados = remoto
-    ? values.map((id) => escolhidos[id]).filter((opcao): opcao is MemberOption => opcao !== undefined)
-    : options.filter((option) => values.includes(option.id));
+  const selecionados = remoto ? selecionadosDoServidor() : options.filter((option) => values.includes(option.id));
   const filtrados = remoto
     ? resultados
     : query.trim()
       ? options.filter((option) => option.nome.toLowerCase().includes(query.trim().toLowerCase()))
       : options;
+
+  /** Chips do modo servidor: os já conhecidos (id + nome) e, para quem ainda não tem nome, um chip
+   * provisório removível — sem ele o usuário não conseguiria tirar um responsável que não carregou. */
+  function selecionadosDoServidor(): MemberOption[] {
+    const conhecidos = values.filter((id) => escolhidos[id]).map((id) => escolhidos[id]);
+    if (ordenarSelecionados === "nome") conhecidos.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    const semNome = values
+      .filter((id) => !escolhidos[id])
+      .map((id) => ({ id, nome: !resolverSelecionados || resolvidos[id] ? "Usuário indisponível" : "Carregando…" }));
+    return [...conhecidos, ...semNome];
+  }
 
   function toggle(option: MemberOption) {
     const id = option.id;

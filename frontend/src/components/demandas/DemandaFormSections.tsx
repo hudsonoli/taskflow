@@ -11,13 +11,13 @@ import { Select } from "@/components/ui/Select";
 import { listHistoricoDemanda, patchDemandaReal, type DemandaPatchCampos } from "@/lib/api-backend";
 import {
   prioridadeDemandaLabels,
-  resolveResponsaveisDemandaNomes,
   statusDemandaEditaveis,
   statusDemandaLabels,
 } from "@/lib/demandas";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { useResponsaveisSelector, useUsuariosPorIds } from "@/lib/useResponsaveisSelector";
 import { corDoEventoHistorico, descreverEventoHistorico } from "@/lib/historicoDemandaLabels";
 import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
 import type { Demanda, DemandaHistoricoEvento, DemandaPrioridade, DemandaStatusEditavel } from "@/types/demanda";
@@ -360,13 +360,11 @@ export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
 
 export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSectionProps) {
   const { departamentos } = useDiretorioDepartamentos();
-  // Picker oferece usuário ativo + os já responsáveis (mesmo se arquivado/inativo/
-  // bloqueado) — sem isso, MemberSelector.selecionados fica vazio e o responsável
-  // persistido some silenciosamente da tela. Novo vínculo continua restrito a ativo.
-  const diretorio = useDiretorioUsuarios().usuarios;
-  const usuariosSelecionaveis = diretorio.filter(
-    (usuario) => usuario.status === "ativo" || demanda.usuarioResponsavelIds.includes(usuario.id),
-  );
+  // Responsáveis: o seletor pesquisa usuários ATIVOS no servidor (sem o corte do diretório de 200) e
+  // resolve o nome de quem já é responsável — mesmo arquivado/inativo/bloqueado ou além da primeira
+  // página — para o responsável persistido nunca sumir (nem virar UUID) da tela.
+  const responsaveis = useResponsaveisSelector();
+  const nomesDosResponsaveis = useUsuariosPorIds(demanda.usuarioResponsavelIds);
   const [erro, setErro] = useState<string | null>(null);
 
   const departamentosNomes = demanda.departamentoResponsavelIds
@@ -382,13 +380,10 @@ export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSection
           values={demanda.usuarioResponsavelIds}
           onChange={(values) => void salvarCampo(demanda, { usuarioResponsavelIds: values }, onChange, setErro)}
           placeholder="Selecionar responsáveis…"
-          options={usuariosSelecionaveis.map((usuario) => ({
-            id: usuario.id,
-            nome: usuario.nome,
-            subtitulo: departamentos.find((departamento) => departamento.id === usuario.departamentoId)?.nome,
-            corIdentificacao: usuario.corIdentificacao,
-            fotoUrl: usuario.fotoUrl,
-          }))}
+          buscarOpcoes={responsaveis.buscarOpcoes}
+          resolverSelecionados={responsaveis.resolverSelecionados}
+          ordenarSelecionados="nome"
+          emptyLabel="Nenhum usuário encontrado"
         />
         <MultiSelect
           label="Departamentos responsáveis"
@@ -401,7 +396,17 @@ export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSection
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <Input label="Usuários selecionados" value={resolveResponsaveisDemandaNomes(demanda.usuarioResponsavelIds, diretorio)} disabled />
+        <Input
+          label="Usuários selecionados"
+          value={
+            demanda.usuarioResponsavelIds.length === 0
+              ? "-"
+              : demanda.usuarioResponsavelIds
+                  .map((id) => nomesDosResponsaveis?.[id]?.nome ?? (nomesDosResponsaveis ? "Usuário indisponível" : "…"))
+                  .join(", ")
+          }
+          disabled
+        />
         <Input label="Departamentos selecionados" value={departamentosNomes} disabled />
       </div>
     </SectionShell>
