@@ -1,8 +1,89 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Tema controlado pela EMPRESA (Configurações → Personalizar), não pelo sistema operacional: o layout raiz
+   grava data-theme="claro|escuro" no <html> já no servidor (sem flash). `dark:` passa a seguir o atributo. */
+@custom-variant dark (&:where([data-theme="escuro"], [data-theme="escuro"] *));
+
+/* ── Tokens semânticos ──────────────────────────────────────────────────────────────────────────
+   Só as DUAS cores de marca são configuráveis (injetadas no <html> como --brand-* / --accent-*, ver
+   lib/branding-tokens.ts). Fundo, superfície, texto, borda e estados são FIXOS por tema e validados por
+   contraste (lib/branding-tokens.contrast.test.ts). Componentes novos devem usar estes tokens
+   (bg-surface, text-fg, border-field-line…) em vez das cores zinc ou do branco fixos. */
+:root,
+[data-theme="claro"] {
+  color-scheme: light;
+  --app-bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-hover: #f4f4f5;
+  --fg: #18181b;
+  --fg-muted: #5b5b64;
+  --fg-subtle: #6b6b74;
+  --fg-disabled: #a1a1aa;
+  --line: #e4e4e7;
+  --line-strong: #d4d4d8;
+  --field-bg: #ffffff;
+  --field-line: #8a8a94;
+  --field-bg-disabled: #f4f4f5;
+  --placeholder: #6b6b74;
+  --focus-ring: var(--color-indigo-600);
+  --success: #166534;
+  --warning: #854d0e;
+  --danger: #b91c1c;
+  --info: #1d4ed8;
+  --background: var(--app-bg);
+  --foreground: var(--fg);
+}
+
+[data-theme="escuro"] {
+  color-scheme: dark;
+  --app-bg: #09090b;
+  --surface: #18181b;
+  --surface-2: #27272a;
+  --surface-hover: #27272a;
+  --fg: #f4f4f5;
+  --fg-muted: #a1a1aa;
+  --fg-subtle: #8f8f99;
+  --fg-disabled: #5b5b64;
+  --line: #3f3f46;
+  --line-strong: #52525b;
+  --field-bg: #0f0f11;
+  --field-line: #71717a;
+  --field-bg-disabled: #1f1f23;
+  --placeholder: #8f8f99;
+  --focus-ring: var(--color-indigo-400);
+  --success: #4ade80;
+  --warning: #facc15;
+  --danger: #f87171;
+  --info: #60a5fa;
+}
+
+/* A escala indigo/violet do Tailwind É a cor da empresa: --brand-N (principal, passo 500 = a cor exata) e
+   --accent-N (secundária, passo 600 = a cor exata) só existem quando a empresa personalizou; sem elas
+   valem os valores originais do Tailwind — o visual padrão não muda. */
+@theme {
+  --color-indigo-50: var(--brand-50, oklch(96.2% 0.018 272.314));
+  --color-indigo-100: var(--brand-100, oklch(93% 0.034 272.788));
+  --color-indigo-200: var(--brand-200, oklch(87% 0.065 274.039));
+  --color-indigo-300: var(--brand-300, oklch(78.5% 0.115 274.713));
+  --color-indigo-400: var(--brand-400, oklch(67.3% 0.182 276.935));
+  --color-indigo-500: var(--brand-500, oklch(58.5% 0.233 277.117));
+  --color-indigo-600: var(--brand-600, oklch(51.1% 0.262 276.966));
+  --color-indigo-700: var(--brand-700, oklch(45.7% 0.24 277.023));
+  --color-indigo-800: var(--brand-800, oklch(39.8% 0.195 277.366));
+  --color-indigo-900: var(--brand-900, oklch(35.9% 0.144 278.697));
+  --color-indigo-950: var(--brand-950, oklch(25.7% 0.09 281.288));
+  --color-violet-50: var(--accent-50, oklch(96.9% 0.016 293.756));
+  --color-violet-100: var(--accent-100, oklch(94.3% 0.029 294.588));
+  --color-violet-200: var(--accent-200, oklch(89.4% 0.057 293.283));
+  --color-violet-300: var(--accent-300, oklch(81.1% 0.111 293.571));
+  --color-violet-400: var(--accent-400, oklch(70.2% 0.183 293.541));
+  --color-violet-500: var(--accent-500, oklch(60.6% 0.25 292.717));
+  --color-violet-600: var(--accent-600, oklch(54.1% 0.281 293.009));
+  --color-violet-700: var(--accent-700, oklch(49.1% 0.27 292.581));
+  --color-violet-800: var(--accent-800, oklch(43.2% 0.232 292.759));
+  --color-violet-900: var(--accent-900, oklch(38% 0.189 293.745));
+  --color-violet-950: var(--accent-950, oklch(28.3% 0.141 291.089));
 }
 
 @theme inline {
@@ -31,16 +112,91 @@
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* tokens semânticos → utilitários (bg-surface, text-fg-muted, border-field-line, ring-focus…) */
+  --color-app: var(--app-bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-disabled: var(--fg-disabled);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-field: var(--field-bg);
+  --color-field-line: var(--field-line);
+  --color-field-disabled: var(--field-bg-disabled);
+  --color-placeholder: var(--placeholder);
+  --color-focus: var(--focus-ring);
+  --color-primary: var(--color-indigo-500);
+  --color-primary-fg: var(--on-primary, #ffffff);
+  --color-secondary: var(--color-violet-600);
+  --color-secondary-fg: var(--on-secondary, #ffffff);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     "Segoe UI Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ── Controles de formulário (input, select, textarea, date/time, busca, combobox…) ──────────────
+   Um só visual para todos os campos, nos dois temas: borda ≥3:1 contra o fundo (o campo nunca "some"),
+   placeholder legível, foco visível, e estados disabled/readonly/erro distintos. Em @layer components:
+   utilitários (px-3, pl-10, w-auto…) continuam vencendo. */
+@layer components {
+  .field {
+    width: 100%;
+    border: 1px solid var(--field-line);
+    background-color: var(--field-bg);
+    color: var(--fg);
+    outline: none;
+    transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
   }
+  .field::placeholder {
+    color: var(--placeholder);
+    opacity: 1;
+  }
+  .field:hover:not(:disabled):not([readonly]):not(:focus) {
+    border-color: var(--fg-muted);
+  }
+  .field:focus,
+  .field:focus-visible {
+    border-color: var(--focus-ring);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 28%, transparent);
+  }
+  .field:disabled {
+    background-color: var(--field-bg-disabled);
+    border-color: var(--line-strong);
+    color: var(--fg-subtle);
+    cursor: not-allowed;
+  }
+  .field[readonly] {
+    background-color: var(--field-bg-disabled);
+    border-style: dashed;
+  }
+  .field[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+  .field-check {
+    accent-color: var(--color-indigo-600);
+    border-color: var(--field-line);
+  }
+  [data-theme="escuro"] .field-check {
+    accent-color: var(--color-indigo-400);
+  }
+}
+
+/* Marca: gradiente principal→secundária e o texto sobre ele (branco ou quase-preto, escolhido por WCAG). */
+.bg-brand-gradient {
+  /* shorthand: --brand-gradient pode ser um degradê OU, quando o texto não é legível nas duas pontas, uma cor sólida */
+  background: var(--brand-gradient, linear-gradient(to bottom right, var(--color-indigo-500), var(--color-violet-600)));
+  color: var(--on-brand, #ffffff);
+}
+.text-on-brand {
+  color: var(--on-brand, #ffffff);
 }
 
 body {
@@ -124,7 +280,6 @@ body {
 
 /* Paleta de dataviz validada (dataviz skill) — ordem fixa, não ciclar. */
 .viz-root {
-  color-scheme: light;
   --viz-surface: #fcfcfb;
   --viz-text-primary: #0b0b0b;
   --viz-text-secondary: #52514e;
@@ -141,22 +296,19 @@ body {
   --viz-series-8: #e34948;
 }
 
-@media (prefers-color-scheme: dark) {
-  .viz-root {
-    color-scheme: dark;
-    --viz-surface: #1a1a19;
-    --viz-text-primary: #ffffff;
-    --viz-text-secondary: #c3c2b7;
-    --viz-text-muted: #898781;
-    --viz-grid: #2c2c2a;
-    --viz-baseline: #383835;
-    --viz-series-1: #3987e5;
-    --viz-series-2: #d95926;
-    --viz-series-3: #199e70;
-    --viz-series-4: #c98500;
-    --viz-series-5: #d55181;
-    --viz-series-6: #008300;
-    --viz-series-7: #9085e9;
-    --viz-series-8: #e66767;
-  }
+[data-theme="escuro"] .viz-root {
+  --viz-surface: #1a1a19;
+  --viz-text-primary: #ffffff;
+  --viz-text-secondary: #c3c2b7;
+  --viz-text-muted: #898781;
+  --viz-grid: #2c2c2a;
+  --viz-baseline: #383835;
+  --viz-series-1: #3987e5;
+  --viz-series-2: #d95926;
+  --viz-series-3: #199e70;
+  --viz-series-4: #c98500;
+  --viz-series-5: #d55181;
+  --viz-series-6: #008300;
+  --viz-series-7: #9085e9;
+  --viz-series-8: #e66767;
 }

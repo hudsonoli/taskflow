@@ -1,3 +1,5 @@
+import { corSobre } from "@/lib/branding-tokens";
+
 export const coresIdentificacaoDisponiveis: { id: string; hex: string }[] = [
   { id: "zinc", hex: "#a1a1aa" },
   { id: "blue", hex: "#3b82f6" },
@@ -13,4 +15,11 @@ export const coresIdentificacaoDisponiveis: { id: string; hex: string }[] = [
 
 export function resolveCorIdentificacaoHex(corId: string): string {
   return coresIdentificacaoDisponiveis.find((cor) => cor.id === corId)?.hex ?? coresIdentificacaoDisponiveis[0].hex;
+}
+
+/** Estilo de um "chip" de identificação (avatar, ícone de cadastro): fundo na cor escolhida e a letra/ícone em
+ * branco ou quase-preto — o que tiver mais contraste (a cor é livre, então o branco fixo falhava em amarelo/ciano). */
+export function estiloCorIdentificacao(corId: string): { backgroundColor: string; color: string } {
+  const backgroundColor = resolveCorIdentificacaoHex(corId);
+  return { backgroundColor, color: corSobre(backgroundColor) };
 }

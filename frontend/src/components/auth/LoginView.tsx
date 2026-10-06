@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
-import { Sparkles } from "lucide-react";
+import { BrandLogo } from "@/components/branding/BrandLogo";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAppData } from "@/lib/AppDataContext";
@@ -94,17 +94,15 @@ export function LoginView({ googleClientId }: { googleClientId: string | null })
   }, [googleClientId, googleScriptPronto, emailValido, email]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
+    <div className="flex min-h-screen items-center justify-center bg-app px-4">
       {googleClientId && (
         <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onLoad={() => setGoogleScriptPronto(true)} />
       )}
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30">
-            <Sparkles size={20} />
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Entrar no Taskfloww</h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Use o e-mail e a senha do seu cadastro.</p>
+          <BrandLogo variant="auth" className="mb-3" />
+          <h1 className="text-lg font-semibold tracking-tight text-fg">Entrar no Taskfloww</h1>
+          <p className="mt-1 text-sm text-fg-muted">Use o e-mail e a senha do seu cadastro.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -125,13 +123,13 @@ export function LoginView({ googleClientId }: { googleClientId: string | null })
             required
           />
           <div className="-mt-2 text-right">
-            <Link href="/esqueci-senha" className="text-xs text-zinc-500 hover:text-indigo-600 hover:underline dark:text-zinc-400 dark:hover:text-indigo-400">
+            <Link href="/esqueci-senha" className="text-xs text-fg-muted hover:text-indigo-600 hover:underline dark:hover:text-indigo-400">
               Esqueci minha senha
             </Link>
           </div>
 
           {erro && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
               {erro}
             </p>
           )}
@@ -143,7 +141,7 @@ export function LoginView({ googleClientId }: { googleClientId: string | null })
 
         {googleClientId && emailValido && (
           <div className="mt-4 flex flex-col items-center gap-3">
-            <div className="flex w-full items-center gap-3 text-xs text-zinc-400">
+            <div className="flex w-full items-center gap-3 text-xs text-fg-subtle">
               <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
               ou
               <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />

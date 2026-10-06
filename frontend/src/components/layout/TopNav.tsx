@@ -12,7 +12,6 @@ import {
   ListChecks,
   Menu,
   Settings,
-  Sparkles,
   Sun,
   X,
 } from "lucide-react";
@@ -28,6 +27,7 @@ import {
   podeAcessarMeuDepartamento,
   podeAcessarMinhasDemandas,
 } from "@/lib/escopo-operacional";
+import { BrandLogo } from "@/components/branding/BrandLogo";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { ProfileMenu } from "@/components/layout/ProfileMenu";
 import type { DepartamentoDiretorioItem } from "@/lib/api-backend";
@@ -93,15 +93,10 @@ export function TopNav() {
   const navItems = buildNavItems(usuarioAtual, departamentos);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/70 backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/70">
+    <header className="sticky top-0 z-20 border-b border-line bg-white/70 backdrop-blur-xl dark:bg-zinc-950/70">
       <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30">
-            <Sparkles size={18} />
-          </div>
-          <span className="hidden text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:inline">
-            Taskfloww
-          </span>
+        <Link href="/" className="flex shrink-0 items-center" aria-label="Início">
+          <BrandLogo variant="header" />
         </Link>
 
         <nav className="hidden flex-1 items-center justify-center gap-1.5 overflow-x-auto md:flex">
@@ -115,7 +110,7 @@ export function TopNav() {
                   "relative flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2.5 text-sm font-medium transition-colors",
                   isActive
                     ? "text-indigo-600 dark:text-indigo-400"
-                    : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100",
+                    : "text-fg-muted hover:text-fg",
                 )}
               >
                 {isActive && (
@@ -149,7 +144,7 @@ export function TopNav() {
             type="button"
             onClick={() => setMobileOpen((current) => !current)}
             aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 text-zinc-500 transition-colors hover:text-zinc-900 md:hidden dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-fg-muted transition-colors hover:text-fg md:hidden"
           >
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>

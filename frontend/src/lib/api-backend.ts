@@ -61,6 +61,8 @@ import type { Peca, PecaDiretorioItem, PecaFormDraft } from "@/types/peca";
 import type { ModeloCampanha, ModeloCampanhaDiretorioItem, ModeloCampanhaFormDraft } from "@/types/modelo-campanha";
 import { itemModeloCampanhaDraftParaPayload } from "@/lib/modeloCampanhaItens";
 import type { SlaRegra, SlaRegraFormDraft, SlaRegraStatus } from "@/types/sla";
+import { normalizarBranding } from "@/lib/branding";
+import type { Branding, PersonalizacaoUpdatePayload } from "@/types/personalizacao";
 import type {
   ConfiguracaoEmailFormDraft,
   ConfiguracaoEmailRead,
@@ -2738,4 +2740,44 @@ export async function testarConfiguracaoEmailReal(): Promise<ConfiguracaoEmailTe
 
 export async function obterNumeracaoTarefaReal(): Promise<ConfiguracaoNumeracaoTarefaRead> {
   return request<ConfiguracaoNumeracaoTarefaRead>("/configuracoes/numeracao-tarefas");
+}
+
+
+// ── Personalização visual (Configurações → Personalizar) ──────────────────────────────────────────
+// A Empresa vem SEMPRE do token (cookie de sessão no proxy) — nenhum empresaId é enviado.
+export async function obterPersonalizacaoReal(): Promise<Branding> {
+  return normalizarBranding(await request<unknown>("/configuracoes/personalizacao"));
+}
+
+export async function atualizarPersonalizacaoReal(payload: PersonalizacaoUpdatePayload): Promise<Branding> {
+  return normalizarBranding(
+    await request<unknown>("/configuracoes/personalizacao", { method: "PATCH", body: JSON.stringify(payload) }),
+  );
+}
+
+/** Restaurar padrão: remove logo e devolve cores/tema ao padrão — não mexe em nenhuma outra configuração. */
+export async function restaurarPersonalizacaoPadraoReal(): Promise<Branding> {
+  return normalizarBranding(await request<unknown>("/configuracoes/personalizacao", { method: "DELETE" }));
+}
+
+export async function removerLogoPersonalizacaoReal(): Promise<Branding> {
+  return normalizarBranding(await request<unknown>("/configuracoes/personalizacao/logo", { method: "DELETE" }));
+}
+
+// Upload multipart — não passa por `request()` (que força JSON e destruiria o boundary do FormData).
+export async function enviarLogoPersonalizacaoReal(arquivo: File): Promise<Branding> {
+  const formData = new FormData();
+  formData.append("arquivo", arquivo);
+  const response = await fetch("/api/backend/configuracoes/personalizacao/logo", {
+    method: "POST",
+    body: formData,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    const detail = data?.detail;
+    const message = typeof detail === "string" ? detail : (detail?.message ?? data?.message);
+    throw new Error(message ?? `Erro ${response.status}`);
+  }
+  return normalizarBranding(await response.json());
 }

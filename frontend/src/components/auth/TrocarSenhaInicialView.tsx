@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound } from "lucide-react";
+import { BrandLogo } from "@/components/branding/BrandLogo";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAppData } from "@/lib/AppDataContext";
@@ -37,16 +38,17 @@ export function TrocarSenhaInicialView() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex min-h-screen items-center justify-center bg-app px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
+          <BrandLogo variant="auth" className="mb-4" />
+          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
             <KeyRound size={20} />
           </div>
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+          <h1 className="text-lg font-semibold tracking-tight text-fg">
             {nome ? `Olá, ${nome}` : "Defina sua nova senha"}
           </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-sm text-fg-muted">
             Este é seu primeiro acesso — por segurança, defina uma senha nova antes de continuar.
           </p>
         </div>
@@ -80,7 +82,7 @@ export function TrocarSenhaInicialView() {
           />
 
           {erro && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
               {erro}
             </p>
           )}

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Building2, Clock, ClipboardList, Hash, History, Layers3, LayoutTemplate, Mail, ShieldCheck, Tag, Timer, Truck, UsersRound, Workflow } from "lucide-react";
+import { Building2, Clock, Palette, ClipboardList, Hash, History, Layers3, LayoutTemplate, Mail, ShieldCheck, Tag, Timer, Truck, UsersRound, Workflow } from "lucide-react";
 
 export type ItemConfiguracao = {
   label: string;
@@ -60,6 +60,14 @@ export const gruposConfiguracao: GrupoConfiguracao[] = [
         available: true,
         apenasAdmin: true,
         permissaoNecessaria: "permissoes.gerenciar",
+      },
+      {
+        label: "Personalizar",
+        description: "Logo, cores da marca e tema claro/escuro de toda a empresa.",
+        href: "/configuracoes/personalizar",
+        icon: Palette,
+        available: true,
+        apenasAdministrativo: true,
       },
       { label: "SLA", description: "Prazos de resposta e resolução por prioridade, departamento ou cliente.", href: "/configuracoes/sla", icon: Timer, available: true },
       { label: "Horário de expediente", description: "Turnos da agência e pausa automática de tarefas.", href: "/configuracoes/horario-expediente", icon: Clock, available: true },

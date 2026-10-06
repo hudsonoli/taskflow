@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND_URL, SESSION_COOKIE_NAME } from "@/lib/server/backend";
+import { invalidarBranding } from "@/lib/server/branding";
 
 // Proxy autenticado genérico — o browser nunca fala direto com o FastAPI nem vê o JWT.
 // Lê o cookie HttpOnly, encaminha com Authorization: Bearer, repassa a resposta (status,
@@ -33,6 +34,9 @@ async function proxy(request: NextRequest, path: string[]) {
     body: hasBody ? (ehMultipart ? await request.arrayBuffer() : await request.text()) : undefined,
     cache: "no-store",
   });
+
+  // Personalização visual alterada → o branding em cache (usado no SSR do layout) deixa de valer.
+  if (hasBody && backendResponse.ok && path[0] === "configuracoes" && path[1] === "personalizacao") invalidarBranding();
 
   if (backendResponse.status === 204) {
     return new NextResponse(null, { status: 204 });
