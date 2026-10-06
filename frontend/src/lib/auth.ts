@@ -12,6 +12,8 @@ export type SessaoAtual = {
   acessoSistema: boolean;
   status: "ativo" | "inativo" | "bloqueado" | "arquivado";
   mustChangePassword: boolean;
+  /** preferência pessoal de tema; null = usar o padrão da empresa */
+  temaPreferencia?: "claro" | "escuro" | "sistema" | null;
 };
 
 export async function login(email: string, senha: string): Promise<{ mustChangePassword: boolean }> {

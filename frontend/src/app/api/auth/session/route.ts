@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { BACKEND_URL, SESSION_COOKIE_NAME } from "@/lib/server/backend";
+import { sincronizarCookieTema } from "@/lib/server/tema";
+import { COOKIE_TEMA } from "@/lib/tema";
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -18,9 +20,12 @@ export async function GET() {
   if (!backendResponse.ok) {
     // Token inválido/expirado — limpa o cookie pra não ficar tentando de novo.
     cookieStore.delete(SESSION_COOKIE_NAME);
+    cookieStore.delete(COOKIE_TEMA);
     return NextResponse.json({ message: "Sessão expirada" }, { status: 401 });
   }
 
   const data = await backendResponse.json();
+  // Reconcilia o cookie-espelho com o banco (outra aba/computador pode ter mudado a preferência).
+  sincronizarCookieTema(cookieStore, data?.temaPreferencia);
   return NextResponse.json(data);
 }

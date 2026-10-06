@@ -234,7 +234,7 @@ export function PersonalizacaoView() {
           />
 
           <fieldset>
-            <legend className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Tema</legend>
+            <legend className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Tema padrão da empresa</legend>
             <div className="inline-flex rounded-xl border border-field-line bg-field p-1" role="radiogroup" aria-label="Tema">
               {TEMAS.map(({ valor, rotulo, icone: Icone }) => {
                 const ativo = rascunho.tema === valor;
@@ -256,7 +256,8 @@ export function PersonalizacaoView() {
               })}
             </div>
             <p className="mt-1.5 text-xs text-fg-muted">
-              Fundo, texto, bordas e estados são definidos pelo tema e não são configuráveis — o contraste é garantido.
+              Usuários podem escolher uma preferência individual no menu do perfil. Fundo, texto, bordas e estados são
+              definidos pelo tema e não são configuráveis — o contraste é garantido.
             </p>
           </fieldset>
         </div>

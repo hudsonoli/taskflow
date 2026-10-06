@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useBranding } from "@/lib/BrandingContext";
+import { normalizarPreferencia } from "@/lib/tema";
 import { fetchSessao, fetchUsuarioAtualCompleto, logout as logoutRequest } from "@/lib/auth";
 import { listDemandasReais } from "@/lib/api-backend";
 import type { Demanda } from "@/types/demanda";
@@ -49,9 +51,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [usuarioAtual, setUsuarioAtual] = useState<Usuario | undefined>(undefined);
   const perfilAtual: PerfilUsuario = usuarioAtual?.perfil ?? "operador";
+  // `sincronizarSessao` é estável (useCallback sem dependências); fica numa ref para `recarregarSessao` continuar
+  // sem dependências de efeito, como antes.
+  const { sincronizarSessao } = useBranding();
+  const sincronizarSessaoRef = useRef(sincronizarSessao);
+  useEffect(() => {
+    sincronizarSessaoRef.current = sincronizarSessao;
+  }, [sincronizarSessao]);
 
   async function recarregarSessao() {
     const sessao = await fetchSessao();
+    // Tema pessoal: a preferência REAL (banco) chega com a sessão; sem sessão, nenhum override vale.
+    sincronizarSessaoRef.current(sessao ? { temaPreferencia: normalizarPreferencia(sessao.temaPreferencia) } : null);
     if (!sessao) {
       setAutenticado(false);
       setMustChangePassword(false);
@@ -77,6 +88,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await logoutRequest();
+    sincronizarSessaoRef.current(null);
     setAutenticado(false);
     setMustChangePassword(false);
     setUsuarioAtual(undefined);

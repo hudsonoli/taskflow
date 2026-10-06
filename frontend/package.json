@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:contraste": "node --test src/lib/branding-tokens.contrast.test.ts"
+    "test:contraste": "node --test src/lib/branding-tokens.contrast.test.ts",
+    "test:tema": "node --test src/lib/tema.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
