@@ -16,6 +16,7 @@ from app.models import (  # noqa: E402,F401
     cliente,
     cliente_grupo,
     configuracao_email,
+    configuracao_personalizacao,
     demanda,
     demanda_arquivo,
     demanda_checklist_item,
