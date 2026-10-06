@@ -95,5 +95,7 @@ class AuthMeResponse(BaseModel):
     # UsuarioPermissaoService.obter_permissoes_efetivas. Aditivo — campo novo, não remove
     # nenhum existente.
     permissoes: list[str] = Field(default_factory=list)
+    # Preferência pessoal de tema; null = herdar o tema padrão da empresa. Aditivo.
+    tema_preferencia: Literal["claro", "escuro", "sistema"] | None = Field(default=None, alias="temaPreferencia")
 
     model_config = ConfigDict(populate_by_name=True)

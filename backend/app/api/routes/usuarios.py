@@ -11,6 +11,7 @@ from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import ensure_resource_empresa, ensure_same_empresa
 from app.dependencies.permissoes import require_permissao
 from app.models.usuario import Usuario
+from app.schemas.usuario_preferencias import UsuarioPreferenciasRead, UsuarioPreferenciasUpdate
 from app.schemas.usuario import (
     UsuarioCreate,
     UsuarioDiretorioRead,
@@ -176,6 +177,18 @@ def get_me(
     # Fase 2G.10A — só em /me: ver nota em UsuarioRead.permissoes.
     permissoes = usuario_permissao_service.obter_permissoes_efetivas(db, usuario)
     return leitura.model_copy(update={"permissoes": permissoes})
+
+
+@router.patch("/me/preferencias", response_model=UsuarioPreferenciasRead)
+def atualizar_minhas_preferencias(
+    payload: UsuarioPreferenciasUpdate,
+    # Aberto a qualquer autenticado com senha em dia: cada um altera SÓ a própria preferência (a
+    # identidade vem do token; a rota não recebe usuarioId). Não depende de permissão nenhuma.
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    usuario = usuario_service.definir_tema_preferencia(db, current_user.id, payload.tema)
+    return UsuarioPreferenciasRead(temaPreferencia=usuario.tema_preferencia)
 
 
 @router.get("/diretorio", response_model=list[UsuarioDiretorioRead])

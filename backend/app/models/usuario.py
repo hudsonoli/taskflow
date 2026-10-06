@@ -35,6 +35,10 @@ class Usuario(Base):
             "status IN ('ativo', 'inativo', 'bloqueado', 'arquivado')",
             name="ck_usuarios_status",
         ),
+        CheckConstraint(
+            "tema_preferencia IS NULL OR tema_preferencia IN ('claro', 'escuro', 'sistema')",
+            name="ck_usuarios_tema_preferencia",
+        ),
         UniqueConstraint("empresa_id", "codigo_interno", name="uq_usuarios_empresa_codigo_interno"),
         UniqueConstraint("empresa_id", "email", name="uq_usuarios_empresa_email"),
         # Global, não por empresa: um `sub` do Google é único no mundo — ver migration 0035.
@@ -118,3 +122,8 @@ class Usuario(Base):
     google_given_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     google_family_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     google_locale: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # Preferência PESSOAL de tema (claro | escuro | sistema). NULL = "usar o padrão da empresa"
+    # (configuracoes_personalizacao.tema) — é o estado de todo usuário existente. Só o próprio usuário
+    # altera (PATCH /usuarios/me/preferencias); logo e cores continuam globais por empresa.
+    tema_preferencia: Mapped[str | None] = mapped_column(String(16), nullable=True)

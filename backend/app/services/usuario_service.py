@@ -246,6 +246,15 @@ class UsuarioService:
             raise UsuarioNotFoundError("Usuário não encontrado")
         return usuario
 
+    def definir_tema_preferencia(self, db: Session, usuario_id: str, tema: str | None) -> Usuario:
+        """Preferência pessoal de tema do próprio usuário (None = herdar o padrão da empresa). Não gera evento
+        de domínio nem mexe em nenhum outro campo: é uma preferência de interface, não um dado cadastral."""
+        usuario = self.get_me(db, usuario_id)
+        usuario.tema_preferencia = tema
+        self.repository.update(db, usuario)
+        db.commit()
+        return usuario
+
     def update_usuario(
         self,
         db: Session,

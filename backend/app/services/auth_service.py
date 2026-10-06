@@ -327,6 +327,7 @@ class AuthService:
             status=usuario.status,
             mustChangePassword=bool(credencial and credencial.senha_deve_ser_alterada),
             permissoes=permissoes,
+            temaPreferencia=usuario.tema_preferencia,
         )
 
     def alterar_senha(
