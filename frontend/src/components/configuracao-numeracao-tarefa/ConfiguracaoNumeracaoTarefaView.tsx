@@ -49,7 +49,7 @@ export function ConfiguracaoNumeracaoTarefaView() {
 
   if (carregando) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white p-10 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+      <div className="flex items-center justify-center gap-2 rounded-2xl border border-line bg-surface p-10 text-sm text-fg-muted shadow-sm">
         <Loader2 className="h-4 w-4 animate-spin" />
         Carregando numeração de tarefas…
       </div>
@@ -66,7 +66,7 @@ export function ConfiguracaoNumeracaoTarefaView() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-xl border border-line bg-surface p-4 shadow-sm"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -74,8 +74,8 @@ export function ConfiguracaoNumeracaoTarefaView() {
               <Hash className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Numeração de tarefas</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <h1 className="text-lg font-semibold tracking-tight text-fg">Numeração de tarefas</h1>
+              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
                 Gerenciado automaticamente pelo sistema.
               </p>
             </div>
@@ -84,39 +84,39 @@ export function ConfiguracaoNumeracaoTarefaView() {
         </div>
       </motion.div>
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Entidade</p>
-            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{dados.rotuloEntidade}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Entidade</p>
+            <p className="mt-1 text-lg font-semibold text-fg">{dados.rotuloEntidade}</p>
           </div>
           <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Status</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Status</p>
             <p className="mt-1 flex items-center gap-1.5 text-lg font-semibold">
               {dados.consistente ? (
                 <>
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
                   <span className="text-emerald-700 dark:text-emerald-400">Consistente</span>
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-400" />
                   <span className="text-amber-700 dark:text-amber-400">Atenção necessária</span>
                 </>
               )}
             </p>
           </div>
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/5">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-500 dark:text-indigo-400">Contador atual</p>
-            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{formatarNumero(dados.contadorAtual)}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-400">Contador atual</p>
+            <p className="mt-1 text-lg font-semibold text-fg">{formatarNumero(dados.contadorAtual)}</p>
           </div>
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/5">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-500 dark:text-indigo-400">Próximo número</p>
-            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{formatarNumero(dados.proximoNumeroEstimado)}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-400">Próximo número</p>
+            <p className="mt-1 text-lg font-semibold text-fg">{formatarNumero(dados.proximoNumeroEstimado)}</p>
           </div>
           <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30 sm:col-span-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Maior número emitido no TaskFloww</p>
-            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Maior número emitido no TaskFloww</p>
+            <p className="mt-1 text-lg font-semibold text-fg">
               {dados.maiorNumeroEmitido != null ? formatarNumero(dados.maiorNumeroEmitido) : "—"}
             </p>
           </div>
@@ -129,7 +129,7 @@ export function ConfiguracaoNumeracaoTarefaView() {
           </div>
         )}
 
-        <div className="mt-5 flex flex-col gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+        <div className="mt-5 flex flex-col gap-1.5 text-xs text-fg-muted">
           <p>A numeração é contínua e não reinicia a cada ano.</p>
           <p>A inicialização para continuidade de sistemas anteriores é feita administrativamente antes da primeira emissão.</p>
         </div>

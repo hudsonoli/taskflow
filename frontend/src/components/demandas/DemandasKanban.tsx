@@ -92,11 +92,11 @@ export function DemandasKanban({
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">Fluxo por status</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Arraste um card para mudar o status, ou clique para abrir os detalhes.</p>
+          <h2 className="text-base font-semibold text-fg">Fluxo por status</h2>
+          <p className="text-sm text-fg-muted">Arraste um card para mudar o status, ou clique para abrir os detalhes.</p>
         </div>
         {estado?.ativo && (
           <Badge tone={expediente.dentroExpediente ? "green" : "amber"}>

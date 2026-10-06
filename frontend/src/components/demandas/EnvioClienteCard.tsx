@@ -73,8 +73,8 @@ export function EnvioClienteCard({ demanda, onChange }: { demanda: Demanda; onCh
               <Clock className="h-4 w-4" />
             </span>
             <div>
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Aguardando retorno do cliente</p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-sm font-semibold text-fg">Aguardando retorno do cliente</p>
+              <p className="text-xs text-fg-muted">
                 Enviado em {formatPrazo(demanda.enviadoClienteEm ?? "")} · retorno até{" "}
                 <strong>{formatPrazo(demanda.prazoRetornoCliente ?? "")}</strong>
               </p>
@@ -100,8 +100,8 @@ export function EnvioClienteCard({ demanda, onChange }: { demanda: Demanda; onCh
     <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/40">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Enviar para o cliente</p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Marca o prazo de retorno para alteração/aprovação.</p>
+          <p className="text-sm font-semibold text-fg">Enviar para o cliente</p>
+          <p className="text-xs text-fg-muted">Marca o prazo de retorno para alteração/aprovação.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <Input

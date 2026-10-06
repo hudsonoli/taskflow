@@ -34,12 +34,12 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50/70 p-1.5 dark:border-zinc-700 dark:bg-zinc-800/60">
+      <div className="border border-line bg-surface-2 mb-2 flex flex-wrap items-center gap-1.5 rounded-xl p-1.5">
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => exec("bold")}
-          className="rounded-lg p-1.5 text-zinc-600 hover:bg-white dark:text-zinc-300 dark:hover:bg-zinc-900"
+          className="rounded-lg p-1.5 text-zinc-600 hover:bg-surface dark:text-zinc-300"
           title="Negrito"
           aria-label="Negrito"
         >
@@ -47,7 +47,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
         </button>
 
         <div className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
-        <span className="px-0.5 text-xs text-zinc-400">Grifo</span>
+        <span className="px-0.5 text-xs text-fg-subtle">Grifo</span>
         {HIGHLIGHT_COLORS.map((color) => (
           <button
             key={color.value}
@@ -62,7 +62,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
         ))}
 
         <div className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
-        <span className="px-0.5 text-xs text-zinc-400">Cor</span>
+        <span className="px-0.5 text-xs text-fg-subtle">Cor</span>
         {FONT_COLORS.map((color) => (
           <button
             key={color.value}
@@ -80,7 +80,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
           type="button"
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => exec("removeFormat")}
-          className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-zinc-500 hover:bg-white dark:text-zinc-400 dark:hover:bg-zinc-900"
+          className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface"
           title="Limpar formatação"
           aria-label="Limpar formatação"
         >
@@ -94,7 +94,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
         contentEditable
         suppressContentEditableWarning
         onInput={() => ref.current && onChange(ref.current.innerHTML)}
-        className="min-h-[180px] rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-sm leading-6 text-zinc-900 outline-none transition focus:border-indigo-300 focus:bg-white focus:shadow-sm dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-100 dark:focus:bg-zinc-900"
+        className="field min-h-[180px] rounded-xl px-3 py-2.5 text-sm leading-6"
       />
     </div>
   );

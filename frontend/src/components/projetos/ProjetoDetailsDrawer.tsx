@@ -105,9 +105,9 @@ export function ProjetoDetailsDrawer({
                   <FolderKanban className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">Painel do projeto</p>
-                  <h3 className="mt-1 text-lg font-semibold text-zinc-950 dark:text-zinc-50">{projeto.campanha}</h3>
-                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{nomeCliente}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">Painel do projeto</p>
+                  <h3 className="mt-1 text-lg font-semibold text-fg">{projeto.campanha}</h3>
+                  <p className="mt-1 text-sm text-fg-muted">{nomeCliente}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -116,18 +116,18 @@ export function ProjetoDetailsDrawer({
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl bg-white p-3 ring-1 ring-zinc-100 dark:bg-zinc-900 dark:ring-zinc-800">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Responsáveis</p>
+            <div className="mt-4 rounded-xl bg-surface p-3 ring-1 ring-zinc-100 dark:ring-zinc-800">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Responsáveis</p>
               <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                <UsersRound className="h-4 w-4 text-zinc-400" />
+                <UsersRound className="h-4 w-4 text-fg-subtle" />
                 {nomesResponsaveis}
               </p>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="mt-1 text-xs text-fg-muted">
                 {nomesDepartamentos}
               </p>
             </div>
 
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-zinc-400">
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-fg-subtle">
               <CalendarDays className="h-3.5 w-3.5" />
               Prazo: {projeto.dataFimPrevista}
             </p>

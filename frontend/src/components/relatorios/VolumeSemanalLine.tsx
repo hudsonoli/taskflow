@@ -81,7 +81,7 @@ export function VolumeSemanalTable({ pontos }: { pontos: PontoLinha[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
-        <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+        <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle">
           <tr>
             <th className="py-2">Semana</th>
             <th className="py-2 text-right">Demandas criadas</th>
@@ -91,7 +91,7 @@ export function VolumeSemanalTable({ pontos }: { pontos: PontoLinha[] }) {
           {pontos.map((ponto) => (
             <tr key={ponto.inicioSemana}>
               <td className="py-2 text-zinc-700 dark:text-zinc-300">{ponto.semanaLabel}</td>
-              <td className="py-2 text-right font-semibold text-zinc-900 dark:text-zinc-100">{ponto.value}</td>
+              <td className="py-2 text-right font-semibold text-fg">{ponto.value}</td>
             </tr>
           ))}
         </tbody>

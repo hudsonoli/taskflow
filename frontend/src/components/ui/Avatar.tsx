@@ -1,5 +1,5 @@
 import { User } from "lucide-react";
-import { resolveCorIdentificacaoHex } from "@/lib/cores";
+import { estiloCorIdentificacao } from "@/lib/cores";
 
 export function Avatar({
   nome,
@@ -19,7 +19,7 @@ export function Avatar({
   return (
     <div
       className={`${className} flex items-center justify-center font-bold text-white`}
-      style={{ backgroundColor: resolveCorIdentificacaoHex(corIdentificacao) }}
+      style={estiloCorIdentificacao(corIdentificacao)}
     >
       {nome.trim().slice(0, 1).toUpperCase() || <User className="h-4 w-4" />}
     </div>

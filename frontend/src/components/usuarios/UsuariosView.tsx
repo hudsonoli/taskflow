@@ -257,14 +257,14 @@ export function UsuariosView() {
             />
           </div>
 
-          {erro && <p className="text-xs text-red-500">{erro}</p>}
+          {erro && <p className="text-xs text-red-600">{erro}</p>}
 
           {temMais && !carregando && (
             <div className="flex flex-col items-center gap-1">
               <Button type="button" variant="secondary" onClick={carregarMais} disabled={carregandoMais}>
                 {carregandoMais ? "Carregando…" : "Carregar mais"}
               </Button>
-              {erroMais && <p className="text-xs text-red-500">{erroMais}</p>}
+              {erroMais && <p className="text-xs text-red-600">{erroMais}</p>}
             </div>
           )}
         </>

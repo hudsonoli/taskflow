@@ -150,18 +150,18 @@ export function CategoriasPecaView() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="grid flex-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="block text-sm">
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                 Busca
               </span>
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar por nome"
-                className="w-full rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-300 focus:bg-white focus:shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-100 dark:focus:bg-zinc-900"
+                className="field w-full rounded-xl px-3 py-2.5 text-sm"
               />
             </label>
 
@@ -179,8 +179,8 @@ export function CategoriasPecaView() {
                   onClick={() => setFiltro(opcao.id)}
                   className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                     filtro === opcao.id
-                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
-                      : "text-zinc-500 dark:text-zinc-400"
+                      ? "bg-white text-fg shadow-sm dark:bg-zinc-950"
+                      : "text-fg-muted"
                   }`}
                 >
                   {opcao.label}
@@ -203,10 +203,10 @@ export function CategoriasPecaView() {
           icon={<Tag size={18} />}
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:bg-zinc-950/40">
+              <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle dark:bg-zinc-950/40">
                 <tr>
                   <th className="px-4 py-2.5">Nome</th>
                   <th className="px-4 py-2.5 text-right">Ordem</th>
@@ -223,11 +223,11 @@ export function CategoriasPecaView() {
                       categoria.status === "ativo" ? "" : "opacity-60"
                     }`}
                   >
-                    <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100">{categoria.nome}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-zinc-600 dark:text-zinc-400">
+                    <td className="px-4 py-3 font-semibold text-fg">{categoria.nome}</td>
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-fg-muted">
                       {categoria.ordem}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-zinc-600 dark:text-zinc-400">
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-fg-muted">
                       {contagemPorCategoria[categoria.id] ?? 0}
                     </td>
                     <td className="px-4 py-3">

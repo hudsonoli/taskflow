@@ -38,18 +38,18 @@ export function SlaTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
       <div className="flex flex-col gap-1 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">Regras de SLA</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Prazos de resposta e resolução por prioridade, departamento ou cliente.</p>
+          <h2 className="text-base font-semibold text-fg">Regras de SLA</h2>
+          <p className="text-sm text-fg-muted">Prazos de resposta e resolução por prioridade, departamento ou cliente.</p>
         </div>
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">{slaRegras.length} registro(s)</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">{slaRegras.length} registro(s)</span>
       </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-[960px] w-full text-left text-sm">
-          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:bg-zinc-950/40">
+          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle dark:bg-zinc-950/40">
             <tr>
               <th className="px-4 py-2.5">Nome</th>
               <th className="px-4 py-2.5">Escopo</th>
@@ -78,15 +78,15 @@ export function SlaTable({
                 >
                   <td className="px-4 py-3">
                     <button type="button" onClick={() => onEdit(regra.id)} className="text-left">
-                      <span className="font-semibold text-zinc-950 transition group-hover:text-indigo-600 dark:text-zinc-50 dark:group-hover:text-indigo-400">
+                      <span className="font-semibold text-fg transition group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
                         {regra.nome}
                       </span>
-                      <p className="mt-0.5 max-w-[220px] truncate text-xs text-zinc-400" title={regra.descricao ?? ""}>
+                      <p className="mt-0.5 max-w-[220px] truncate text-xs text-fg-subtle" title={regra.descricao ?? ""}>
                         {regra.descricao || "Sem descrição"}
                       </p>
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                  <td className="px-4 py-3 text-xs leading-5 text-fg-muted">
                     <div>
                       Prioridade: <span className="font-medium text-zinc-700 dark:text-zinc-300">{prioridadeLabel}</span>
                     </div>
@@ -97,13 +97,13 @@ export function SlaTable({
                       Cliente: <span className="font-medium text-zinc-700 dark:text-zinc-300">{clienteLabel}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                  <td className="px-4 py-3 text-fg-muted">
                     {formatarPrazo(regra.prazoPrimeiraRespostaQuantidade, regra.prazoPrimeiraRespostaUnidade)}
                   </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                  <td className="px-4 py-3 text-fg-muted">
                     {formatarPrazo(regra.prazoResolucaoQuantidade, regra.prazoResolucaoUnidade)}
                   </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{regra.prioridadeRegra}</td>
+                  <td className="px-4 py-3 text-fg-muted">{regra.prioridadeRegra}</td>
                   <td className="px-4 py-3">
                     {regra.considerarApenasExpediente ? (
                       <Badge tone="blue">Expediente</Badge>
@@ -130,7 +130,7 @@ export function SlaTable({
                             type="button"
                             onClick={() => onArquivar(regra.id)}
                             aria-label={`Arquivar ${regra.nome}`}
-                            className="rounded-full p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                            className="rounded-full p-1.5 text-fg-subtle transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                           >
                             <Archive className="h-3.5 w-3.5" />
                           </button>

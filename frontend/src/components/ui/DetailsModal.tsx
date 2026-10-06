@@ -50,12 +50,12 @@ export function DetailsModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className={`relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-2xl dark:border-zinc-800/80 dark:bg-zinc-900 ${maxWidthClassName}`}
+            className={`relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl ${maxWidthClassName}`}
           >
             <div className="flex items-start justify-between gap-4 border-b border-zinc-100 p-6 dark:border-zinc-800">
               <div className="min-w-0">
-                {title && <h2 className="truncate text-lg font-semibold text-zinc-950 dark:text-zinc-50">{title}</h2>}
-                {description && <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{description}</p>}
+                {title && <h2 className="truncate text-lg font-semibold text-fg">{title}</h2>}
+                {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {onEdit && (
@@ -63,7 +63,7 @@ export function DetailsModal({
                     type="button"
                     onClick={onEdit}
                     aria-label={editLabel}
-                    className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   >
                     <Pencil size={16} />
                   </button>
@@ -72,7 +72,7 @@ export function DetailsModal({
                   type="button"
                   onClick={onClose}
                   aria-label="Fechar"
-                  className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                 >
                   <X size={16} />
                 </button>

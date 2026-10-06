@@ -24,7 +24,7 @@ export function WorkflowsGrid({
         return (
           <div
             key={modelo.id}
-            className={`flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${modelo.status === "ativo" ? "" : "opacity-60"}`}
+            className={`flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5 shadow-sm ${modelo.status === "ativo" ? "" : "opacity-60"}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -32,8 +32,8 @@ export function WorkflowsGrid({
                   <WorkflowIcon className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
-                  <p className="font-semibold text-zinc-950 dark:text-zinc-50">{modelo.nome}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{modelo.etapas.length} etapa(s)</p>
+                  <p className="font-semibold text-fg">{modelo.nome}</p>
+                  <p className="mt-0.5 text-xs text-fg-muted">{modelo.etapas.length} etapa(s)</p>
                 </div>
               </div>
               {modelo.status === "ativo" ? <Badge tone="green">Ativo</Badge> : <Badge tone="neutral">Inativo</Badge>}
@@ -54,7 +54,7 @@ export function WorkflowsGrid({
               ))}
             </div>
 
-            <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+            <div className="flex items-center gap-3 text-xs text-fg-muted">
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-indigo-500" /> {execucao} execução
               </span>

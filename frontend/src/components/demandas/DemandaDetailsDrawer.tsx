@@ -83,9 +83,9 @@ export function DemandaDetailsDrawer({
                   <ClipboardList className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">Painel da tarefa</p>
-                  <h3 className="mt-1 text-lg font-semibold text-zinc-950 dark:text-zinc-50">{demanda.nome}</h3>
-                  <p className="mt-1 flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">Painel da tarefa</p>
+                  <h3 className="mt-1 text-lg font-semibold text-fg">{demanda.nome}</h3>
+                  <p className="mt-1 flex items-center gap-2 text-sm text-fg-muted">
                     <FolderKanban className="h-4 w-4" />
                     {resolverProjetoNome(demanda.projetoId, projetos)}
                   </p>
@@ -98,15 +98,15 @@ export function DemandaDetailsDrawer({
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-white p-3 ring-1 ring-zinc-100 dark:bg-zinc-900 dark:ring-zinc-800">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Prazo atual</p>
+              <div className="rounded-xl bg-surface p-3 ring-1 ring-zinc-100 dark:ring-zinc-800">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Prazo atual</p>
                 <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                  <CalendarDays className="h-4 w-4 text-zinc-400" />
+                  <CalendarDays className="h-4 w-4 text-fg-subtle" />
                   {formatPrazo(demanda.prazoEtapaAtual)}
                 </p>
               </div>
-              <div className="rounded-xl bg-white p-3 ring-1 ring-zinc-100 dark:bg-zinc-900 dark:ring-zinc-800 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Responsáveis</p>
+              <div className="rounded-xl bg-surface p-3 ring-1 ring-zinc-100 dark:ring-zinc-800 sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Responsáveis</p>
                 <div className="mt-2">
                   <AvatarStack
                     pessoas={demanda.usuarioResponsavelIds

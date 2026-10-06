@@ -121,10 +121,10 @@ export function WorkflowModeloFormModal({
             <WorkflowIcon className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? `Editando: ${modelo.nome}` : "Novo workflow"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Modelo reutilizável de etapas — aplicado ao criar uma nova tarefa.
             </p>
           </div>
@@ -133,7 +133,7 @@ export function WorkflowModeloFormModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -142,7 +142,7 @@ export function WorkflowModeloFormModal({
       <div className="mt-6 flex flex-col gap-4">
         <Input label="Nome do modelo de workflow" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
 
-        <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
           <Switch
             checked={draft.status === "ativo"}
             onChange={(checked) => updateDraft({ status: checked ? "ativo" : "inativo" })}
@@ -152,7 +152,7 @@ export function WorkflowModeloFormModal({
         </div>
 
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Etapas</p>
+          <p className="text-sm font-semibold text-fg">Etapas</p>
           <button
             type="button"
             onClick={toggleExpandirTudo}
@@ -184,15 +184,15 @@ export function WorkflowModeloFormModal({
                   }`}
                 >
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${
-                      tone === "amber" ? "bg-amber-500" : "bg-indigo-500"
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                      tone === "amber" ? "bg-amber-500 text-zinc-950" : "bg-indigo-500 text-primary-fg"
                     }`}
                   >
                     {index + 1}
                   </span>
                   <button type="button" onClick={() => toggleExpanded(etapa.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                    <span className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{etapa.nome || "Nova etapa"}</span>
-                    <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
+                    <span className="truncate text-sm font-semibold text-fg">{etapa.nome || "Nova etapa"}</span>
+                    <span className="shrink-0 text-xs text-fg-muted">
                       {etapa.quantidadeAntesDeadline} {workflowUnidadePrazoLabels[etapa.unidadePrazo].toLowerCase()} antes do deadline
                     </span>
                   </button>
@@ -203,7 +203,7 @@ export function WorkflowModeloFormModal({
                       onClick={() => moveEtapa(index, -1)}
                       disabled={index === 0}
                       aria-label="Mover para cima"
-                      className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/70 disabled:opacity-30 dark:hover:bg-zinc-900/40"
+                      className="rounded-lg p-1.5 text-fg-muted transition hover:bg-white/70 disabled:opacity-30 dark:hover:bg-zinc-900/40"
                     >
                       <ChevronUp className="h-3.5 w-3.5" />
                     </button>
@@ -212,7 +212,7 @@ export function WorkflowModeloFormModal({
                       onClick={() => moveEtapa(index, 1)}
                       disabled={index === draft.etapas.length - 1}
                       aria-label="Mover para baixo"
-                      className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/70 disabled:opacity-30 dark:hover:bg-zinc-900/40"
+                      className="rounded-lg p-1.5 text-fg-muted transition hover:bg-white/70 disabled:opacity-30 dark:hover:bg-zinc-900/40"
                     >
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>
@@ -220,7 +220,7 @@ export function WorkflowModeloFormModal({
                       type="button"
                       onClick={() => removeEtapa(etapa.id)}
                       aria-label="Remover etapa"
-                      className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/70 hover:text-red-600 dark:hover:bg-zinc-900/40"
+                      className="rounded-lg p-1.5 text-fg-muted transition hover:bg-white/70 dark:hover:text-red-400 hover:text-red-600 dark:hover:bg-zinc-900/40"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -228,7 +228,7 @@ export function WorkflowModeloFormModal({
                       type="button"
                       onClick={() => toggleExpanded(etapa.id)}
                       aria-label={expanded ? "Recolher etapa" : "Expandir etapa"}
-                      className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/70 dark:hover:bg-zinc-900/40"
+                      className="rounded-lg p-1.5 text-fg-muted transition hover:bg-white/70 dark:hover:bg-zinc-900/40"
                     >
                       <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
                     </button>
@@ -236,7 +236,7 @@ export function WorkflowModeloFormModal({
                 </div>
 
                 {expanded && (
-                  <div className="flex flex-col gap-3 bg-white p-3.5 dark:bg-zinc-900">
+                  <div className="flex flex-col gap-3 bg-surface p-3.5">
                     <Input label="Nome da etapa" value={etapa.nome} onChange={(event) => updateEtapa(etapa.id, { nome: event.target.value })} />
 
                     <div className="grid gap-3 sm:grid-cols-3">
@@ -271,7 +271,7 @@ export function WorkflowModeloFormModal({
                       emptyLabel="Nenhum usuário encontrado"
                     />
                     {etapa.usuarioResponsavelIds.length === 0 && (
-                      <p className="text-xs text-zinc-400">Sem responsável padrão — definido na tarefa ao aplicar o modelo.</p>
+                      <p className="text-xs text-fg-subtle">Sem responsável padrão — definido na tarefa ao aplicar o modelo.</p>
                     )}
 
                     <MultiSelect

@@ -58,7 +58,7 @@ export function AnalisePecasReport() {
       )}
 
       {erro ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
           Não foi possível carregar as peças do projeto: {erro}
         </div>
       ) : carregando ? (
@@ -69,7 +69,7 @@ export function AnalisePecasReport() {
         <>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+              <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle">
                 <tr>
                   <th className="py-2">Demanda</th>
                   <th className="py-2">Redator/DA</th>
@@ -83,20 +83,20 @@ export function AnalisePecasReport() {
                 {pecas.map((peca) => (
                   <tr key={peca.demandaId}>
                     <td className="py-2">
-                      <p className="font-medium text-zinc-900 dark:text-zinc-100">{peca.nome}</p>
-                      <p className="text-xs text-zinc-400">#{peca.numeroOperacional}</p>
+                      <p className="font-medium text-fg">{peca.nome}</p>
+                      <p className="text-xs text-fg-subtle">#{peca.numeroOperacional}</p>
                     </td>
-                    <td className="py-2 text-zinc-600 dark:text-zinc-400">{peca.redatorNome ?? "Sem responsável"}</td>
-                    <td className="py-2 text-right text-zinc-600 dark:text-zinc-400">
+                    <td className="py-2 text-fg-muted">{peca.redatorNome ?? "Sem responsável"}</td>
+                    <td className="py-2 text-right text-fg-muted">
                       {peca.emAndamento ? "Em andamento" : `${peca.tempoEmPautaDias?.toFixed(1)}d`}
                     </td>
-                    <td className="py-2 text-right text-zinc-600 dark:text-zinc-400">
+                    <td className="py-2 text-right text-fg-muted">
                       {valorAjuste(peca.demandaId, "ajustesInternos")}
                     </td>
-                    <td className="py-2 text-right text-zinc-600 dark:text-zinc-400">
+                    <td className="py-2 text-right text-fg-muted">
                       {valorAjuste(peca.demandaId, "ajustesCliente")}
                     </td>
-                    <td className="py-2 text-right text-zinc-600 dark:text-zinc-400">
+                    <td className="py-2 text-right text-fg-muted">
                       {valorAjuste(peca.demandaId, "refacoes")}
                     </td>
                   </tr>
@@ -110,7 +110,7 @@ export function AnalisePecasReport() {
               <Button type="button" variant="secondary" onClick={carregarMais} disabled={carregandoMais}>
                 {carregandoMais ? "Carregando…" : "Carregar mais"}
               </Button>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-fg-subtle">
                 Mostrando {pecas.length} de {total}
               </p>
               {erroMais && <p className="text-xs text-red-600 dark:text-red-400">{erroMais}</p>}

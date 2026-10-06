@@ -44,7 +44,7 @@ function SectionShell({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
+    <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-5">
       <div className="flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
           {icon}
@@ -52,8 +52,8 @@ function SectionShell({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{title}</h3>
-              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
+              <h3 className="text-sm font-semibold text-fg">{title}</h3>
+              <p className="mt-0.5 text-xs text-fg-muted">{description}</p>
             </div>
             {action}
           </div>
@@ -143,7 +143,7 @@ export function DadosProjetoSection({ projeto, onChange, somenteLeitura }: Proje
       </div>
 
       <div className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">Responsáveis</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">Responsáveis</p>
         {/* MultiSelect não tem modo desabilitado; em leitura os nomes já aparecem nos
             campos "selecionados" logo abaixo, então o seletor simplesmente não é montado. */}
         {!somenteLeitura && (

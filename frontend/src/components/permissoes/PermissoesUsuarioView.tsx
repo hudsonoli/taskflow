@@ -159,7 +159,7 @@ export function PermissoesUsuarioView() {
       )}
 
       {usuarioId && erroAcao && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
           {erroAcao}
         </p>
       )}
@@ -175,9 +175,9 @@ export function PermissoesUsuarioView() {
           {grupos.map((grupo) => (
             <section
               key={grupo.modulo}
-              className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              className="rounded-2xl border border-line bg-surface p-4 shadow-sm"
             >
-              <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+              <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                 {grupo.modulo}
               </h2>
               <div className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -188,7 +188,7 @@ export function PermissoesUsuarioView() {
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">{item.label}</p>
-                      <p className="text-xs text-zinc-400 dark:text-zinc-500">{item.permissao}</p>
+                      <p className="text-xs text-fg-subtle">{item.permissao}</p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 sm:shrink-0">

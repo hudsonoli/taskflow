@@ -28,9 +28,9 @@ export function RankingCard({
   emptyDescription: string;
 }) {
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">{title}</h2>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
+    <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+      <h2 className="text-base font-semibold text-fg">{title}</h2>
+      <p className="text-sm text-fg-muted">{description}</p>
 
       <div className="mt-4">
         {items.length === 0 ? (
@@ -45,10 +45,10 @@ export function RankingCard({
                     <span className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">{item.label}</span>
                     <div className="flex shrink-0 items-center gap-2">
                       {item.badge}
-                      <span className="font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.displayValue}</span>
+                      <span className="font-mono text-sm font-semibold text-fg">{item.displayValue}</span>
                     </div>
                   </div>
-                  <p className="mb-1.5 text-xs text-zinc-400">{item.description}</p>
+                  <p className="mb-1.5 text-xs text-fg-subtle">{item.description}</p>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                     <motion.div
                       initial={{ width: 0 }}

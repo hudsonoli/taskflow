@@ -42,10 +42,10 @@ export function DemandaKanbanColumn({
       <div className="sticky top-0 z-10 mb-2.5 flex items-start justify-between gap-2 rounded-xl bg-inherit px-1 pb-1 pt-0.5 backdrop-blur-sm">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-sm font-semibold text-zinc-950 dark:text-zinc-50">{title}</h2>
+            <h2 className="truncate text-sm font-semibold text-fg">{title}</h2>
             <Badge tone={tone}>{demandas.length}</Badge>
           </div>
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{description}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-fg-muted">{description}</p>
         </div>
       </div>
 

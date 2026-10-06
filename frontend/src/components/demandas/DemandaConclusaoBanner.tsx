@@ -58,7 +58,7 @@ export function DemandaConclusaoBanner({
     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 ring-1 ring-emerald-100 dark:bg-zinc-900 dark:text-emerald-400 dark:ring-emerald-500/20">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-emerald-700 ring-1 ring-emerald-100 dark:text-emerald-400 dark:ring-emerald-500/20">
             <CheckCircle2 className="h-4 w-4" />
           </div>
           <div className="min-w-0">

@@ -64,7 +64,7 @@ export function PerformanceColaboradorReport() {
       </div>
 
       <div className="rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-        <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Participação por etapa do workflow</p>
+        <p className="mb-3 text-sm font-semibold text-fg">Participação por etapa do workflow</p>
         <GraficoEstado carregando={carregando} erro={erro}>
           <DemandasPorProjetoDonut
             fatias={performance?.participacaoPorEtapa ?? []}

@@ -47,7 +47,7 @@ export function TrafegoIniciarSessao({
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="grid flex-1 gap-3 sm:grid-cols-2">
           {/* Busca no servidor (sem o corte de 200); qualquer status, como a lista de antes. O `usuarioId`

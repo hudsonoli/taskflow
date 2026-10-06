@@ -56,7 +56,7 @@ export function RelatoriosView() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-xl border border-line bg-surface p-4 shadow-sm"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -64,8 +64,8 @@ export function RelatoriosView() {
               <BarChart3 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Relatórios e indicadores</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <h1 className="text-lg font-semibold tracking-tight text-fg">Relatórios e indicadores</h1>
+              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
                 Visão geral de demandas por cliente, projeto, colaborador e período.
               </p>
             </div>
@@ -153,25 +153,25 @@ export function RelatoriosView() {
 
       {secao === "relatorios" && (
         <div className="flex flex-col gap-6">
-          <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="mb-1 text-base font-semibold text-zinc-950 dark:text-zinc-50">Análise de projeto</h2>
-            <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+          <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+            <h2 className="mb-1 text-base font-semibold text-fg">Análise de projeto</h2>
+            <p className="mb-4 text-sm text-fg-muted">
               Volume, prazos, ajustes e colaboradores envolvidos em um projeto.
             </p>
             <AnaliseProjetoReport />
           </section>
 
-          <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="mb-1 text-base font-semibold text-zinc-950 dark:text-zinc-50">Análise de peças por projeto</h2>
-            <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+          <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+            <h2 className="mb-1 text-base font-semibold text-fg">Análise de peças por projeto</h2>
+            <p className="mb-4 text-sm text-fg-muted">
               Tempo em pauta, ajustes e refações de cada peça do projeto.
             </p>
             <AnalisePecasReport />
           </section>
 
-          <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="mb-1 text-base font-semibold text-zinc-950 dark:text-zinc-50">Performance de colaborador</h2>
-            <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+          <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+            <h2 className="mb-1 text-base font-semibold text-fg">Performance de colaborador</h2>
+            <p className="mb-4 text-sm text-fg-muted">
               Entregas, prazos e em qual etapa do workflow o colaborador mais atua.
             </p>
             <PerformanceColaboradorReport />

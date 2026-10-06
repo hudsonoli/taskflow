@@ -75,10 +75,10 @@ export function ModeloCampanhaFormModal({
             <Layers3 className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? `Editando: ${modelo.nome}` : "Novo modelo de campanha"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Estrutura reutilizável de itens sugeridos para campanhas recorrentes.
             </p>
           </div>
@@ -87,7 +87,7 @@ export function ModeloCampanhaFormModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -103,7 +103,7 @@ export function ModeloCampanhaFormModal({
           onChange={(event) => updateDraft({ descricao: event.target.value })}
         />
 
-        <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
           <Switch
             checked={draft.status === "ativo"}
             onChange={(checked) => updateDraft({ status: checked ? "ativo" : "inativo" })}

@@ -304,7 +304,7 @@ export function MeuDepartamentoView() {
       <Cabecalho nomeDepartamento={departamentoHead.nome} />
 
       <IndicadoresGrid itens={indicadores} colunas={4} />
-      {erroResumo && <p className="text-xs text-red-500">{erroResumo}</p>}
+      {erroResumo && <p className="text-xs text-red-600">{erroResumo}</p>}
 
       {erroHoras && departamentoHead && (
         <EstadoErro
@@ -313,8 +313,8 @@ export function MeuDepartamentoView() {
         />
       )}
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Filtros</p>
+      <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+        <p className="mb-3 text-sm font-semibold text-fg">Filtros</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/* Filtro (não vínculo): colaboradores ATIVOS do departamento do Head, buscados no servidor
               (sem o corte de 200). Clicar de novo no selecionado volta para "Todos". */}
@@ -382,7 +382,7 @@ export function MeuDepartamentoView() {
       </div>
 
       {carregandoInicial ? (
-        <p className="text-sm text-zinc-400">Carregando tarefas do departamento…</p>
+        <p className="text-sm text-fg-subtle">Carregando tarefas do departamento…</p>
       ) : (
         <div className={buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}>
           <TarefasLista
@@ -394,11 +394,11 @@ export function MeuDepartamentoView() {
         </div>
       )}
 
-      {erroPagina && demandasPagina.length > 0 && <p className="text-xs text-red-500">{erroPagina}</p>}
+      {erroPagina && demandasPagina.length > 0 && <p className="text-xs text-red-600">{erroPagina}</p>}
 
       {!carregandoInicial && (demandasPagina.length > 0 || offset > 0) && (
         <div className="flex items-center justify-between">
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-fg-subtle">
             {offset > 0 ? `Itens ${offset + 1}–${offset + demandasPagina.length}` : `${demandasPagina.length} item(ns)`}
           </span>
           <div className="flex gap-2">
@@ -431,7 +431,7 @@ function Cabecalho({ nomeDepartamento }: { nomeDepartamento: string | undefined 
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      className="rounded-xl border border-line bg-surface p-4 shadow-sm"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
@@ -439,8 +439,8 @@ function Cabecalho({ nomeDepartamento }: { nomeDepartamento: string | undefined 
             <Building2 className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Meu Departamento</h1>
-            <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <h1 className="text-lg font-semibold tracking-tight text-fg">Meu Departamento</h1>
+            <p className="mt-1 text-sm leading-6 text-fg-muted">
               {nomeDepartamento ? `Visão operacional de ${nomeDepartamento}.` : "Visão restrita a Heads de departamento."}
             </p>
           </div>

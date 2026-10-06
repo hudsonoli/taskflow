@@ -174,7 +174,7 @@ export function ArquivosContextView({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-fg-subtle">
           {carregandoInicial
             ? "Carregando…"
             : `${itens.length} arquivo(s) carregado(s)${temMais ? " · há mais — use “Carregar mais”" : ""}`}
@@ -197,13 +197,13 @@ export function ArquivosContextView({
       />
 
       {erro && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
           {erro}
         </div>
       )}
 
       {carregandoInicial ? (
-        <p className="text-sm text-zinc-400">Carregando…</p>
+        <p className="text-sm text-fg-subtle">Carregando…</p>
       ) : itens.length === 0 ? (
         <EmptyState title="Nenhum arquivo encontrado." description="Ajuste os filtros ou envie o primeiro arquivo." icon={<FolderOpen size={18} />} />
       ) : (

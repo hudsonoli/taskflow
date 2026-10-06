@@ -40,7 +40,7 @@ export function RegistrarAjusteCard({ demanda }: { demanda: Demanda }) {
 
   return (
     <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/40">
-      <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Registrar movimentação</p>
+      <p className="mb-3 text-sm font-semibold text-fg">Registrar movimentação</p>
       <div className="flex flex-wrap gap-2">
         {TIPOS.map(({ tipo, label, icon: Icon }) => (
           <Button

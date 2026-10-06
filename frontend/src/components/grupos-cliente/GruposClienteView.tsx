@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
-import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
+import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
 import {
   atualizarGrupoClienteReal,
   arquivarGrupoClienteReal,
@@ -124,14 +124,14 @@ export function GruposClienteView() {
         <EstadoErro mensagem={erro} onRetry={invalidarDiretorioGruposCliente} />
       ) : (
         <>
-          <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row">
               <input
                 value={novoNome}
                 onChange={(event) => setNovoNome(event.target.value)}
                 onKeyDown={(event) => event.key === "Enter" && handleCriar()}
                 placeholder="Nome do novo grupo (ex.: GRUPO BRETAS)"
-                className="w-full flex-1 rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-300 focus:bg-white focus:shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-100 dark:focus:bg-zinc-900"
+                className="field w-full flex-1 rounded-xl px-3 py-2.5 text-sm"
               />
               <Button onClick={handleCriar} disabled={!novoNome.trim() || criando}>
                 <Plus className="h-4 w-4" />
@@ -160,21 +160,21 @@ export function GruposClienteView() {
                 return (
                   <div
                     key={grupo.id}
-                    className={`flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between ${arquivado ? "opacity-60" : ""}`}
+                    className={`flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between ${arquivado ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-center gap-3">
                       <div
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
-                        style={{ backgroundColor: resolveCorIdentificacaoHex(grupo.corIdentificacao) }}
+                        style={estiloCorIdentificacao(grupo.corIdentificacao)}
                       >
                         <Tag className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="font-semibold text-zinc-950 dark:text-zinc-50">
+                        <p className="font-semibold text-fg">
                           {grupo.nome}
-                          {arquivado && <span className="ml-2 text-xs font-normal text-zinc-400">(arquivado)</span>}
+                          {arquivado && <span className="ml-2 text-xs font-normal text-fg-subtle">(arquivado)</span>}
                         </p>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        <p className="text-xs text-fg-muted">
                           {contarClientes(grupo)} cliente(s) na base
                         </p>
                       </div>
@@ -205,7 +205,7 @@ export function GruposClienteView() {
                           onClick={() => handleRestaurar(grupo.id)}
                           disabled={restaurandoId === grupo.id}
                           aria-label={`Restaurar ${grupo.nome}`}
-                          className="rounded-full p-2 text-zinc-400 transition hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400"
+                          className="rounded-full p-2 text-fg-subtle transition hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400"
                         >
                           <ArchiveRestore className="h-4 w-4" />
                         </button>
@@ -214,7 +214,7 @@ export function GruposClienteView() {
                           type="button"
                           onClick={() => setArquivarGrupoId(grupo.id)}
                           aria-label={`Arquivar ${grupo.nome}`}
-                          className="rounded-full p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                          className="rounded-full p-2 text-fg-subtle transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                         >
                           <Archive className="h-4 w-4" />
                         </button>
@@ -226,7 +226,7 @@ export function GruposClienteView() {
             </div>
           )}
 
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs text-fg-subtle">
             Os grupos são compartilhados entre os módulos — a contagem acima considera todos os clientes cadastrados.
           </p>
         </>

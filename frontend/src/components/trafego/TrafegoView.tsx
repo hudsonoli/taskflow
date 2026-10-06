@@ -305,7 +305,7 @@ export function TrafegoView() {
       <TrafegoFilters filters={filters} onChange={setFilters} departamentos={departamentos} />
 
       {erroIndicadores && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
           {erroIndicadores}
         </div>
       )}

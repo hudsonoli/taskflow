@@ -134,15 +134,15 @@ export function ModeloCampanhaSection({ projeto, somenteLeitura }: { projeto: Pr
   const botaoAplicarLabel = snapshot ? "Substituir Modelo" : "Aplicar Modelo";
 
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
+    <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
             <Layers3 className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Modelo de campanha</h3>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <h3 className="text-sm font-semibold text-fg">Modelo de campanha</h3>
+            <p className="mt-0.5 text-xs text-fg-muted">
               Estrutura de itens aplicada a partir da biblioteca de Modelos de Campanha.
             </p>
           </div>
@@ -156,7 +156,7 @@ export function ModeloCampanhaSection({ projeto, somenteLeitura }: { projeto: Pr
 
       <div className="mt-4">
         {carregandoSnapshot ? (
-          <div className="h-32 animate-pulse rounded-2xl border border-zinc-200 bg-zinc-100/70 dark:border-zinc-800 dark:bg-zinc-900/60" />
+          <div className="h-32 animate-pulse rounded-2xl border border-line bg-zinc-100/70 dark:bg-zinc-900/60" />
         ) : erroSnapshot ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-500/30 dark:bg-red-500/10">
             <p className="max-w-sm text-sm text-red-600 dark:text-red-400">{erroSnapshot}</p>
@@ -185,7 +185,7 @@ export function ModeloCampanhaSection({ projeto, somenteLeitura }: { projeto: Pr
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-100 bg-zinc-50/70 px-3.5 py-2.5 text-xs dark:border-zinc-800 dark:bg-zinc-950/30">
               <Badge tone="blue">{snapshot.modeloCampanhaNomeSnapshot ?? "Modelo removido da biblioteca"}</Badge>
               {snapshot.aplicadoAt && (
-                <span className="text-zinc-500 dark:text-zinc-400">Aplicado em {formatarDataHora(snapshot.aplicadoAt)}</span>
+                <span className="text-fg-muted">Aplicado em {formatarDataHora(snapshot.aplicadoAt)}</span>
               )}
             </div>
 

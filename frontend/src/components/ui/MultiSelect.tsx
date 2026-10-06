@@ -26,8 +26,8 @@ export function MultiSelect({ label, values, onChange, options }: MultiSelectPro
 
   return (
     <div className="text-sm">
-      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{label}</span>
-      <div className="flex flex-wrap gap-1.5 rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-2 dark:border-zinc-800 dark:bg-zinc-900/60">
+      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">{label}</span>
+      <div className="border border-line bg-surface-2 flex flex-wrap gap-1.5 rounded-xl p-2">
         {options.map((option) => {
           const active = values.includes(option.value);
           return (
@@ -38,8 +38,8 @@ export function MultiSelect({ label, values, onChange, options }: MultiSelectPro
               aria-pressed={active}
               className={
                 active
-                  ? "inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 px-3 py-1 text-xs font-semibold text-white"
-                  : "inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-300 dark:ring-zinc-700"
+                  ? "bg-brand-gradient inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
+                  : "inline-flex items-center gap-1 rounded-full bg-surface px-3 py-1 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200 hover:bg-surface-hover dark:text-zinc-300 dark:ring-zinc-700"
               }
             >
               {active && <Check className="h-3.5 w-3.5" />}

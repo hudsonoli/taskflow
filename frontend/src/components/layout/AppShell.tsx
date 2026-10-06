@@ -45,14 +45,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     // Enquanto carrega ou durante o redirect (useEffect acima), não renderiza a área
     // autenticada — evita um flash do conteúdo protegido antes do guard agir.
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+      <div className="flex h-screen items-center justify-center bg-app">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-500 dark:border-zinc-700" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen flex-col bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex h-screen flex-col bg-app">
       <TopNav />
       <main className="min-w-0 flex-1 overflow-y-auto px-4 py-8 sm:px-6">{children}</main>
     </div>

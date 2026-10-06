@@ -28,7 +28,7 @@ export function ConfiguracoesSidebarNav() {
       <nav className="flex flex-col gap-5 lg:sticky lg:top-6">
         {grupos.map((grupo) => (
           <div key={grupo.titulo}>
-            <p className="mb-1.5 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+            <p className="mb-1.5 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               {grupo.titulo}
             </p>
             <div className="flex flex-col gap-0.5">
@@ -44,12 +44,12 @@ export function ConfiguracoesSidebarNav() {
                         ? "bg-indigo-50 font-semibold text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400"
                         : item.available
                           ? "text-zinc-600 hover:bg-zinc-100/70 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                          : "cursor-not-allowed text-zinc-400 dark:text-zinc-600",
+                          : "cursor-not-allowed text-fg-subtle dark:text-zinc-600",
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{item.label}</span>
-                    {!item.available && <span className="ml-auto shrink-0 text-[10px] text-zinc-400">em breve</span>}
+                    {!item.available && <span className="ml-auto shrink-0 text-[10px] text-fg-subtle">em breve</span>}
                   </span>
                 );
 

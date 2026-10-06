@@ -11,7 +11,7 @@ export function TrafegoHeader({ onRefresh, refreshing }: { onRefresh: () => void
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-      className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm"
     >
       <div className="relative p-5 lg:p-6">
         <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 rounded-bl-full bg-indigo-50 dark:bg-indigo-500/10" />
@@ -24,13 +24,13 @@ export function TrafegoHeader({ onRefresh, refreshing }: { onRefresh: () => void
             </div>
 
             <div className="mt-4 flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm">
+              <div className="bg-brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm">
                 <Activity className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">Central de Tráfego</h2>
+                <h2 className="text-2xl font-bold tracking-tight text-fg">Central de Tráfego</h2>
                 <p className="mt-1 text-sm font-medium text-zinc-600 dark:text-zinc-300">Tempo operacional em tempo real</p>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-muted">
                   Sessões de trabalho abertas e encerradas via API, calculadas pelo motor de horas do backend.
                 </p>
               </div>

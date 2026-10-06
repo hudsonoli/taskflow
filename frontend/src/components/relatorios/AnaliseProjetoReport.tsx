@@ -115,19 +115,19 @@ export function AnaliseProjetoReport() {
       )}
 
       <div className="rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-        <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Demandas por colaborador</p>
+        <p className="mb-3 text-sm font-semibold text-fg">Demandas por colaborador</p>
         {carregando ? (
-          <p className="text-sm text-zinc-400">Carregando…</p>
+          <p className="text-sm text-fg-subtle">Carregando…</p>
         ) : !analise ? (
-          <p className="text-sm text-zinc-400">—</p>
+          <p className="text-sm text-fg-subtle">—</p>
         ) : analise.colaboradores.length === 0 ? (
-          <p className="text-sm text-zinc-400">Nenhum colaborador com demandas neste projeto.</p>
+          <p className="text-sm text-fg-subtle">Nenhum colaborador com demandas neste projeto.</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {analise.colaboradores.map((colaborador) => (
               <li key={colaborador.id} className="flex items-center justify-between text-sm">
                 <span className="text-zinc-700 dark:text-zinc-300">{colaborador.nome}</span>
-                <span className="font-semibold text-zinc-900 dark:text-zinc-100">{colaborador.demandas} demanda(s)</span>
+                <span className="font-semibold text-fg">{colaborador.demandas} demanda(s)</span>
               </li>
             ))}
           </ul>

@@ -163,15 +163,15 @@ export function DashboardView() {
   };
 
   const STATS = [
-    { label: "Tarefas ativas", value: String(valorIndicador(resumo?.ativas)), icon: Sparkles, accent: "linear-gradient(135deg,#6366f1,#8b5cf6)" },
-    { label: "Novas", value: String(valorIndicador(resumo?.novas)), icon: CalendarClock, accent: "linear-gradient(135deg,#38bdf8,#6366f1)" },
-    { label: "Andamento", value: String(valorIndicador(resumo?.andamento)), icon: TrendingUp, accent: "linear-gradient(135deg,#0ea5e9,#6366f1)" },
+    { label: "Tarefas ativas", value: String(valorIndicador(resumo?.ativas)), icon: Sparkles, accent: "var(--brand-gradient, linear-gradient(135deg,var(--color-indigo-500),var(--color-violet-500)))", onAccent: "var(--on-brand, #ffffff)" },
+    { label: "Novas", value: String(valorIndicador(resumo?.novas)), icon: CalendarClock, accent: "linear-gradient(135deg,#38bdf8,var(--color-indigo-500))" },
+    { label: "Andamento", value: String(valorIndicador(resumo?.andamento)), icon: TrendingUp, accent: "linear-gradient(135deg,#0ea5e9,var(--color-indigo-500))" },
     { label: "Pausadas", value: String(valorIndicador(resumo?.pausadas)), icon: PauseCircle, accent: "linear-gradient(135deg,#f59e0b,#f97316)" },
     { label: "Aguardando", value: String(valorIndicador(resumo?.aguardando)), icon: Send, accent: "linear-gradient(135deg,#eab308,#f59e0b)" },
     { label: "Atrasadas", value: String(valorIndicador(resumo?.atrasadas)), icon: AlertTriangle, accent: "linear-gradient(135deg,#ef4444,#dc2626)" },
     { label: "Concluídas", value: String(valorIndicador(resumo?.concluidas)), icon: CheckCircle2, accent: "linear-gradient(135deg,#22c55e,#0ea5e9)" },
-    { label: "Previstas para hoje", value: String(valorIndicador(resumo?.previstasHoje)), icon: CalendarDays, accent: "linear-gradient(135deg,#8b5cf6,#6366f1)" },
-    { label: "Previstas para a semana", value: String(valorIndicador(resumo?.previstasSemana)), icon: Clock3, accent: "linear-gradient(135deg,#8b5cf6,#a855f7)" },
+    { label: "Previstas para hoje", value: String(valorIndicador(resumo?.previstasHoje)), icon: CalendarDays, accent: "linear-gradient(135deg,var(--color-violet-500),var(--color-indigo-500))" },
+    { label: "Previstas para a semana", value: String(valorIndicador(resumo?.previstasSemana)), icon: Clock3, accent: "linear-gradient(135deg,var(--color-violet-500),#a855f7)" },
   ];
 
   const concluidasNaSemana = resumo?.concluidasSemana;
@@ -204,14 +204,14 @@ export function DashboardView() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
+        className="rounded-2xl border border-line bg-surface p-5 shadow-sm sm:p-6"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h1 className="text-lg font-semibold tracking-tight text-fg">
               Olá, {usuarioAtual?.nome.split(" ")[0] ?? "por aqui"}!
             </h1>
-            <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{mensagemMotivacional}</p>
+            <p className="mt-1 text-sm leading-6 text-fg-muted">{mensagemMotivacional}</p>
           </div>
           <Badge tone="green">Banco real</Badge>
         </div>
@@ -222,34 +222,34 @@ export function DashboardView() {
           <StatCard key={stat.label} index={index} {...stat} />
         ))}
       </div>
-      {erroResumo && <p className="text-xs text-red-500">{erroResumo}</p>}
+      {erroResumo && <p className="text-xs text-red-600">{erroResumo}</p>}
 
       <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 shadow-sm dark:border-indigo-500/20 dark:bg-indigo-500/5 sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-500 dark:text-indigo-400">Resumo</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600 dark:text-indigo-400">Resumo</p>
         <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-700 dark:text-zinc-300">
           <p>
-            Esta semana: <span className="font-semibold text-zinc-900 dark:text-zinc-100">{valorIndicador(resumo?.concluidasSemana)}</span> tarefa(s) concluída(s)
+            Esta semana: <span className="font-semibold text-fg">{valorIndicador(resumo?.concluidasSemana)}</span> tarefa(s) concluída(s)
           </p>
           <p>
-            Ontem: <span className="font-semibold text-zinc-900 dark:text-zinc-100">{valorIndicador(resumo?.concluidasOntem)}</span> tarefa(s) concluída(s)
+            Ontem: <span className="font-semibold text-fg">{valorIndicador(resumo?.concluidasOntem)}</span> tarefa(s) concluída(s)
           </p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-2xl border border-line bg-surface shadow-sm">
         <div className="border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">Tarefas cadastradas</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <h2 className="text-base font-semibold text-fg">Tarefas cadastradas</h2>
+          <p className="text-sm text-fg-muted">
             Suas tarefas em aberto. {podeSinalizar ? "Sinalize as prioritárias com a bandeira." : "A bandeira mostra as prioritárias."}
           </p>
         </div>
 
         {carregandoInicial ? (
-          <p className="px-5 py-6 text-sm text-zinc-400">Carregando…</p>
+          <p className="px-5 py-6 text-sm text-fg-subtle">Carregando…</p>
         ) : erroPagina && demandasPagina.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-red-500">{erroPagina}</p>
+          <p className="px-5 py-6 text-sm text-red-600">{erroPagina}</p>
         ) : demandasPagina.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-zinc-400">Nenhuma tarefa em aberto atribuída a você.</p>
+          <p className="px-5 py-6 text-sm text-fg-subtle">Nenhuma tarefa em aberto atribuída a você.</p>
         ) : (
           <ul className={`divide-y divide-zinc-100 dark:divide-zinc-800 ${buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}`}>
             {demandasPagina.map((demanda) => {
@@ -258,22 +258,22 @@ export function DashboardView() {
               return (
                 <li key={demanda.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    <p className="truncate text-sm font-semibold text-fg">
                       {rotuloDemanda(demanda)} · {demanda.nome}
                     </p>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 truncate text-xs text-fg-muted">
                       <span>{cliente?.nome ?? "Sem cliente"}</span>
                       <span>·</span>
                       <span>{resolverProjetoNome(demanda.projetoId, projetos)}</span>
                       <span>·</span>
                       <span>{statusDemandaLabels[demanda.status]}</span>
                       {demanda.status === "bloqueada" && (
-                        <span className="inline-flex items-center gap-1 text-red-500" title="Tarefa bloqueada">
+                        <span className="inline-flex items-center gap-1 text-red-600" title="Tarefa bloqueada">
                           <Lock className="h-3 w-3" />
                         </span>
                       )}
                       <span>·</span>
-                      <span className={classificacao.atrasada ? "inline-flex items-center gap-1 font-semibold text-red-500" : ""}>
+                      <span className={classificacao.atrasada ? "inline-flex items-center gap-1 font-semibold text-red-600" : ""}>
                         {classificacao.atrasada && <AlertTriangle className="h-3 w-3" />}
                         Prazo {formatPrazo(demanda.prazoEtapaAtual)}
                       </span>
@@ -295,8 +295,8 @@ export function DashboardView() {
                     <Flag
                       className={
                         demanda.sinalizada
-                          ? "h-4 w-4 fill-red-500 text-red-500"
-                          : "h-4 w-4 text-zinc-300 hover:text-zinc-400 dark:text-zinc-700"
+                          ? "h-4 w-4 fill-red-500 text-red-600"
+                          : "h-4 w-4 text-zinc-300 hover:text-fg-subtle dark:text-zinc-700"
                       }
                     />
                   </button>
@@ -306,11 +306,11 @@ export function DashboardView() {
           </ul>
         )}
 
-        {erroPagina && demandasPagina.length > 0 && <p className="px-5 pb-3 text-xs text-red-500">{erroPagina}</p>}
+        {erroPagina && demandasPagina.length > 0 && <p className="px-5 pb-3 text-xs text-red-600">{erroPagina}</p>}
 
         {!carregandoInicial && (demandasPagina.length > 0 || offset > 0) && (
           <div className="flex items-center justify-between border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
-            <span className="text-xs text-zinc-400">
+            <span className="text-xs text-fg-subtle">
               {offset > 0 ? `Itens ${offset + 1}–${offset + demandasPagina.length}` : `${demandasPagina.length} item(ns)`}
             </span>
             <div className="flex gap-2">

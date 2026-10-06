@@ -98,10 +98,10 @@ export function ArquivoPreviewModal({
   return (
     <Modal open={indiceAtual !== null} onClose={onFechar} maxWidthClassName="max-w-4xl">
       <div className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-4 dark:border-zinc-800">
-        <h2 className="truncate text-base font-semibold text-zinc-950 dark:text-zinc-50" title={arquivo.nome}>
+        <h2 className="truncate text-base font-semibold text-fg" title={arquivo.nome}>
           {arquivo.nome}
         </h2>
-        <button type="button" onClick={onFechar} aria-label="Fechar" className="rounded-full p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
+        <button type="button" onClick={onFechar} aria-label="Fechar" className="rounded-full p-2 text-fg-subtle hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -112,12 +112,12 @@ export function ArquivoPreviewModal({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={urlDownload} alt={arquivo.nome} className="max-h-[420px] max-w-full rounded-xl object-contain" />
           ) : arquivo.tipo === "link" ? (
-            <div className="flex flex-col items-center gap-2 p-10 text-center text-zinc-400">
+            <div className="flex flex-col items-center gap-2 p-10 text-center text-fg-subtle">
               <Link2 className="h-10 w-10" />
               <p className="text-sm">Link externo — abre em nova aba.</p>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-2 p-10 text-center text-zinc-400">
+            <div className="flex flex-col items-center gap-2 p-10 text-center text-fg-subtle">
               <FileText className="h-10 w-10" />
               <p className="text-sm">Sem preview inline — use download.</p>
             </div>
@@ -148,23 +148,23 @@ export function ArquivoPreviewModal({
           )}
 
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
-            <dt className="text-zinc-400">Tamanho</dt>
+            <dt className="text-fg-subtle">Tamanho</dt>
             <dd className="text-zinc-700 dark:text-zinc-200">{formatarTamanho(arquivo.tamanhoBytes)}</dd>
-            <dt className="text-zinc-400">Enviado em</dt>
+            <dt className="text-fg-subtle">Enviado em</dt>
             <dd className="text-zinc-700 dark:text-zinc-200">{formatarData(arquivo.createdAt)}</dd>
-            <dt className="text-zinc-400">Uploader</dt>
+            <dt className="text-fg-subtle">Uploader</dt>
             <dd className="text-zinc-700 dark:text-zinc-200">{arquivo.usuarioNome ?? "—"}</dd>
-            <dt className="text-zinc-400">Cliente</dt>
+            <dt className="text-fg-subtle">Cliente</dt>
             <dd className="text-zinc-700 dark:text-zinc-200">{arquivo.clienteNome ?? "—"}</dd>
-            <dt className="text-zinc-400">Projeto</dt>
+            <dt className="text-fg-subtle">Projeto</dt>
             <dd className="text-zinc-700 dark:text-zinc-200">{arquivo.projetoNome ?? "—"}</dd>
-            <dt className="text-zinc-400">Demanda</dt>
+            <dt className="text-fg-subtle">Demanda</dt>
             <dd className="truncate text-zinc-700 dark:text-zinc-200">
               #{arquivo.demanda.numeroOperacional} — {arquivo.demanda.nome}
             </dd>
             {arquivo.descricao && (
               <>
-                <dt className="text-zinc-400">Descrição</dt>
+                <dt className="text-fg-subtle">Descrição</dt>
                 <dd className="text-zinc-700 dark:text-zinc-200">{arquivo.descricao}</dd>
               </>
             )}
@@ -203,7 +203,7 @@ export function ArquivoPreviewModal({
         <Button type="button" variant="ghost" disabled={indiceAtual <= 0} onClick={() => onNavegar(indiceAtual - 1)}>
           Anterior
         </Button>
-        <span className="text-xs text-zinc-400">
+        <span className="text-xs text-fg-subtle">
           {indiceAtual + 1} de {itens.length}
         </span>
         <Button type="button" variant="ghost" disabled={indiceAtual >= itens.length - 1} onClick={() => onNavegar(indiceAtual + 1)}>

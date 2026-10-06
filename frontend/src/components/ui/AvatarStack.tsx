@@ -19,7 +19,7 @@ export function AvatarStack({
   emptyLabel?: string;
 }) {
   if (pessoas.length === 0) {
-    return <span className="text-xs text-zinc-400">{emptyLabel}</span>;
+    return <span className="text-xs text-fg-subtle">{emptyLabel}</span>;
   }
 
   const visiveis = pessoas.slice(0, max);

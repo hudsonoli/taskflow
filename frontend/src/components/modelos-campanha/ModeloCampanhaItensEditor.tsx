@@ -161,7 +161,7 @@ export function ModeloCampanhaItensEditor({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Itens</p>
+        <p className="text-sm font-semibold text-fg">Itens</p>
         {itens.length > 0 && (
           <button
             type="button"
@@ -181,7 +181,7 @@ export function ModeloCampanhaItensEditor({
           return (
             <div key={item.clientKey} className="overflow-hidden rounded-2xl border border-indigo-200 dark:border-indigo-500/30">
               <div className="flex items-center gap-3 bg-indigo-50 px-3.5 py-2.5 dark:bg-indigo-500/10">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[11px] font-bold text-white">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[11px] font-bold text-primary-fg">
                   {index + 1}
                 </span>
                 <button
@@ -189,8 +189,8 @@ export function ModeloCampanhaItensEditor({
                   onClick={() => toggleExpanded(item.clientKey)}
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
-                  <span className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.nome || "Novo item"}</span>
-                  <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="truncate text-sm font-semibold text-fg">{item.nome || "Novo item"}</span>
+                  <span className="shrink-0 text-xs text-fg-muted">
                     {prioridadePadraoLabels[item.prioridadePadrao]}
                   </span>
                 </button>
@@ -203,7 +203,7 @@ export function ModeloCampanhaItensEditor({
                         onClick={() => moveItem(index, -1)}
                         disabled={index === 0}
                         aria-label="Mover para cima"
-                        className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/70 disabled:opacity-30 dark:hover:bg-zinc-900/40"
+                        className="rounded-lg p-1.5 text-fg-muted transition hover:bg-white/70 disabled:opacity-30 dark:hover:bg-zinc-900/40"
                       >
                         <ChevronUp className="h-3.5 w-3.5" />
                       </button>
@@ -212,7 +212,7 @@ export function ModeloCampanhaItensEditor({
                         onClick={() => moveItem(index, 1)}
                         disabled={index === itens.length - 1}
                         aria-label="Mover para baixo"
-                        className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/70 disabled:opacity-30 dark:hover:bg-zinc-900/40"
+                        className="rounded-lg p-1.5 text-fg-muted transition hover:bg-white/70 disabled:opacity-30 dark:hover:bg-zinc-900/40"
                       >
                         <ChevronDown className="h-3.5 w-3.5" />
                       </button>
@@ -220,7 +220,7 @@ export function ModeloCampanhaItensEditor({
                         type="button"
                         onClick={() => removeItem(item.clientKey)}
                         aria-label="Remover item"
-                        className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/70 hover:text-red-600 dark:hover:bg-zinc-900/40"
+                        className="rounded-lg p-1.5 text-fg-muted transition hover:bg-white/70 dark:hover:text-red-400 hover:text-red-600 dark:hover:bg-zinc-900/40"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -230,7 +230,7 @@ export function ModeloCampanhaItensEditor({
                     type="button"
                     onClick={() => toggleExpanded(item.clientKey)}
                     aria-label={expanded ? "Recolher item" : "Expandir item"}
-                    className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/70 dark:hover:bg-zinc-900/40"
+                    className="rounded-lg p-1.5 text-fg-muted transition hover:bg-white/70 dark:hover:bg-zinc-900/40"
                   >
                     <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
                   </button>
@@ -238,7 +238,7 @@ export function ModeloCampanhaItensEditor({
               </div>
 
               {expanded && (
-                <div className="flex flex-col gap-3 bg-white p-3.5 dark:bg-zinc-900">
+                <div className="flex flex-col gap-3 bg-surface p-3.5">
                   <Input
                     label="Nome do item"
                     value={item.nome}

@@ -62,24 +62,24 @@ export function ArquivosFiltros({
   );
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
+        <span className="bg-brand-gradient flex h-9 w-9 items-center justify-center rounded-xl">
           <SlidersHorizontal className="h-4 w-4" />
         </span>
         <div>
-          <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Filtros</p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Busca e filtros rodam no servidor — nunca sobre tudo já carregado.</p>
+          <p className="text-sm font-semibold text-fg">Filtros</p>
+          <p className="text-xs text-fg-muted">Busca e filtros rodam no servidor — nunca sobre tudo já carregado.</p>
         </div>
       </div>
 
       <div className="relative mb-3">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
         <input
           value={filtros.search ?? ""}
           onChange={(event) => atualizar("search", event.target.value)}
           placeholder="Buscar por nome, demanda, cliente ou projeto…"
-          className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 py-2.5 pl-10 pr-3 text-sm text-zinc-900 outline-none transition focus:border-indigo-300 focus:bg-white focus:shadow-sm dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-100 dark:focus:bg-zinc-900"
+          className="field w-full rounded-xl py-2.5 pl-10 pr-3 text-sm"
         />
       </div>
 

@@ -31,7 +31,7 @@ export function MinhaContaView() {
   const [senhaSucesso, setSenhaSucesso] = useState(false);
 
   if (!usuarioAtual) {
-    return <p className="text-sm text-zinc-400">Nenhum usuário selecionado.</p>;
+    return <p className="text-sm text-fg-subtle">Nenhum usuário selecionado.</p>;
   }
 
   const usuarioId = usuarioAtual.id;
@@ -99,13 +99,13 @@ export function MinhaContaView() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
+        className="rounded-2xl border border-line bg-surface p-5 shadow-sm sm:p-6"
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Avatar nome={nome} corIdentificacao={corIdentificacao} fotoUrl={fotoUrl} className="h-14 w-14 shrink-0 rounded-2xl text-lg" />
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">{usuarioAtual.nome}</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-fg">{usuarioAtual.nome}</h1>
               <div className="mt-1">
                 <Badge tone="blue">{perfilUsuarioLabels[usuarioAtual.perfil]}</Badge>
               </div>
@@ -115,9 +115,9 @@ export function MinhaContaView() {
         </div>
       </motion.div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
+      <div className="rounded-2xl border border-line bg-surface p-5 shadow-sm sm:p-6">
         <div>
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
             Foto de perfil
           </span>
           <div className="flex items-center gap-3">
@@ -140,7 +140,7 @@ export function MinhaContaView() {
         </div>
 
         <div className="mt-5">
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
             Cor de identificação
           </span>
           <div className="flex flex-wrap gap-2">
@@ -165,17 +165,17 @@ export function MinhaContaView() {
           <Button type="button" onClick={handleSalvarPerfil} disabled={salvandoPerfil}>
             {salvandoPerfil ? "Salvando…" : "Salvar perfil"}
           </Button>
-          {perfilSalvo && <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Perfil atualizado.</span>}
-          {perfilErro && <span className="text-xs font-medium text-red-500">{perfilErro}</span>}
+          {perfilSalvo && <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Perfil atualizado.</span>}
+          {perfilErro && <span className="text-xs font-medium text-red-600">{perfilErro}</span>}
         </div>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
+      <div className="rounded-2xl border border-line bg-surface p-5 shadow-sm sm:p-6">
         <div className="flex items-center gap-2.5">
-          <KeyRound className="h-4 w-4 text-zinc-400" />
-          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Alterar senha</p>
+          <KeyRound className="h-4 w-4 text-fg-subtle" />
+          <p className="text-sm font-semibold text-fg">Alterar senha</p>
         </div>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Informe a senha atual e escolha uma nova (mínimo 6 caracteres).</p>
+        <p className="mt-1 text-xs text-fg-muted">Informe a senha atual e escolha uma nova (mínimo 6 caracteres).</p>
 
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <Input label="Senha atual" type="password" value={senhaAtual} onChange={(event) => setSenhaAtual(event.target.value)} />
@@ -183,8 +183,8 @@ export function MinhaContaView() {
           <Input label="Confirmar" type="password" value={confirmarSenha} onChange={(event) => setConfirmarSenha(event.target.value)} />
         </div>
 
-        {senhaErro && <p className="mt-3 text-xs font-medium text-red-500">{senhaErro}</p>}
-        {senhaSucesso && <p className="mt-3 text-xs font-medium text-emerald-600 dark:text-emerald-400">Senha alterada (simulado).</p>}
+        {senhaErro && <p className="mt-3 text-xs font-medium text-red-600">{senhaErro}</p>}
+        {senhaSucesso && <p className="mt-3 text-xs font-medium text-emerald-700 dark:text-emerald-400">Senha alterada (simulado).</p>}
 
         <div className="mt-5 border-t border-zinc-100 pt-4 dark:border-zinc-800">
           <Button type="button" variant="secondary" onClick={handleAlterarSenha}>
@@ -192,7 +192,7 @@ export function MinhaContaView() {
           </Button>
         </div>
 
-        <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-zinc-100 bg-zinc-50/70 p-3.5 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-400">
+        <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-zinc-100 bg-zinc-50/70 p-3.5 text-xs text-fg-muted dark:border-zinc-800 dark:bg-zinc-950/30">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           Troca de senha ainda simulada nesta fase — sem envio de foto de perfil para um servidor real.
         </div>

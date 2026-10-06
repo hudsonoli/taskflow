@@ -48,10 +48,10 @@ export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; o
   return (
     <div className="flex flex-col gap-5">
       {[...grupos.entries()].map(([chave, demandasDoDia]) => (
-        <div key={chave} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div key={chave} className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-            <h2 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{tituloDoGrupo(chave)}</h2>
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+            <h2 className="text-sm font-semibold text-fg">{tituloDoGrupo(chave)}</h2>
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">
               {demandasDoDia.length} tarefa(s)
             </span>
           </div>
@@ -66,17 +66,17 @@ export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; o
 
               return (
                 <li key={demanda.id} className="flex flex-wrap items-center gap-4 px-4 py-3 transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5">
-                  <span className="w-14 shrink-0 text-sm font-semibold tabular-nums text-zinc-500 dark:text-zinc-400">{hora}</span>
+                  <span className="w-14 shrink-0 text-sm font-semibold tabular-nums text-fg-muted">{hora}</span>
 
                   <button
                     type="button"
                     onClick={() => onOpenDetails(demanda.id)}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <span className="block truncate font-semibold text-zinc-950 transition hover:text-indigo-600 dark:text-zinc-50 dark:hover:text-indigo-400">
+                    <span className="block truncate font-semibold text-fg transition hover:text-indigo-600 dark:hover:text-indigo-400">
                       {demanda.nome}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-zinc-400">
+                    <span className="mt-0.5 block truncate text-xs text-fg-subtle">
                       {rotuloDemanda(demanda)} · {resolverProjetoNome(demanda.projetoId, projetos)}
                     </span>
                   </button>
@@ -98,7 +98,7 @@ export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; o
                     type="button"
                     onClick={() => onOpenDetails(demanda.id)}
                     aria-label={`Ver detalhes de ${demanda.nome}`}
-                    className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   >
                     <Eye className="h-4 w-4" />
                   </button>

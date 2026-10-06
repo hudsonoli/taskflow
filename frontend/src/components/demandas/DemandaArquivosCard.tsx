@@ -132,9 +132,9 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+        <div className="flex items-center gap-2 text-sm font-semibold text-fg">
           <Paperclip className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           Arquivos
         </div>
@@ -149,7 +149,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
             className={
               tipoSelecionado === tipo
                 ? "rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white"
-                : "rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-500 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-400"
+                : "rounded-full border border-line px-3 py-1 text-xs font-semibold text-fg-muted hover:border-field-line"
             }
           >
             {tipo === "anexo" ? "Anexo" : tipo === "layout" ? "Layout" : "Link"}
@@ -178,7 +178,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={enviando}
-              className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:text-zinc-100"
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-300 dark:hover:border-zinc-700"
             >
               <Upload className="h-3.5 w-3.5" />
               {enviando ? "Enviando…" : `Enviar ${tipoSelecionado === "layout" ? "layout" : "arquivo"}`}
@@ -195,7 +195,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
               }}
             />
           </div>
-          <p className="mt-1.5 text-xs text-zinc-400">PNG, JPG ou PDF.</p>
+          <p className="mt-1.5 text-xs text-fg-subtle">PNG, JPG ou PDF.</p>
         </>
       )}
 
@@ -203,9 +203,9 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
 
       <div className="mt-3 flex flex-col gap-1.5">
         {carregando ? (
-          <p className="text-sm text-zinc-400">Carregando arquivos…</p>
+          <p className="text-sm text-fg-subtle">Carregando arquivos…</p>
         ) : arquivos.length === 0 ? (
-          <p className="text-sm text-zinc-400">Nenhum arquivo enviado ainda.</p>
+          <p className="text-sm text-fg-subtle">Nenhum arquivo enviado ainda.</p>
         ) : (
           arquivos.map((arquivo) => {
             const nome = arquivo.nomeOriginal ?? arquivo.titulo ?? "(sem nome)";
@@ -241,7 +241,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
                       {nome}
                     </a>
                   )}
-                  {tamanho && <span className="shrink-0 text-xs text-zinc-400">{tamanho}</span>}
+                  {tamanho && <span className="shrink-0 text-xs text-fg-subtle">{tamanho}</span>}
                   {arquivo.tipo === "layout" && arquivo.statusLayout && (
                     <Badge tone={STATUS_LAYOUT_TONE[arquivo.statusLayout]}>{STATUS_LAYOUT_LABELS[arquivo.statusLayout]}</Badge>
                   )}
@@ -250,7 +250,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
                     onClick={() => void excluir(arquivo.id)}
                     disabled={excluindoId === arquivo.id}
                     aria-label="Excluir arquivo"
-                    className="shrink-0 rounded-lg p-1 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                    className="shrink-0 rounded-lg p-1 text-fg-subtle transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

@@ -250,7 +250,7 @@ export function MemberSelector({
 
   return (
     <div className="relative" ref={containerRef}>
-      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{label}</span>
+      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">{label}</span>
       <div
         role="button"
         tabIndex={0}
@@ -261,10 +261,10 @@ export function MemberSelector({
             setOpen((current) => !current);
           }
         }}
-        className="flex min-h-[42px] w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-1.5 text-left text-sm outline-none transition focus:border-indigo-300 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900/60 dark:focus:bg-zinc-900"
+        className="field flex min-h-[42px] w-full cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-left text-sm"
       >
         {selecionados.length === 0 ? (
-          <span className="text-zinc-400">{placeholder}</span>
+          <span className="text-fg-subtle">{placeholder}</span>
         ) : (
           <div className="flex flex-1 flex-wrap items-center gap-1.5 py-0.5">
             {selecionados.map((option) => (
@@ -284,7 +284,7 @@ export function MemberSelector({
                     type="button"
                     onClick={(event) => remove(option.id, event)}
                     aria-label={`Remover ${option.nome}`}
-                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    className="text-fg-subtle hover:text-zinc-600 dark:hover:text-zinc-200"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -293,30 +293,30 @@ export function MemberSelector({
             ))}
           </div>
         )}
-        <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-4 w-4 shrink-0 text-fg-subtle transition ${open ? "rotate-180" : ""}`} />
       </div>
 
       {open && (
-        <div className="absolute z-20 mt-1 w-full min-w-[260px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="absolute z-20 mt-1 w-full min-w-[260px] overflow-hidden rounded-xl border border-zinc-200 bg-surface shadow-lg dark:border-zinc-700">
           <div className="border-b border-zinc-100 p-2 dark:border-zinc-800">
             <span className="relative block">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
               <input
                 autoFocus
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar…"
-                className="w-full rounded-lg border border-transparent bg-zinc-50 py-1.5 pl-8 pr-2 text-sm text-zinc-900 outline-none focus:border-indigo-300 dark:bg-zinc-800 dark:text-zinc-100"
+                className="field w-full rounded-lg py-1.5 pl-8 pr-2 text-sm"
               />
             </span>
           </div>
           <div className={`max-h-60 overflow-y-auto p-1.5 ${remoto && carregando && resultados.length > 0 ? "opacity-60 transition-opacity" : ""}`}>
             {carregandoPrimeiraPagina ? (
-              <p className="px-3 py-2 text-sm text-zinc-400">Carregando…</p>
+              <p className="px-3 py-2 text-sm text-fg-subtle">Carregando…</p>
             ) : remoto && erro ? (
               <p className="px-3 py-2 text-sm text-red-600 dark:text-red-400">{erro}</p>
             ) : filtrados.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-zinc-400">{emptyLabel}</p>
+              <p className="px-3 py-2 text-sm text-fg-subtle">{emptyLabel}</p>
             ) : (
               filtrados.map((option) => {
                 const isSelected = values.includes(option.id);
@@ -339,7 +339,7 @@ export function MemberSelector({
                     />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-zinc-800 dark:text-zinc-100">{option.nome}</p>
-                      {option.subtitulo && <p className="truncate text-xs text-zinc-400">{option.subtitulo}</p>}
+                      {option.subtitulo && <p className="truncate text-xs text-fg-subtle">{option.subtitulo}</p>}
                     </div>
                     {isSelected && <Check className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />}
                   </button>

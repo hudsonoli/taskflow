@@ -2,7 +2,7 @@ import { Archive, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { resolveCorIdentificacaoHex } from "@/lib/cores";
+import { estiloCorIdentificacao } from "@/lib/cores";
 import { resolverUsuarioPorReferencia } from "@/lib/referencias";
 import type { UsuarioDiretorioItem } from "@/lib/api-backend";
 import type { Departamento } from "@/types/departamento";
@@ -25,20 +25,20 @@ export function DepartamentosTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
       <div className="flex flex-col gap-1 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">Departamentos</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Setores da operação e seus responsáveis.</p>
+          <h2 className="text-base font-semibold text-fg">Departamentos</h2>
+          <p className="text-sm text-fg-muted">Setores da operação e seus responsáveis.</p>
         </div>
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">
           {departamentos.length} registro(s)
         </span>
       </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-[760px] w-full text-left text-sm">
-          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:bg-zinc-950/40">
+          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle dark:bg-zinc-950/40">
             <tr>
               <th className="px-4 py-2.5">Departamento</th>
               <th className="px-4 py-2.5">Descrição</th>
@@ -56,19 +56,19 @@ export function DepartamentosTable({
                     <button type="button" onClick={() => onEdit(departamento.id)} className="flex items-center gap-2.5 text-left">
                       <span
                         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                        style={{ backgroundColor: resolveCorIdentificacaoHex(departamento.corIdentificacao) }}
+                        style={estiloCorIdentificacao(departamento.corIdentificacao)}
                       >
                         {departamento.nome.slice(0, 2).toUpperCase()}
                       </span>
-                      <span className="font-semibold text-zinc-950 transition group-hover:text-indigo-600 dark:text-zinc-50 dark:group-hover:text-indigo-400">
+                      <span className="font-semibold text-fg transition group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
                         {departamento.nome}
                       </span>
                     </button>
                   </td>
-                  <td className="max-w-[320px] truncate px-4 py-3 text-zinc-500 dark:text-zinc-400" title={departamento.descricao}>
+                  <td className="max-w-[320px] truncate px-4 py-3 text-fg-muted" title={departamento.descricao}>
                     {departamento.descricao || "-"}
                   </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{responsavel?.nome ?? "Sem responsável"}</td>
+                  <td className="px-4 py-3 text-fg-muted">{responsavel?.nome ?? "Sem responsável"}</td>
                   <td className="px-4 py-3">
                     {departamento.status === "ativo" ? (
                       <Badge tone="green">Ativo</Badge>
@@ -102,7 +102,7 @@ export function DepartamentosTable({
                             type="button"
                             onClick={() => onArquivar(departamento.id)}
                             aria-label={`Arquivar ${departamento.nome}`}
-                            className="rounded-full p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                            className="rounded-full p-1.5 text-fg-subtle transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                           >
                             <Archive className="h-3.5 w-3.5" />
                           </button>

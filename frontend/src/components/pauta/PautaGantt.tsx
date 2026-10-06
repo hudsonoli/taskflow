@@ -68,17 +68,17 @@ export function PautaGantt({
   const indiceHoje = hoje >= periodoInicio && hoje <= periodoFim ? indiceDoDia(hoje, dias) : null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
       <div className="overflow-x-auto">
         <div className="min-w-[720px]">
           <div className="flex border-b border-zinc-100 dark:border-zinc-800">
-            <div className="w-56 shrink-0 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">Tarefa</div>
+            <div className="w-56 shrink-0 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle">Tarefa</div>
             <div className="grid flex-1" style={{ gridTemplateColumns: `repeat(${dias.length}, minmax(0, 1fr))` }}>
               {dias.map((dia, index) => (
                 <div
                   key={dia.toISOString()}
                   className={clsx(
-                    "border-l border-zinc-100 px-1 py-2.5 text-center text-xs font-medium text-zinc-400 dark:border-zinc-800",
+                    "border-l border-zinc-100 px-1 py-2.5 text-center text-xs font-medium text-fg-subtle dark:border-zinc-800",
                     index === indiceHoje && "bg-indigo-50/60 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400",
                   )}
                 >
@@ -113,10 +113,10 @@ export function PautaGantt({
                     onClick={() => onOpenDetails(demanda.id)}
                     className="w-56 shrink-0 px-4 py-3 text-left"
                   >
-                    <span className="block truncate text-sm font-semibold text-zinc-950 transition hover:text-indigo-600 dark:text-zinc-50 dark:hover:text-indigo-400">
+                    <span className="block truncate text-sm font-semibold text-fg transition hover:text-indigo-600 dark:hover:text-indigo-400">
                       {demanda.nome}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-zinc-400">{resolverProjetoNome(demanda.projetoId, projetos)}</span>
+                    <span className="mt-0.5 block truncate text-xs text-fg-subtle">{resolverProjetoNome(demanda.projetoId, projetos)}</span>
                   </button>
 
                   <div

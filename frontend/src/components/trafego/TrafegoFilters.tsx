@@ -34,15 +34,15 @@ export function TrafegoFilters({
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
+          <span className="bg-brand-gradient flex h-9 w-9 items-center justify-center rounded-xl">
             <SlidersHorizontal className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Filtros operacionais</p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">Ajuste a visão sem alterar dados.</p>
+            <p className="text-sm font-semibold text-fg">Filtros operacionais</p>
+            <p className="text-xs text-fg-muted">Ajuste a visão sem alterar dados.</p>
           </div>
         </div>
 

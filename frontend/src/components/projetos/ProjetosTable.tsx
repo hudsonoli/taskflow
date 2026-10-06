@@ -70,20 +70,20 @@ export function ProjetosTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
       <div className="flex flex-col gap-1 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">Carteira de projetos</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Projetos, campanhas, responsáveis e prazos.</p>
+          <h2 className="text-base font-semibold text-fg">Carteira de projetos</h2>
+          <p className="text-sm text-fg-muted">Projetos, campanhas, responsáveis e prazos.</p>
         </div>
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">
           {projetos.length} registro(s)
         </span>
       </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-[1180px] w-full text-left text-sm">
-          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:bg-zinc-950/40">
+          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle dark:bg-zinc-950/40">
             <tr>
               {["Código", "Projeto", "Cliente", "Campanha", "Responsáveis", "Departamentos", "Status", "Prioridade", "Prazo", "Ações"].map(
                 (column) => (
@@ -108,20 +108,20 @@ export function ProjetosTable({
 
               return (
                 <tr key={projeto.id} className="group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5">
-                  <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100" title={projeto.codigoReferencia}>
+                  <td className="px-4 py-3 font-semibold text-fg" title={projeto.codigoReferencia}>
                     #{projeto.sequencialReferencia}
                   </td>
                   <td className="px-4 py-3">
                     <button
                       type="button"
                       onClick={() => onOpenDetails(projeto.id)}
-                      className="max-w-[240px] text-left font-semibold text-zinc-950 transition hover:text-indigo-600 dark:text-zinc-50 dark:hover:text-indigo-400"
+                      className="max-w-[240px] text-left font-semibold text-fg transition hover:text-indigo-600 dark:hover:text-indigo-400"
                     >
                       <span className="block truncate">{projeto.nome}</span>
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{nomeCliente}</td>
-                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{projeto.campanha}</td>
+                  <td className="px-4 py-3 text-fg-muted">{nomeCliente}</td>
+                  <td className="px-4 py-3 text-fg-muted">{projeto.campanha}</td>
                   <td className="px-4 py-3">
                     <CompactList items={responsaveis} />
                   </td>
@@ -136,7 +136,7 @@ export function ProjetosTable({
                       {prioridadeProjetoLabels[projeto.prioridade]}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-zinc-400">
+                  <td className="px-4 py-3 text-xs text-fg-subtle">
                     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                       <CalendarDays className="h-3.5 w-3.5" />
                       {projeto.dataFimPrevista}

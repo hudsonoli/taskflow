@@ -2,7 +2,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { resolveCorIdentificacaoHex } from "@/lib/cores";
+import { estiloCorIdentificacao } from "@/lib/cores";
 import { resolverDepartamentoNome } from "@/lib/referencias";
 import { perfilUsuarioLabels } from "@/types/usuario";
 import type { Usuario } from "@/types/usuario";
@@ -27,13 +27,13 @@ export function UsuariosTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
       <div className="flex flex-col gap-1 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">Equipe</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Pessoas com acesso ao workspace.</p>
+          <h2 className="text-base font-semibold text-fg">Equipe</h2>
+          <p className="text-sm text-fg-muted">Pessoas com acesso ao workspace.</p>
         </div>
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">
           {usuarios.length}
           {temMais ? "+" : ""} registro(s)
         </span>
@@ -41,7 +41,7 @@ export function UsuariosTable({
 
       <div className="overflow-x-auto">
         <table className="min-w-[960px] w-full text-left text-sm">
-          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:bg-zinc-950/40">
+          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle dark:bg-zinc-950/40">
             <tr>
               <th className="px-4 py-2.5">Pessoa</th>
               <th className="px-4 py-2.5">Departamento</th>
@@ -58,24 +58,24 @@ export function UsuariosTable({
                   <button type="button" onClick={() => onEdit(usuario.id)} className="flex max-w-[240px] items-center gap-2.5 text-left">
                     <span
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                      style={{ backgroundColor: resolveCorIdentificacaoHex(usuario.corIdentificacao) }}
+                      style={estiloCorIdentificacao(usuario.corIdentificacao)}
                     >
                       {usuario.nome.slice(0, 2).toUpperCase()}
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold text-zinc-950 transition group-hover:text-indigo-600 dark:text-zinc-50 dark:group-hover:text-indigo-400">
+                      <span className="block truncate font-semibold text-fg transition group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
                         {usuario.nome}
                       </span>
                     </span>
                   </button>
                 </td>
-                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                <td className="px-4 py-3 text-fg-muted">
                   <span className="flex items-center gap-1.5">
                     {resolverDepartamentoNome(usuario.departamentoId, departamentos)}
                     {usuario.liderDepartamento && <Badge tone="blue">Head</Badge>}
                   </span>
                 </td>
-                <td className="px-4 py-3 max-w-[220px] truncate text-zinc-600 dark:text-zinc-400" title={usuario.email}>
+                <td className="px-4 py-3 max-w-[220px] truncate text-fg-muted" title={usuario.email}>
                   {usuario.email || "-"}
                 </td>
                 <td className="px-4 py-3">

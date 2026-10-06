@@ -75,10 +75,10 @@ export function NovoProjetoModal({
             <FolderPlus className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? "Editar projeto" : "Novo projeto"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Organize campanha, equipe e modelo de demandas.
             </p>
           </div>
@@ -87,7 +87,7 @@ export function NovoProjetoModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>

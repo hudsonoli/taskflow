@@ -104,7 +104,7 @@ export function VolumeColaboradorTable({ series }: { series: SerieBarraEmpilhada
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
-        <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+        <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle">
           <tr>
             <th className="py-2">Projeto</th>
             {allColaboradores.map(([id, label]) => (
@@ -122,11 +122,11 @@ export function VolumeColaboradorTable({ series }: { series: SerieBarraEmpilhada
               <tr key={serie.categoriaId}>
                 <td className="py-2 text-zinc-700 dark:text-zinc-300">{serie.categoria}</td>
                 {allColaboradores.map(([id]) => (
-                  <td key={id} className="py-2 text-right text-zinc-600 dark:text-zinc-400">
+                  <td key={id} className="py-2 text-right text-fg-muted">
                     {serie.segmentos.find((segmento) => segmento.seriesId === id)?.value ?? 0}
                   </td>
                 ))}
-                <td className="py-2 text-right font-semibold text-zinc-900 dark:text-zinc-100">{total}</td>
+                <td className="py-2 text-right font-semibold text-fg">{total}</td>
               </tr>
             );
           })}

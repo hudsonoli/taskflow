@@ -304,7 +304,7 @@ export function DemandasView() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-xl border border-line bg-surface p-4 shadow-sm"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -312,8 +312,8 @@ export function DemandasView() {
               <ClipboardList className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Tarefas</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <h1 className="text-lg font-semibold tracking-tight text-fg">Tarefas</h1>
+              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
                 Fila operacional de tarefas, com visão em lista ou kanban por status.
               </p>
             </div>
@@ -325,7 +325,7 @@ export function DemandasView() {
       {erro && (
         <div
           role="alert"
-          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
+          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
         >
           {erro}
         </div>
@@ -334,7 +334,7 @@ export function DemandasView() {
       {erroPagina && (
         <div
           role="alert"
-          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
+          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
         >
           {erroPagina}
         </div>
@@ -375,8 +375,8 @@ export function DemandasView() {
       )}
 
       {!carregandoInicial && (demandasPagina.length > 0 || offset > 0) && (
-        <div className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <span className="text-zinc-500 dark:text-zinc-400">
+        <div className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3 text-sm">
+          <span className="text-fg-muted">
             {offset > 0 ? `Itens ${offset + 1}–${offset + demandasPagina.length}` : `${demandasPagina.length} item(ns)`}
           </span>
           <div className="flex items-center gap-2">

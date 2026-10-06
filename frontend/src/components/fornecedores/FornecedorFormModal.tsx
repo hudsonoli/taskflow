@@ -15,7 +15,7 @@ import {
   statusFornecedorEditaveis,
   statusFornecedorLabels,
 } from "@/lib/fornecedores";
-import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
+import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
 import type { Fornecedor, FornecedorFormDraft, FornecedorStatusEditavel } from "@/types/fornecedor";
 
 const ufsDisponiveis = [
@@ -88,15 +88,15 @@ export function FornecedorFormModal({
         <div className="flex items-start gap-4">
           <div
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-bold text-white"
-            style={{ backgroundColor: resolveCorIdentificacaoHex(draft.corIdentificacao) }}
+            style={estiloCorIdentificacao(draft.corIdentificacao)}
           >
             {draft.nome.trim().slice(0, 2).toUpperCase() || <Truck className="h-5 w-5" />}
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? `Editando: ${fornecedor.nome}` : "Novo fornecedor"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Gráficas, produtoras, freelancers, mídia.
               {editing && (
                 <span className="ml-1 font-mono text-xs opacity-70">{fornecedor.codigoReferencia}</span>
@@ -108,7 +108,7 @@ export function FornecedorFormModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -159,7 +159,7 @@ export function FornecedorFormModal({
             </div>
 
             <div>
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Cor de identificação</span>
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Cor de identificação</span>
               <div className="flex flex-wrap gap-2">
                 {coresIdentificacaoDisponiveis.map((cor) => (
                   <button

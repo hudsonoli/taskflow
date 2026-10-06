@@ -12,13 +12,13 @@ export function AcessoNegado({
   descricao?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/50 p-12 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
-      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-line bg-zinc-50/50 p-12 text-center dark:bg-zinc-900/40">
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
         <ShieldAlert size={20} />
       </div>
       <div>
         <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{titulo}</p>
-        <p className="mt-1 max-w-sm text-sm text-zinc-400">{descricao}</p>
+        <p className="mt-1 max-w-sm text-sm text-fg-subtle">{descricao}</p>
       </div>
     </div>
   );

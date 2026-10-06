@@ -16,7 +16,7 @@ import type { Demanda, DemandaPrioridade } from "@/types/demanda";
 const prioridadeClassNames: Record<DemandaPrioridade, string> = {
   alta: "border-blue-900 bg-blue-900/5 text-blue-900 dark:border-blue-300 dark:bg-blue-400/10 dark:text-blue-200",
   media: "border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-400/60 dark:bg-sky-500/10 dark:text-sky-300",
-  baixa: "border-sky-200 bg-sky-50/60 text-sky-500 dark:border-sky-200/40 dark:bg-sky-500/5 dark:text-sky-300",
+  baixa: "border-sky-200 bg-sky-50/60 text-sky-700 dark:border-sky-200/40 dark:bg-sky-500/5 dark:text-sky-300",
 };
 
 const prioridadeBorderClassNames: Record<DemandaPrioridade, string> = {
@@ -36,10 +36,10 @@ function CardContent({ demanda }: { demanda: Demanda }) {
     <>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">
             {rotuloDemanda(demanda)}
           </span>
-          <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-zinc-950 transition group-hover:text-indigo-600 dark:text-zinc-50 dark:group-hover:text-indigo-400">
+          <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-fg transition group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
             {demanda.nome}
           </h3>
         </div>
@@ -48,7 +48,7 @@ function CardContent({ demanda }: { demanda: Demanda }) {
         </span>
       </div>
 
-      <p className="mt-2 truncate text-xs font-medium text-zinc-500 dark:text-zinc-400">
+      <p className="mt-2 truncate text-xs font-medium text-fg-muted">
         {resolverProjetoNome(demanda.projetoId, projetos)}
       </p>
 
@@ -112,7 +112,7 @@ export function DemandaKanbanCard({
 export function DemandaKanbanCardOverlay({ demanda }: { demanda: Demanda }) {
   return (
     <div
-      className={`w-[260px] rotate-2 cursor-grabbing rounded-2xl border border-l-4 border-zinc-100 bg-white p-3.5 text-left shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 ${prioridadeBorderClassNames[demanda.prioridade]}`}
+      className={`w-[260px] rotate-2 cursor-grabbing rounded-2xl border border-l-4 border-zinc-100 bg-surface p-3.5 text-left shadow-2xl dark:border-zinc-800 ${prioridadeBorderClassNames[demanda.prioridade]}`}
     >
       <CardContent demanda={demanda} />
     </div>

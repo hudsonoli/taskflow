@@ -204,9 +204,9 @@ export function MinhasDemandasView() {
       <Cabecalho />
 
       <IndicadoresGrid itens={indicadores} colunas={3} />
-      {erroResumo && <p className="text-xs text-red-500">{erroResumo}</p>}
+      {erroResumo && <p className="text-xs text-red-600">{erroResumo}</p>}
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
         <div className="max-w-xs">
           <Select
             label="Status"
@@ -218,17 +218,17 @@ export function MinhasDemandasView() {
       </div>
 
       {carregandoInicial ? (
-        <p className="text-sm text-zinc-400">Carregando suas demandas…</p>
+        <p className="text-sm text-fg-subtle">Carregando suas demandas…</p>
       ) : erroPagina && demandasPagina.length === 0 ? (
         <EmptyState title="Não foi possível carregar" description={erroPagina} />
       ) : demandasPagina.length === 0 ? (
         <EmptyState title="Nenhuma demanda encontrada" description="Ajuste o filtro para visualizar suas demandas." />
       ) : (
         <div className={buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}>
-          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-[1100px] w-full text-left text-sm">
-                <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:bg-zinc-950/40">
+                <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle dark:bg-zinc-950/40">
                   <tr>
                     {["Título", "Cliente", "Depto. executor", "Responsável", "Status", "Prazo", "Previsão", "Última atualização", "Pendência"].map(
                       (coluna) => (
@@ -260,14 +260,14 @@ export function MinhasDemandasView() {
                           <button
                             type="button"
                             onClick={() => setSelecionadaId(demanda.id)}
-                            className="max-w-[220px] text-left font-semibold text-zinc-950 transition hover:text-indigo-600 dark:text-zinc-50 dark:hover:text-indigo-400"
+                            className="max-w-[220px] text-left font-semibold text-fg transition hover:text-indigo-600 dark:hover:text-indigo-400"
                           >
                             <span className="block truncate">{demanda.nome}</span>
-                            <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{rotuloDemanda(demanda)}</span>
+                            <span className="mt-0.5 block truncate text-xs font-medium text-fg-subtle">{rotuloDemanda(demanda)}</span>
                           </button>
                         </td>
-                        <td className="max-w-[140px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">{cliente?.nome ?? "Sem cliente"}</td>
-                        <td className="max-w-[160px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                        <td className="max-w-[140px] truncate px-4 py-3 text-fg-muted">{cliente?.nome ?? "Sem cliente"}</td>
+                        <td className="max-w-[160px] truncate px-4 py-3 text-fg-muted">
                           {demanda.departamentoResponsavelIds.length === 0
                             ? "-"
                             : demanda.departamentoResponsavelIds
@@ -281,22 +281,22 @@ export function MinhasDemandasView() {
                           <Badge tone={statusDemandaTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={classificacao.atrasada ? "font-semibold text-red-500" : "text-zinc-600 dark:text-zinc-400"}>
+                          <span className={classificacao.atrasada ? "font-semibold text-red-600" : "text-fg-muted"}>
                             {formatPrazo(demanda.prazoEtapaAtual)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{formatPrazo(demanda.dataFimPrevista)}</td>
-                        <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                        <td className="px-4 py-3 text-fg-muted">{formatPrazo(demanda.dataFimPrevista)}</td>
+                        <td className="px-4 py-3 text-xs text-fg-muted">
                           {new Date(demanda.updatedAt).toLocaleDateString("pt-BR")}
                         </td>
                         <td className="px-4 py-3 text-xs">
                           {pendencia ? (
                             <div>
                               <p className="font-medium text-zinc-700 dark:text-zinc-200">{pendencia.texto}</p>
-                              <p className="text-zinc-400">{pendencia.origem}</p>
+                              <p className="text-fg-subtle">{pendencia.origem}</p>
                             </div>
                           ) : (
-                            <span className="text-zinc-400">—</span>
+                            <span className="text-fg-subtle">—</span>
                           )}
                         </td>
                       </tr>
@@ -309,11 +309,11 @@ export function MinhasDemandasView() {
         </div>
       )}
 
-      {erroPagina && demandasPagina.length > 0 && <p className="text-xs text-red-500">{erroPagina}</p>}
+      {erroPagina && demandasPagina.length > 0 && <p className="text-xs text-red-600">{erroPagina}</p>}
 
       {!carregandoInicial && (demandasPagina.length > 0 || offset > 0) && (
         <div className="flex items-center justify-between">
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-fg-subtle">
             {offset > 0 ? `Itens ${offset + 1}–${offset + demandasPagina.length}` : `${demandasPagina.length} item(ns)`}
           </span>
           <div className="flex gap-2">
@@ -354,7 +354,7 @@ function Cabecalho() {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      className="rounded-xl border border-line bg-surface p-4 shadow-sm"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
@@ -362,8 +362,8 @@ function Cabecalho() {
             <Headset className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Minhas Demandas</h1>
-            <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <h1 className="text-lg font-semibold tracking-tight text-fg">Minhas Demandas</h1>
+            <p className="mt-1 text-sm leading-6 text-fg-muted">
               Demandas criadas por você, sob sua responsabilidade, ou de clientes que você atende.
             </p>
           </div>

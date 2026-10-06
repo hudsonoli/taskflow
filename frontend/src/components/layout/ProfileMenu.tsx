@@ -60,10 +60,10 @@ export function ProfileMenu() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
+            className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-2xl border border-line bg-surface shadow-lg"
           >
             {saindo ? (
-              <p className="px-4 py-5 text-center text-sm text-zinc-500 dark:text-zinc-400">Saindo…</p>
+              <p className="px-4 py-5 text-center text-sm text-fg-muted">Saindo…</p>
             ) : (
               <>
                 <div className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800">
@@ -74,7 +74,7 @@ export function ProfileMenu() {
                     className="h-10 w-10 shrink-0 rounded-full text-sm"
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{usuarioAtual.nome}</p>
+                    <p className="truncate text-sm font-semibold text-fg">{usuarioAtual.nome}</p>
                     <Badge tone="blue">{perfilUsuarioLabels[usuarioAtual.perfil]}</Badge>
                   </div>
                 </div>
@@ -85,7 +85,7 @@ export function ProfileMenu() {
                     onClick={() => setOpen(false)}
                     className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
-                    <UserCog className="h-4 w-4 text-zinc-400" />
+                    <UserCog className="h-4 w-4 text-fg-subtle" />
                     Conta
                   </Link>
                   <button

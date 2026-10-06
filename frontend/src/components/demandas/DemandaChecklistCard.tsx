@@ -123,14 +123,14 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
   const concluidos = itens.filter((item) => item.concluido).length;
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+        <div className="flex items-center gap-2 text-sm font-semibold text-fg">
           <ListChecks className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           Checklist
         </div>
         {itens.length > 0 && (
-          <span className="text-xs font-medium text-zinc-400">
+          <span className="text-xs font-medium text-fg-subtle">
             {concluidos}/{itens.length} concluídos
           </span>
         )}
@@ -149,13 +149,13 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
             }
           }}
           placeholder="Adicionar item…"
-          className="w-full rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-2 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-300 focus:bg-white focus:shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-100 dark:focus:bg-zinc-900"
+          className="field w-full rounded-xl px-3 py-2 text-sm"
         />
         <button
           type="button"
           onClick={() => void adicionarItem()}
           disabled={!novoTexto.trim()}
-          className="inline-flex shrink-0 items-center justify-center rounded-xl bg-indigo-600 p-2.5 text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex shrink-0 items-center justify-center rounded-xl bg-indigo-600 p-2.5 text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Adicionar item"
         >
           <Send className="h-4 w-4" />
@@ -164,9 +164,9 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
 
       <div className="mt-3 flex flex-col gap-1.5">
         {carregando ? (
-          <p className="text-sm text-zinc-400">Carregando checklist…</p>
+          <p className="text-sm text-fg-subtle">Carregando checklist…</p>
         ) : itens.length === 0 ? (
-          <p className="text-sm text-zinc-400">Nenhum item no checklist ainda.</p>
+          <p className="text-sm text-fg-subtle">Nenhum item no checklist ainda.</p>
         ) : (
           itens.map((item, index) => (
             <div
@@ -178,7 +178,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                 onClick={() => void alternarConcluido(item)}
                 disabled={processandoId === item.id}
                 aria-label={item.concluido ? "Reabrir item" : "Concluir item"}
-                className="shrink-0 text-zinc-400 transition hover:text-indigo-600 disabled:opacity-40 dark:hover:text-indigo-400"
+                className="shrink-0 text-fg-subtle transition hover:text-indigo-600 disabled:opacity-40 dark:hover:text-indigo-400"
               >
                 {item.concluido ? (
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
@@ -197,13 +197,13 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                     if (event.key === "Escape") setEditandoId(null);
                   }}
                   onBlur={() => void salvarEdicao(item.id)}
-                  className="min-w-0 flex-1 rounded-lg border border-indigo-300 bg-white px-2 py-1 text-sm text-zinc-900 outline-none dark:bg-zinc-900 dark:text-zinc-100"
+                  className="field min-w-0 flex-1 rounded-lg px-2 py-1 text-sm"
                 />
               ) : (
                 <span
                   className={`min-w-0 flex-1 truncate text-sm ${
                     item.concluido
-                      ? "text-zinc-400 line-through"
+                      ? "text-fg-subtle line-through"
                       : "text-zinc-700 dark:text-zinc-200"
                   }`}
                 >
@@ -217,7 +217,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                   onClick={() => mover(index, -1)}
                   disabled={index === 0}
                   aria-label="Mover para cima"
-                  className="rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  className="rounded-lg p-1 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                 >
                   <ChevronUp className="h-3.5 w-3.5" />
                 </button>
@@ -226,7 +226,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                   onClick={() => mover(index, 1)}
                   disabled={index === itens.length - 1}
                   aria-label="Mover para baixo"
-                  className="rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  className="rounded-lg p-1 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                 >
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
@@ -235,7 +235,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                     type="button"
                     onClick={() => setEditandoId(null)}
                     aria-label="Cancelar edição"
-                    className="rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    className="rounded-lg p-1 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -244,7 +244,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                     type="button"
                     onClick={() => iniciarEdicao(item)}
                     aria-label="Editar texto"
-                    className="rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    className="rounded-lg p-1 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -254,7 +254,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                   onClick={() => void excluir(item.id)}
                   disabled={processandoId === item.id}
                   aria-label="Excluir item"
-                  className="rounded-lg p-1 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                  className="rounded-lg p-1 text-fg-subtle transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

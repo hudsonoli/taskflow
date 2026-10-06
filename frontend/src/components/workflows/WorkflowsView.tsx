@@ -95,7 +95,7 @@ export function WorkflowsView() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-xl border border-line bg-surface p-4 shadow-sm"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -103,8 +103,8 @@ export function WorkflowsView() {
               <WorkflowIcon className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Workflows</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <h1 className="text-lg font-semibold tracking-tight text-fg">Workflows</h1>
+              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
                 Modelos de etapas padrão, aplicados no cadastro de tarefas para acelerar a montagem do fluxo de execução.
               </p>
             </div>

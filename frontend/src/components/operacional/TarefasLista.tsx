@@ -48,10 +48,10 @@ export function TarefasLista({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
       <div className="overflow-x-auto">
         <table className="min-w-[900px] w-full text-left text-sm">
-          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:bg-zinc-950/40">
+          <thead className="bg-zinc-50/80 text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle dark:bg-zinc-950/40">
             <tr>
               {["Tarefa", "Cliente", "Projeto", "Prioridade", "Responsáveis", "Status", "Prazo"].map((coluna) => (
                 <th key={coluna} className="px-4 py-2.5">
@@ -75,14 +75,14 @@ export function TarefasLista({
                       type="button"
                       onClick={() => onOpenDetails?.(demanda.id)}
                       disabled={!onOpenDetails}
-                      className="max-w-[240px] text-left font-semibold text-zinc-950 transition hover:text-indigo-600 disabled:cursor-default disabled:hover:text-zinc-950 dark:text-zinc-50 dark:disabled:hover:text-zinc-50 dark:hover:text-indigo-400"
+                      className="max-w-[240px] text-left font-semibold text-fg transition hover:text-indigo-600 disabled:cursor-default disabled:hover:text-fg dark:hover:text-indigo-400"
                     >
                       <span className="block truncate">{demanda.nome}</span>
-                      <span className="mt-0.5 block truncate text-xs font-medium text-zinc-400">{rotuloDemanda(demanda)}</span>
+                      <span className="mt-0.5 block truncate text-xs font-medium text-fg-subtle">{rotuloDemanda(demanda)}</span>
                     </button>
                   </td>
-                  <td className="max-w-[160px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">{cliente?.nome ?? "Sem cliente"}</td>
-                  <td className="max-w-[160px] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                  <td className="max-w-[160px] truncate px-4 py-3 text-fg-muted">{cliente?.nome ?? "Sem cliente"}</td>
+                  <td className="max-w-[160px] truncate px-4 py-3 text-fg-muted">
                     {resolverProjetoNome(demanda.projetoId, projetos)}
                   </td>
                   <td className="px-4 py-3">
@@ -97,7 +97,7 @@ export function TarefasLista({
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge tone={statusDemandaTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
                       {demanda.status === "bloqueada" && (
-                        <span title="Tarefa bloqueada" className="text-red-500">
+                        <span title="Tarefa bloqueada" className="text-red-600">
                           <Lock className="h-3.5 w-3.5" />
                         </span>
                       )}
@@ -107,7 +107,7 @@ export function TarefasLista({
                     <span
                       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${
                         classificacao.atrasada
-                          ? "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"
+                          ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400"
                           : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
                       }`}
                     >

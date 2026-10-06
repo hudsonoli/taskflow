@@ -211,7 +211,7 @@ export function PautaView() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-xl border border-line bg-surface p-4 shadow-sm"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -219,8 +219,8 @@ export function PautaView() {
               <CalendarClock className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Pauta</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <h1 className="text-lg font-semibold tracking-tight text-fg">Pauta</h1>
+              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
                 Ordem das tarefas por prazo, para acompanhar o dia e preparar a reunião de pauta da equipe.
               </p>
             </div>
@@ -241,7 +241,7 @@ export function PautaView() {
       />
 
       {carregandoInicial ? (
-        <p className="text-sm text-zinc-400">Carregando pauta…</p>
+        <p className="text-sm text-fg-subtle">Carregando pauta…</p>
       ) : erro && demandasPauta.length === 0 ? (
         <EmptyState title="Não foi possível carregar a pauta" description={erro} icon={<CalendarClock size={16} />} />
       ) : (
@@ -254,7 +254,7 @@ export function PautaView() {
         </div>
       )}
 
-      {erro && demandasPauta.length > 0 && <p className="text-xs text-red-500">{erro}</p>}
+      {erro && demandasPauta.length > 0 && <p className="text-xs text-red-600">{erro}</p>}
 
       {!carregandoInicial && temMais && (
         <div className="flex justify-center">

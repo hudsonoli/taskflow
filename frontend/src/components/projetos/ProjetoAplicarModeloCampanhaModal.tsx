@@ -42,10 +42,10 @@ export function ProjetoAplicarModeloCampanhaModal({
             <Layers3 className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-lg font-semibold text-fg">
               {temSnapshotAtual ? "Substituir Modelo de Campanha" : "Aplicar Modelo de Campanha"}
             </h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 text-sm text-fg-muted">
               {temSnapshotAtual
                 ? "Isso substituirá todos os itens atuais deste Modelo de Campanha no Projeto. Alterações feitas nos itens atuais serão perdidas — a biblioteca original não é afetada."
                 : "Os itens do Modelo escolhido serão copiados para este Projeto e podem ser editados livremente depois."}
@@ -56,7 +56,7 @@ export function ProjetoAplicarModeloCampanhaModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -74,10 +74,10 @@ export function ProjetoAplicarModeloCampanhaModal({
           ]}
         />
         {erroDiretorio && (
-          <p className="mt-1 text-xs text-red-500 dark:text-red-400">Não foi possível carregar os modelos de campanha.</p>
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">Não foi possível carregar os modelos de campanha.</p>
         )}
         {!carregando && !erroDiretorio && modelosCampanha.length === 0 && (
-          <p className="mt-1 text-xs text-zinc-400">Nenhum modelo de campanha ativo na biblioteca.</p>
+          <p className="mt-1 text-xs text-fg-subtle">Nenhum modelo de campanha ativo na biblioteca.</p>
         )}
       </div>
 

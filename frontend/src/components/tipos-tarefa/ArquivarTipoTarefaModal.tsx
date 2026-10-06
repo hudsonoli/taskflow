@@ -30,12 +30,12 @@ export function ArquivarTipoTarefaModal({
     <Modal open={open} onClose={onClose} maxWidthClassName="max-w-md">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400">
             <Archive className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Arquivar {nome}</h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            <h2 className="text-lg font-semibold text-fg">Arquivar {nome}</h2>
+            <p className="mt-1 text-sm text-fg-muted">
               O tipo de tarefa não é apagado. Itens de Modelo de Campanha que já o referenciam continuam como
               estão — apenas novas seleções ficam bloqueadas. Pode ser restaurado depois.
             </p>
@@ -45,7 +45,7 @@ export function ArquivarTipoTarefaModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>

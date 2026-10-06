@@ -50,7 +50,7 @@ export function Combobox({
       <label className="block text-sm">
         <span className="mb-1 block font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
         <span className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
           <input
             value={open ? query : (selected?.label ?? "")}
             onChange={(event) => {
@@ -62,7 +62,7 @@ export function Combobox({
               setQuery("");
             }}
             placeholder={placeholder}
-            className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 py-2.5 pl-9 pr-8 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-300 focus:bg-white focus:shadow-sm dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-100 dark:focus:bg-zinc-900"
+            className="field w-full rounded-xl py-2.5 pl-9 pr-8 text-sm"
           />
           {value && (
             <button
@@ -72,7 +72,7 @@ export function Combobox({
                 onChange("");
                 setQuery("");
               }}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-zinc-600 dark:hover:text-zinc-200"
               aria-label="Limpar seleção"
             >
               <X className="h-3.5 w-3.5" />
@@ -82,9 +82,9 @@ export function Combobox({
       </label>
 
       {open && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-zinc-200 bg-surface p-1 shadow-lg dark:border-zinc-700">
           {filtered.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-zinc-400">{emptyLabel}</p>
+            <p className="px-3 py-2 text-sm text-fg-subtle">{emptyLabel}</p>
           ) : (
             filtered.map((option) => (
               <button

@@ -89,20 +89,20 @@ export function ProjetoDemandasSection({ projetoId }: { projetoId: string }) {
   }
 
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
+    <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-5">
       <div className="flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
           <ClipboardList className="h-5 w-5" />
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Demandas do projeto</h3>
-          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Ativas, concluídas e demais status, todas em um lugar.</p>
+          <h3 className="text-sm font-semibold text-fg">Demandas do projeto</h3>
+          <p className="mt-0.5 text-xs text-fg-muted">Ativas, concluídas e demais status, todas em um lugar.</p>
         </div>
       </div>
 
       <div className="mt-4">
         {carregandoInicial ? (
-          <p className="text-sm text-zinc-400">Carregando demandas…</p>
+          <p className="text-sm text-fg-subtle">Carregando demandas…</p>
         ) : erro && demandas.length === 0 ? (
           <EmptyState title="Não foi possível carregar" description={erro} icon={<ClipboardList size={16} />} />
         ) : demandas.length === 0 ? (
@@ -116,8 +116,8 @@ export function ProjetoDemandasSection({ projetoId }: { projetoId: string }) {
                   className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-100 bg-zinc-50/60 px-3.5 py-2.5 dark:border-zinc-800 dark:bg-zinc-950/30"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{demanda.nome}</p>
-                    <p className="text-xs text-zinc-400">
+                    <p className="truncate text-sm font-semibold text-fg">{demanda.nome}</p>
+                    <p className="text-xs text-fg-subtle">
                       {rotuloDemanda(demanda)} · prazo {formatPrazo(demanda.prazoEtapaAtual)}
                     </p>
                   </div>
@@ -125,7 +125,7 @@ export function ProjetoDemandasSection({ projetoId }: { projetoId: string }) {
                 </li>
               ))}
             </ul>
-            {erro && demandas.length > 0 && <p className="mt-2 text-xs text-red-500">{erro}</p>}
+            {erro && demandas.length > 0 && <p className="mt-2 text-xs text-red-600">{erro}</p>}
             {temMais && (
               <div className="mt-3 flex justify-center">
                 <Button type="button" variant="secondary" onClick={carregarMais} disabled={carregandoMais}>

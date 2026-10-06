@@ -11,7 +11,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
 import { generateId } from "@/lib/ids";
 import { formatCPF } from "@/lib/mascaras";
-import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
+import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
 import { PERFIL_PARA_PERFIL_BASE } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeVerFinanceiroEfetivo } from "@/lib/escopo-operacional";
@@ -129,15 +129,15 @@ export function UsuarioFormModal({
         <div className="flex items-start gap-4">
           <div
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-bold text-white"
-            style={{ backgroundColor: resolveCorIdentificacaoHex(draft.corIdentificacao) }}
+            style={estiloCorIdentificacao(draft.corIdentificacao)}
           >
             {draft.nome.trim().slice(0, 2).toUpperCase() || <User className="h-5 w-5" />}
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? `Editando: ${usuario.nome}` : "Nova pessoa na equipe"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Cadastro real — login com e-mail e senha própria, gravado no banco.
             </p>
           </div>
@@ -146,7 +146,7 @@ export function UsuarioFormModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -203,7 +203,7 @@ export function UsuarioFormModal({
                   options={Object.entries(perfilUsuarioLabels).map(([value, label]) => ({ value, label }))}
                 />
                 {PERFIL_PARA_PERFIL_BASE[draft.perfil] !== draft.perfil && (
-                  <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+                  <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
                     Nesta fase, o backend só tem 3 níveis reais — este perfil é gravado como{" "}
                     <strong>{perfilUsuarioLabels[PERFIL_PARA_PERFIL_BASE[draft.perfil]]}</strong>.
                   </p>
@@ -212,7 +212,7 @@ export function UsuarioFormModal({
             </div>
 
             <div className="flex flex-col gap-2.5">
-              <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+              <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
                 <Switch
                   checked={draft.ativo}
                   onChange={(checked) => updateDraft({ ativo: checked })}
@@ -222,7 +222,7 @@ export function UsuarioFormModal({
               </div>
 
               <div
-                className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900"
+                className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700"
                 title="Líderes/gerentes de departamento podem cadastrar novas demandas, independentemente do perfil."
               >
                 <Switch
@@ -242,7 +242,7 @@ export function UsuarioFormModal({
             />
 
             <div>
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Cor de identificação</span>
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Cor de identificação</span>
               <div className="flex flex-wrap gap-2">
                 {coresIdentificacaoDisponiveis.map((cor) => (
                   <button
@@ -291,7 +291,7 @@ export function UsuarioFormModal({
         {effectiveTab === "contatos" && (
           <>
             {draft.contatos.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-4 text-center text-xs text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800/60">
+              <p className="border border-dashed border-line bg-surface-2 rounded-xl px-3 py-4 text-center text-xs text-fg-subtle">
                 Nenhum contato cadastrado.
               </p>
             ) : (
@@ -320,7 +320,7 @@ export function UsuarioFormModal({
                       <button
                         type="button"
                         onClick={() => removeContato(contato.id)}
-                        className="rounded-full p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                        className="rounded-full p-1.5 text-fg-subtle transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                         aria-label="Remover contato"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -355,15 +355,15 @@ export function UsuarioFormModal({
               />
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/60">
+            <div className="border border-line bg-surface-2 rounded-xl p-4">
               <div className="flex items-start gap-2">
-                <Calculator className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                <Calculator className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" />
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Cruzamento recebimento x hora</p>
-                  <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Cruzamento recebimento x hora</p>
+                  <p className="mt-1 text-lg font-semibold text-fg">
                     {valorPorHora !== null ? `${formatBRL(valorPorHora)}/h` : "—"}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-1 text-xs text-fg-muted">
                     Calculado a partir do valor recebido dividido pelas horas de trabalho aproximadas.
                   </p>
                 </div>

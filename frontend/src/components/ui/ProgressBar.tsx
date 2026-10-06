@@ -22,7 +22,7 @@ export function ProgressBar({
   return (
     <div>
       {label && (
-        <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-zinc-500 dark:text-zinc-400">
+        <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-fg-muted">
           <span>{label}</span>
           <span>{value}%</span>
         </div>

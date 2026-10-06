@@ -123,10 +123,10 @@ export function PecaFormModal({
             <Layers3 className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? `Editando: ${peca.nome}` : "Nova peça no catálogo"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Modelo reutilizável — tempo estimado, valor de tabela e briefing padrão.
             </p>
           </div>
@@ -135,7 +135,7 @@ export function PecaFormModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -178,12 +178,12 @@ export function PecaFormModal({
                 className="font-mono tabular-nums"
               />
             </div>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-fg-subtle">
               O tempo calculado pela execução da tarefa no sistema é automático — aparece assim que houver sessões de
               trabalho vinculadas a esta peça.
             </p>
 
-            <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+            <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
               <Switch
                 checked={form.ativa}
                 onChange={(checked) => updateForm({ ativa: checked })}
@@ -206,10 +206,10 @@ export function PecaFormModal({
               />
             ) : (
               <div>
-                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                   Valor de tabela (R$)
                 </span>
-                <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-xs text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800/60">
+                <p className="border border-dashed border-line bg-surface-2 rounded-xl px-3 py-2.5 text-xs text-fg-subtle">
                   Visível apenas para Gestão e Diretoria
                 </p>
               </div>
@@ -217,7 +217,7 @@ export function PecaFormModal({
 
             {podeVerValor ? (
               <div>
-                <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+                <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
                   <Switch
                     checked={form.sindicatoAtivo}
                     onChange={(checked) => updateForm({ sindicatoAtivo: checked })}
@@ -228,7 +228,7 @@ export function PecaFormModal({
 
                 {form.sindicatoAtivo && (
                   <div className="mt-3">
-                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                       Valores de sindicato
                     </span>
                     <div className="grid gap-3 md:grid-cols-3">
@@ -258,7 +258,7 @@ export function PecaFormModal({
                 )}
               </div>
             ) : (
-              <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-2.5 text-xs text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800/60">
+              <p className="border border-dashed border-line bg-surface-2 rounded-xl px-3 py-2.5 text-xs text-fg-subtle">
                 Valores de sindicato visíveis apenas para Gestão e Diretoria.
               </p>
             )}

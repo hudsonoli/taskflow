@@ -18,11 +18,11 @@ export function ChartCard({
   const [view, setView] = useState<"chart" | "table">("chart");
 
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">{title}</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
+          <h2 className="text-base font-semibold text-fg">{title}</h2>
+          <p className="text-sm text-fg-muted">{description}</p>
         </div>
         <Button
           variant="secondary"

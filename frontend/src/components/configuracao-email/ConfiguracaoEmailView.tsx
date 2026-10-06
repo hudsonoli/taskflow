@@ -201,7 +201,7 @@ export function ConfiguracaoEmailView() {
 
   if (carregando) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white p-10 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+      <div className="flex items-center justify-center gap-2 rounded-2xl border border-line bg-surface p-10 text-sm text-fg-muted shadow-sm">
         <Loader2 className="h-4 w-4 animate-spin" />
         Carregando configuração de e-mail…
       </div>
@@ -226,7 +226,7 @@ export function ConfiguracaoEmailView() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-xl border border-line bg-surface p-4 shadow-sm"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
@@ -234,8 +234,8 @@ export function ConfiguracaoEmailView() {
               <Mail className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Configuração de e-mail</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <h1 className="text-lg font-semibold tracking-tight text-fg">Configuração de e-mail</h1>
+              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
                 Servidor SMTP usado para disparar e-mails do sistema, como o aviso de conclusão de tarefa ao cliente.
               </p>
             </div>
@@ -244,11 +244,11 @@ export function ConfiguracaoEmailView() {
         </div>
       </motion.div>
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Servidor SMTP</p>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm font-semibold text-fg">Servidor SMTP</p>
+            <p className="mt-1 text-xs text-fg-muted">
               Integrações OAuth com Google e Microsoft poderão ser adicionadas futuramente — por enquanto, configuração
               manual apenas.
             </p>
@@ -333,7 +333,7 @@ export function ConfiguracaoEmailView() {
               )}
             </div>
             {draft.removerSenha && (
-              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                 A senha salva será removida ao salvar as alterações.
               </p>
             )}
@@ -345,7 +345,7 @@ export function ConfiguracaoEmailView() {
           <Switch checked={draft.usarSsl} onChange={handleUsarSsl} label="Usar SSL implícito" />
         </div>
 
-        <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-zinc-100 bg-zinc-50/70 p-3.5 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-400">
+        <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-zinc-100 bg-zinc-50/70 p-3.5 text-xs text-fg-muted dark:border-zinc-800 dark:bg-zinc-950/30">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           A senha nunca é exibida depois de salva — só é possível confirmar que existe ou substituí-la.
         </div>
@@ -357,10 +357,10 @@ export function ConfiguracaoEmailView() {
               {testando ? "Testando…" : "Testar conexão"}
             </Button>
             {configuracao?.id != null && alteracoesPendentes && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">Salve as alterações antes de testar.</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">Salve as alterações antes de testar.</p>
             )}
             {configuracao?.id == null && (
-              <p className="text-xs text-zinc-400">Salve a configuração pelo menos uma vez para poder testá-la.</p>
+              <p className="text-xs text-fg-subtle">Salve a configuração pelo menos uma vez para poder testá-la.</p>
             )}
           </div>
           <Button type="button" onClick={handleSalvar} disabled={salvando}>

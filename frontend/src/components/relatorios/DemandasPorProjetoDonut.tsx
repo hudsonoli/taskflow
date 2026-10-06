@@ -59,8 +59,8 @@ export function DemandasPorProjetoDonut({
           </g>
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">{total}</span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">em aberto</span>
+          <span className="text-2xl font-semibold text-fg">{total}</span>
+          <span className="text-xs text-fg-muted">em aberto</span>
         </div>
       </div>
 
@@ -69,8 +69,8 @@ export function DemandasPorProjetoDonut({
           <li key={fatia.id} className="flex items-center gap-2.5 text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: seriesColor(index) }} />
             <span className="text-zinc-700 dark:text-zinc-300">{fatia.label}</span>
-            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{fatia.value}</span>
-            <span className="text-xs text-zinc-400">({Math.round((fatia.value / total) * 100)}%)</span>
+            <span className="font-semibold text-fg">{fatia.value}</span>
+            <span className="text-xs text-fg-subtle">({Math.round((fatia.value / total) * 100)}%)</span>
           </li>
         ))}
       </ul>
@@ -87,7 +87,7 @@ export function DemandasPorProjetoTable({ fatias }: { fatias: FatiaPizza[] }) {
 
   return (
     <table className="w-full text-left text-sm">
-      <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+      <thead className="text-xs font-semibold uppercase tracking-[0.12em] text-fg-subtle">
         <tr>
           <th className="py-2">Projeto</th>
           <th className="py-2 text-right">Demandas abertas</th>
@@ -98,8 +98,8 @@ export function DemandasPorProjetoTable({ fatias }: { fatias: FatiaPizza[] }) {
         {fatias.map((fatia) => (
           <tr key={fatia.id}>
             <td className="py-2 text-zinc-700 dark:text-zinc-300">{fatia.label}</td>
-            <td className="py-2 text-right font-semibold text-zinc-900 dark:text-zinc-100">{fatia.value}</td>
-            <td className="py-2 text-right text-zinc-500 dark:text-zinc-400">{Math.round((fatia.value / total) * 100)}%</td>
+            <td className="py-2 text-right font-semibold text-fg">{fatia.value}</td>
+            <td className="py-2 text-right text-fg-muted">{Math.round((fatia.value / total) * 100)}%</td>
           </tr>
         ))}
       </tbody>

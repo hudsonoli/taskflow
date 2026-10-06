@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { Tabs } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
-import { coresIdentificacaoDisponiveis, resolveCorIdentificacaoHex } from "@/lib/cores";
+import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
 import { generateId } from "@/lib/ids";
 import { detectDocumentType, formatDocument } from "@/lib/mascaras";
 import { buscarDadosPorDocumento } from "@/lib/documento-lookup";
@@ -140,15 +140,15 @@ export function ClienteFormModal({
         <div className="flex items-start gap-4">
           <div
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-bold text-white"
-            style={{ backgroundColor: resolveCorIdentificacaoHex(draft.corIdentificacao) }}
+            style={estiloCorIdentificacao(draft.corIdentificacao)}
           >
             {draft.nome.trim().slice(0, 2).toUpperCase() || <User className="h-5 w-5" />}
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? `Editando: ${cliente.nome}` : "Novo cliente"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Cadastro local do cliente — dados usados em projetos e demandas.
             </p>
           </div>
@@ -157,7 +157,7 @@ export function ClienteFormModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -228,7 +228,7 @@ export function ClienteFormModal({
             />
 
             <div>
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Cor de identificação</span>
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Cor de identificação</span>
               <div className="flex flex-wrap gap-2">
                 {coresIdentificacaoDisponiveis.map((cor) => (
                   <button
@@ -276,12 +276,12 @@ export function ClienteFormModal({
 
         {effectiveTab === "contatos" && (
           <>
-            <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800/60">
+            <div className="border border-line bg-surface-2 flex items-center justify-between rounded-xl px-4 py-3">
               <div className="flex items-start gap-2">
-                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" />
                 <div>
                   <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Avisar sobre e-mail de conclusão</p>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-0.5 text-xs text-fg-muted">
                     Ao concluir uma demanda deste cliente, oferece o envio do trabalho finalizado.
                   </p>
                 </div>
@@ -293,7 +293,7 @@ export function ClienteFormModal({
             </div>
 
             {draft.contatos.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-3 py-4 text-center text-xs text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800/60">
+              <p className="border border-dashed border-line bg-surface-2 rounded-xl px-3 py-4 text-center text-xs text-fg-subtle">
                 Nenhum contato cadastrado.
               </p>
             ) : (
@@ -322,7 +322,7 @@ export function ClienteFormModal({
                       <button
                         type="button"
                         onClick={() => removeContato(contato.id)}
-                        className="rounded-full p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                        className="rounded-full p-1.5 text-fg-subtle transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                         aria-label="Remover contato"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -364,7 +364,7 @@ export function ClienteFormModal({
               />
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800/60">
+            <div className="border border-line bg-surface-2 flex items-center justify-between rounded-xl px-4 py-3">
               <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Cliente referencial (case de portfólio)</p>
               <Switch checked={draft.clienteReferencial} onChange={(checked) => updateDraft({ clienteReferencial: checked })} />
             </div>

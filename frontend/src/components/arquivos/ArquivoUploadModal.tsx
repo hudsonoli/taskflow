@@ -105,8 +105,8 @@ export function ArquivoUploadModal({
   return (
     <Modal open={open} onClose={fechar} maxWidthClassName="max-w-lg">
       <div className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-4 dark:border-zinc-800">
-        <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">Novo arquivo</h2>
-        <button type="button" onClick={fechar} aria-label="Fechar" className="rounded-full p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
+        <h2 className="text-base font-semibold text-fg">Novo arquivo</h2>
+        <button type="button" onClick={fechar} aria-label="Fechar" className="rounded-full p-2 text-fg-subtle hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -145,7 +145,7 @@ export function ArquivoUploadModal({
           ]}
         />
         {demandasFiltradas.length === 0 && (
-          <p className="text-xs text-zinc-400">Nenhuma demanda neste recorte — um arquivo sempre pertence a uma Demanda.</p>
+          <p className="text-xs text-fg-subtle">Nenhuma demanda neste recorte — um arquivo sempre pertence a uma Demanda.</p>
         )}
 
         <div className="mt-1 flex items-center gap-1.5">
@@ -157,7 +157,7 @@ export function ArquivoUploadModal({
               className={
                 tipo === valor
                   ? "rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white"
-                  : "rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-500 hover:border-zinc-300 dark:border-zinc-800 dark:text-zinc-400"
+                  : "rounded-full border border-line px-3 py-1 text-xs font-semibold text-fg-muted hover:border-field-line"
               }
             >
               {valor === "anexo" ? "Anexo" : valor === "layout" ? "Layout" : "Link"}
@@ -172,7 +172,7 @@ export function ArquivoUploadModal({
             <Input label="Descrição (opcional)" value={linkDescricao} onChange={(event) => setLinkDescricao(event.target.value)} />
           </div>
         ) : (
-          <p className="text-xs text-zinc-400">PNG, JPG ou PDF.</p>
+          <p className="text-xs text-fg-subtle">PNG, JPG ou PDF.</p>
         )}
 
         {erro && <p className="text-xs text-red-600 dark:text-red-400">{erro}</p>}

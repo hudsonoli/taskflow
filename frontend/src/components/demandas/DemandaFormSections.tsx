@@ -48,7 +48,7 @@ function SectionShell({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
           {icon}
@@ -56,8 +56,8 @@ function SectionShell({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{title}</h3>
-              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
+              <h3 className="text-sm font-semibold text-fg">{title}</h3>
+              <p className="mt-0.5 text-xs text-fg-muted">{description}</p>
             </div>
             {action}
           </div>
@@ -300,7 +300,7 @@ export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
   if (demanda.workflowEtapas.length === 0) {
     return (
       <SectionShell title="Workflow" description="Etapas do fluxo de execução da tarefa." icon={<GitBranch className="h-5 w-5" />}>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-fg-muted">
           Esta tarefa não foi criada a partir de um modelo de workflow.
         </p>
       </SectionShell>
@@ -340,12 +340,12 @@ export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
                   <Badge tone={etapa.tipo === "aprovacao" ? "amber" : "blue"}>
                     {workflowEtapaTipoLabels[etapa.tipo]}
                   </Badge>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="text-xs text-fg-muted">
                     {workflowEtapaStatusLabel[etapa.status]}
                   </span>
                 </div>
-                <p className="mt-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{etapa.nome}</p>
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="mt-1.5 text-sm font-semibold text-fg">{etapa.nome}</p>
+                <p className="mt-1 text-xs text-fg-muted">
                   {responsaveis || departamentosNomes
                     ? [responsaveis, departamentosNomes].filter(Boolean).join(" · ")
                     : "Sem responsável definido"}
@@ -456,9 +456,9 @@ export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
     <SectionShell title="Histórico" description="Eventos registrados para auditoria." icon={<History className="h-5 w-5" />}>
       {erro && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{erro}</p>}
       {carregando ? (
-        <p className="text-sm text-zinc-400">Carregando histórico…</p>
+        <p className="text-sm text-fg-subtle">Carregando histórico…</p>
       ) : eventos.length === 0 ? (
-        <p className="text-sm text-zinc-400">Nenhum evento registrado ainda.</p>
+        <p className="text-sm text-fg-subtle">Nenhum evento registrado ainda.</p>
       ) : (
         <div className="space-y-3">
           {eventos.map((evento) => (
@@ -477,10 +477,10 @@ export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
                     }`}
                   />
                   <div>
-                    <p className="font-semibold text-zinc-950 dark:text-zinc-50">
+                    <p className="font-semibold text-fg">
                       {descreverEventoHistorico(evento, { usuarios, departamentos, resolvendoUsuarios: resolvendo })}
                     </p>
-                    <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    <p className="mt-1 text-sm text-fg-muted">
                       {nomeUsuario(evento.usuarioId)} · {new Date(evento.occurredAt).toLocaleString("pt-BR")}
                     </p>
                   </div>

@@ -23,7 +23,7 @@ export function ArquivoCard({ arquivo, onAbrir }: { arquivo: ArquivoCentral; onA
     <button
       type="button"
       onClick={onAbrir}
-      className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white p-3 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-indigo-500/50"
+      className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-500/50"
     >
       <div className="flex h-24 items-center justify-center overflow-hidden rounded-xl bg-zinc-50 dark:bg-zinc-950/40">
         {arquivo.previewDisponivel ? (
@@ -40,7 +40,7 @@ export function ArquivoCard({ arquivo, onAbrir }: { arquivo: ArquivoCentral; onA
         )}
       </div>
 
-      <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={arquivo.nome}>
+      <p className="truncate text-sm font-medium text-fg" title={arquivo.nome}>
         {arquivo.nome}
       </p>
 
@@ -51,10 +51,10 @@ export function ArquivoCard({ arquivo, onAbrir }: { arquivo: ArquivoCentral; onA
         )}
       </div>
 
-      <div className="flex items-center justify-between text-xs text-zinc-400">
+      <div className="flex items-center justify-between text-xs text-fg-subtle">
         <span className="truncate">#{arquivo.demanda.numeroOperacional} — {arquivo.demanda.nome}</span>
       </div>
-      <div className="flex items-center justify-between text-[11px] text-zinc-400">
+      <div className="flex items-center justify-between text-[11px] text-fg-subtle">
         <span>{arquivo.usuarioNome ?? "—"}</span>
         <span>{tamanho ? `${tamanho} · ` : ""}{formatarData(arquivo.createdAt)}</span>
       </div>

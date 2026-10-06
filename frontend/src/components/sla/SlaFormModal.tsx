@@ -88,10 +88,10 @@ export function SlaFormModal({
             <Timer className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? `Editando: ${regra.nome}` : "Nova regra de SLA"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Define prazos de resposta e resolução para o escopo selecionado.
             </p>
           </div>
@@ -100,7 +100,7 @@ export function SlaFormModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -156,7 +156,7 @@ export function SlaFormModal({
             value={draft.prioridadeRegra}
             onChange={(event) => updateDraft({ prioridadeRegra: Number(event.target.value) })}
           />
-          <p className="mt-1 text-xs text-zinc-400">Menor número = maior precedência.</p>
+          <p className="mt-1 text-xs text-fg-subtle">Menor número = maior precedência.</p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -191,7 +191,7 @@ export function SlaFormModal({
           />
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
           <Switch
             checked={draft.considerarApenasExpediente}
             onChange={(checked) => updateDraft({ considerarApenasExpediente: checked })}
@@ -201,7 +201,7 @@ export function SlaFormModal({
         </div>
 
         {editing && (
-          <div className="rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+          <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
             <Switch
               checked={draft.status === "ativo"}
               onChange={(checked) => updateDraft({ status: checked ? "ativo" : "inativo" })}

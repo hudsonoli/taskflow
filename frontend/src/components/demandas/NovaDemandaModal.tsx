@@ -134,10 +134,10 @@ export function NovaDemandaModal({
             <ClipboardPlus className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">
               {editing ? "Editar tarefa" : "Nova tarefa"}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Estruture a tarefa: dados principais, briefing, workflow e responsáveis.
             </p>
           </div>
@@ -146,7 +146,7 @@ export function NovaDemandaModal({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <X className="h-4 w-4" />
         </button>
@@ -268,12 +268,12 @@ export function NovaDemandaModal({
                 Etapas aplicadas ao criar
               </div>
               {carregandoWorkflow ? (
-                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Carregando etapas…</p>
+                <p className="mt-2 text-xs text-fg-muted">Carregando etapas…</p>
               ) : (
                 <ol className="mt-2 flex flex-col gap-1.5">
                   {previewAtual?.etapas.map((etapa, index) => (
                     <li key={etapa.id} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-bold text-white">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-bold text-primary-fg">
                         {index + 1}
                       </span>
                       <span className="truncate">{etapa.nome}</span>
@@ -288,12 +288,12 @@ export function NovaDemandaModal({
           )}
         </div>
       ) : demanda.workflowEtapas.length > 0 ? (
-        <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50/60 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+        <div className="mt-4 rounded-2xl border border-line bg-zinc-50/60 p-3.5 dark:bg-zinc-950/30">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-fg-muted">
             <GitBranch className="h-3.5 w-3.5" />
             Workflow aplicado — {demanda.workflowEtapas.length} etapa(s)
           </div>
-          <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1.5 text-xs text-fg-muted">
             Etapas já materializadas na criação. Ver detalhe e progresso na aba Workflow da tarefa.
           </p>
         </div>

@@ -73,7 +73,7 @@ export function AcessosView() {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      className="rounded-xl border border-line bg-surface p-4 shadow-sm"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
@@ -81,8 +81,8 @@ export function AcessosView() {
             <History className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Acesso</h1>
-            <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+            <h1 className="text-lg font-semibold tracking-tight text-fg">Acesso</h1>
+            <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
               Histórico de login ao sistema — hora, IP, navegador e sistema operacional. Área administrativa, restrita a
               Admin, Gestor e Diretoria.
             </p>
@@ -129,11 +129,11 @@ export function AcessosView() {
           icon={<History className="h-5 w-5" />}
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
           <div className="flex items-center justify-between gap-3 border-b border-zinc-100 p-4 dark:border-zinc-800">
             <div>
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Logins recentes</h2>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">{eventos.length} registro(s)</p>
+              <h2 className="text-sm font-semibold text-fg">Logins recentes</h2>
+              <p className="text-xs text-fg-muted">{eventos.length} registro(s)</p>
             </div>
             <Button type="button" variant="secondary" onClick={carregar} className="px-3 py-1.5 text-xs">
               Atualizar
@@ -143,7 +143,7 @@ export function AcessosView() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead>
-                <tr className="border-b border-zinc-100 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+                <tr className="border-b border-zinc-100 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle dark:border-zinc-800">
                   <th className="px-4 py-3">Usuário</th>
                   <th className="px-4 py-3">Data/hora</th>
                   <th className="px-4 py-3">IP</th>
@@ -155,7 +155,7 @@ export function AcessosView() {
               <tbody>
                 {eventos.map((evento) => (
                   <tr key={evento.id} className="border-b border-zinc-50 last:border-0 dark:border-zinc-800/60">
-                    <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{evento.nome}</td>
+                    <td className="px-4 py-3 font-medium text-fg">{evento.nome}</td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-300">{formatDataHora(evento.ocorridoEm)}</td>
                     <td className="px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-300">{evento.ip ?? "—"}</td>
                     <td className="px-4 py-3">

@@ -79,7 +79,7 @@ export function RegraExpedienteView() {
 
   if (carregando) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white p-10 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+      <div className="flex items-center justify-center gap-2 rounded-2xl border border-line bg-surface p-10 text-sm text-fg-muted shadow-sm">
         <Loader2 className="h-4 w-4 animate-spin" />
         Carregando regra de expediente…
       </div>
@@ -163,15 +163,15 @@ export function RegraExpedienteView() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-xl border border-line bg-surface p-4 shadow-sm"
       >
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
             <Clock className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">Horário de expediente</h1>
-            <p className="mt-0.5 max-w-3xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+            <h1 className="text-lg font-semibold tracking-tight text-fg">Horário de expediente</h1>
+            <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
               Fora do horário configurado, demandas &quot;Em execução&quot; são pausadas automaticamente — o
               usuário precisa arrastar o card de volta para retomar.
             </p>
@@ -187,22 +187,22 @@ export function RegraExpedienteView() {
         }`}
       >
         {dentroDoExpediente ? (
-          <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2 className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
         ) : (
-          <PauseCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <PauseCircle className="h-5 w-5 text-amber-700 dark:text-amber-400" />
         )}
         <div>
           <p className={`text-sm font-semibold ${dentroDoExpediente ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
             {dentroDoExpediente ? "Agora: dentro do expediente" : "Agora: fora do expediente — pausas automáticas ativas"}
           </p>
-          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-0.5 text-xs text-fg-muted">
             {agoraFormatado ?? "—"} · {emExecucaoAgoraTexto} demanda(s) em execução agora
           </p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="max-w-sm rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
+        <div className="max-w-sm rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
           <Switch
             checked={regra.ativo}
             onChange={(checked) => updateRegra({ ativo: checked })}
@@ -212,7 +212,7 @@ export function RegraExpedienteView() {
         </div>
 
         <div className="mt-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Dias úteis</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Dias úteis</p>
           <div className="flex flex-wrap gap-2">
             {ORDEM_DIAS.map((diaSemana) => {
               const dia = regra.dias.find((item) => item.diaSemana === diaSemana);
@@ -226,7 +226,7 @@ export function RegraExpedienteView() {
                   className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                     ativo
                       ? "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300"
-                      : "border-zinc-200 bg-zinc-50 text-zinc-400 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-500"
+                      : "border-line bg-zinc-50 text-fg-subtle hover:border-field-line dark:bg-zinc-950/30"
                   }`}
                 >
                   {DIAS_LABEL[diaSemana]}
@@ -238,7 +238,7 @@ export function RegraExpedienteView() {
 
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Turno da manhã</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Turno da manhã</p>
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Início"
@@ -258,7 +258,7 @@ export function RegraExpedienteView() {
           </div>
 
           <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Turno da tarde</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Turno da tarde</p>
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Início"
@@ -279,7 +279,7 @@ export function RegraExpedienteView() {
         </div>
 
         {!diaReferencia && (
-          <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+          <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
             Selecione ao menos um dia útil acima para definir os turnos.
           </p>
         )}
@@ -294,7 +294,7 @@ export function RegraExpedienteView() {
             onChange={(event) => updateRegra({ toleranciaRetomadaMinutos: Number(event.target.value) || 0 })}
           />
           {inicioTarde && diaReferencia?.tardeFim && (
-            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mt-2 text-xs text-fg-muted">
               A partir das <span className="font-semibold text-zinc-700 dark:text-zinc-300">{inicioTarde}</span>, o
               usuário já pode arrastar o card de volta para &quot;Em execução&quot; sem que a regra pause de novo — mesmo o
               turno da tarde começando oficialmente às {diaReferencia.tardeInicio}.
@@ -303,7 +303,7 @@ export function RegraExpedienteView() {
         </div>
 
         {diaReferencia?.manhaFim && inicioTarde && diaReferencia.tardeFim && (
-          <p className="mt-5 border-t border-zinc-100 pt-4 text-xs text-zinc-400 dark:border-zinc-800">
+          <p className="mt-5 border-t border-zinc-100 pt-4 text-xs text-fg-subtle dark:border-zinc-800">
             Fora dos turnos configurados (ex.: {diaReferencia.manhaFim}–{inicioTarde}, e após {diaReferencia.tardeFim}), nos
             dias úteis marcados acima, toda demanda com status &quot;Em execução&quot; é movida automaticamente para
             &quot;Pausada&quot;.
