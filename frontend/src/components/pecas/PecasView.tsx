@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Badge } from "@/components/ui/Badge";
 import { Layers3 } from "lucide-react";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -128,7 +127,6 @@ export function PecasView() {
               </p>
             </div>
           </div>
-          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

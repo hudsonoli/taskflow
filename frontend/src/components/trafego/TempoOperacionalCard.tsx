@@ -1,5 +1,4 @@
 import { Clock, TimerReset } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { formatTempoOperacional } from "@/lib/trafego";
 import type { TrafegoResumo } from "@/types/trafego";
@@ -25,7 +24,6 @@ export function TempoOperacionalCard({ resumo, erro }: { resumo: TrafegoResumo |
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">Tempo operacional</p>
               <h3 className="mt-1 text-base font-semibold text-fg">Estimativa acumulada do período</h3>
             </div>
-            <Badge tone="blue">não é folha de ponto</Badge>
           </div>
 
           <div className="mt-4 flex items-end gap-3">

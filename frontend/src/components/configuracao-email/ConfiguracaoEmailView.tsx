@@ -240,7 +240,6 @@ export function ConfiguracaoEmailView() {
               </p>
             </div>
           </div>
-          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

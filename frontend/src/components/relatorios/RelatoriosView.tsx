@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { BarChart3 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
@@ -70,7 +69,6 @@ export function RelatoriosView() {
               </p>
             </div>
           </div>
-          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

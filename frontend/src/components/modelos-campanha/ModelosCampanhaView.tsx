@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Layers3 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -137,7 +136,6 @@ export function ModelosCampanhaView() {
         icon={<Layers3 className="h-5 w-5" />}
         title="Modelos de campanha"
         description="Biblioteca reutilizável de estruturas de campanha — ainda sem integração com Projeto."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       {erro && (

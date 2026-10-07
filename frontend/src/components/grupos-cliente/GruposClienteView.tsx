@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Archive, ArchiveRestore, Plus, Tag } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -115,7 +114,6 @@ export function GruposClienteView() {
         icon={<Tag className="h-5 w-5" />}
         title="Grupos de clientes"
         description="Etiquetas para organizar os clientes — grupos econômicos, redes, carteiras. Aplique-as no cadastro do cliente; na grid de Clientes dá para agrupar por grupo."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       {carregando ? (

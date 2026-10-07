@@ -15,7 +15,6 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { KpiStrip } from "@/components/ui/KpiStrip";
 import { getResumoMinhaHome, listDemandasReais, patchDemandaReal, type ResumoMinhaHome } from "@/lib/api-backend";
@@ -213,7 +212,6 @@ export function DashboardView() {
             </h1>
             <p className="mt-1 text-sm leading-6 text-fg-muted">{mensagemMotivacional}</p>
           </div>
-          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardList } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -134,7 +133,6 @@ export function TiposTarefaView() {
         icon={<ClipboardList className="h-5 w-5" />}
         title="Tipos de tarefa"
         description="Categorias de demanda usadas nos modelos de campanha."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       {erro && (

@@ -368,7 +368,6 @@ function Cabecalho() {
             </p>
           </div>
         </div>
-        <Badge tone="green">Banco real</Badge>
       </div>
     </motion.div>
   );

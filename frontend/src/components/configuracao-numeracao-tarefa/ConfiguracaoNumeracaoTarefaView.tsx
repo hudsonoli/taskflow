@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Hash, Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { obterNumeracaoTarefaReal } from "@/lib/api-backend";
 import type { ConfiguracaoNumeracaoTarefaRead } from "@/types/configuracao-numeracao-tarefa";
@@ -80,7 +79,6 @@ export function ConfiguracaoNumeracaoTarefaView() {
               </p>
             </div>
           </div>
-          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

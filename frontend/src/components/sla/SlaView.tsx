@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Timer } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -130,7 +129,6 @@ export function SlaView() {
         icon={<Timer className="h-5 w-5" />}
         title="SLA"
         description="Prazos de resposta e resolução, por prioridade, departamento ou cliente."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       {erro && (

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { UsersRound } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -121,7 +120,6 @@ export function EquipesView() {
         icon={<UsersRound className="h-5 w-5" />}
         title="Equipes"
         description="Squads e times da operação, com líder e membros vinculados aos usuários reais."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       {erro && (

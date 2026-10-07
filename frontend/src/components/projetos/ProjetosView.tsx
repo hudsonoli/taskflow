@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { FolderKanban } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -141,7 +140,6 @@ export function ProjetosView() {
         icon={<FolderKanban className="h-5 w-5" />}
         title="Projetos"
         description="Raiz de cada empreendimento/campanha — as demandas se organizam a partir de um projeto."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       {erro && (

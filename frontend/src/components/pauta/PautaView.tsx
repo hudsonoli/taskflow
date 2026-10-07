@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getDemandaReal, listDemandasReais } from "@/lib/api-backend";
@@ -225,7 +224,6 @@ export function PautaView() {
               </p>
             </div>
           </div>
-          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

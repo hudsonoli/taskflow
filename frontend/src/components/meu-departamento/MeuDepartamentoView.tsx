@@ -14,7 +14,6 @@ import {
   Timer,
   UserX,
 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Select } from "@/components/ui/Select";
@@ -449,7 +448,6 @@ function Cabecalho({ nomeDepartamento }: { nomeDepartamento: string | undefined 
             </p>
           </div>
         </div>
-        <Badge tone="green">Banco real</Badge>
       </div>
     </motion.div>
   );

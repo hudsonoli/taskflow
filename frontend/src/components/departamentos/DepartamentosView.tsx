@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -142,7 +141,6 @@ export function DepartamentosView() {
         icon={<Building2 className="h-5 w-5" />}
         title="Departamentos"
         description="Setores da operação, usados nos filtros de Usuários e Projetos."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       {erro && (

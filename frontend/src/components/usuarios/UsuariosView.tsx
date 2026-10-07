@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Users } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
@@ -224,7 +223,6 @@ export function UsuariosView() {
         icon={<Users className="h-5 w-5" />}
         title="Usuários"
         description="Pessoas com acesso ao workspace, departamento e perfil de permissão."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       <UsuariosStats resumo={resumo} />

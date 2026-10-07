@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Workflow as WorkflowIcon } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import {
@@ -109,7 +108,6 @@ export function WorkflowsView() {
               </p>
             </div>
           </div>
-          <Badge tone="green">Banco real</Badge>
         </div>
       </motion.div>
 

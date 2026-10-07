@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Truck } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
@@ -122,7 +121,6 @@ export function FornecedoresView() {
         icon={<Truck className="h-5 w-5" />}
         title="Fornecedores"
         description="Gráficas, produtoras, freelancers, mídia — vincule-os aos custos das demandas."
-        action={<Badge tone="green">Banco real</Badge>}
       />
 
       {erro && (
