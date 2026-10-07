@@ -5,6 +5,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppDataProvider } from "@/lib/AppDataContext";
 import { BrandingProvider } from "@/lib/BrandingContext";
+import { NotificacoesProvider } from "@/lib/NotificacoesContext";
 import { variaveisDaMarca } from "@/lib/branding-tokens";
 import { SESSION_COOKIE_NAME } from "@/lib/server/backend";
 import { obterBranding } from "@/lib/server/branding";
@@ -63,7 +64,9 @@ export default async function RootLayout({
       <body className="min-h-full">
         <BrandingProvider inicial={branding} preferenciaInicial={preferencia} autenticadoInicial={autenticado}>
           <AppDataProvider>
-            <AppShell>{children}</AppShell>
+            <NotificacoesProvider>
+              <AppShell>{children}</AppShell>
+            </NotificacoesProvider>
           </AppDataProvider>
         </BrandingProvider>
       </body>

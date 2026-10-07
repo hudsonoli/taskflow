@@ -3,21 +3,27 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, ClipboardList } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { listDemandasReais } from "@/lib/api-backend";
+import { listarNotificacoes, listDemandasReais, marcarNotificacaoLida } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
+import { formatarBadge } from "@/lib/notificacoes";
+import { useNotificacoes } from "@/lib/NotificacoesContext";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
+import type { Notificacao } from "@/types/notificacoes";
 
-// A notificação de menção (@Nome em comentário) saiu daqui na Fase 2E.4: Comentários reais
-// não trazem @mention nesta primeira versão (decisão explícita da fase), e o comentário de
-// TODAS as demandas carregadas de uma vez também não existe mais — é buscado por Demanda, sob
-// demanda, para não inflar a listagem (ver DemandaComentario/AtividadeDemandaSection). Volta
-// quando @mention for implementado, com uma fonte de dado compatível.
+// O sino é o PREVIEW rápido; o histórico completo, os filtros e os prazos da equipe ficam em /notificacoes.
+// A contagem de não lidas NÃO é consultada aqui: vem do estado único (NotificacoesContext) que o menu do avatar e
+// a página também usam — marcar como lida em qualquer lugar reconcilia todos na hora.
+//
+// "Tarefas atribuídas a você" (abaixo das notificações) segue como antes: filtro e `limit=5` server-side
+// (`responsavelId` + `naoFinalizada`), refeito a cada abertura do dropdown (sem polling).
 type TarefaNotificacao = { tipo: "tarefa"; demanda: Demanda };
 
 export function NotificationBell() {
   const { usuarioAtual, setDemandaParaAbrir } = useAppData();
+  const { resumo, recarregar, aplicarResumo } = useNotificacoes();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -32,38 +38,30 @@ export function NotificationBell() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // D2-D1 — deixa de depender de `AppDataContext.demandas` (até 200 mais recentes da
-  // empresa, não do usuário): uma demanda aberta atribuída a este usuário, mas fora dessa
-  // janela global, nunca aparecia aqui. Filtro e `limit=5` agora são server-side
-  // (`responsavelId` + `naoFinalizada`, ambos já existentes/reaproveitados) — nunca busca 200
-  // pra cortar em 5 no cliente. Sem polling.
-  //
-  // `open` entra nas dependências (não só `usuarioAtual`) porque, antes desta migração, o
-  // sino lia `AppDataContext.demandas` — uma referência nova a cada mutation bem-sucedida em
-  // DemandasView/PautaView/MinhasDemandasView/Dashboard (todas chamam `setDemandas`), o que
-  // mantinha o sino fresco durante a mesma sessão sem nenhum código dedicado. Sem essa fonte,
-  // um efeito preso só a `usuarioAtual` (estável a sessão inteira) buscaria uma vez e nunca
-  // mais — concluir a própria tarefa em outra tela não atualizaria o sino até recarregar a
-  // página. Refazer a busca a cada abertura do dropdown corrige isso sem polling, sem SSE e
-  // sem novo estado global: o dado fica fresco no momento em que é de fato consultado.
+  const [recentes, setRecentes] = useState<Notificacao[]>([]);
   const [tarefasAtribuidas, setTarefasAtribuidas] = useState<TarefaNotificacao[]>([]);
   useEffect(() => {
-    if (!usuarioAtual) return;
+    if (!usuarioAtual || !open) return;
     let cancelado = false;
+    void recarregar();
+    listarNotificacoes({ limit: 5 })
+      .then((pagina) => {
+        if (!cancelado) setRecentes(pagina.itens);
+      })
+      .catch(() => {
+        // Falha de rede não derruba a navbar — degrada em silêncio.
+      });
     listDemandasReais({ responsavelId: usuarioAtual.id, naoFinalizada: true, limit: 5 })
       .then((demandas) => {
         if (!cancelado) setTarefasAtribuidas(demandas.map((demanda) => ({ tipo: "tarefa" as const, demanda })));
       })
-      .catch(() => {
-        // Falha de rede não deve derrubar a navbar — degrada em silêncio (sem notificação
-        // exibida), sem toast global novo.
-      });
+      .catch(() => {});
     return () => {
       cancelado = true;
     };
-  }, [usuarioAtual, open]);
+  }, [usuarioAtual, open, recarregar]);
 
-  const totalNotificacoes = tarefasAtribuidas.length;
+  const badge = formatarBadge(resumo.naoLidas.total);
 
   function abrirDemanda(demandaId: string, aba: string) {
     setDemandaParaAbrir({ demandaId, aba });
@@ -71,17 +69,35 @@ export function NotificationBell() {
     router.push("/tarefas");
   }
 
+  async function abrirNotificacao(notificacao: Notificacao) {
+    if (!notificacao.lida) {
+      setRecentes((atuais) => atuais.map((item) => (item.id === notificacao.id ? { ...item, lida: true } : item)));
+      try {
+        aplicarResumo(await marcarNotificacaoLida(notificacao.id)); // badge reconciliado na hora
+      } catch {
+        void recarregar();
+      }
+    }
+    if (notificacao.demandaId) abrirDemanda(notificacao.demandaId, "dados");
+  }
+
   return (
     <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        aria-label="Notificações"
+        aria-label={badge ? `Notificações — ${resumo.naoLidas.total} não lidas` : "Notificações"}
+        aria-expanded={open}
         className="relative flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-fg-muted transition-colors hover:text-fg"
       >
         <Bell size={16} />
-        {totalNotificacoes > 0 && (
-          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-indigo-500" />
+        {badge && (
+          <span
+            aria-hidden
+            className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-surface"
+          >
+            {badge}
+          </span>
         )}
       </button>
 
@@ -92,15 +108,50 @@ export function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-2xl border border-line bg-surface shadow-lg"
+            className="fixed inset-x-2 top-16 z-30 overflow-hidden rounded-2xl border border-line bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80"
           >
-            <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+            <div className="flex items-center justify-between border-b border-line px-4 py-3">
               <p className="text-sm font-semibold text-fg">Notificações</p>
+              <Link
+                href="/notificacoes"
+                onClick={() => setOpen(false)}
+                className="text-xs font-medium text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400"
+              >
+                Ver todas
+              </Link>
             </div>
 
             <div className="max-h-96 overflow-y-auto">
-              {totalNotificacoes === 0 && (
+              {recentes.length === 0 && tarefasAtribuidas.length === 0 && (
                 <p className="px-4 py-6 text-center text-sm text-fg-subtle">Nenhuma notificação por aqui.</p>
+              )}
+
+              {recentes.length > 0 && (
+                <div className="p-1.5">
+                  <p className="px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Recentes</p>
+                  {recentes.map((notificacao) => (
+                    <button
+                      key={notificacao.id}
+                      type="button"
+                      onClick={() => void abrirNotificacao(notificacao)}
+                      className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition hover:bg-surface-hover"
+                    >
+                      <span
+                        aria-hidden
+                        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notificacao.lida ? "bg-transparent" : "bg-indigo-600 dark:bg-indigo-400"}`}
+                      />
+                      <div className="min-w-0">
+                        <p className={`truncate text-sm text-fg ${notificacao.lida ? "font-normal" : "font-semibold"}`}>
+                          {notificacao.titulo}
+                          {!notificacao.lida && <span className="sr-only"> (não lida)</span>}
+                        </p>
+                        <p className="truncate text-xs text-fg-muted">
+                          {[notificacao.demandaReferencia, notificacao.demandaNome].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               )}
 
               {tarefasAtribuidas.length > 0 && (
@@ -111,11 +162,11 @@ export function NotificationBell() {
                       key={demanda.id}
                       type="button"
                       onClick={() => abrirDemanda(demanda.id, "dados")}
-                      className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                      className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition hover:bg-surface-hover"
                     >
                       <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                        <p className="truncate text-sm font-medium text-fg">
                           {rotuloDemanda(demanda)} · {demanda.nome}
                         </p>
                       </div>

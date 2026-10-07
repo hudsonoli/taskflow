@@ -67,8 +67,10 @@ export type Usuario = {
   departamentoId: string;
   perfil: PerfilUsuario;
   cargo?: string;
-  // Preenchida no autoatendimento de "Minha conta" — data URL local (sem upload real nesta fase).
+  // Foto de perfil: caminho da API (`/usuarios/<id>/avatar?v=…`, foto própria enviada) ou URL externa (Google).
   fotoUrl?: string;
+  // Só no usuário logado (GET /usuarios/me): último login bem-sucedido.
+  ultimoAcesso?: { em: string; ip: string | null };
   // Marca a pessoa como líder/gerente do departamento (head) — dá permissão de cadastrar demandas.
   liderDepartamento: boolean;
   // Aba Financeiro (visível apenas para Gestão/Diretoria/Financeiro): cruzamento recebimento x hora.

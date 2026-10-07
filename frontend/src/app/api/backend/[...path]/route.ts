@@ -52,6 +52,11 @@ async function proxy(request: NextRequest, path: string[]) {
     headers.set("content-type", contentType || "application/octet-stream");
     const contentDisposition = backendResponse.headers.get("content-disposition");
     if (contentDisposition) headers.set("content-disposition", contentDisposition);
+    // Avatar/logo: o backend manda `nosniff` e cache por versão — o proxy não pode descartar isso.
+    const nosniff = backendResponse.headers.get("x-content-type-options");
+    if (nosniff) headers.set("x-content-type-options", nosniff);
+    const cacheControl = backendResponse.headers.get("cache-control");
+    if (cacheControl) headers.set("cache-control", cacheControl);
     return new NextResponse(buffer, { status: backendResponse.status, headers });
   }
 

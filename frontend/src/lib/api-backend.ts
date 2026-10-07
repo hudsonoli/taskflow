@@ -63,6 +63,7 @@ import { itemModeloCampanhaDraftParaPayload } from "@/lib/modeloCampanhaItens";
 import type { SlaRegra, SlaRegraFormDraft, SlaRegraStatus } from "@/types/sla";
 import { normalizarBranding } from "@/lib/branding";
 import type { Branding, PersonalizacaoUpdatePayload } from "@/types/personalizacao";
+import type { CategoriaNotificacao, GrupoPrazo, NotificacoesPagina, NotificacoesResumo } from "@/types/notificacoes";
 import type {
   ConfiguracaoEmailFormDraft,
   ConfiguracaoEmailRead,
@@ -311,6 +312,8 @@ export type UsuarioReadApi = {
   updatedAt: string;
   // Só vem preenchido em GET /usuarios/me — ver docstring de UsuarioRead.permissoes no backend.
   permissoes?: string[] | null;
+  // Só em GET /usuarios/me: último login bem-sucedido do próprio usuário.
+  ultimoAcesso?: { em: string; ip: string | null } | null;
 };
 
 export function mapUsuarioReadToUsuario(data: UsuarioReadApi): Usuario {
@@ -341,6 +344,7 @@ export function mapUsuarioReadToUsuario(data: UsuarioReadApi): Usuario {
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     permissoes: data.permissoes ?? undefined,
+    ultimoAcesso: data.ultimoAcesso ?? undefined,
   };
 }
 
@@ -402,18 +406,83 @@ export async function getResumoUsuarios(empresaId: string): Promise<UsuarioResum
   return request<UsuarioResumo>(`/usuarios/resumo?empresaId=${encodeURIComponent(empresaId)}`);
 }
 
-// Autoedição de perfil (tela "Minha Conta") — PATCH direto, só os campos que a própria
-// pessoa pode alterar de si mesma (nome, cargo, cor, foto). Sem passar pelo draft completo
-// de UsuarioFormDraft (que é do cadastro administrativo).
-export async function atualizarPerfilProprio(
-  usuarioId: string,
-  patch: { nome?: string; cargo?: string | null; corIdentificacao?: string | null; fotoUrl?: string | null },
-): Promise<Usuario> {
-  const updated = await request<UsuarioReadApi>(`/usuarios/${usuarioId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+// Autoedição do PERFIL (página Perfil / Minha Conta): só contato (telefone) e cor de identificação. Nome, e-mail,
+// perfil, departamento etc. NÃO são autoeditáveis — o backend recusa com 422. A identidade vem do token.
+export async function atualizarMeuPerfil(patch: { telefone?: string | null; corIdentificacao?: string }): Promise<Usuario> {
+  const updated = await request<UsuarioReadApi>("/usuarios/me", { method: "PATCH", body: JSON.stringify(patch) });
   return mapUsuarioReadToUsuario(updated);
+}
+
+async function erroDaResposta(response: Response, padrao: string): Promise<Error> {
+  const data = await response.json().catch(() => null);
+  const detail = data?.detail;
+  const message = typeof detail === "string" ? detail : (detail?.message ?? data?.message);
+  return new Error(message ?? padrao);
+}
+
+// Foto de perfil — multipart (não passa por `request()`, que força JSON e destruiria o boundary).
+export async function enviarMinhaFoto(arquivo: File): Promise<Usuario> {
+  const formData = new FormData();
+  formData.append("arquivo", arquivo);
+  const response = await fetch("/api/backend/usuarios/me/avatar", { method: "POST", body: formData, cache: "no-store" });
+  if (!response.ok) throw await erroDaResposta(response, "Não foi possível enviar a foto.");
+  return mapUsuarioReadToUsuario(await response.json());
+}
+
+export async function removerMinhaFoto(): Promise<Usuario> {
+  return mapUsuarioReadToUsuario(await request<UsuarioReadApi>("/usuarios/me/avatar", { method: "DELETE" }));
+}
+
+// Troca de senha do usuário autenticado (a mesma rota real já usada na troca inicial).
+export async function alterarMinhaSenha(senhaAtual: string, novaSenha: string, confirmacaoSenha: string): Promise<void> {
+  const response = await fetch("/api/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ senhaAtual, novaSenha, confirmacaoSenha }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await erroDaResposta(response, "Não foi possível alterar a senha.");
+}
+
+// ── Central de Notificações ─────────────────────────────────────────────────────────────────────────
+export async function obterResumoNotificacoes(): Promise<NotificacoesResumo> {
+  return request<NotificacoesResumo>("/notificacoes/resumo");
+}
+
+export async function listarNotificacoes(params: {
+  categoria?: CategoriaNotificacao;
+  apenasNaoLidas?: boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<NotificacoesPagina> {
+  const query = new URLSearchParams({ limit: String(params.limit ?? 50), offset: String(params.offset ?? 0) });
+  if (params.categoria) query.set("categoria", params.categoria);
+  if (params.apenasNaoLidas) query.set("apenasNaoLidas", "true");
+  return request<NotificacoesPagina>(`/notificacoes?${query.toString()}`);
+}
+
+/** Devolve o resumo já atualizado (uma só ida ao servidor para marcar + reconciliar o badge). */
+export async function marcarNotificacaoLida(eventoId: string): Promise<NotificacoesResumo> {
+  return request<NotificacoesResumo>(`/notificacoes/${eventoId}/lida`, { method: "POST" });
+}
+
+export async function marcarTodasNotificacoesLidas(categoria?: CategoriaNotificacao): Promise<NotificacoesResumo> {
+  return request<NotificacoesResumo>("/notificacoes/lidas", {
+    method: "POST",
+    body: JSON.stringify(categoria ? { categoria } : {}),
+  });
+}
+
+/** Prazos da equipe: demandas abertas com prazo, no escopo REAL do usuário, paginadas no servidor. */
+export async function listarPrazosEquipe(
+  grupo: GrupoPrazo,
+  params?: { limit?: number; offset?: number },
+): Promise<{ itens: Demanda[]; total: number; limit: number; offset: number }> {
+  const query = new URLSearchParams({ grupo, limit: String(params?.limit ?? 50), offset: String(params?.offset ?? 0) });
+  const data = await request<{ itens: DemandaReadApi[]; total: number; limit: number; offset: number }>(
+    `/notificacoes/prazos-equipe?${query.toString()}`,
+  );
+  return { ...data, itens: data.itens.map(mapDemandaReadToDemanda) };
 }
 
 // Projeção mínima pra seletores de responsável/membro (ver docs/padrao-arquivamento.md e
