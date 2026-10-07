@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import clsx from "clsx";
 import type { BadgeTone } from "@/components/ui/Badge";
 
-const toneClassNames: Record<BadgeTone, string> = {
+export const toneClassNames: Record<BadgeTone, string> = {
   neutral: "bg-zinc-100 text-fg-muted dark:bg-zinc-800",
   blue: "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400",
   green: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",

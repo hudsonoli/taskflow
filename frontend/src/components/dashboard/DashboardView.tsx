@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { StatCard } from "@/components/dashboard/StatCard";
+import { KpiStrip } from "@/components/ui/KpiStrip";
 import { getResumoMinhaHome, listDemandasReais, patchDemandaReal, type ResumoMinhaHome } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
@@ -217,15 +217,17 @@ export function DashboardView() {
         </div>
       </motion.div>
 
-      {/* Faixa única: sem rolagem em lg+ (tooltip no hover/foco); abaixo disso rola só a faixa, com rótulo visível. */}
-      <ul
-        aria-label="Indicadores das suas tarefas"
-        className="-mx-1 flex gap-2 overflow-x-auto p-1 [scrollbar-width:thin] lg:mx-0 lg:overflow-visible lg:p-0"
-      >
-        {STATS.map((stat, index) => (
-          <StatCard key={stat.label} index={index} total={STATS.length} {...stat} />
-        ))}
-      </ul>
+      <KpiStrip
+        ariaLabel="Indicadores das suas tarefas"
+        itens={STATS.map(({ label, value, icon: Icone, accent, onAccent }) => ({
+          key: label,
+          label,
+          value,
+          icon: <Icone size={16} />,
+          accent,
+          onAccent,
+        }))}
+      />
       {erroResumo && <p className="text-xs text-red-600">{erroResumo}</p>}
 
       <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 shadow-sm dark:border-indigo-500/20 dark:bg-indigo-500/5 sm:p-6">

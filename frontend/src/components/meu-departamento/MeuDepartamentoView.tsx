@@ -20,7 +20,8 @@ import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Select } from "@/components/ui/Select";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
-import { IndicadoresGrid, type IndicadorItem } from "@/components/operacional/IndicadoresGrid";
+import { type IndicadorItem } from "@/components/operacional/IndicadoresGrid";
+import { KpiStrip } from "@/components/ui/KpiStrip";
 import { TarefasLista } from "@/components/operacional/TarefasLista";
 import {
   getResumoDepartamento,
@@ -303,7 +304,10 @@ export function MeuDepartamentoView() {
     <div className="flex flex-col gap-6">
       <Cabecalho nomeDepartamento={departamentoHead.nome} />
 
-      <IndicadoresGrid itens={indicadores} colunas={4} />
+      <KpiStrip
+        ariaLabel="Indicadores do departamento"
+        itens={indicadores.map(({ key, title, value, description, icon, tone }) => ({ key, label: title, value, description, icon, tone }))}
+      />
       {erroResumo && <p className="text-xs text-red-600">{erroResumo}</p>}
 
       {erroHoras && departamentoHead && (
