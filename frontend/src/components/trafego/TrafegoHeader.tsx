@@ -29,7 +29,7 @@ export function TrafegoHeader({ onRefresh, refreshing }: { onRefresh: () => void
               </div>
               <div>
                 <h2 className="text-2xl font-bold tracking-tight text-fg">Central de Tráfego</h2>
-                <p className="mt-1 text-sm font-medium text-zinc-600 dark:text-zinc-300">Tempo operacional em tempo real</p>
+                <p className="mt-1 text-sm font-medium text-fg-muted">Tempo operacional em tempo real</p>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-muted">
                   Sessões de trabalho abertas e encerradas via API, calculadas pelo motor de horas do backend.
                 </p>

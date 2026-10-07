@@ -87,10 +87,10 @@ export function TrafegoAgoraTable({
         <EmptyState title="Nenhuma sessão em execução no momento" description="Inicie uma sessão de teste acima ou aguarde novas movimentações." icon={<Inbox size={16} />} />
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-zinc-100 dark:border-zinc-800">
+          <div className="overflow-hidden rounded-xl border border-line">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-zinc-100 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-subtle dark:border-zinc-800 dark:bg-zinc-950/40">
+                <thead className="border-b border-line bg-surface-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-subtle">
                   <tr>
                     <th className="px-4 py-2.5">Colaborador</th>
                     <th className="px-4 py-2.5">Demanda</th>
@@ -107,7 +107,7 @@ export function TrafegoAgoraTable({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="border-b border-zinc-100 transition last:border-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40"
+                        className="border-b border-line transition last:border-0 hover:bg-surface-hover"
                       >
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-3">
