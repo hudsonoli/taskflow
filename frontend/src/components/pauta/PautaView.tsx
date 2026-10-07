@@ -43,7 +43,7 @@ export function PautaView() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [departamentoIds, setDepartamentoIds] = useState<string[]>([]);
   const [periodo, setPeriodo] = useState<PautaPeriodoFiltro>("7d");
-  const [viewMode, setViewMode] = useState<PautaViewMode>("lista");
+  const [viewMode, setViewMode] = useState<PautaViewMode>("gantt");
   const [selectedDemandId, setSelectedDemandId] = useState<string | null>(null);
 
   const { inicio: periodoInicio, fim: periodoFim } = useMemo(() => periodoParaIntervalo(periodo), [periodo]);

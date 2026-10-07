@@ -75,7 +75,7 @@ export function DemandasView() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<DemandaStatusFiltro>("todos");
   const [offset, setOffset] = useState(0);
-  const [viewMode, setViewMode] = useState<DemandasViewMode>("lista");
+  const [viewMode, setViewMode] = useState<DemandasViewMode>("kanban");
   const [creatingDemand, setCreatingDemand] = useState(false);
   const [editingDemandId, setEditingDemandId] = useState<string | null>(null);
   const [selectedDemandId, setSelectedDemandId] = useState<string | null>(null);
