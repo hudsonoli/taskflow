@@ -45,9 +45,15 @@ Eventos automáticos (`usuario_id` nulo) nunca são escondidos por esta regra. �
 alterado. `EventoRepository.list(..., ocultar_atores_de_sistema=True)` aplica o filtro; o default continua `False` (consumo
 interno não é filtrado).
 
-**Fora desta fase (decisão de produto pendente):** `GET /notificacoes` ainda pode exibir o nome da conta de sistema como
-autor de uma notificação ao responsável de uma demanda. Esconder o evento faria o responsável perder a notificação; mascarar o
-nome é uma escolha de produto. O histórico de demanda, ao contrário, foi tratado porque a regra pedia a mesma política.
+**Notificações (hotfix pré-deploy):** `GET /notificacoes` resolvia o autor por JOIN em `usuarios`, então o responsável de uma
+demanda recebia o NOME REAL da conta de sistema. Agora a notificação **continua existindo** (nada é escondido nem apagado), mas o
+autor de uma conta de sistema é exibido como **"Sistema"** e a atividade vai para a aba **Sistema** (a categoria passa a ser
+"sem ator humano": `usuario_id` nulo **ou** ator `is_system_account`). A regra mora num ponto só,
+`NotificacaoService._ator_e_conta_de_sistema` (decide por `is_system_account`, nunca por e-mail/nome), e vale para a listagem, a
+contagem de não lidas (`/resumo`) e "marcar todas por categoria". O nome real nem sai do banco (CASE no SELECT).
+
+**Ainda fora do escopo (acompanhar):** a listagem de arquivos de demanda devolve `usuarioNome` de quem enviou e pode expor o nome
+de uma conta de sistema; comentários expõem `autorUsuarioId`. Mesma regra a aplicar em tarefa própria.
 
 ## Frontend
 

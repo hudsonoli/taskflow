@@ -7,7 +7,9 @@ novo é o estado "lida" por usuário (`notificacao_leituras`) — sem linha = n�
 Categorias (derivadas do evento, nunca de texto):
   - minhas  : atividade de OUTRA pessoa nas demandas em que sou responsável (atribuição a mim, mudança de
               status, bloqueio, ajuste/refação, anexo, arquivamento) — nunca a minha própria ação;
-  - sistema : o mesmo catálogo, mas gerado sem ator humano (`eventos.usuario_id` nulo — automação).
+  - sistema : o mesmo catálogo, mas gerado sem ator humano (`eventos.usuario_id` nulo — automação) OU por uma
+              conta de sistema (`usuarios.is_system_account`): para o tenant, a conta de sistema é "Sistema", nunca
+              uma pessoa — a notificação continua existindo, mas sem nome/identidade da conta (Fase 1A).
 
 "Prazos da equipe" NÃO é persistido: é derivado de Demandas, no MESMO escopo de `GET /demandas`
 (`core/escopo.py`), em `DemandaRepository.contar_prazos` / `list`.
@@ -34,6 +36,8 @@ from app.schemas.notificacao import (
     NotificacoesResumoRead,
     PrazosResumoRead,
 )
+
+AUTOR_SISTEMA = "Sistema"  # autor exibido quando o ator é conta de sistema (nunca o nome real)
 
 JANELA_DIAS = 30  # histórico exibido: últimos 30 dias (a central não é um arquivo morto)
 
@@ -121,11 +125,25 @@ class NotificacaoService:
         ]
 
     @staticmethod
-    def _filtro_categoria(categoria: str | None) -> list:
+    def _ator_e_conta_de_sistema():
+        """O ator do evento é uma conta `is_system_account`. ÚNICO ponto que decide isso nas notificações — vale
+        para a categoria, para a contagem e para o autor exibido. Alias: o JOIN da listagem já usa `Usuario`."""
+        ator = aliased(Usuario)
+        return exists(
+            select(1).select_from(ator).where(ator.id == Evento.usuario_id, ator.is_system_account.is_(True)).correlate(Evento)
+        )
+
+    @classmethod
+    def _eh_sistema(cls):
+        """Sem ator humano: automação (`usuario_id` nulo) ou conta de sistema."""
+        return or_(Evento.usuario_id.is_(None), cls._ator_e_conta_de_sistema())
+
+    @classmethod
+    def _filtro_categoria(cls, categoria: str | None) -> list:
         if categoria == "sistema":
-            return [Evento.usuario_id.is_(None)]
+            return [cls._eh_sistema()]
         if categoria == "minhas":
-            return [Evento.usuario_id.is_not(None)]
+            return [~cls._eh_sistema()]
         return []
 
     @staticmethod
@@ -152,8 +170,11 @@ class NotificacaoService:
             condicoes.append(self._nao_lida(usuario))
 
         total = db.scalar(select(func.count()).select_from(Evento).where(*condicoes)) or 0
+        eh_sistema = self._eh_sistema()
+        # O nome real só sai do banco quando o ator é uma pessoa: para conta de sistema o CASE já devolve "Sistema".
+        autor = case((self._ator_e_conta_de_sistema(), literal(AUTOR_SISTEMA)), else_=Usuario.nome)
         linhas = db.execute(
-            select(Evento, Demanda.codigo_referencia, Demanda.nome, Usuario.nome, NotificacaoLeitura.lida_em)
+            select(Evento, Demanda.codigo_referencia, Demanda.nome, autor, NotificacaoLeitura.lida_em, eh_sistema)
             .select_from(Evento)
             .join(Demanda, and_(Demanda.id == Evento.entidade_id, Demanda.empresa_id == usuario.empresa_id))
             .outerjoin(Usuario, Usuario.id == Evento.usuario_id)
@@ -169,7 +190,7 @@ class NotificacaoService:
         itens = [
             NotificacaoRead(
                 id=evento.id,
-                categoria="sistema" if evento.usuario_id is None else "minhas",
+                categoria="sistema" if sistema else "minhas",
                 tipo=evento.tipo,
                 titulo=TITULOS[evento.tipo],
                 detalhe=_detalhe(evento.tipo, evento.payload),
@@ -180,15 +201,15 @@ class NotificacaoService:
                 demandaNome=nome_demanda,
                 autorNome=autor,
             )
-            for evento, referencia, nome_demanda, autor, lida_em in linhas
+            for evento, referencia, nome_demanda, autor, lida_em, sistema in linhas
         ]
         return NotificacoesPaginaRead(itens=itens, total=total, limit=limit, offset=offset)
 
     def nao_lidas(self, db: Session, usuario: Usuario) -> NaoLidasRead:
         sistema, minhas = db.execute(
             select(
-                func.count(case((Evento.usuario_id.is_(None), 1))),
-                func.count(case((Evento.usuario_id.is_not(None), 1))),
+                func.count(case((self._eh_sistema(), 1))),
+                func.count(case((~self._eh_sistema(), 1))),
             )
             .select_from(Evento)
             .where(*self._predicado(usuario), self._nao_lida(usuario))
