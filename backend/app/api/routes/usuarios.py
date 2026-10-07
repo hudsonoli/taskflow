@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.core.autoridade_usuarios import AutoridadeUsuarioError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import ensure_resource_empresa, ensure_same_empresa
@@ -40,6 +41,7 @@ from app.services.usuario_service import (
     UsuarioNotFoundError,
     UsuarioService,
     UsuarioSystemAccountProtegidoError,
+    UsuarioUltimoGestorError,
 )
 
 # Gate único pra todas as rotas: autenticado + senha em dia (ver
@@ -110,6 +112,12 @@ def handle_usuario_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, UsuarioSystemAccountProtegidoError):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if isinstance(exc, AutoridadeUsuarioError):
+        # Hierarquia (Fase 1A): o ator não tem autoridade sobre este perfil/alvo. 403, não 422 — o dado
+        # é válido; quem pede é que não pode.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if isinstance(exc, UsuarioUltimoGestorError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     raise exc
 
 
@@ -121,7 +129,7 @@ def create_usuario(
 ):
     ensure_same_empresa(usuario.empresa_id, current_user)
     try:
-        created = usuario_service.create_usuario(db, usuario, actor_usuario_id=current_user.id)
+        created = usuario_service.create_usuario(db, usuario, actor_usuario_id=current_user.id, actor=current_user)
         return usuario_service.to_read(db, created, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
@@ -396,7 +404,9 @@ def update_usuario(
 
     try:
         data = UsuarioUpdate.model_validate(payload)
-        usuario = usuario_service.update_usuario(db, str(usuario_id), data, actor_usuario_id=current_user.id)
+        usuario = usuario_service.update_usuario(
+            db, str(usuario_id), data, actor_usuario_id=current_user.id, actor=current_user
+        )
         return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
@@ -419,6 +429,7 @@ def inativar_usuario(
             str(usuario_id),
             motivo_inativacao=payload.motivo_inativacao if payload else None,
             actor_usuario_id=current_user.id,
+            actor=current_user,
         )
         return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
@@ -435,7 +446,9 @@ def reativar_usuario(
     try:
         existing = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(existing.empresa_id, current_user)
-        usuario = usuario_service.reativar_usuario(db, str(usuario_id), actor_usuario_id=current_user.id)
+        usuario = usuario_service.reativar_usuario(
+            db, str(usuario_id), actor_usuario_id=current_user.id, actor=current_user
+        )
         return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
@@ -453,7 +466,9 @@ def bloquear_usuario(
     try:
         existing = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(existing.empresa_id, current_user)
-        usuario = usuario_service.bloquear_usuario(db, str(usuario_id), actor_usuario_id=current_user.id)
+        usuario = usuario_service.bloquear_usuario(
+            db, str(usuario_id), actor_usuario_id=current_user.id, actor=current_user
+        )
         return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
@@ -469,7 +484,9 @@ def desbloquear_usuario(
     try:
         existing = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(existing.empresa_id, current_user)
-        usuario = usuario_service.desbloquear_usuario(db, str(usuario_id), actor_usuario_id=current_user.id)
+        usuario = usuario_service.desbloquear_usuario(
+            db, str(usuario_id), actor_usuario_id=current_user.id, actor=current_user
+        )
         return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)
@@ -492,6 +509,7 @@ def excluir_usuario(
             str(usuario_id),
             motivo_arquivamento=payload.motivo_arquivamento,
             actor_usuario_id=current_user.id,
+            actor=current_user,
         )
         return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
@@ -507,7 +525,9 @@ def restaurar_usuario(
     try:
         existing = usuario_service.get_usuario(db, str(usuario_id))
         ensure_resource_empresa(existing.empresa_id, current_user)
-        usuario = usuario_service.restaurar_usuario(db, str(usuario_id), actor_usuario_id=current_user.id)
+        usuario = usuario_service.restaurar_usuario(
+            db, str(usuario_id), actor_usuario_id=current_user.id, actor=current_user
+        )
         return usuario_service.to_read(db, usuario, actor=current_user)
     except Exception as exc:
         handle_usuario_error(exc)

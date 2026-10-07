@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { generateId } from "@/lib/ids";
 import { formatCPF } from "@/lib/mascaras";
 import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
-import { PERFIL_PARA_PERFIL_BASE } from "@/lib/api-backend";
+import { opcoesDePerfil, perfilTecnico, podeAlterarPerfilDe } from "@/lib/autoridadeUsuarios";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeVerFinanceiroEfetivo } from "@/lib/escopo-operacional";
 import {
@@ -90,6 +90,14 @@ export function UsuarioFormModal({
   const canSave =
     draft.nome.trim().length > 0 && draft.email.trim().length > 0 && (editing || sobrenome.trim().length > 0);
   const podeVerFinanceiro = usuarioAtual ? podeVerFinanceiroEfetivo(usuarioAtual) : false;
+  // Perfis oferecidos conforme quem está logado (perfil/permissões da SESSÃO, nunca e-mail): o admin legado
+  // oferece Gestor e Usuário; o Gestor, só Usuário. `admin` nunca é oferecido. Se não há o que escolher (uma
+  // opção só) ou o alvo é um perfil que o ator não pode alterar (admin legado), o perfil aparece só para leitura.
+  const opcoesPerfil = usuarioAtual ? opcoesDePerfil(usuarioAtual) : [];
+  const perfilAlteravel =
+    opcoesPerfil.length > 1 &&
+    (!usuario || (usuarioAtual !== undefined && podeAlterarPerfilDe(usuarioAtual, usuario))) &&
+    opcoesPerfil.some((opcao) => perfilTecnico(opcao.value) === perfilTecnico(draft.perfil));
 
   const tabs = [
     { id: "dados", label: "Dados" },
@@ -196,17 +204,15 @@ export function UsuarioFormModal({
                 options={[{ value: "", label: "Sem departamento" }, ...departamentos.map((departamento) => ({ value: departamento.id, label: departamento.nome }))]}
               />
               <div>
-                <Select
-                  label="Perfil"
-                  value={draft.perfil}
-                  onChange={(event) => updateDraft({ perfil: event.target.value as PerfilUsuario })}
-                  options={Object.entries(perfilUsuarioLabels).map(([value, label]) => ({ value, label }))}
-                />
-                {PERFIL_PARA_PERFIL_BASE[draft.perfil] !== draft.perfil && (
-                  <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
-                    Nesta fase, o backend só tem 3 níveis reais — este perfil é gravado como{" "}
-                    <strong>{perfilUsuarioLabels[PERFIL_PARA_PERFIL_BASE[draft.perfil]]}</strong>.
-                  </p>
+                {perfilAlteravel ? (
+                  <Select
+                    label="Perfil"
+                    value={draft.perfil}
+                    onChange={(event) => updateDraft({ perfil: event.target.value as PerfilUsuario })}
+                    options={opcoesPerfil}
+                  />
+                ) : (
+                  <Input label="Perfil" value={perfilUsuarioLabels[draft.perfil]} disabled readOnly />
                 )}
               </div>
             </div>

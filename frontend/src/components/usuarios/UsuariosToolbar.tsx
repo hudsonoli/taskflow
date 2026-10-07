@@ -15,6 +15,7 @@ export function UsuariosToolbar({
   departamentoFilter,
   onDepartamentoFilterChange,
   departamentos,
+  podeCriar,
   onNewUsuario,
 }: {
   query: string;
@@ -24,6 +25,8 @@ export function UsuariosToolbar({
   departamentoFilter: string;
   onDepartamentoFilterChange: (value: string) => void;
   departamentos: DepartamentoDiretorioItem[];
+  /** `usuarios.criar` na sessão — sem isso o botão não existe (a API responderia 403). */
+  podeCriar: boolean;
   onNewUsuario: () => void;
 }) {
   return (
@@ -62,10 +65,12 @@ export function UsuariosToolbar({
           />
         </div>
 
-        <Button onClick={onNewUsuario}>
-          <Plus className="h-4 w-4" />
-          Nova pessoa
-        </Button>
+        {podeCriar && (
+          <Button onClick={onNewUsuario}>
+            <Plus className="h-4 w-4" />
+            Nova pessoa
+          </Button>
+        )}
       </div>
     </div>
   );

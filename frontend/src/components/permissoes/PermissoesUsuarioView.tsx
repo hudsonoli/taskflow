@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -12,7 +12,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { useAppData } from "@/lib/AppDataContext";
 import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
-import { definirPermissaoUsuario, herdarPermissaoUsuario, listarPermissoesUsuario } from "@/lib/api-backend";
+import { definirPermissaoUsuario, herdarPermissaoUsuario, listarPermissoesUsuario, listUsuariosPagina } from "@/lib/api-backend";
+import { perfilTecnico } from "@/lib/autoridadeUsuarios";
+import type { BuscarOpcoesMembros } from "@/components/ui/MemberSelector";
 import { podeGerenciarPermissoes } from "@/lib/escopo-operacional";
 import type { PermissaoAdminItem, PermissaoEstadoUI } from "@/types/permissao";
 
@@ -30,7 +32,26 @@ const OPCOES_ESTADO: { value: PermissaoEstadoUI; label: string }[] = [
 
 export function PermissoesUsuarioView() {
   const { usuarioAtual, sessaoCarregando } = useAppData();
-  const { buscarOpcoes } = useUsuariosSelector({ todosStatus: true });
+  const { buscarOpcoes: buscarOpcoesDiretorio } = useUsuariosSelector({ todosStatus: true });
+  // Quem não é admin legado (o Gestor) só administra Usuários: o seletor oferece apenas eles (o backend repete a
+  // regra — Gestor, admin legado e conta de sistema nunca abrem). Lista por perfil técnico `operador`.
+  const soUsuarios = usuarioAtual ? perfilTecnico(usuarioAtual.perfil) !== "admin" : false;
+  const empresaId = usuarioAtual?.empresaId;
+  // Identidade estável: o seletor refaz a busca quando a função muda.
+  const buscarOpcoes = useCallback<BuscarOpcoesMembros>(
+    async ({ busca, limit, offset }) => {
+      if (!soUsuarios || !empresaId) return buscarOpcoesDiretorio({ busca, limit, offset });
+      const usuarios = await listUsuariosPagina({ empresaId, search: busca || undefined, perfilBase: "operador", limit, offset });
+      return usuarios.map((usuario) => ({
+        id: usuario.id,
+        nome: usuario.nome,
+        subtitulo: undefined,
+        corIdentificacao: usuario.corIdentificacao,
+        fotoUrl: usuario.fotoUrl,
+      }));
+    },
+    [soUsuarios, empresaId, buscarOpcoesDiretorio],
+  );
 
   const [usuarioId, setUsuarioId] = useState("");
   const [itens, setItens] = useState<PermissaoAdminItem[] | null>(null);
@@ -111,8 +132,8 @@ export function PermissoesUsuarioView() {
   if (!podeGerenciarPermissoes(usuarioAtual)) {
     return (
       <AcessoNegado
-        titulo="Área restrita a administradores"
-        descricao="A gestão de permissões é restrita a administradores com a permissão permissoes.gerenciar. Se você precisa desta área, fale com quem administra o workspace."
+        titulo="Área restrita a quem administra o workspace"
+        descricao="A gestão de permissões é restrita a Gestores com a permissão permissoes.gerenciar. Se você precisa desta área, fale com quem administra o workspace."
       />
     );
   }

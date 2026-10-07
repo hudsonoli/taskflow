@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.evento import Evento
+from app.models.usuario import Usuario
 
 
 class EventoRepository:
@@ -21,6 +22,30 @@ class EventoRepository:
     def get_by_id(self, db: Session, evento_id: str) -> Evento | None:
         return db.get(Evento, evento_id)
 
+    @staticmethod
+    def _ator_nao_e_conta_de_sistema():
+        """Predicado de VISIBILIDADE: o evento passa se não tem ator (automático, `usuario_id` nulo) ou se o
+        ator não é conta de sistema (`is_system_account`). Só filtra a leitura — nunca apaga nem altera o
+        evento histórico."""
+        return or_(
+            Evento.usuario_id.is_(None),
+            ~exists(
+                select(1)
+                .select_from(Usuario)
+                .where(Usuario.id == Evento.usuario_id, Usuario.is_system_account.is_(True))
+                .correlate(Evento)
+            ),
+        )
+
+    def ator_e_conta_de_sistema(self, db: Session, evento: Evento) -> bool:
+        if evento.usuario_id is None:
+            return False
+        return bool(
+            db.scalar(
+                select(exists().where(Usuario.id == evento.usuario_id, Usuario.is_system_account.is_(True)))
+            )
+        )
+
     def list(
         self,
         db: Session,
@@ -34,8 +59,15 @@ class EventoRepository:
         data_fim: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
+        ocultar_atores_de_sistema: bool = False,
     ) -> list[Evento]:
+        """`ocultar_atores_de_sistema`: superfícies de leitura do TENANT (Acessos, histórico de Demanda) passam
+        True para quem não é a própria conta de sistema — eventos cujo ator é `is_system_account` não aparecem.
+        Eventos automáticos (`usuario_id` nulo) nunca são escondidos por esta regra. Default False: consumo
+        interno não é filtrado."""
         statement = select(Evento)
+        if ocultar_atores_de_sistema:
+            statement = statement.where(self._ator_nao_e_conta_de_sistema())
 
         if empresa_id:
             statement = statement.where(Evento.empresa_id == empresa_id)

@@ -10,13 +10,13 @@ export type ItemConfiguracao = {
   // Item administrativo — visível apenas para Admin/Gestor/Diretoria/SuperAdmin
   // (ver `podeAcessarAcessos` em lib/escopo-operacional.ts). Filtrado no ConfiguracoesSidebarNav.
   apenasAdministrativo?: boolean;
-  // Mais restrito que `apenasAdministrativo`: só Admin (nunca Gestor) — ver
-  // `podeGerenciarPermissoes` em lib/escopo-operacional.ts. Usado por Permissões, onde o
-  // piso real do backend é `perfil_base == "admin"`, não "admin ou gestor".
+  // Mais restrito que `apenasAdministrativo`: quem pode gerir permissões de terceiros (admin legado ou
+  // Gestor, e com `permissoes.gerenciar` efetiva) — ver `podeGerenciarPermissoes` em
+  // lib/escopo-operacional.ts. Usado por Permissões; o nome do campo é histórico (era só admin).
   apenasAdmin?: boolean;
   // Chave do catálogo de permissões (app/core/permissoes.py) que também precisa estar no
-  // conjunto efetivo do usuário, além de `apenasAdmin`. Deixa visível "Admin comum" mas
-  // esconde de um Admin com essa chave negada explicitamente via override.
+  // conjunto efetivo do usuário, além de `apenasAdmin`. Deixa visível para o Gestor comum mas
+  // esconde de quem tem essa chave negada explicitamente via override.
   permissaoNecessaria?: string;
 };
 

@@ -151,6 +151,22 @@ class UsuarioRepository:
         ).one()
         return {"total": linha[0], "ativos": linha[1], "gestao": linha[2], "departamentos": linha[3]}
 
+    def contar_gestores_ativos(self, db: Session, *, empresa_id: str, exceto_id: str | None = None) -> int:
+        """Gestores que ainda conseguem administrar a empresa: `perfil_base="gestor"`, `ativo` e com
+        `acesso_sistema`. Base da regra "a empresa nunca fica sem Gestor ativo por uma operação
+        administrativa normal" (UsuarioService). Nunca conta conta de sistema; `exceto_id` tira o alvo
+        da operação da conta."""
+        condicoes = [
+            Usuario.empresa_id == empresa_id,
+            Usuario.perfil_base == "gestor",
+            Usuario.status == STATUS_ATIVO,
+            Usuario.acesso_sistema.is_(True),
+            Usuario.is_system_account.is_(False),
+        ]
+        if exceto_id is not None:
+            condicoes.append(Usuario.id != exceto_id)
+        return int(db.scalar(select(func.count(Usuario.id)).where(*condicoes)) or 0)
+
     def list_diretorio(
         self,
         db: Session,

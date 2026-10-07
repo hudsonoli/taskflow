@@ -6,8 +6,26 @@ export const perfilUsuarioLabels: Record<PerfilUsuario, string> = {
   diretoria: "Diretoria",
   gestor: "Gestor",
   financeiro: "Financeiro",
-  operador: "Operador",
+  // Rótulo VISÍVEL do perfil técnico `operador` (nome interno inalterado no banco/API/JWT).
+  operador: "Usuário",
   cliente: "Cliente",
+};
+
+// Perfil técnico que a API realmente grava/devolve (`perfil_base`). `admin` é LEGADO: continua válido para
+// leitura, mas a API nunca o atribui (Fase 1A).
+export type UsuarioPerfilBaseApi = "admin" | "gestor" | "operador";
+
+// perfil_base real só tem 3 valores. Mapeamento do rótulo rico antigo (mock) para o valor técnico — hoje só
+// serve para ler o perfil de quem já existe (superadmin|diretoria -> admin, financeiro -> gestor, cliente ->
+// operador): a UI de cadastro NÃO oferece mais essas opções, só Gestor e Usuário.
+export const PERFIL_PARA_PERFIL_BASE: Record<PerfilUsuario, UsuarioPerfilBaseApi> = {
+  superadmin: "admin",
+  admin: "admin",
+  diretoria: "admin",
+  financeiro: "gestor",
+  gestor: "gestor",
+  operador: "operador",
+  cliente: "operador",
 };
 
 // Perfis com visibilidade de dados financeiros sensíveis (ex: fee mensal de clientes,

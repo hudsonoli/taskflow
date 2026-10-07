@@ -5,6 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.autoridade_usuarios import (
+    AutoridadeUsuarioError,
+    ensure_nao_e_auto_administracao,
+    ensure_pode_administrar_alvo,
+    ensure_pode_atribuir_perfil,
+)
 from app.core.referencias import gerar_proxima_referencia
 from app.domain.event_types import DomainEventType
 from app.models.evento import Evento
@@ -78,6 +84,12 @@ class UsuarioDepartamentoInvalidoError(ValueError):
     """Departamento inexistente, de outra empresa ou arquivado (novo vínculo)."""
 
 
+class UsuarioUltimoGestorError(ValueError):
+    """A operação deixaria a empresa sem nenhum Gestor ativo (inativar, bloquear, excluir, tirar o
+    acesso ou rebaixar o último). Só protege quem JÁ tem Gestor: uma empresa sem nenhum (estado
+    legado, ex.: administrada só pela conta de sistema) não é afetada."""
+
+
 class UsuarioSystemAccountProtegidoError(ValueError):
     """A conta de sistema (is_system_account=true) não pode ser editada, inativada,
     reativada, bloqueada ou desbloqueada por nenhum caminho de API — proteção incondicional."""
@@ -107,7 +119,12 @@ class UsuarioService:
         data: UsuarioCreate,
         *,
         actor_usuario_id: str | None = None,
+        actor: Usuario | None = None,
     ) -> Usuario:
+        # `actor` (as rotas sempre passam) liga a regra de autoridade: perfil atribuível por quem cria.
+        # Ausente = chamada interna (CLI/seed), sem checagem de hierarquia.
+        if actor is not None:
+            ensure_pode_atribuir_perfil(actor.perfil_base, data.perfil_base)
         empresa_id = str(data.empresa_id)
         email = self._normalize_email(data.email)
         now = datetime.now(timezone.utc)
@@ -168,6 +185,9 @@ class UsuarioService:
                     usuario_arquivado_id=existing.id,
                 ) from None
             raise UsuarioConflictError("e-mail ou codigoInterno já cadastrado para esta Empresa") from None
+        except (AutoridadeUsuarioError, UsuarioUltimoGestorError):
+            # Recusa de autoridade/estado: decidida ANTES de qualquer escrita — nada a desfazer.
+            raise
         except Exception:
             db.rollback()
             raise
@@ -296,12 +316,26 @@ class UsuarioService:
         data: UsuarioUpdate,
         *,
         actor_usuario_id: str | None = None,
+        actor: Usuario | None = None,
     ) -> Usuario:
         try:
             usuario = self.get_usuario(db, usuario_id)
             self._ensure_not_system_account(usuario)
             changed_fields: list[str] = []
             updates = data.model_dump(exclude_unset=True, by_alias=False)
+
+            perfil_muda = "perfil_base" in updates and updates["perfil_base"] != usuario.perfil_base
+            perde_acesso = (
+                "acesso_sistema" in updates and updates["acesso_sistema"] is False and bool(usuario.acesso_sistema)
+            )
+            if actor is not None:
+                ensure_pode_administrar_alvo(actor.perfil_base, usuario.perfil_base)
+                if perfil_muda:
+                    ensure_pode_atribuir_perfil(actor.perfil_base, updates["perfil_base"])
+                if perfil_muda or perde_acesso:
+                    ensure_nao_e_auto_administracao(actor.id, usuario.id)
+            if perfil_muda or perde_acesso:
+                self._ensure_mantem_gestor(db, usuario)
 
             if "nome" in updates and updates["nome"] != usuario.nome:
                 usuario.nome = updates["nome"]
@@ -356,6 +390,9 @@ class UsuarioService:
             db.commit()
             db.refresh(usuario)
             return usuario
+        except (AutoridadeUsuarioError, UsuarioUltimoGestorError):
+            # Recusa de autoridade/estado: decidida ANTES de qualquer escrita — nada a desfazer.
+            raise
         except Exception:
             db.rollback()
             raise
@@ -367,10 +404,13 @@ class UsuarioService:
         *,
         motivo_inativacao: str | None = None,
         actor_usuario_id: str | None = None,
+        actor: Usuario | None = None,
     ) -> Usuario:
         try:
             usuario = self.get_usuario(db, usuario_id)
             self._ensure_not_system_account(usuario)
+            self._ensure_autoridade(actor, usuario, suspensao=True)
+            self._ensure_mantem_gestor(db, usuario)
             if usuario.status == STATUS_INATIVO:
                 raise UsuarioInvalidTransitionError("Usuário já está inativo")
             if usuario.status == STATUS_ARQUIVADO:
@@ -387,6 +427,9 @@ class UsuarioService:
             db.commit()
             db.refresh(usuario)
             return usuario
+        except (AutoridadeUsuarioError, UsuarioUltimoGestorError):
+            # Recusa de autoridade/estado: decidida ANTES de qualquer escrita — nada a desfazer.
+            raise
         except Exception:
             db.rollback()
             raise
@@ -397,10 +440,12 @@ class UsuarioService:
         usuario_id: str,
         *,
         actor_usuario_id: str | None = None,
+        actor: Usuario | None = None,
     ) -> Usuario:
         try:
             usuario = self.get_usuario(db, usuario_id)
             self._ensure_not_system_account(usuario)
+            self._ensure_autoridade(actor, usuario)
             if usuario.status == STATUS_ATIVO:
                 raise UsuarioInvalidTransitionError("Usuário já está ativo")
             if usuario.status == STATUS_BLOQUEADO:
@@ -419,6 +464,9 @@ class UsuarioService:
             db.commit()
             db.refresh(usuario)
             return usuario
+        except (AutoridadeUsuarioError, UsuarioUltimoGestorError):
+            # Recusa de autoridade/estado: decidida ANTES de qualquer escrita — nada a desfazer.
+            raise
         except Exception:
             db.rollback()
             raise
@@ -429,10 +477,13 @@ class UsuarioService:
         usuario_id: str,
         *,
         actor_usuario_id: str | None = None,
+        actor: Usuario | None = None,
     ) -> Usuario:
         try:
             usuario = self.get_usuario(db, usuario_id)
             self._ensure_not_system_account(usuario)
+            self._ensure_autoridade(actor, usuario, suspensao=True)
+            self._ensure_mantem_gestor(db, usuario)
             if usuario.status == STATUS_BLOQUEADO:
                 raise UsuarioInvalidTransitionError("Usuário já está bloqueado")
             if usuario.status == STATUS_ARQUIVADO:
@@ -446,6 +497,9 @@ class UsuarioService:
             db.commit()
             db.refresh(usuario)
             return usuario
+        except (AutoridadeUsuarioError, UsuarioUltimoGestorError):
+            # Recusa de autoridade/estado: decidida ANTES de qualquer escrita — nada a desfazer.
+            raise
         except Exception:
             db.rollback()
             raise
@@ -456,10 +510,12 @@ class UsuarioService:
         usuario_id: str,
         *,
         actor_usuario_id: str | None = None,
+        actor: Usuario | None = None,
     ) -> Usuario:
         try:
             usuario = self.get_usuario(db, usuario_id)
             self._ensure_not_system_account(usuario)
+            self._ensure_autoridade(actor, usuario)
             if usuario.status != STATUS_BLOQUEADO:
                 raise UsuarioInvalidTransitionError("Somente usuário bloqueado pode ser desbloqueado")
 
@@ -471,6 +527,9 @@ class UsuarioService:
             db.commit()
             db.refresh(usuario)
             return usuario
+        except (AutoridadeUsuarioError, UsuarioUltimoGestorError):
+            # Recusa de autoridade/estado: decidida ANTES de qualquer escrita — nada a desfazer.
+            raise
         except Exception:
             db.rollback()
             raise
@@ -482,12 +541,15 @@ class UsuarioService:
         *,
         motivo_arquivamento: str,
         actor_usuario_id: str,
+        actor: Usuario | None = None,
     ) -> Usuario:
         """"Excluir" = arquivar (soft-delete permanente) — nunca apaga a linha nem troca o
         ID. Ver docs/padrao-arquivamento.md."""
         try:
             usuario = self.get_usuario(db, usuario_id)
             self._ensure_not_system_account(usuario)
+            self._ensure_autoridade(actor, usuario, suspensao=True)
+            self._ensure_mantem_gestor(db, usuario)
             if usuario.status == STATUS_ARQUIVADO:
                 raise UsuarioInvalidTransitionError("Usuário já está arquivado")
 
@@ -503,6 +565,9 @@ class UsuarioService:
             db.commit()
             db.refresh(usuario)
             return usuario
+        except (AutoridadeUsuarioError, UsuarioUltimoGestorError):
+            # Recusa de autoridade/estado: decidida ANTES de qualquer escrita — nada a desfazer.
+            raise
         except Exception:
             db.rollback()
             raise
@@ -513,6 +578,7 @@ class UsuarioService:
         usuario_id: str,
         *,
         actor_usuario_id: str,
+        actor: Usuario | None = None,
     ) -> Usuario:
         """Restaura sempre para "inativo" — nunca reativa sozinho, mesmo que o status antes
         do arquivamento fosse "ativo"/"bloqueado". Reativar é uma ação administrativa
@@ -520,6 +586,7 @@ class UsuarioService:
         try:
             usuario = self.get_usuario(db, usuario_id)
             self._ensure_not_system_account(usuario)
+            self._ensure_autoridade(actor, usuario)
             if usuario.status != STATUS_ARQUIVADO:
                 raise UsuarioInvalidTransitionError("Somente usuário arquivado pode ser restaurado")
 
@@ -533,6 +600,9 @@ class UsuarioService:
             db.commit()
             db.refresh(usuario)
             return usuario
+        except (AutoridadeUsuarioError, UsuarioUltimoGestorError):
+            # Recusa de autoridade/estado: decidida ANTES de qualquer escrita — nada a desfazer.
+            raise
         except Exception:
             db.rollback()
             raise
@@ -629,6 +699,33 @@ class UsuarioService:
             fotoUrl=url_do_avatar(usuario) or usuario.foto_url,
             corIdentificacao=usuario.cor_identificacao,
         )
+
+    @staticmethod
+    def _ensure_autoridade(actor: Usuario | None, alvo: Usuario, *, suspensao: bool = False) -> None:
+        """Hierarquia (app/core/autoridade_usuarios.py): o ator só opera sobre os perfis que lhe cabem e,
+        nas ações de suspensão (inativar/bloquear/excluir), nunca sobre si mesmo. `actor=None` = chamada
+        interna, sem checagem."""
+        if actor is None:
+            return
+        ensure_pode_administrar_alvo(actor.perfil_base, alvo.perfil_base)
+        if suspensao:
+            ensure_nao_e_auto_administracao(actor.id, alvo.id)
+
+    def _ensure_mantem_gestor(self, db: Session, alvo: Usuario) -> None:
+        """A empresa não pode ficar sem Gestor ativo por uma operação administrativa normal. Vale para
+        qualquer ator (é proteção do ESTADO, não de hierarquia) e só quando o alvo é um Gestor ativo e é o
+        último — empresa sem nenhum Gestor (legado) nunca cai aqui, porque o alvo não seria Gestor."""
+        if not (
+            alvo.perfil_base == "gestor"
+            and alvo.status == STATUS_ATIVO
+            and alvo.acesso_sistema
+            and not alvo.is_system_account
+        ):
+            return
+        if self.repository.contar_gestores_ativos(db, empresa_id=alvo.empresa_id, exceto_id=alvo.id) == 0:
+            raise UsuarioUltimoGestorError(
+                "A empresa precisa manter ao menos um Gestor ativo. Crie outro Gestor antes de continuar."
+            )
 
     def _ensure_empresa_accepts_usuario(self, db: Session, empresa_id: str) -> None:
         empresa = self.empresa_repository.get_by_id(db, empresa_id)

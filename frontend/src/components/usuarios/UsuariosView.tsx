@@ -18,6 +18,7 @@ import {
 } from "@/lib/api-backend";
 import { invalidarDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { useAppData } from "@/lib/AppDataContext";
+import { perfilTecnico, podeCriarUsuario, podeEditarUsuario, podeSuspenderUsuario } from "@/lib/autoridadeUsuarios";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import type { Usuario, UsuarioFormDraft } from "@/types/usuario";
 import { ExcluirUsuarioModal } from "./ExcluirUsuarioModal";
@@ -54,6 +55,10 @@ export function UsuariosView() {
   const editingUsuario = usuarios.find((usuario) => usuario.id === editingUsuarioId);
   const excluirUsuario = usuarios.find((usuario) => usuario.id === excluirUsuarioId);
   const empresaId = usuarioAtual?.empresaId;
+  // Autoridade do usuário logado (perfil + permissões da sessão): decide o que aparece. A API repete a regra.
+  const podeCriar = usuarioAtual ? podeCriarUsuario(usuarioAtual) : false;
+  const podeEditar = (alvo: Usuario) => (usuarioAtual ? podeEditarUsuario(usuarioAtual, alvo) : false);
+  const podeExcluir = (alvo: Usuario) => (usuarioAtual ? podeSuspenderUsuario(usuarioAtual, alvo) : false);
 
   // Espelha a chave vigente para descartar respostas de "Carregar mais" de uma consulta anterior.
   const chaveRef = useRef<string | null>(null);
@@ -171,7 +176,12 @@ export function UsuariosView() {
         await criarUsuarioReal(draft, empresaId);
       } else {
         const anterior = usuarios.find((usuario) => usuario.id === usuarioId);
-        await atualizarUsuarioReal(usuarioId, draft, anterior?.ativo ?? true);
+        await atualizarUsuarioReal(
+          usuarioId,
+          draft,
+          anterior?.ativo ?? true,
+          anterior ? perfilTecnico(anterior.perfil) : undefined,
+        );
       }
       reconciliar();
       invalidarDiretorioUsuarios();
@@ -242,6 +252,7 @@ export function UsuariosView() {
             departamentoFilter={departamentoFilter}
             onDepartamentoFilterChange={setDepartamentoFilter}
             departamentos={departamentos}
+            podeCriar={podeCriar}
             onNewUsuario={() => setCreatingUsuario(true)}
           />
 
@@ -250,6 +261,8 @@ export function UsuariosView() {
               usuarios={usuarios}
               departamentos={departamentos}
               temMais={temMais}
+              podeEditar={podeEditar}
+              podeExcluir={podeExcluir}
               onEdit={setEditingUsuarioId}
               onExcluir={setExcluirUsuarioId}
             />

@@ -253,25 +253,23 @@ def require_demandas_criar() -> Callable[..., Usuario]:
     return dependency
 
 
-# admin-only, mesma allowlist restrita de PERFIL_ADMIN sozinho (nem gestor entra aqui, ao
-# contrário de _PERFIS_TRAFEGO_AUTORIZADOS) — gerenciar overrides de outras pessoas é mais
-# sensível do que abrir/fechar sessão de trabalho: um override de "conceder" mal colocado
-# aqui deixaria alguém administrar as próprias permissões de qualquer um, inclusive de si
-# mesmo (self-escalation).
-_PERFIS_PERMISSOES_GERENCIAR_AUTORIZADOS = frozenset({PERFIL_ADMIN})
+# Admin legado e gestor (Fase 1A: o gestor é a autoridade máxima da empresa). Operador NUNCA entra
+# aqui, nem com override de "conceder" — gerenciar overrides de outras pessoas é mais sensível do
+# que abrir/fechar sessão de trabalho: um "conceder" mal colocado deixaria alguém administrar as
+# próprias permissões (self-escalation). SOBRE QUEM o gestor age (só Usuário) é regra de alvo,
+# imposta na rota (app/core/autoridade_usuarios.py), não neste piso.
+_PERFIS_PERMISSOES_GERENCIAR_AUTORIZADOS = frozenset({PERFIL_ADMIN, PERFIL_GESTOR})
 
 
 def require_permissoes_gerenciar() -> Callable[..., Usuario]:
     """Como `require_trafego_gerenciar`, mas para `permissoes.gerenciar` (Fase 2G.10C-C1).
 
     Piso fixo: mesmo com `permissoes.gerenciar = conceder` via override, só quem já tem
-    `perfil_base == "admin"` passa. Isso é o que impede um gestor/operador com grant de virar
-    administrador de permissões — a permissão sozinha nunca é suficiente, só perfil real.
+    `perfil_base` admin (legado) ou gestor passa. Isso é o que impede um operador com grant de
+    virar administrador de permissões — a permissão sozinha nunca é suficiente, só perfil real.
 
-    Não existe "super-admin" nem hierarquia nova: um admin pode alterar overrides de outro
-    admin (inclusive negar `permissoes.gerenciar` dele) — ver
-    app/api/routes/usuario_permissao.py para a regra de self (bloqueada por outro motivo,
-    não por este guard).
+    O alvo é decidido em app/api/routes/usuario_permissao.py: o gestor só vê e altera overrides de
+    Usuário (nunca de outro Gestor, do admin legado ou de si mesmo), e o self é bloqueado lá.
     """
     base = require_permissao("permissoes.gerenciar")
 

@@ -86,10 +86,11 @@ EFEITOS_VALIDOS: frozenset[str] = frozenset({EFEITO_CONCEDER, EFEITO_NEGAR})
 #
 # `permissoes.gerenciar` nasceu na Fase 2G.10C-C1, junto do endpoint que ela protege
 # (POST/PUT/DELETE /usuarios/{id}/permissoes — ver app/api/routes/usuario_permissao.py).
-# Default só em admin (ver DEFAULTS_POR_PERFIL) — gestor/operador nunca administram
+# Default em admin (legado) e gestor (Fase 1A — ver DEFAULTS_POR_PERFIL). Operador nunca administra
 # overrides de terceiros, mesmo recebendo um "conceder" via override (piso fixo de perfil em
 # require_permissoes_gerenciar, app/dependencies/permissoes.py, mesmo padrão de
-# require_trafego_gerenciar).
+# require_trafego_gerenciar). SOBRE QUEM o gestor pode agir (só Usuário) é regra de alvo, em
+# app/core/autoridade_usuarios.py.
 # ---------------------------------------------------------------------------------------
 
 MODULO_DEMANDAS = "demandas"
@@ -152,8 +153,9 @@ CATALOGO: dict[str, list[str]] = {
     ],
     # Cadastros administrativos — mesmo formato para todos.
     **{modulo: _permissoes_cadastro(modulo) for modulo in _CADASTROS_ADMIN_OU_GESTOR},
-    # Usuários — único cadastro em que criar/editar/suspender são mais restritos que
-    # visualizar (require_admin puro; ver app/api/routes/usuarios.py). "suspender" cobre
+    # Usuários — único cadastro em que criar/editar/suspender têm regra de ALVO (Fase 1A: admin legado
+    # administra Gestor e Usuário; gestor só Usuário — app/core/autoridade_usuarios.py, imposta em
+    # app/services/usuario_service.py). "suspender" cobre
     # inativar/bloquear/desbloquear/excluir/reativar/restaurar — mesmo guard real nas seis
     # (e vale nos dois sentidos: suspender E reverter a suspensão, mesma convenção de
     # "arquivar" cobrir arquivar+restaurar acima).
@@ -192,9 +194,9 @@ CATALOGO: dict[str, list[str]] = {
     # publicado internamente pelos services (ver DomainEventPublisher), nunca pela API
     # pública. Não vira `acessos.criar` sem uma ação real de UI por trás.
     MODULO_ACESSOS: ["acessos.visualizar"],
-    # Fase 2G.10C-C1 — administração de exceções individuais (usuario_permissao). Só admin
-    # (ver DEFAULTS_POR_PERFIL e require_permissoes_gerenciar) — nunca gestor/operador, nem
-    # via override.
+    # Fase 2G.10C-C1 — administração de exceções individuais (usuario_permissao). Admin legado e
+    # gestor (piso fixo de perfil em require_permissoes_gerenciar) — nunca operador, nem via
+    # override; e o gestor só sobre Usuários.
     MODULO_PERMISSOES: ["permissoes.gerenciar"],
 }
 
@@ -383,8 +385,10 @@ DEFAULTS_POR_PERFIL: dict[str, frozenset[str]] = {
             "permissoes.gerenciar",
         }
     ),
-    # gestor: administra os mesmos cadastros e áreas que admin, mas não gerencia Usuário
-    # (só visualiza) — ver require_admin puro em app/api/routes/usuarios.py.
+    # gestor: autoridade máxima da EMPRESA (Fase 1A). Administra os mesmos cadastros e áreas que
+    # admin e passa a gerir Usuários e permissões individuais — mas só de Usuário (`operador`):
+    # a regra de alvo vive em app/core/autoridade_usuarios.py e é imposta no service/rotas, não
+    # aqui (permissão diz SE, não SOBRE QUEM).
     PERFIL_GESTOR: frozenset(
         {
             "demandas.visualizar",
@@ -440,6 +444,9 @@ DEFAULTS_POR_PERFIL: dict[str, frozenset[str]] = {
             "modelos_campanha.editar",
             "modelos_campanha.arquivar",
             "usuarios.visualizar",
+            "usuarios.criar",
+            "usuarios.editar",
+            "usuarios.suspender",
             "financeiro.visualizar",
             "relatorios.visualizar",
             "trafego.gerenciar",
@@ -450,6 +457,7 @@ DEFAULTS_POR_PERFIL: dict[str, frozenset[str]] = {
             "email.editar",
             "numeracao.visualizar",
             "acessos.visualizar",
+            "permissoes.gerenciar",
         }
     ),
     # operador: visualizar/editar Demanda dentro do escopo resolvido por escopo.py. Nenhum

@@ -23,7 +23,13 @@ class DemandaHistoricoService:
         self.repository = repository or EventoRepository()
 
     def listar(
-        self, db: Session, *, empresa_id: str, demanda_id: str, limit: int = 200
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        demanda_id: str,
+        limit: int = 200,
+        ocultar_atores_de_sistema: bool = False,
     ) -> list[Evento]:
         return self.repository.list(
             db,
@@ -31,6 +37,7 @@ class DemandaHistoricoService:
             entidade_tipo=TIPO_ENTIDADE,
             entidade_id=demanda_id,
             limit=limit,
+            ocultar_atores_de_sistema=ocultar_atores_de_sistema,
         )
 
     @staticmethod

@@ -1,4 +1,8 @@
-import type { PerfilUsuario, Usuario, UsuarioFormDraft } from "@/types/usuario";
+import { PERFIL_PARA_PERFIL_BASE, type Usuario, type UsuarioFormDraft, type UsuarioPerfilBaseApi } from "@/types/usuario";
+
+// Reexportados: o mapeamento mora em types/usuario (puro, testável sem alias); quem já importava daqui segue funcionando.
+export { PERFIL_PARA_PERFIL_BASE };
+export type { UsuarioPerfilBaseApi };
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type {
   FatiaPizza,
@@ -268,22 +272,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json();
 }
 
-export type UsuarioPerfilBaseApi = "admin" | "gestor" | "operador";
-
-// perfil_base real só aceita 3 valores — mapeamento usado tanto no seed (backend) quanto
-// aqui: superadmin|diretoria -> admin, financeiro -> gestor, cliente -> operador. Ver
-// "Limitação conhecida" no plano da Fase 1 — o rótulo rico do mock não é preservado no
-// backend real ainda, só a permissão equivalente mais próxima.
-export const PERFIL_PARA_PERFIL_BASE: Record<PerfilUsuario, UsuarioPerfilBaseApi> = {
-  superadmin: "admin",
-  admin: "admin",
-  diretoria: "admin",
-  financeiro: "gestor",
-  gestor: "gestor",
-  operador: "operador",
-  cliente: "operador",
-};
-
 export type UsuarioReadApi = {
   id: string;
   empresaId: string;
@@ -383,6 +371,8 @@ export async function listUsuariosPagina(params: {
   empresaId: string;
   search?: string;
   situacao?: "ativo" | "inativo";
+  /** Filtro exato de perfil técnico (ex.: "operador" para listar só Usuários). */
+  perfilBase?: UsuarioPerfilBaseApi;
   departamentoId?: string;
   limit: number;
   offset: number;
@@ -394,6 +384,7 @@ export async function listUsuariosPagina(params: {
   });
   if (params.search) query.set("search", params.search);
   if (params.situacao) query.set("situacao", params.situacao);
+  if (params.perfilBase) query.set("perfilBase", params.perfilBase);
   if (params.departamentoId) query.set("departamentoId", params.departamentoId);
   const data = await request<UsuarioReadApi[]>(`/usuarios?${query.toString()}`);
   return data.map(mapUsuarioReadToUsuario);
@@ -577,10 +568,19 @@ export async function criarUsuarioReal(draft: UsuarioFormDraft, empresaId: strin
   return mapUsuarioReadToUsuario(created);
 }
 
-export async function atualizarUsuarioReal(usuarioId: string, draft: UsuarioFormDraft, ativoAnterior: boolean): Promise<Usuario> {
+// `perfilBaseAnterior`: o PATCH só leva `perfilBase` quando o perfil MUDOU. Reenviar o mesmo valor seria inútil e, para
+// quem ainda é `admin` (legado), seria recusado — a API nunca atribui `admin`.
+export async function atualizarUsuarioReal(
+  usuarioId: string,
+  draft: UsuarioFormDraft,
+  ativoAnterior: boolean,
+  perfilBaseAnterior?: UsuarioPerfilBaseApi,
+): Promise<Usuario> {
+  const { perfilBase, ...resto } = draftParaPayload(draft);
+  const payload = perfilBaseAnterior !== undefined && perfilBaseAnterior === perfilBase ? resto : { perfilBase, ...resto };
   const updated = await request<UsuarioReadApi>(`/usuarios/${usuarioId}`, {
     method: "PATCH",
-    body: JSON.stringify(draftParaPayload(draft)),
+    body: JSON.stringify(payload),
   });
 
   if (draft.ativo !== ativoAnterior) {

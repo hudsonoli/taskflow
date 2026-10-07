@@ -100,7 +100,8 @@ def test_operador_nao_visualiza_detalhe_de_outro(client_operador: TestClient, us
 
 
 # --------------------------------------------------------------------------------------
-# Equivalência — criar (usuarios.criar): só admin. Mais restrito que visualizar.
+# Fase 1A — criar (usuarios.criar): admin legado e GESTOR (autoridade máxima da empresa). O gestor só
+# cria Usuário (`operador`); a regra de alvo está em test_gestor_autoridade_usuarios.py.
 # --------------------------------------------------------------------------------------
 
 
@@ -109,9 +110,9 @@ def test_admin_cria(client_admin: TestClient, empresa: Empresa) -> None:
     assert criado["perfilBase"] == "operador"
 
 
-def test_gestor_nao_cria(client_gestor: TestClient, empresa: Empresa) -> None:
-    resposta = client_gestor.post("/usuarios", json=_payload_usuario(empresa.id))
-    assert resposta.status_code == 403
+def test_gestor_cria_usuario(client_gestor: TestClient, empresa: Empresa) -> None:
+    criado = _criar_usuario(client_gestor, empresa.id)
+    assert criado["perfilBase"] == "operador"
 
 
 def test_operador_nao_cria(client_operador: TestClient, empresa: Empresa) -> None:
@@ -120,7 +121,7 @@ def test_operador_nao_cria(client_operador: TestClient, empresa: Empresa) -> Non
 
 
 # --------------------------------------------------------------------------------------
-# Equivalência — editar (usuarios.editar): só admin.
+# Fase 1A — editar (usuarios.editar): admin legado e gestor (sobre Usuário).
 # --------------------------------------------------------------------------------------
 
 
@@ -129,9 +130,9 @@ def test_admin_edita(client_admin: TestClient, usuario_operador: Usuario) -> Non
     assert resposta.status_code == 200
 
 
-def test_gestor_nao_edita(client_gestor: TestClient, usuario_operador: Usuario) -> None:
+def test_gestor_edita_usuario(client_gestor: TestClient, usuario_operador: Usuario) -> None:
     resposta = client_gestor.patch(f"/usuarios/{usuario_operador.id}", json={"nome": "Editado"})
-    assert resposta.status_code == 403
+    assert resposta.status_code == 200
 
 
 def test_operador_nao_edita(client_operador: TestClient, usuario_gestor: Usuario) -> None:
@@ -140,7 +141,7 @@ def test_operador_nao_edita(client_operador: TestClient, usuario_gestor: Usuario
 
 
 # --------------------------------------------------------------------------------------
-# Equivalência — ações de status (usuarios.suspender): só admin. Cobre as 6 rotas que
+# Fase 1A — ações de status (usuarios.suspender): admin legado e gestor (sobre Usuário). Cobre as 6 rotas que
 # compartilham a mesma permission key (inativar/reativar/bloquear/desbloquear/excluir/
 # restaurar) — cada uma tem formato de payload/guard de auto-alvo próprio, então são
 # exercitadas individualmente, não parametrizadas por path genérico.
@@ -152,9 +153,9 @@ def test_admin_inativa(client_admin: TestClient, usuario_operador: Usuario) -> N
     assert resposta.status_code == 200
 
 
-def test_gestor_nao_inativa(client_gestor: TestClient, usuario_operador: Usuario) -> None:
+def test_gestor_inativa_usuario(client_gestor: TestClient, usuario_operador: Usuario) -> None:
     resposta = client_gestor.post(f"/usuarios/{usuario_operador.id}/inativar", json={})
-    assert resposta.status_code == 403
+    assert resposta.status_code == 200
 
 
 def test_operador_nao_inativa(client_operador: TestClient, usuario_gestor: Usuario) -> None:
@@ -168,10 +169,10 @@ def test_admin_reativa(client_admin: TestClient, usuario_operador: Usuario) -> N
     assert resposta.status_code == 200
 
 
-def test_gestor_nao_reativa(client_admin: TestClient, client_gestor: TestClient, usuario_operador: Usuario) -> None:
+def test_gestor_reativa_usuario(client_admin: TestClient, client_gestor: TestClient, usuario_operador: Usuario) -> None:
     client_admin.post(f"/usuarios/{usuario_operador.id}/inativar", json={})
     resposta = client_gestor.post(f"/usuarios/{usuario_operador.id}/reativar")
-    assert resposta.status_code == 403
+    assert resposta.status_code == 200
 
 
 def test_admin_bloqueia(client_admin: TestClient, usuario_operador: Usuario) -> None:
@@ -179,9 +180,9 @@ def test_admin_bloqueia(client_admin: TestClient, usuario_operador: Usuario) -> 
     assert resposta.status_code == 200
 
 
-def test_gestor_nao_bloqueia(client_gestor: TestClient, usuario_operador: Usuario) -> None:
+def test_gestor_bloqueia_usuario(client_gestor: TestClient, usuario_operador: Usuario) -> None:
     resposta = client_gestor.post(f"/usuarios/{usuario_operador.id}/bloquear")
-    assert resposta.status_code == 403
+    assert resposta.status_code == 200
 
 
 def test_admin_desbloqueia(client_admin: TestClient, usuario_operador: Usuario) -> None:
@@ -190,10 +191,10 @@ def test_admin_desbloqueia(client_admin: TestClient, usuario_operador: Usuario) 
     assert resposta.status_code == 200
 
 
-def test_gestor_nao_desbloqueia(client_admin: TestClient, client_gestor: TestClient, usuario_operador: Usuario) -> None:
+def test_gestor_desbloqueia_usuario(client_admin: TestClient, client_gestor: TestClient, usuario_operador: Usuario) -> None:
     client_admin.post(f"/usuarios/{usuario_operador.id}/bloquear")
     resposta = client_gestor.post(f"/usuarios/{usuario_operador.id}/desbloquear")
-    assert resposta.status_code == 403
+    assert resposta.status_code == 200
 
 
 def test_admin_exclui(client_admin: TestClient, usuario_operador: Usuario) -> None:
@@ -203,11 +204,11 @@ def test_admin_exclui(client_admin: TestClient, usuario_operador: Usuario) -> No
     assert resposta.status_code == 200
 
 
-def test_gestor_nao_exclui(client_gestor: TestClient, usuario_operador: Usuario) -> None:
+def test_gestor_exclui_usuario(client_gestor: TestClient, usuario_operador: Usuario) -> None:
     resposta = client_gestor.post(
         f"/usuarios/{usuario_operador.id}/excluir", json={"motivoArquivamento": "teste"}
     )
-    assert resposta.status_code == 403
+    assert resposta.status_code == 200
 
 
 def test_admin_restaura(client_admin: TestClient, usuario_operador: Usuario) -> None:
@@ -216,10 +217,10 @@ def test_admin_restaura(client_admin: TestClient, usuario_operador: Usuario) -> 
     assert resposta.status_code == 200
 
 
-def test_gestor_nao_restaura(client_admin: TestClient, client_gestor: TestClient, usuario_operador: Usuario) -> None:
+def test_gestor_restaura_usuario(client_admin: TestClient, client_gestor: TestClient, usuario_operador: Usuario) -> None:
     client_admin.post(f"/usuarios/{usuario_operador.id}/excluir", json={"motivoArquivamento": "teste"})
     resposta = client_gestor.post(f"/usuarios/{usuario_operador.id}/restaurar")
-    assert resposta.status_code == 403
+    assert resposta.status_code == 200
 
 
 # --------------------------------------------------------------------------------------
@@ -249,24 +250,21 @@ def test_gestor_com_grant_cria(db_session: Session, client_gestor: TestClient, u
     assert criado["perfilBase"] == "operador"
 
 
-def test_gestor_sem_grant_continua_403(client_gestor: TestClient, empresa: Empresa) -> None:
+def test_gestor_cria_por_default_sem_override(client_gestor: TestClient, empresa: Empresa) -> None:
     resposta = client_gestor.post("/usuarios", json=_payload_usuario(empresa.id))
-    assert resposta.status_code == 403
+    assert resposta.status_code == 201
 
 
-def test_gestor_com_grant_criar_nao_ganha_editar_nem_suspender(
+def test_gestor_com_deny_criar_perde_so_criar(
     db_session: Session, client_gestor: TestClient, usuario_gestor: Usuario, usuario_operador: Usuario, empresa: Empresa
 ) -> None:
-    """`usuarios.criar = conceder` é pontual — não implica `usuarios.editar` nem
-    `usuarios.suspender`. gestor já tem `usuarios.visualizar` por default (não é efeito do
-    override), então visualizar continua funcionando; criar/editar/suspender continua
-    seguindo cada chave isoladamente."""
-    _override(db_session, usuario=usuario_gestor, permissao="usuarios.criar", efeito="conceder")
+    """`usuarios.criar = negar` é pontual — não tira `usuarios.editar` nem `usuarios.suspender`: o override
+    continua valendo chave a chave, mesmo agora que o gestor recebe as três por default (Fase 1A)."""
+    _override(db_session, usuario=usuario_gestor, permissao="usuarios.criar", efeito="negar")
 
-    criado = _criar_usuario(client_gestor, empresa.id)
-    assert client_gestor.get(f"/usuarios/{usuario_operador.id}").status_code == 200  # default, não o override
-    assert client_gestor.patch(f"/usuarios/{criado['id']}", json={"nome": "y"}).status_code == 403
-    assert client_gestor.post(f"/usuarios/{criado['id']}/inativar", json={}).status_code == 403
+    assert client_gestor.post("/usuarios", json=_payload_usuario(empresa.id)).status_code == 403
+    assert client_gestor.patch(f"/usuarios/{usuario_operador.id}", json={"nome": "y"}).status_code == 200
+    assert client_gestor.post(f"/usuarios/{usuario_operador.id}/inativar", json={}).status_code == 200
 
 
 def test_admin_com_deny_editar_recebe_403(

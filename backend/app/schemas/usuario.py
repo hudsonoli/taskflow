@@ -5,6 +5,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 UsuarioPerfilBase = Literal["admin", "gestor", "operador"]
+# O que a API normal aceita ATRIBUIR (criar/promover). `admin` é legado: continua válido para LEITURA
+# (UsuarioRead, JWT, CHECK do banco, bootstrap), mas nunca é emitido por POST/PATCH — um valor `admin`
+# aqui é 422, o mesmo formato de qualquer outra falha de schema (Fase 1A).
+UsuarioPerfilBaseAtribuivel = Literal["gestor", "operador"]
 UsuarioStatus = Literal["ativo", "inativo", "bloqueado", "arquivado"]
 
 
@@ -60,7 +64,7 @@ class UsuarioCreate(UsuarioPerfilFields):
     empresa_id: UUID = Field(alias="empresaId")
     nome: str = Field(min_length=1, max_length=255)
     email: str = Field(min_length=1, max_length=255)
-    perfil_base: UsuarioPerfilBase = Field(alias="perfilBase")
+    perfil_base: UsuarioPerfilBaseAtribuivel = Field(alias="perfilBase")
     acesso_sistema: bool = Field(default=True, alias="acessoSistema")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -71,7 +75,7 @@ class UsuarioCreate(UsuarioPerfilFields):
 class UsuarioUpdate(UsuarioPerfilFields):
     nome: str | None = Field(default=None, min_length=1, max_length=255)
     email: str | None = Field(default=None, min_length=1, max_length=255)
-    perfil_base: UsuarioPerfilBase | None = Field(default=None, alias="perfilBase")
+    perfil_base: UsuarioPerfilBaseAtribuivel | None = Field(default=None, alias="perfilBase")
     acesso_sistema: bool | None = Field(default=None, alias="acessoSistema")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")

@@ -77,18 +77,19 @@ def test_defaults_literais_nao_contem_permissao_fora_do_catalogo() -> None:
         assert not sobra, f"{perfil}: permissões fora do catálogo: {sobra}"
 
 
-def test_default_gestor_administra_cadastros_mas_nao_usuarios() -> None:
+def test_default_gestor_administra_cadastros_e_usuarios() -> None:
     gestor = DEFAULTS_POR_PERFIL[PERFIL_GESTOR]
 
     # Cadastros — require_admin_or_gestor real.
     for permissao in ("clientes.criar", "clientes.editar", "clientes.arquivar", "projetos.arquivar", "sla.criar"):
         assert permissao in gestor, permissao
 
-    # Usuário — só visualizar; criar/editar/suspender são require_admin puro.
+    # Usuário — Fase 1A: o Gestor é a autoridade máxima da empresa e gere Usuários (a regra de ALVO — só
+    # `operador` — vive em app/core/autoridade_usuarios.py, não neste catálogo).
     assert "usuarios.visualizar" in gestor
-    assert "usuarios.criar" not in gestor
-    assert "usuarios.editar" not in gestor
-    assert "usuarios.suspender" not in gestor
+    assert "usuarios.criar" in gestor
+    assert "usuarios.editar" in gestor
+    assert "usuarios.suspender" in gestor
 
     # Financeiro — hoje ClienteRead/UsuarioRead com dado financeiro são require_admin_or_gestor
     # (ver Fase 2G.10, achado D4/item 18 — não é corrigido aqui).
@@ -131,12 +132,12 @@ def test_permissoes_gerenciar_existe_e_e_modulo_proprio() -> None:
     assert CATALOGO["permissoes"] == ["permissoes.gerenciar"]
 
 
-def test_permissoes_gerenciar_e_admin_only_por_default() -> None:
-    """Gestor/operador nunca administram overrides por perfil — o piso fixo em
-    require_permissoes_gerenciar (app/dependencies/permissoes.py) reforça isso mesmo se
-    algum dia um override tentasse conceder a chave a outro perfil."""
+def test_permissoes_gerenciar_e_de_admin_legado_e_gestor_nunca_de_operador() -> None:
+    """Fase 1A: admin legado e gestor administram overrides (o gestor só de Usuário — regra de alvo na rota). Operador
+    nunca, por perfil: o piso fixo em require_permissoes_gerenciar (app/dependencies/permissoes.py) reforça isso
+    mesmo se um override tentasse conceder a chave a um operador."""
     assert "permissoes.gerenciar" in DEFAULTS_POR_PERFIL[PERFIL_ADMIN]
-    assert "permissoes.gerenciar" not in DEFAULTS_POR_PERFIL[PERFIL_GESTOR]
+    assert "permissoes.gerenciar" in DEFAULTS_POR_PERFIL[PERFIL_GESTOR]
     assert "permissoes.gerenciar" not in DEFAULTS_POR_PERFIL[PERFIL_OPERADOR]
 
 

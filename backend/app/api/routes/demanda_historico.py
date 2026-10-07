@@ -47,5 +47,12 @@ def listar_historico(
     except DemandaNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
-    eventos = historico_service.listar(db, empresa_id=current_user.empresa_id, demanda_id=demanda.id)
+    # Privacidade da conta de sistema (Fase 1A): o tenant não vê passos cujo ator seja `is_system_account`
+    # (o evento continua no banco). A própria conta de sistema vê a timeline completa.
+    eventos = historico_service.listar(
+        db,
+        empresa_id=current_user.empresa_id,
+        demanda_id=demanda.id,
+        ocultar_atores_de_sistema=not current_user.is_system_account,
+    )
     return [historico_service.to_read(evento) for evento in eventos]

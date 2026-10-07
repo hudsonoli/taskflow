@@ -69,9 +69,13 @@ def test_admin_acessa_get(client_admin: TestClient, usuario_operador: Usuario) -
     assert resposta.status_code == 200, resposta.text
 
 
-def test_gestor_recebe_403(client_gestor: TestClient, usuario_operador: Usuario) -> None:
-    resposta = client_gestor.get(f"/usuarios/{usuario_operador.id}/permissoes")
-    assert resposta.status_code == 403, resposta.text
+def test_gestor_acessa_get_de_usuario_e_recebe_403_de_gestor(
+    client_gestor: TestClient, usuario_operador: Usuario, db_session: Session, empresa: Empresa
+) -> None:
+    """Fase 1A: o gestor passou a gerir permissões — mas só de Usuário (`operador`). Outro Gestor continua 403."""
+    assert client_gestor.get(f"/usuarios/{usuario_operador.id}/permissoes").status_code == 200
+    outro_gestor = _criar_usuario_com_credencial(db_session, empresa=empresa, perfil_base="gestor", email_prefixo="gestor-par")
+    assert client_gestor.get(f"/usuarios/{outro_gestor.id}/permissoes").status_code == 403
 
 
 def test_operador_recebe_403(client_operador: TestClient, usuario_gestor: Usuario) -> None:
@@ -79,12 +83,11 @@ def test_operador_recebe_403(client_operador: TestClient, usuario_gestor: Usuari
     assert resposta.status_code == 403, resposta.text
 
 
-def test_gestor_com_grant_permissoes_gerenciar_continua_403(
+def test_gestor_com_deny_permissoes_gerenciar_recebe_403(
     app, db_session: Session, usuario_gestor: Usuario, usuario_operador: Usuario
 ) -> None:
-    """O piso fixo (perfil_base == admin) vence mesmo com a permissão concedida via
-    override — a chave sozinha nunca é suficiente."""
-    _override_direto(db_session, usuario=usuario_gestor, permissao="permissoes.gerenciar", efeito="conceder")
+    """O gestor tem a chave por default (Fase 1A); um `negar` explícito a tira dele, como de qualquer perfil."""
+    _override_direto(db_session, usuario=usuario_gestor, permissao="permissoes.gerenciar", efeito="negar")
     resposta = _client_para(app, usuario_gestor).get(f"/usuarios/{usuario_operador.id}/permissoes")
     assert resposta.status_code == 403, resposta.text
 

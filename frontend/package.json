@@ -10,7 +10,8 @@
     "test:contraste": "node --test src/lib/branding-tokens.contrast.test.ts",
     "test:tema": "node --test src/lib/tema.test.ts",
     "test:perfil": "node --test src/lib/notificacoes.test.ts",
-    "test:kpi": "node --test src/lib/kpiStrip.test.ts"
+    "test:kpi": "node --test src/lib/kpiStrip.test.ts",
+    "test:rbac": "node --test src/lib/autoridadeUsuarios.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -43,6 +43,9 @@ class EventoService:
     def list_eventos(self, db: Session, **filters) -> list[Evento]:
         return self.repository.list(db, **filters)
 
+    def ator_e_conta_de_sistema(self, db: Session, evento: Evento) -> bool:
+        return self.repository.ator_e_conta_de_sistema(db, evento)
+
     def to_read(self, evento: Evento) -> EventoRead:
         return EventoRead(
             id=evento.id,

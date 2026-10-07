@@ -276,7 +276,8 @@ def test_usuarios_me_expoe_permissoes(client_gestor: TestClient) -> None:
     corpo = resposta.json()
     assert corpo["permissoes"] == sorted(corpo["permissoes"])
     assert "usuarios.visualizar" in corpo["permissoes"]
-    assert "usuarios.criar" not in corpo["permissoes"]
+    assert "usuarios.criar" in corpo["permissoes"]  # Fase 1A: o gestor passou a gerir Usuários
+    assert "permissoes.gerenciar" in corpo["permissoes"]
 
 
 def test_usuarios_get_outro_usuario_nao_expoe_permissoes(
@@ -417,12 +418,14 @@ def test_equivalencia_admin_continua_administrativo(client_admin: TestClient) ->
     assert client_admin.get("/clientes").status_code == 200
 
 
-def test_equivalencia_gestor_administra_cadastro_mas_nao_usuario(
+def test_equivalencia_gestor_administra_cadastro_e_usuario(
     client_gestor: TestClient, empresa: Empresa
 ) -> None:
     assert client_gestor.get("/clientes").status_code == 200
-    resposta = client_gestor.post("/usuarios", json=_payload_usuario(empresa))
-    assert resposta.status_code == 403
+    payload = _payload_usuario(empresa)
+    payload.pop("codigoInterno")  # gerado pelo backend desde a 2G.10C-B; o helper antigo ainda o envia
+    resposta = client_gestor.post("/usuarios", json=payload)
+    assert resposta.status_code == 201, resposta.text
 
 
 def test_equivalencia_operador_bloqueado_em_area_administrativa(client_operador: TestClient) -> None:

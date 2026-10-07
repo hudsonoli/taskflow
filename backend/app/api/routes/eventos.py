@@ -86,6 +86,10 @@ def get_evento(
     # Evento de outra empresa é 404, nunca 403: 403 confirmaria que o registro existe.
     if evento is None or evento.empresa_id != current_user.empresa_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evento não encontrado")
+    # Mesma política da listagem: evento de ator `is_system_account` não é visível ao tenant (404, igual a
+    # inexistente — não confirma que existe). A própria conta de sistema continua vendo os seus.
+    if not current_user.is_system_account and evento_service.ator_e_conta_de_sistema(db, evento):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evento não encontrado")
     return evento_service.to_read(evento)
 
 
@@ -114,5 +118,8 @@ def list_eventos(
         data_fim=normalize_datetime(data_fim),
         limit=limit,
         offset=offset,
+        # Privacidade da conta de sistema (Fase 1A): o tenant normal — gestor incluído — não recebe eventos
+        # cujo ator seja `is_system_account`. A própria conta de sistema enxerga os seus normalmente.
+        ocultar_atores_de_sistema=not current_user.is_system_account,
     )
     return [evento_service.to_read(evento) for evento in eventos]

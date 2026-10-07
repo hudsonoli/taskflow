@@ -12,6 +12,8 @@ export function UsuariosTable({
   usuarios,
   departamentos,
   temMais = false,
+  podeEditar,
+  podeExcluir,
   onEdit,
   onExcluir,
 }: {
@@ -19,6 +21,9 @@ export function UsuariosTable({
   departamentos: DepartamentoDiretorioItem[];
   /** Há mais páginas no servidor: o contador mostra o que está carregado, com "+". */
   temMais?: boolean;
+  /** Autoridade do usuário logado SOBRE aquela linha (perfil + permissões da sessão): sem ela, a ação não aparece. */
+  podeEditar: (usuario: Usuario) => boolean;
+  podeExcluir: (usuario: Usuario) => boolean;
   onEdit: (usuarioId: string) => void;
   onExcluir: (usuarioId: string) => void;
 }) {
@@ -55,19 +60,31 @@ export function UsuariosTable({
             {usuarios.map((usuario) => (
               <tr key={usuario.id} className={`group transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 ${usuario.ativo ? "" : "opacity-60"}`}>
                 <td className="px-4 py-3">
-                  <button type="button" onClick={() => onEdit(usuario.id)} className="flex max-w-[240px] items-center gap-2.5 text-left">
-                    <span
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                      style={estiloCorIdentificacao(usuario.corIdentificacao)}
-                    >
-                      {usuario.nome.slice(0, 2).toUpperCase()}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold text-fg transition group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                        {usuario.nome}
+                  {podeEditar(usuario) ? (
+                    <button type="button" onClick={() => onEdit(usuario.id)} className="flex max-w-[240px] items-center gap-2.5 text-left">
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                        style={estiloCorIdentificacao(usuario.corIdentificacao)}
+                      >
+                        {usuario.nome.slice(0, 2).toUpperCase()}
                       </span>
-                    </span>
-                  </button>
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-fg transition group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                          {usuario.nome}
+                        </span>
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex max-w-[240px] items-center gap-2.5">
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                        style={estiloCorIdentificacao(usuario.corIdentificacao)}
+                      >
+                        {usuario.nome.slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="block min-w-0 truncate font-semibold text-fg">{usuario.nome}</span>
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-fg-muted">
                   <span className="flex items-center gap-1.5">
@@ -86,14 +103,18 @@ export function UsuariosTable({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" onClick={() => onEdit(usuario.id)} className="px-3 py-1.5 text-xs">
-                      <Pencil className="h-3.5 w-3.5" />
-                      Editar
-                    </Button>
-                    <Button variant="secondary" onClick={() => onExcluir(usuario.id)} className="px-3 py-1.5 text-xs">
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Excluir
-                    </Button>
+                    {podeEditar(usuario) && (
+                      <Button variant="secondary" onClick={() => onEdit(usuario.id)} className="px-3 py-1.5 text-xs">
+                        <Pencil className="h-3.5 w-3.5" />
+                        Editar
+                      </Button>
+                    )}
+                    {podeExcluir(usuario) && (
+                      <Button variant="secondary" onClick={() => onExcluir(usuario.id)} className="px-3 py-1.5 text-xs">
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Excluir
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>

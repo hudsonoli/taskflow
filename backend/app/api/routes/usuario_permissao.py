@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.autoridade_usuarios import AutoridadeUsuarioError, ensure_pode_administrar_alvo
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import ensure_resource_empresa
@@ -11,8 +12,8 @@ from app.services.usuario_permissao_service import UsuarioPermissaoService
 from app.services.usuario_service import UsuarioNotFoundError, UsuarioService
 
 # Fase 2G.10C-C1 — administração de exceções individuais de permissão. Todos os endpoints
-# exigem require_permissoes_gerenciar() (permissao "permissoes.gerenciar" + piso fixo
-# perfil_base == admin — ver app/dependencies/permissoes.py). Sub-recurso de Usuário, mesmo
+# exigem require_permissoes_gerenciar() (permissao "permissoes.gerenciar" + piso fixo de perfil: admin
+# legado ou gestor — ver app/dependencies/permissoes.py) e a regra de alvo de `_buscar_usuario_alvo`. Sub-recurso de Usuário, mesmo
 # padrão de demanda_checklist.py/demanda_arquivos.py (arquivo próprio, registrado à parte em
 # main.py, com seu próprio gate de senha em dia — routers do FastAPI não herdam
 # `dependencies` de outro router só por compartilhar prefixo de path).
@@ -36,6 +37,13 @@ def _buscar_usuario_alvo(db: Session, usuario_id: str, current_user: Usuario) ->
     except UsuarioNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     ensure_resource_empresa(usuario.empresa_id, current_user)
+    # Hierarquia (Fase 1A): o gestor só vê e altera overrides de Usuário — nunca de outro Gestor, do admin
+    # legado (nem de si mesmo, que é Gestor). A conta de sistema já some acima (404). Mesmo 403/texto das
+    # demais recusas deste router.
+    try:
+        ensure_pode_administrar_alvo(current_user.perfil_base, usuario.perfil_base)
+    except AutoridadeUsuarioError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return usuario
 
 
