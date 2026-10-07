@@ -36,6 +36,10 @@ class Usuario(Base):
             name="ck_usuarios_status",
         ),
         CheckConstraint(
+            "(foto_perfil_storage_key IS NULL) = (foto_perfil_mime_type IS NULL)",
+            name="ck_usuarios_foto_perfil_par",
+        ),
+        CheckConstraint(
             "tema_preferencia IS NULL OR tema_preferencia IN ('claro', 'escuro', 'sistema')",
             name="ck_usuarios_tema_preferencia",
         ),
@@ -127,3 +131,9 @@ class Usuario(Base):
     # (configuracoes_personalizacao.tema) — é o estado de todo usuário existente. Só o próprio usuário
     # altera (PATCH /usuarios/me/preferencias); logo e cores continuam globais por empresa.
     tema_preferencia: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+    # Foto de perfil enviada pelo próprio usuário (PNG/JPEG validado pelos bytes). Só a referência fica
+    # aqui; o arquivo mora no volume de uploads, em usuarios/<empresa>/<usuario>/<nome gerado>. `foto_url`
+    # (acima) segue existindo para a foto externa do Google e para o cadastro administrativo.
+    foto_perfil_storage_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    foto_perfil_mime_type: Mapped[str | None] = mapped_column(String(32), nullable=True)

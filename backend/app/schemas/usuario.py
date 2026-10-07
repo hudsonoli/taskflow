@@ -134,6 +134,9 @@ class UsuarioRead(BaseModel):
     # de uma pessoa a quem só tem require_admin_or_gestor sobre ela. Ainda não autoriza
     # nada — ver app/core/permissoes.py. Campo aditivo, backward-compatible.
     permissoes: list[str] | None = None
+    # Só preenchido em GET /usuarios/me: o último login bem-sucedido DO PRÓPRIO usuário (hora e IP, do mesmo
+    # registro de eventos que alimenta Configurações → Acesso). None em qualquer consulta de outro usuário.
+    ultimo_acesso: "UltimoAcessoRead | None" = Field(default=None, alias="ultimoAcesso")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -141,6 +144,46 @@ class UsuarioRead(BaseModel):
     @classmethod
     def validate_timezone(cls, value: datetime | None) -> datetime | None:
         return ensure_timezone_aware(value)
+
+
+class UltimoAcessoRead(BaseModel):
+    em: datetime
+    ip: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+def normalizar_telefone(valor: str | None) -> str | None:
+    """Telefone canônico = só dígitos (com `+` opcional na frente), 8 a 15 dígitos — cobre fixo/celular
+    brasileiro com ou sem DDD/DDI. Aceita qualquer máscara na entrada; não impõe máscara no banco. Vazio →
+    `None` (remove o contato). Letras e símbolos soltos → erro."""
+    if valor is None:
+        return None
+    texto = valor.strip()
+    if not texto:
+        return None
+    if any(not (c.isdigit() or c in " ()+-.") for c in texto):
+        raise ValueError("Telefone inválido: use apenas números (DDD + número).")
+    digitos = "".join(c for c in texto if c.isdigit())
+    if not 8 <= len(digitos) <= 15:
+        raise ValueError("Telefone inválido: informe de 8 a 15 dígitos (com DDD).")
+    return ("+" if texto.startswith("+") else "") + digitos
+
+
+class UsuarioMeUpdate(BaseModel):
+    """Autoatendimento do PERFIL: só o que o próprio usuário pode alterar — contato (telefone) e a cor de
+    identificação (já era autoeditável). Nome, sobrenome, e-mail, perfil, status, departamento, empresa e
+    permissões nunca entram por aqui (`extra="forbid"` → 422); a identidade vem do token."""
+
+    telefone: str | None = Field(default=None, max_length=40)
+    cor_identificacao: str | None = Field(default=None, alias="corIdentificacao", max_length=32)
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @field_validator("telefone")
+    @classmethod
+    def _telefone(cls, valor: str | None) -> str | None:
+        return normalizar_telefone(valor)
 
 
 class UsuarioResumoRead(BaseModel):

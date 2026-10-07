@@ -500,6 +500,13 @@ class DemandaService:
     ) -> list[Demanda]:
         return self.repository.list_por_ids(db, escopo=escopo, ids=ids)
 
+    def contar_prazos(
+        self, db: Session, *, escopo: EscopoDemanda, agora: datetime, fim_hoje: datetime, fim_proximas: datetime
+    ) -> dict[str, int]:
+        return self.repository.contar_prazos(
+            db, escopo=escopo, agora=agora, fim_hoje=fim_hoje, fim_proximas=fim_proximas
+        )
+
     def resumo_atendimento(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
         return self.repository.resumo_atendimento(db, escopo=escopo)
 

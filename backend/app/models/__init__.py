@@ -20,6 +20,7 @@ from app.models import (  # noqa: F401
     cliente_grupo,
     configuracao_email,
     configuracao_personalizacao,
+    notificacao_leitura,
     demanda,
     demanda_departamento,
     demanda_responsavel,

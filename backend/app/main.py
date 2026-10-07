@@ -8,6 +8,7 @@ from app.api.routes import (
     auth,
     configuracao_email,
     configuracao_personalizacao,
+    notificacoes,
     configuracao_numeracao_tarefa,
     demanda_arquivos,
     demanda_checklist,
@@ -83,6 +84,7 @@ app.include_router(sla_regras.router)
 app.include_router(configuracao_email.router)
 app.include_router(configuracao_personalizacao.router)
 app.include_router(configuracao_personalizacao.router_publico)
+app.include_router(notificacoes.router)
 app.include_router(configuracao_numeracao_tarefa.router)
 app.include_router(regra_expediente.router)
 app.include_router(expediente.router)

@@ -1,7 +1,8 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -19,7 +20,15 @@ from app.schemas.usuario import (
     UsuarioInativar,
     UsuarioRead,
     UsuarioResumoRead,
+    UsuarioMeUpdate,
     UsuarioUpdate,
+)
+from app.services.usuario_avatar_service import (
+    AVATAR_MAX_BYTES,
+    AvatarInvalidoError,
+    AvatarMuitoGrandeError,
+    AvatarNaoEncontradoError,
+    UsuarioAvatarService,
 )
 from app.services.usuario_permissao_service import UsuarioPermissaoService
 from app.services.usuario_service import (
@@ -39,6 +48,7 @@ from app.services.usuario_service import (
 # ficam abertas a qualquer autenticado (ver docstrings das duas rotas abaixo).
 router = APIRouter(prefix="/usuarios", tags=["usuarios"], dependencies=[Depends(get_current_user_password_ready)])
 usuario_service = UsuarioService()
+avatar_service = UsuarioAvatarService()
 # Fase 2G.10A — só usado para preencher UsuarioRead.permissoes em GET /usuarios/me
 # (informativo). Nenhuma outra rota deste arquivo o usa.
 usuario_permissao_service = UsuarioPermissaoService()
@@ -176,7 +186,9 @@ def get_me(
     leitura = usuario_service.to_read(db, usuario, actor=current_user, permitir_financeiro_proprio=True)
     # Fase 2G.10A — só em /me: ver nota em UsuarioRead.permissoes.
     permissoes = usuario_permissao_service.obter_permissoes_efetivas(db, usuario)
-    return leitura.model_copy(update={"permissoes": permissoes})
+    return leitura.model_copy(
+        update={"permissoes": permissoes, "ultimo_acesso": usuario_service.ultimo_acesso(db, usuario)}
+    )
 
 
 @router.patch("/me/preferencias", response_model=UsuarioPreferenciasRead)
@@ -189,6 +201,90 @@ def atualizar_minhas_preferencias(
 ):
     usuario = usuario_service.definir_tema_preferencia(db, current_user.id, payload.tema)
     return UsuarioPreferenciasRead(temaPreferencia=usuario.tema_preferencia)
+
+
+@router.patch("/me", response_model=UsuarioRead)
+def atualizar_meu_perfil(
+    payload: UsuarioMeUpdate,
+    # Autoatendimento: qualquer autenticado com senha em dia altera SÓ o próprio contato (telefone) e a
+    # própria cor de identificação. Nome/sobrenome/e-mail/perfil/status/departamento/empresa/permissões →
+    # 422 (extra="forbid"); a identidade vem do token, nunca do corpo. A edição administrativa de usuário
+    # (PATCH /usuarios/{id}) segue como estava.
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    usuario = usuario_service.atualizar_perfil_proprio(db, current_user.id, payload.model_dump(exclude_unset=True))
+    leitura = usuario_service.to_read(db, usuario, actor=current_user, permitir_financeiro_proprio=True)
+    permissoes = usuario_permissao_service.obter_permissoes_efetivas(db, usuario)
+    return leitura.model_copy(
+        update={"permissoes": permissoes, "ultimo_acesso": usuario_service.ultimo_acesso(db, usuario)}
+    )
+
+
+def _erro_avatar(exc: Exception) -> None:
+    if isinstance(exc, AvatarMuitoGrandeError):
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)) from exc
+    if isinstance(exc, AvatarInvalidoError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    if isinstance(exc, AvatarNaoEncontradoError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    raise exc
+
+
+@router.post("/me/avatar", response_model=UsuarioRead)
+def enviar_meu_avatar(
+    arquivo: UploadFile = File(...),
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Foto de perfil (PNG/JPEG, até 5 MB), validada pelos bytes. Só a própria foto: a identidade vem do token."""
+    conteudo = arquivo.file.read(AVATAR_MAX_BYTES + 1)  # basta para saber que estourou
+    try:
+        usuario = avatar_service.salvar(
+            db,
+            usuario_service.get_me(db, current_user.id),
+            conteudo=conteudo,
+            nome_arquivo=arquivo.filename,
+            content_type=arquivo.content_type,
+        )
+    except Exception as exc:
+        _erro_avatar(exc)
+    return usuario_service.to_read(db, usuario, actor=current_user, permitir_financeiro_proprio=True)
+
+
+@router.delete("/me/avatar", response_model=UsuarioRead)
+def remover_meu_avatar(
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    usuario = avatar_service.remover(db, usuario_service.get_me(db, current_user.id))
+    return usuario_service.to_read(db, usuario, actor=current_user, permitir_financeiro_proprio=True)
+
+
+@router.get("/{usuario_id}/avatar")
+def obter_avatar(
+    usuario_id: UUID,
+    v: str | None = Query(default=None, max_length=32),
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Foto de um usuário da MESMA empresa (outra empresa/inexistente/sem foto → 404, sem distinguir).
+    Content-Type canônico, nosniff, sem expor o caminho; URL com a versão certa é imutável (cache longo)."""
+    try:
+        alvo = usuario_service.get_me(db, str(usuario_id))
+        if alvo.empresa_id != current_user.empresa_id:
+            raise AvatarNaoEncontradoError("Usuário sem foto de perfil.")
+        caminho, mime, versao = avatar_service.ler(alvo)
+    except UsuarioNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário sem foto de perfil.") from exc
+    except Exception as exc:
+        _erro_avatar(exc)
+    cache = "private, max-age=31536000, immutable" if v and v == versao else "private, no-cache"
+    return FileResponse(
+        caminho,
+        media_type=mime,
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": cache, "Content-Disposition": "inline"},
+    )
 
 
 @router.get("/diretorio", response_model=list[UsuarioDiretorioRead])

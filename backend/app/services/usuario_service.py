@@ -1,19 +1,22 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.referencias import gerar_proxima_referencia
 from app.domain.event_types import DomainEventType
+from app.models.evento import Evento
 from app.models.usuario import Usuario
 from app.repositories.empresa_repository import EmpresaRepository
 from app.repositories.usuario_repository import UsuarioRepository
-from app.schemas.usuario import UsuarioCreate, UsuarioDiretorioRead, UsuarioRead, UsuarioUpdate
+from app.schemas.usuario import UltimoAcessoRead, UsuarioCreate, UsuarioDiretorioRead, UsuarioRead, UsuarioUpdate
 from app.services.empresa_service import STATUS_ARQUIVADA as EMPRESA_STATUS_ARQUIVADA
 from app.services.empresa_service import STATUS_INATIVA as EMPRESA_STATUS_INATIVA
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.usuario_permissao_service import UsuarioPermissaoService
+from app.services.usuario_avatar_service import url_do_avatar
 
 # Padrão de arquivamento (soft-delete permanente) — contrato completo documentado em
 # docs/padrao-arquivamento.md. Ao migrar Cliente/Fornecedor, copiar de lá, não daqui.
@@ -245,6 +248,37 @@ class UsuarioService:
         if usuario is None:
             raise UsuarioNotFoundError("Usuário não encontrado")
         return usuario
+
+    def atualizar_perfil_proprio(self, db: Session, usuario_id: str, campos: dict) -> Usuario:
+        """Autoatendimento do perfil: aplica SÓ os campos já validados por `UsuarioMeUpdate` (telefone,
+        corIdentificacao). Sem evento de domínio — é dado pessoal de contato, não cadastro administrativo."""
+        usuario = self.get_me(db, usuario_id)
+        if "telefone" in campos:
+            usuario.telefone = campos["telefone"]
+        if "cor_identificacao" in campos and campos["cor_identificacao"] is not None:
+            usuario.cor_identificacao = campos["cor_identificacao"]
+        usuario.updated_at = datetime.now(timezone.utc)
+        self.repository.update(db, usuario)
+        db.commit()
+        return usuario
+
+    def ultimo_acesso(self, db: Session, usuario: Usuario) -> UltimoAcessoRead | None:
+        """Último login bem-sucedido do usuário (hora e IP) — o mesmo evento que alimenta Configurações →
+        Acesso. Nunca de outro usuário."""
+        evento = db.scalars(
+            select(Evento)
+            .where(
+                Evento.empresa_id == usuario.empresa_id,
+                Evento.usuario_id == usuario.id,
+                Evento.tipo == "auth.login_sucesso",
+            )
+            .order_by(Evento.occurred_at.desc())
+            .limit(1)
+        ).first()
+        if evento is None:
+            return None
+        ip = (evento.payload or {}).get("ip_address")
+        return UltimoAcessoRead(em=evento.occurred_at, ip=ip if isinstance(ip, str) and ip else None)
 
     def definir_tema_preferencia(self, db: Session, usuario_id: str, tema: str | None) -> Usuario:
         """Preferência pessoal de tema do próprio usuário (None = herdar o padrão da empresa). Não gera evento
@@ -565,7 +599,7 @@ class UsuarioService:
             contatos=usuario.contatos,
             departamentoId=usuario.departamento_id,
             cargo=usuario.cargo,
-            fotoUrl=usuario.foto_url,
+            fotoUrl=url_do_avatar(usuario) or usuario.foto_url,
             liderDepartamento=usuario.lider_departamento,
             valorRecebidoMensalCentavos=usuario.valor_recebido_mensal_centavos if pode_ver_financeiro else None,
             horasTrabalhoAproximadas=usuario.horas_trabalho_aproximadas if pode_ver_financeiro else None,
@@ -592,7 +626,7 @@ class UsuarioService:
             status=usuario.status,
             cargo=usuario.cargo,
             departamentoId=usuario.departamento_id,
-            fotoUrl=usuario.foto_url,
+            fotoUrl=url_do_avatar(usuario) or usuario.foto_url,
             corIdentificacao=usuario.cor_identificacao,
         )
 

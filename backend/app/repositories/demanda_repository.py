@@ -440,6 +440,40 @@ class DemandaRepository:
         prazo_vencido = and_(Demanda.prazo_etapa_atual.is_not(None), Demanda.prazo_etapa_atual < agora)
         return finalizada, prazo_vencido
 
+    def contar_prazos(
+        self,
+        db: Session,
+        *,
+        escopo: EscopoDemanda,
+        agora: datetime,
+        fim_hoje: datetime,
+        fim_proximas: datetime,
+    ) -> dict[str, int]:
+        """Central de Notificações → "Prazos da equipe": quantas demandas ABERTAS (nem concluídas, nem
+        canceladas, nem arquivadas) e com prazo caem em cada grupo — numa única consulta, no MESMO escopo da
+        listagem de demandas (`_predicado_escopo`, nunca um escopo paralelo).
+
+          atrasadas: prazo < agora · hoje: agora ≤ prazo ≤ fim do dia · proximas: fim do dia < prazo ≤ +7 dias
+        Os grupos são disjuntos (quem já passou do prazo hoje é "atrasada", não "hoje")."""
+        zero = {"atrasadas": 0, "hoje": 0, "proximas": 0}
+        if escopo.vazio:
+            return zero
+        aberta = and_(
+            Demanda.prazo_etapa_atual.is_not(None),
+            Demanda.status.not_in((*self._STATUS_FINALIZADOS, STATUS_ARQUIVADO)),
+        )
+        prazo = Demanda.prazo_etapa_atual
+        statement = select(
+            func.count(case((and_(aberta, prazo < agora), 1))),
+            func.count(case((and_(aberta, prazo >= agora, prazo <= fim_hoje), 1))),
+            func.count(case((and_(aberta, prazo > fim_hoje, prazo <= fim_proximas), 1))),
+        ).where(Demanda.empresa_id == escopo.empresa_id)
+        predicado = self._predicado_escopo(escopo)
+        if predicado is not None:
+            statement = statement.where(predicado)
+        atrasadas, hoje, proximas = db.execute(statement).one()
+        return {"atrasadas": int(atrasadas), "hoje": int(hoje), "proximas": int(proximas)}
+
     def resumo_atendimento(self, db: Session, *, escopo: EscopoDemanda) -> dict[str, int]:
         """Indicadores agregados de "Minhas Demandas" (D2-B4) — universo INTEGRAL permitido
         pelo escopo, nunca uma página. Reproduz exatamente as nove fórmulas de
