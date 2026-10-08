@@ -10,6 +10,7 @@ from app.api.routes import (
     configuracao_personalizacao,
     notificacoes,
     plataforma,
+    publico,
     configuracao_numeracao_tarefa,
     demanda_arquivos,
     demanda_checklist,
@@ -91,3 +92,4 @@ app.include_router(regra_expediente.router)
 app.include_router(expediente.router)
 app.include_router(auth.router)
 app.include_router(plataforma.router)
+app.include_router(publico.router)

@@ -12,7 +12,8 @@
     "test:perfil": "node --test src/lib/notificacoes.test.ts",
     "test:kpi": "node --test src/lib/kpiStrip.test.ts",
     "test:rbac": "node --test src/lib/autoridadeUsuarios.test.ts",
-    "test:plataforma": "node --test src/lib/plataforma.test.ts"
+    "test:plataforma": "node --test src/lib/plataforma.test.ts",
+    "test:multitenant": "node --test src/lib/multitenant.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

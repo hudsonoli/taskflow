@@ -7,6 +7,7 @@ import { BrandLogo } from "@/components/branding/BrandLogo";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { confirmarRedefinicaoSenha, LinkRedefinicaoInvalidoError } from "@/lib/auth";
+import { hrefDoTenant, hrefLogin } from "@/lib/tenant";
 
 // Mínimo de caracteres da senha — o mesmo do backend (`AuthService._validate_new_password`), que
 // continua sendo a autoridade; aqui só evita uma ida ao servidor por erro óbvio.
@@ -29,7 +30,8 @@ function extrairToken(hash: string): string | null {
  * removido da barra de endereço (`history.replaceState`), para não ficar em histórico/captura de
  * tela. Não autentica: depois do sucesso o usuário volta ao login.
  */
-export function RedefinirSenhaView() {
+// `slug`: confirmação da empresa da URL `/e/<slug>/redefinir-senha`; o backend confere que o token pertence a ela.
+export function RedefinirSenhaView({ slug }: { slug?: string }) {
   // `undefined` = ainda lendo a URL; `null` = não há token (ou foi recusado); string = em memória.
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [novaSenha, setNovaSenha] = useState("");
@@ -63,7 +65,7 @@ export function RedefinirSenhaView() {
     }
     setEnviando(true);
     try {
-      await confirmarRedefinicaoSenha(token, novaSenha, confirmacao);
+      await confirmarRedefinicaoSenha(token, novaSenha, confirmacao, slug);
       setToken(null); // uso único: o token sai da memória
       setNovaSenha("");
       setConfirmacao("");
@@ -92,7 +94,7 @@ export function RedefinirSenhaView() {
           </div>
           <h1 className="text-lg font-semibold tracking-tight text-fg">Senha redefinida com sucesso.</h1>
           <p className="text-sm text-fg-muted">Use a nova senha para entrar.</p>
-          <Link href="/login" className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+          <Link href={hrefLogin(slug)} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
             Voltar para o login
           </Link>
         </div>
@@ -108,10 +110,10 @@ export function RedefinirSenhaView() {
           <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
             {MENSAGEM_LINK_INVALIDO}
           </p>
-          <Link href="/esqueci-senha" className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+          <Link href={hrefDoTenant(slug, "esqueci-senha")} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
             Solicitar nova redefinição
           </Link>
-          <Link href="/login" className="text-sm text-fg-muted hover:underline">
+          <Link href={hrefLogin(slug)} className="text-sm text-fg-muted hover:underline">
             Voltar para o login
           </Link>
         </div>

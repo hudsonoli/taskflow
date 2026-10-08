@@ -14,13 +14,16 @@ export type SessaoAtual = {
   mustChangePassword: boolean;
   /** preferência pessoal de tema; null = usar o padrão da empresa */
   temaPreferencia?: "claro" | "escuro" | "sistema" | null;
+  /** slug PÚBLICO da empresa da sessão (contexto visual); nunca autoriza nada */
+  empresaSlug?: string | null;
 };
 
-export async function login(email: string, senha: string): Promise<{ mustChangePassword: boolean }> {
+// `slug`: o da URL `/e/<slug>/login`. Sem slug, é o acesso legado `/login` (empresa padrão do servidor).
+export async function login(email: string, senha: string, slug?: string): Promise<{ mustChangePassword: boolean }> {
   const response = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, senha }),
+    body: JSON.stringify({ email, senha, ...(slug ? { empresaSlug: slug } : {}) }),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
@@ -32,11 +35,11 @@ export async function login(email: string, senha: string): Promise<{ mustChangeP
 // Login Google Workspace — mesmo contrato de `login()` (BFF trata o idToken, grava o mesmo
 // cookie tf_session). `email` é o que o usuário digitou (login_hint), confirmado no backend
 // contra o claim do token antes de qualquer vínculo — ver AuthService.login_google.
-export async function loginGoogle(email: string, idToken: string): Promise<{ mustChangePassword: boolean }> {
+export async function loginGoogle(email: string, idToken: string, slug?: string): Promise<{ mustChangePassword: boolean }> {
   const response = await fetch("/api/auth/google", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, idToken }),
+    body: JSON.stringify({ email, idToken, ...(slug ? { empresaSlug: slug } : {}) }),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
@@ -47,11 +50,11 @@ export async function loginGoogle(email: string, idToken: string): Promise<{ mus
 
 // Recuperação de senha. O pedido NUNCA revela se a conta existe: sucesso é sempre a mesma mensagem.
 // `empresaCodigo` é do servidor (BFF) — nunca enviado daqui.
-export async function solicitarRedefinicaoSenha(email: string): Promise<string> {
+export async function solicitarRedefinicaoSenha(email: string, slug?: string): Promise<string> {
   const response = await fetch("/api/auth/password-reset/request", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, ...(slug ? { empresaSlug: slug } : {}) }),
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
@@ -63,11 +66,16 @@ export async function solicitarRedefinicaoSenha(email: string): Promise<string> 
 /** Token de redefinição inexistente, expirado, já usado ou de outra empresa (o servidor nunca diz qual). */
 export class LinkRedefinicaoInvalidoError extends Error {}
 
-export async function confirmarRedefinicaoSenha(token: string, novaSenha: string, confirmacaoSenha: string): Promise<void> {
+export async function confirmarRedefinicaoSenha(
+  token: string,
+  novaSenha: string,
+  confirmacaoSenha: string,
+  slug?: string,
+): Promise<void> {
   const response = await fetch("/api/auth/password-reset/confirm", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, novaSenha, confirmacaoSenha }),
+    body: JSON.stringify({ token, novaSenha, confirmacaoSenha, ...(slug ? { empresaSlug: slug } : {}) }),
   });
   if (response.ok) return;
   const data = await response.json().catch(() => null);

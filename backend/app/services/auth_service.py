@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.core.empresa_slug import validar_slug
 from app.core.security import (
     AuthTokenError,
     create_access_token,
@@ -101,13 +102,13 @@ class AuthService:
         self,
         db: Session,
         *,
-        empresa_codigo: str,
+        empresa_codigo: str | None = None,
+        empresa_slug: str | None = None,
         email: str,
         senha: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> AccessTokenResponse:
-        empresa_codigo_normalizado = self._normalize_empresa_codigo(empresa_codigo)
         email_normalizado = self._normalize_email(email)
         now = datetime.now(timezone.utc)
         empresa: Empresa | None = None
@@ -115,7 +116,7 @@ class AuthService:
         credencial: UsuarioCredencial | None = None
 
         try:
-            empresa = self.empresa_repository.get_by_codigo_interno(db, empresa_codigo_normalizado)
+            empresa = self._resolver_empresa(db, empresa_codigo=empresa_codigo, empresa_slug=empresa_slug)
             if empresa is None or empresa.status != EMPRESA_STATUS_ATIVA:
                 self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
                 db.commit()
@@ -173,7 +174,8 @@ class AuthService:
         self,
         db: Session,
         *,
-        empresa_codigo: str,
+        empresa_codigo: str | None = None,
+        empresa_slug: str | None = None,
         email: str,
         id_token: str,
         ip_address: str | None = None,
@@ -197,7 +199,6 @@ class AuthService:
         vínculo, o e-mail salvo no TaskFloww (ou mesmo o e-mail real da conta Google) pode
         divergir do que foi digitado sem quebrar o login.
         """
-        empresa_codigo_normalizado = self._normalize_empresa_codigo(empresa_codigo)
         email_digitado = self._normalize_email(email)
         now = datetime.now(timezone.utc)
 
@@ -216,7 +217,7 @@ class AuthService:
                 raise AuthUnauthorizedError("Token Google inválido")
 
         try:
-            empresa = self.empresa_repository.get_by_codigo_interno(db, empresa_codigo_normalizado)
+            empresa = self._resolver_empresa(db, empresa_codigo=empresa_codigo, empresa_slug=empresa_slug)
             if empresa is None or empresa.status != EMPRESA_STATUS_ATIVA:
                 self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
                 db.commit()
@@ -318,6 +319,7 @@ class AuthService:
     def me(self, db: Session, usuario: Usuario) -> AuthMeResponse:
         credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)
         permissoes = self.usuario_permissao_service.obter_permissoes_efetivas(db, usuario)
+        empresa = self.empresa_repository.get_by_id(db, usuario.empresa_id)
         return AuthMeResponse(
             usuarioId=usuario.id,
             empresaId=usuario.empresa_id,
@@ -328,6 +330,7 @@ class AuthService:
             mustChangePassword=bool(credencial and credencial.senha_deve_ser_alterada),
             permissoes=permissoes,
             temaPreferencia=usuario.tema_preferencia,
+            empresaSlug=empresa.slug if empresa is not None else None,
         )
 
     def alterar_senha(
@@ -364,7 +367,14 @@ class AuthService:
     # Recuperação de senha self-service
     # ----------------------------------------------------------------------------------
 
-    def solicitar_redefinicao_senha(self, db: Session, *, empresa_codigo: str, email: str) -> None:
+    def solicitar_redefinicao_senha(
+        self,
+        db: Session,
+        *,
+        empresa_codigo: str | None = None,
+        empresa_slug: str | None = None,
+        email: str,
+    ) -> None:
         """Pedido de "Esqueci minha senha". NÃO devolve nada e NÃO levanta por motivo de negócio:
         quem chama responde sempre `PASSWORD_RESET_REQUEST_MESSAGE`, então nada aqui pode vazar
         se a conta existe, está habilitada, tem senha local, está em cooldown ou se o e-mail saiu.
@@ -386,7 +396,7 @@ class AuthService:
         Nada do token, do link ou do corpo do e-mail é registrado.
         """
         now = datetime.now(timezone.utc)
-        empresa = self.empresa_repository.get_by_codigo_interno(db, self._normalize_empresa_codigo(empresa_codigo))
+        empresa = self._resolver_empresa(db, empresa_codigo=empresa_codigo, empresa_slug=empresa_slug)
         if empresa is None or empresa.status != EMPRESA_STATUS_ATIVA:
             return
         usuario = self.usuario_repository.get_by_email(db, empresa_id=empresa.id, email=self._normalize_email(email))
@@ -413,7 +423,10 @@ class AuthService:
         self.credencial_repository.update(db, credencial)
         db.commit()
 
-        link = f"{base_url}/redefinir-senha#token={token}"
+        # Pedido feito pelo slug (`/e/<slug>/esqueci-senha`) volta ao MESMO tenant: o link carrega o slug. O fluxo
+        # legado (código de empresa do servidor) mantém o link antigo. APP_PUBLIC_URL segue sendo uma só.
+        caminho = f"/e/{empresa.slug}/redefinir-senha" if empresa_slug is not None else "/redefinir-senha"
+        link = f"{base_url}{caminho}#token={token}"
         try:
             self.configuracao_email_service.enviar_email_transacional(
                 db,
@@ -438,7 +451,8 @@ class AuthService:
         self,
         db: Session,
         *,
-        empresa_codigo: str,
+        empresa_codigo: str | None = None,
+        empresa_slug: str | None = None,
         token: str,
         nova_senha: str,
         confirmacao_senha: str,
@@ -471,7 +485,7 @@ class AuthService:
             if expira_em is None or now >= expira_em:
                 raise AuthPasswordResetTokenInvalidError(PASSWORD_RESET_INVALID_TOKEN_MESSAGE)
 
-            empresa = self.empresa_repository.get_by_codigo_interno(db, self._normalize_empresa_codigo(empresa_codigo))
+            empresa = self._resolver_empresa(db, empresa_codigo=empresa_codigo, empresa_slug=empresa_slug)
             usuario = self.usuario_repository.get_by_id(db, credencial.usuario_id)
             if (
                 empresa is None
@@ -742,6 +756,23 @@ class AuthService:
             payload=payload,
             occurred_at=occurred_at,
         )
+
+    def _resolver_empresa(
+        self, db: Session, *, empresa_codigo: str | None, empresa_slug: str | None
+    ) -> Empresa | None:
+        """Empresa-alvo de um fluxo PÚBLICO (login, Google, reset). Pelo slug da URL (`/e/<slug>/...`) ou, no acesso
+        legado, pelo código da empresa padrão do servidor. Slug inválido/inexistente → `None` (o chamador responde
+        sempre com a mesma mensagem genérica: nada diferencia "não existe" de "senha errada"). Só decide A QUAL
+        empresa o fluxo se refere: depois do login, a empresa vem sempre da sessão (`usuario.empresa_id`)."""
+        if empresa_slug is not None:
+            try:
+                slug = validar_slug(empresa_slug)
+            except ValueError:
+                return None
+            return self.empresa_repository.get_by_slug(db, slug)
+        if empresa_codigo is None:
+            return None
+        return self.empresa_repository.get_by_codigo_interno(db, self._normalize_empresa_codigo(empresa_codigo))
 
     @staticmethod
     def _normalize_empresa_codigo(empresa_codigo: str) -> str:

@@ -44,6 +44,7 @@ def login(payload: AuthLoginRequest, request: Request, db: Session = Depends(get
         return auth_service.login(
             db,
             empresa_codigo=payload.empresa_codigo,
+            empresa_slug=payload.empresa_slug,
             email=payload.email,
             senha=payload.senha,
             ip_address=extract_client_ip(request),
@@ -64,6 +65,7 @@ def login_google(payload: AuthGoogleLoginRequest, request: Request, db: Session 
         return auth_service.login_google(
             db,
             empresa_codigo=payload.empresa_codigo,
+            empresa_slug=payload.empresa_slug,
             email=payload.email,
             id_token=payload.id_token,
             ip_address=extract_client_ip(request),
@@ -80,7 +82,9 @@ def password_reset_request(payload: AuthPasswordResetRequest, db: Session = Depe
     """Público (sem autenticação). Responde SEMPRE o mesmo status e a mesma mensagem, para
     qualquer pedido de formato válido — conta existente ou não, habilitada ou não, em cooldown,
     com envio de e-mail falho ou não. Ver `AuthService.solicitar_redefinicao_senha`."""
-    auth_service.solicitar_redefinicao_senha(db, empresa_codigo=payload.empresa_codigo, email=payload.email)
+    auth_service.solicitar_redefinicao_senha(
+        db, empresa_codigo=payload.empresa_codigo, empresa_slug=payload.empresa_slug, email=payload.email
+    )
     return AuthPasswordResetRequestResponse(message=PASSWORD_RESET_REQUEST_MESSAGE)
 
 
@@ -92,6 +96,7 @@ def password_reset_confirm(payload: AuthPasswordResetConfirm, db: Session = Depe
         auth_service.confirmar_redefinicao_senha(
             db,
             empresa_codigo=payload.empresa_codigo,
+            empresa_slug=payload.empresa_slug,
             token=payload.token,
             nova_senha=payload.nova_senha,
             confirmacao_senha=payload.confirmacao_senha,

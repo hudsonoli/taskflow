@@ -37,5 +37,7 @@ export function normalizarBranding(bruto: unknown): Branding {
 
 /** src do <img> do logo (com a versão: cache imutável no navegador e troca instantânea ao enviar outro). */
 export function srcDoLogo(branding: Branding): string | null {
-  return branding.logoDisponivel && branding.logoVersao ? `${URL_LOGO}?v=${branding.logoVersao}` : null;
+  if (!branding.logoDisponivel || !branding.logoVersao) return null;
+  // Com slug, o logo é o DAQUELA empresa (rota pública por slug); sem slug, o da empresa padrão (acesso legado).
+  return branding.slug ? `${URL_LOGO}?slug=${encodeURIComponent(branding.slug)}&v=${branding.logoVersao}` : `${URL_LOGO}?v=${branding.logoVersao}`;
 }

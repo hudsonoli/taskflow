@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAppData } from "@/lib/AppDataContext";
 import { login, loginGoogle } from "@/lib/auth";
+import { hrefDoTenant } from "@/lib/tenant";
 
 // Tipagem mínima do Google Identity Services (carregado via <Script>, não um pacote npm —
 // evita dependência nova só pra isso). Só os dois métodos realmente usados aqui.
@@ -34,7 +35,17 @@ declare global {
 
 const EMAIL_VALIDO_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function LoginView({ googleClientId }: { googleClientId: string | null }) {
+// `slug` presente = login da empresa da URL `/e/<slug>/login` (a empresa vem DELE, nunca de EMPRESA_CODIGO); ausente =
+// acesso legado `/login`, que continua entrando na empresa padrão do servidor.
+export function LoginView({
+  googleClientId,
+  slug,
+  nomeEmpresa,
+}: {
+  googleClientId: string | null;
+  slug?: string;
+  nomeEmpresa?: string | null;
+}) {
   const router = useRouter();
   const { recarregarSessao } = useAppData();
   const [email, setEmail] = useState("");
@@ -51,7 +62,7 @@ export function LoginView({ googleClientId }: { googleClientId: string | null })
     setErro(null);
     setEnviando(true);
     try {
-      const { mustChangePassword } = await login(email, senha);
+      const { mustChangePassword } = await login(email, senha, slug);
       await recarregarSessao();
       router.replace(mustChangePassword ? "/trocar-senha-inicial" : "/meu-dia");
     } catch (error) {
@@ -65,7 +76,7 @@ export function LoginView({ googleClientId }: { googleClientId: string | null })
     setErro(null);
     setEnviando(true);
     try {
-      const { mustChangePassword } = await loginGoogle(email, idToken);
+      const { mustChangePassword } = await loginGoogle(email, idToken, slug);
       await recarregarSessao();
       router.replace(mustChangePassword ? "/trocar-senha-inicial" : "/meu-dia");
     } catch (error) {
@@ -102,6 +113,7 @@ export function LoginView({ googleClientId }: { googleClientId: string | null })
         <div className="mb-6 flex flex-col items-center text-center">
           <BrandLogo variant="auth" className="mb-3" />
           <h1 className="text-lg font-semibold tracking-tight text-fg">Entrar no Taskfloww</h1>
+          {nomeEmpresa && <p className="mt-0.5 text-sm font-medium text-fg">{nomeEmpresa}</p>}
           <p className="mt-1 text-sm text-fg-muted">Use o e-mail e a senha do seu cadastro.</p>
         </div>
 
@@ -123,7 +135,7 @@ export function LoginView({ googleClientId }: { googleClientId: string | null })
             required
           />
           <div className="-mt-2 text-right">
-            <Link href="/esqueci-senha" className="text-xs text-fg-muted hover:text-indigo-600 hover:underline dark:hover:text-indigo-400">
+            <Link href={hrefDoTenant(slug, "esqueci-senha")} className="text-xs text-fg-muted hover:text-indigo-600 hover:underline dark:hover:text-indigo-400">
               Esqueci minha senha
             </Link>
           </div>

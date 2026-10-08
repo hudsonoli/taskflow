@@ -25,6 +25,21 @@ export function sessionCookieOptions() {
   };
 }
 
+// Cookie VISUAL do tenant (slug público da empresa da sessão). Não sensível e SEM poder algum: serve só para o SSR
+// escolher a marca certa de quem está logado e para voltar ao login da empresa certa. A empresa de verdade vem da
+// sessão no backend. Reconciliado com `/auth/me` a cada login e a cada carregamento de sessão; apagado no logout.
+export const TENANT_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+export function tenantSlugCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: TENANT_COOKIE_MAX_AGE_SECONDS,
+  };
+}
+
 // Sessão da Administração da Plataforma: cookie PRÓPRIO, separado de `tf_session`. O token tenant e o de plataforma
 // nunca se misturam (o backend recusa um no lugar do outro). Escopo de caminho restrito ao BFF da plataforma — o
 // navegador não o envia para nenhuma outra rota — e HttpOnly: o JS da página nunca o lê.

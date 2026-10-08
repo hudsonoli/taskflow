@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AccessTokenClaims(BaseModel):
@@ -27,11 +27,19 @@ class AccessTokenResponse(BaseModel):
 
 
 class AuthLoginRequest(BaseModel):
-    empresa_codigo: str = Field(alias="empresaCodigo", min_length=1, max_length=64)
+    empresa_codigo: str | None = Field(default=None, alias="empresaCodigo", min_length=1, max_length=64)
+    # Fase 2: a empresa também pode ser indicada pelo slug público da URL (`/e/<slug>/...`). Exatamente UM dos dois.
+    empresa_slug: str | None = Field(default=None, alias="empresaSlug", min_length=1, max_length=64)
     email: str = Field(min_length=1, max_length=255)
     senha: str = Field(min_length=1)
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def _exatamente_uma_empresa(self):
+        if (self.empresa_codigo is None) == (self.empresa_slug is None):
+            raise ValueError("Informe empresaCodigo ou empresaSlug (exatamente um).")
+        return self
 
 
 # `email` aqui é o digitado pelo usuário no formulário (login_hint), não extraído do token —
@@ -39,20 +47,36 @@ class AuthLoginRequest(BaseModel):
 # (ver docstring do método). Nunca usar só o claim: o e-mail digitado é o que ancora a
 # intenção do usuário de entrar como aquela conta específica.
 class AuthGoogleLoginRequest(BaseModel):
-    empresa_codigo: str = Field(alias="empresaCodigo", min_length=1, max_length=64)
+    empresa_codigo: str | None = Field(default=None, alias="empresaCodigo", min_length=1, max_length=64)
+    # Fase 2: a empresa também pode ser indicada pelo slug público da URL (`/e/<slug>/...`). Exatamente UM dos dois.
+    empresa_slug: str | None = Field(default=None, alias="empresaSlug", min_length=1, max_length=64)
     email: str = Field(min_length=1, max_length=255)
     id_token: str = Field(alias="idToken", min_length=1)
 
     model_config = ConfigDict(populate_by_name=True)
 
+    @model_validator(mode="after")
+    def _exatamente_uma_empresa(self):
+        if (self.empresa_codigo is None) == (self.empresa_slug is None):
+            raise ValueError("Informe empresaCodigo ou empresaSlug (exatamente um).")
+        return self
+
 
 # Recuperação de senha ("Esqueci minha senha"). `empresaCodigo` vem do BFF (EMPRESA_CODIGO do
 # servidor), nunca do navegador — mesmo desenho do login. O e-mail aqui é só o digitado.
 class AuthPasswordResetRequest(BaseModel):
-    empresa_codigo: str = Field(alias="empresaCodigo", min_length=1, max_length=64)
+    empresa_codigo: str | None = Field(default=None, alias="empresaCodigo", min_length=1, max_length=64)
+    # Fase 2: a empresa também pode ser indicada pelo slug público da URL (`/e/<slug>/...`). Exatamente UM dos dois.
+    empresa_slug: str | None = Field(default=None, alias="empresaSlug", min_length=1, max_length=64)
     email: str = Field(min_length=1, max_length=255)
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def _exatamente_uma_empresa(self):
+        if (self.empresa_codigo is None) == (self.empresa_slug is None):
+            raise ValueError("Informe empresaCodigo ou empresaSlug (exatamente um).")
+        return self
 
 
 # A resposta é SEMPRE esta, para qualquer pedido de formato válido (ver AuthService).
@@ -65,12 +89,20 @@ class AuthPasswordResetRequestResponse(BaseModel):
 # neutra de qualquer token inválido, e com token válido recebe a mensagem da política (sem
 # consumir o token, para o usuário poder tentar de novo).
 class AuthPasswordResetConfirm(BaseModel):
-    empresa_codigo: str = Field(alias="empresaCodigo", min_length=1, max_length=64)
+    empresa_codigo: str | None = Field(default=None, alias="empresaCodigo", min_length=1, max_length=64)
+    # Fase 2: a empresa também pode ser indicada pelo slug público da URL (`/e/<slug>/...`). Exatamente UM dos dois.
+    empresa_slug: str | None = Field(default=None, alias="empresaSlug", min_length=1, max_length=64)
     token: str = Field(min_length=1, max_length=512)
     nova_senha: str = Field(alias="novaSenha", min_length=1)
     confirmacao_senha: str = Field(alias="confirmacaoSenha", min_length=1)
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def _exatamente_uma_empresa(self):
+        if (self.empresa_codigo is None) == (self.empresa_slug is None):
+            raise ValueError("Informe empresaCodigo ou empresaSlug (exatamente um).")
+        return self
 
 
 class AuthAlterarSenhaRequest(BaseModel):
@@ -97,5 +129,8 @@ class AuthMeResponse(BaseModel):
     permissoes: list[str] = Field(default_factory=list)
     # Preferência pessoal de tema; null = herdar o tema padrão da empresa. Aditivo.
     tema_preferencia: Literal["claro", "escuro", "sistema"] | None = Field(default=None, alias="temaPreferencia")
+    # Fase 2: slug PÚBLICO da empresa da sessão — o BFF o usa só para o contexto visual (cookie não sensível) e
+    # para voltar à tela de login da empresa certa. Nunca é usado para autorizar nada.
+    empresa_slug: str | None = Field(default=None, alias="empresaSlug")
 
     model_config = ConfigDict(populate_by_name=True)

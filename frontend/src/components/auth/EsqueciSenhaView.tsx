@@ -7,13 +7,15 @@ import { BrandLogo } from "@/components/branding/BrandLogo";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { solicitarRedefinicaoSenha } from "@/lib/auth";
+import { hrefLogin } from "@/lib/tenant";
 
 /**
  * "Esqueci minha senha": só pede o e-mail. Depois do envio mostra SEMPRE a mesma mensagem — exista a
  * conta ou não — para a tela nunca servir de teste de "esse e-mail está cadastrado?". Só uma falha
  * técnica (servidor fora do ar) aparece como erro e mantém o formulário para nova tentativa.
  */
-export function EsqueciSenhaView() {
+// `slug`: pedido da empresa da URL `/e/<slug>/esqueci-senha` (o e-mail leva de volta a `/e/<slug>/redefinir-senha`).
+export function EsqueciSenhaView({ slug }: { slug?: string }) {
   const [email, setEmail] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -24,7 +26,7 @@ export function EsqueciSenhaView() {
     setErro(null);
     setEnviando(true);
     try {
-      setMensagem(await solicitarRedefinicaoSenha(email.trim()));
+      setMensagem(await solicitarRedefinicaoSenha(email.trim(), slug));
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível processar o pedido agora.");
     } finally {
@@ -55,7 +57,7 @@ export function EsqueciSenhaView() {
             <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
               {mensagem}
             </p>
-            <Link href="/login" className="text-center text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+            <Link href={hrefLogin(slug)} className="text-center text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
               Voltar para o login
             </Link>
           </div>
@@ -79,7 +81,7 @@ export function EsqueciSenhaView() {
             <Button type="submit" disabled={enviando} className="justify-center">
               {enviando ? "Enviando…" : "Enviar instruções"}
             </Button>
-            <Link href="/login" className="text-center text-sm text-fg-muted hover:underline">
+            <Link href={hrefLogin(slug)} className="text-center text-sm text-fg-muted hover:underline">
               Voltar para o login
             </Link>
           </form>

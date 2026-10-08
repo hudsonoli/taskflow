@@ -43,7 +43,7 @@ function formatarUltimoAcesso(em: string): string {
 
 export function ProfileMenu() {
   const { usuarioAtual, logout } = useAppData();
-  const { branding, preferenciaTema, definirPreferenciaTema } = useBranding();
+  const { branding, preferenciaTema, definirPreferenciaTema, loginHref } = useBranding();
   const { resumo, recarregar } = useNotificacoes();
   const { departamentos } = useDiretorioDepartamentos();
   const [erroTema, setErroTema] = useState<string | null>(null);
@@ -84,8 +84,9 @@ export function ProfileMenu() {
 
   async function handleSair() {
     setSaindo(true);
+    const destino = loginHref; // login da empresa da sessão (capturado antes de o contexto ser limpo)
     await logout();
-    router.replace("/login");
+    router.replace(destino);
     router.refresh();
   }
 

@@ -1,5 +1,7 @@
 import "server-only";
+import { tenantSlugCookieOptions } from "@/lib/server/backend";
 import { COOKIE_TEMA, normalizarPreferencia, type TemaPreferencia } from "@/lib/tema";
+import { COOKIE_TENANT_SLUG, normalizarSlug } from "@/lib/tenant";
 
 // Cookie-espelho da preferência pessoal de tema (primeiro paint no servidor). A VERDADE é o banco
 // (usuarios.tema_preferencia); este cookie só evita o flash e é reconciliado a cada login, a cada
@@ -44,4 +46,31 @@ export async function preferenciaDoBackend(backendUrl: string, token: string): P
   } catch {
     return null;
   }
+}
+
+/** Dados VISUAIS da sessão recém-emitida, vindos do backend (`/auth/me`): preferência de tema e slug PÚBLICO da
+ * empresa da sessão. Qualquer falha → herdar a empresa e sem slug. A empresa de verdade é a do token; isto só alimenta
+ * cookies visuais. */
+export async function dadosVisuaisDaSessao(
+  backendUrl: string,
+  token: string,
+): Promise<{ preferencia: TemaPreferencia; empresaSlug: string | null }> {
+  try {
+    const resposta = await fetch(`${backendUrl}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!resposta.ok) return { preferencia: null, empresaSlug: null };
+    const dados = (await resposta.json().catch(() => null)) as { temaPreferencia?: unknown; empresaSlug?: unknown } | null;
+    return { preferencia: normalizarPreferencia(dados?.temaPreferencia), empresaSlug: normalizarSlug(dados?.empresaSlug) };
+  } catch {
+    return { preferencia: null, empresaSlug: null };
+  }
+}
+
+/** Reconcilia o cookie visual do tenant com a empresa da SESSÃO (nunca o contrário). */
+export function sincronizarCookieTenant(jar: Jar, empresaSlug: string | null): void {
+  if (empresaSlug) jar.set(COOKIE_TENANT_SLUG, empresaSlug, tenantSlugCookieOptions());
+  else jar.delete(COOKIE_TENANT_SLUG);
 }

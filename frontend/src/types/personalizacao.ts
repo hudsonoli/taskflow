@@ -12,6 +12,8 @@ export type Branding = {
   logoVersao: string | null;
   /** `true` quando nada foi personalizado (aparência original do TaskFloww) */
   padrao: boolean;
+  /** slug PÚBLICO da empresa dona desta marca (só no contexto por slug) — vai na URL do logo; nunca autoriza nada */
+  slug?: string | null;
 };
 
 export type PersonalizacaoUpdatePayload = Partial<Pick<Branding, "corPrimaria" | "corSecundaria" | "tema">>;

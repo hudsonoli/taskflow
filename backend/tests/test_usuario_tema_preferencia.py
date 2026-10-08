@@ -61,8 +61,8 @@ def test_auth_me_mantem_o_shape_existente(client_admin: TestClient) -> None:
     corpo = _me(client_admin)
     for campo in ("usuarioId", "empresaId", "nome", "perfilBase", "acessoSistema", "status", "mustChangePassword", "permissoes"):
         assert campo in corpo
-    # só um campo novo, sem vazar nada além da preferência
-    assert set(corpo) - {"usuarioId", "empresaId", "nome", "perfilBase", "acessoSistema", "status", "mustChangePassword", "permissoes"} == {"temaPreferencia"}
+    # só campos aditivos: a preferência de tema e (Fase 2) o slug PÚBLICO da empresa da sessão — nada sensível
+    assert set(corpo) - {"usuarioId", "empresaId", "nome", "perfilBase", "acessoSistema", "status", "mustChangePassword", "permissoes"} == {"temaPreferencia", "empresaSlug"}
 
 
 # ------------------------------------------------------------------ gravação

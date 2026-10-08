@@ -62,7 +62,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   async function recarregarSessao() {
     const sessao = await fetchSessao();
     // Tema pessoal: a preferência REAL (banco) chega com a sessão; sem sessão, nenhum override vale.
-    sincronizarSessaoRef.current(sessao ? { temaPreferencia: normalizarPreferencia(sessao.temaPreferencia) } : null);
+    sincronizarSessaoRef.current(
+      sessao ? { temaPreferencia: normalizarPreferencia(sessao.temaPreferencia), empresaSlug: sessao.empresaSlug ?? null } : null,
+    );
     if (!sessao) {
       setAutenticado(false);
       setMustChangePassword(false);

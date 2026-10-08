@@ -20,6 +20,8 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from app.core.empresa_slug import validar_slug
+from app.models.empresa import Empresa
 from app.models.configuracao_personalizacao import (
     COR_PRIMARIA_PADRAO,
     COR_SECUNDARIA_PADRAO,
@@ -28,7 +30,7 @@ from app.models.configuracao_personalizacao import (
 )
 from app.repositories.configuracao_personalizacao_repository import ConfiguracaoPersonalizacaoRepository
 from app.repositories.empresa_repository import EmpresaRepository
-from app.schemas.configuracao_personalizacao import PersonalizacaoRead, PersonalizacaoUpdate
+from app.schemas.configuracao_personalizacao import PersonalizacaoRead, PersonalizacaoUpdate, PublicoEmpresaBrandingRead
 from app.services import demanda_arquivo_service
 
 LOGO_LARGURA = 320
@@ -165,6 +167,34 @@ class ConfiguracaoPersonalizacaoService:
             return self._para_read(None)
         return self._para_read(self.repository.get_by_empresa(db, empresa.id))
 
+    def _empresa_ativa_por_slug(self, db: Session, slug: str) -> Empresa | None:
+        """Empresa ATIVA do slug público, ou `None` (slug malformado, reservado, inexistente ou inativa — sem
+        diferenciar). Empresa inativa nunca expõe identidade visual nem logo."""
+        try:
+            slug_valido = validar_slug(slug)
+        except ValueError:
+            return None
+        empresa = self.empresa_repository.get_by_slug(db, slug_valido)
+        if empresa is None or empresa.status != "ativa":
+            return None
+        return empresa
+
+    def get_publico_por_slug(self, db: Session, *, slug: str) -> PublicoEmpresaBrandingRead:
+        empresa = self._empresa_ativa_por_slug(db, slug)
+        if empresa is None:
+            base = self._para_read(None)
+            return PublicoEmpresaBrandingRead(**base.model_dump(by_alias=True), disponivel=False, nomeExibicao=None)
+        base = self._para_read(self.repository.get_by_empresa(db, empresa.id))
+        return PublicoEmpresaBrandingRead(
+            **base.model_dump(by_alias=True), disponivel=True, nomeExibicao=empresa.nome_fantasia or empresa.nome
+        )
+
+    def ler_logo_publico_por_slug(self, db: Session, *, slug: str) -> tuple[Path, str, str]:
+        empresa = self._empresa_ativa_por_slug(db, slug)
+        if empresa is None:
+            raise PersonalizacaoLogoNaoEncontradoError("Logo não encontrado")
+        return self._logo_da_empresa(db, empresa)
+
     # ------------------------------------------------------------------------------------
     # Escrita
     # ------------------------------------------------------------------------------------
@@ -278,6 +308,9 @@ class ConfiguracaoPersonalizacaoService:
         empresa = self.empresa_repository.get_by_codigo_interno(db, empresa_codigo.strip().upper())
         if empresa is None:
             raise PersonalizacaoLogoNaoEncontradoError("Logo não encontrado")
+        return self._logo_da_empresa(db, empresa)
+
+    def _logo_da_empresa(self, db: Session, empresa: Empresa) -> tuple[Path, str, str]:
         registro = self.repository.get_by_empresa(db, empresa.id)
         if registro is None or registro.logo_storage_key is None or registro.logo_mime_type is None:
             raise PersonalizacaoLogoNaoEncontradoError("Logo não encontrado")

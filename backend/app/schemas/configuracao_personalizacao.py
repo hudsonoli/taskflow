@@ -33,6 +33,15 @@ class PersonalizacaoRead(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class PublicoEmpresaBrandingRead(PersonalizacaoRead):
+    """Branding público de uma empresa pelo SLUG (antes do login). SÓ dados públicos de apresentação: nada de id,
+    documento, usuários, configurações ou e-mail. Empresa inexistente, inativa ou slug inválido recebem a MESMA
+    resposta: `disponivel=false` com a identidade neutra (padrão do TaskFloww) e sem nome."""
+
+    disponivel: bool
+    nome_exibicao: str | None = Field(default=None, alias="nomeExibicao")
+
+
 class PersonalizacaoUpdate(BaseModel):
     """Alteração parcial: só os campos enviados mudam. Só duas cores são configuráveis — fundo,
     superfície, texto, borda e estados derivam do design system (contraste garantido)."""

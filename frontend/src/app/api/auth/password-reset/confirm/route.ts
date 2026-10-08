@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { BACKEND_URL, EMPRESA_CODIGO } from "@/lib/server/backend";
+import { normalizarSlug } from "@/lib/tenant";
 
 const MENSAGEM_LINK_INVALIDO = "Este link é inválido ou expirou. Solicite uma nova redefinição de senha.";
 const TIMEOUT_MS = 15_000;
@@ -19,13 +20,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Informe e confirme a nova senha." }, { status: 422 });
   }
 
+  // O link do e-mail aponta para `/e/<slug>/redefinir-senha`: o slug da URL escolhe a empresa e o backend confere que o
+  // token pertence a ela (token de outra empresa = mesmo "link inválido"). Sem slug, o legado usa a empresa padrão.
+  const slugInformado = body?.empresaSlug;
+  const slug = normalizarSlug(slugInformado);
+  if (slugInformado !== undefined && slugInformado !== null && !slug) {
+    return NextResponse.json({ message: MENSAGEM_LINK_INVALIDO }, { status: 400 });
+  }
+  const empresa = slug ? { empresaSlug: slug } : { empresaCodigo: EMPRESA_CODIGO };
+
   let backendResponse: Response;
   try {
     backendResponse = await fetch(`${BACKEND_URL}/auth/password-reset/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // `empresaCodigo` do servidor, nunca do navegador.
-      body: JSON.stringify({ empresaCodigo: EMPRESA_CODIGO, token, novaSenha, confirmacaoSenha }),
+      body: JSON.stringify({ ...empresa, token, novaSenha, confirmacaoSenha }),
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });

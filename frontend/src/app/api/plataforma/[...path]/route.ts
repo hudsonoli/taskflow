@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { BACKEND_URL, PLATFORM_COOKIE_NAME, PLATFORM_COOKIE_PATH } from "@/lib/server/backend";
+import { invalidarBranding } from "@/lib/server/branding";
 
 // Proxy da Administração da Plataforma: lê SOMENTE o cookie HttpOnly `tf_platform` e encaminha a `/plataforma/*` do
 // FastAPI. Nunca usa `tf_session` (o backend também recusaria: token tenant não entra em /plataforma). O navegador
@@ -31,6 +32,9 @@ async function proxy(request: NextRequest, path: string[]) {
   if (resposta.status === 401 || resposta.status === 403) {
     cookieStore.delete({ name: PLATFORM_COOKIE_NAME, path: PLATFORM_COOKIE_PATH });
   }
+
+  // Branding de alguma empresa mudou: o cache por tenant do SSR deixa de valer (o próximo carregamento já vê a nova marca).
+  if (hasBody && resposta.ok && path.includes("personalizacao")) invalidarBranding();
 
   if (resposta.status === 204) return new NextResponse(null, { status: 204 });
 

@@ -4,27 +4,29 @@ import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { TopNav } from "@/components/layout/TopNav";
 import { useAppData } from "@/lib/AppDataContext";
+import { useBranding } from "@/lib/BrandingContext";
+import { ehRotaDeLogin, ehRotaDeRecuperacaoDeSenha } from "@/lib/tenant";
 
-const ROTAS_PUBLICAS = ["/login"];
-// Recuperação de senha: telas públicas "nuas" que NÃO redirecionam quem já tem sessão nem quem
-// precisa trocar a senha — o link do e-mail (com o token no fragmento) tem de chegar até a tela.
-const ROTAS_RECUPERACAO_SENHA = ["/esqueci-senha", "/redefinir-senha"];
+// Login (legado `/login` ou `/e/<slug>/login`) e recuperação de senha (idem) são telas públicas "nuas". A recuperação
+// NÃO redireciona quem já tem sessão nem quem precisa trocar a senha — o link do e-mail (com o token no fragmento) tem
+// de chegar até a tela. Quem não tem sessão volta ao login DA EMPRESA (`loginHref`), não ao da empresa padrão.
 const ROTA_TROCA_SENHA = "/trocar-senha-inicial";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { sessaoCarregando, autenticado, mustChangePassword } = useAppData();
+  const { loginHref } = useBranding();
 
-  const rotaPublica = ROTAS_PUBLICAS.includes(pathname);
+  const rotaPublica = ehRotaDeLogin(pathname);
   const rotaTrocaSenha = pathname === ROTA_TROCA_SENHA;
-  const rotaRecuperacaoSenha = ROTAS_RECUPERACAO_SENHA.includes(pathname);
+  const rotaRecuperacaoSenha = ehRotaDeRecuperacaoDeSenha(pathname);
 
   useEffect(() => {
     if (sessaoCarregando || rotaRecuperacaoSenha) return;
 
     if (!autenticado && !rotaPublica) {
-      router.replace("/login");
+      router.replace(loginHref);
       return;
     }
     if (autenticado && mustChangePassword && !rotaTrocaSenha) {
@@ -34,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (autenticado && !mustChangePassword && (rotaPublica || rotaTrocaSenha)) {
       router.replace("/meu-dia");
     }
-  }, [sessaoCarregando, autenticado, mustChangePassword, rotaPublica, rotaTrocaSenha, rotaRecuperacaoSenha, router]);
+  }, [sessaoCarregando, autenticado, mustChangePassword, rotaPublica, rotaTrocaSenha, rotaRecuperacaoSenha, router, loginHref]);
 
   // Login, recuperação e troca de senha inicial são telas "nuas" — sem TopNav, sem exigir sessão.
   if (rotaPublica || rotaTrocaSenha || rotaRecuperacaoSenha) {

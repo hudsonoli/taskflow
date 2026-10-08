@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { BACKEND_URL, EMPRESA_CODIGO } from "@/lib/server/backend";
+import { normalizarSlug } from "@/lib/tenant";
 
 // Mesma mensagem que o backend devolve — o BFF nunca a varia por conta/e-mail (anti-enumeration).
 const MENSAGEM_PUBLICA =
@@ -15,13 +16,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Informe um e-mail válido." }, { status: 400 });
   }
 
-  // `empresaCodigo` é SEMPRE o do servidor (EMPRESA_CODIGO) — nunca aceito do navegador.
+  // Empresa: o slug da URL (`/e/<slug>/esqueci-senha`) ou, SEM slug, a empresa padrão do servidor (legado).
+  // `empresaCodigo` nunca vem do navegador. Slug presente mas inválido → a MESMA resposta pública (anti-enumeração).
+  const slugInformado = body?.empresaSlug;
+  const slug = normalizarSlug(slugInformado);
+  if (slugInformado !== undefined && slugInformado !== null && !slug) {
+    return NextResponse.json({ message: MENSAGEM_PUBLICA });
+  }
+  const empresa = slug ? { empresaSlug: slug } : { empresaCodigo: EMPRESA_CODIGO };
+
   let backendResponse: Response;
   try {
     backendResponse = await fetch(`${BACKEND_URL}/auth/password-reset/request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ empresaCodigo: EMPRESA_CODIGO, email }),
+      body: JSON.stringify({ ...empresa, email }),
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
