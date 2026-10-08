@@ -60,3 +60,16 @@ export function mensagemDeErroDaApi(dados: unknown, padrao: string): string {
   if (typeof message === "string" && message) return message;
   return padrao;
 }
+
+/**
+ * Separa os usuários da empresa em Gestores (`perfilBase === "gestor"`) e demais. Gestor NÃO é um cadastro à parte: é o
+ * próprio usuário com esse perfil, e a empresa pode ter vários. Admin legado e Usuário ficam em "demais" (nunca contam como
+ * Gestor). A conta de sistema nunca chega aqui (a API a omite). Ordem estável por nome.
+ */
+export function separarGestores<T extends { perfilBase: string; nome: string }>(usuarios: readonly T[]): { gestores: T[]; demais: T[] } {
+  const porNome = (a: T, b: T) => a.nome.localeCompare(b.nome, "pt-BR");
+  return {
+    gestores: usuarios.filter((u) => u.perfilBase === "gestor").sort(porNome),
+    demais: usuarios.filter((u) => u.perfilBase !== "gestor").sort(porNome),
+  };
+}

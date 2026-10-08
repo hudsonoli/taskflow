@@ -269,3 +269,46 @@ def test_novo_gestor_nunca_vira_admin_e_nao_vaza_senha_para_evento(
     senha = corpo["senhaTemporaria"]
     eventos = db_session.scalars(select(Evento).where(Evento.empresa_id == alvo["id"])).all()
     assert senha not in str([e.payload for e in eventos])
+
+
+# --------------------------------------------------------------------------------------
+# Gestor É o usuário (perfil_base="gestor"); a empresa pode ter vários
+# --------------------------------------------------------------------------------------
+
+
+def test_varios_gestores_sao_listados_e_adicionar_outro_nao_altera_os_demais(
+    client_plataforma: TestClient, db_session: Session, alvo: dict
+) -> None:
+    a, b, c = (_usuario(db_session, alvo["id"], nome) for nome in ("Gestor A", "Gestor B", "Gestor C"))
+    comum = _usuario(db_session, alvo["id"], "Usuario Comum")
+    _usuario(db_session, alvo["id"], "Admin Legado", perfil="admin")
+    _usuario(db_session, alvo["id"], "Conta Sistema", perfil="admin", sistema=True)
+    for pessoa in (a, b, c):
+        assert _promover(client_plataforma, alvo["id"], pessoa.id).status_code == 200
+
+    def gestores() -> dict[str, str]:
+        usuarios = client_plataforma.get(f"{PLAT}/empresas/{alvo['id']}/usuarios", params={"limit": 200}).json()
+        return {u["id"]: u["nome"] for u in usuarios if u["perfilBase"] == "gestor"}
+
+    assert gestores() == {a.id: "Gestor A", b.id: "Gestor B", c.id: "Gestor C"}
+    assert client_plataforma.get(f"{PLAT}/empresas/{alvo['id']}").json()["gestoresAtivos"] == 3
+
+    # adicionar o Gestor D (promovendo outro usuário) não remove nem altera A/B/C
+    assert _promover(client_plataforma, alvo["id"], comum.id).status_code == 200
+    assert gestores() == {a.id: "Gestor A", b.id: "Gestor B", c.id: "Gestor C", comum.id: "Usuario Comum"}
+    assert client_plataforma.get(f"{PLAT}/empresas/{alvo['id']}").json()["gestoresAtivos"] == 4
+    # a lista nunca traz a conta de sistema, e o admin legado não é contado como Gestor
+    nomes = [u["nome"] for u in client_plataforma.get(f"{PLAT}/empresas/{alvo['id']}/usuarios", params={"limit": 200}).json()]
+    assert "Conta Sistema" not in nomes and "Admin Legado" in nomes
+
+
+def test_gestor_e_o_proprio_usuario_sem_cadastro_paralelo_nem_limite_no_banco(db_session: Session) -> None:
+    from sqlalchemy import inspect
+
+    inspetor = inspect(db_session.get_bind())
+    tabelas = set(inspetor.get_table_names())
+    assert not {"gestores", "gestor", "empresa_gestor", "empresas_gestores"} & tabelas  # não existe entidade separada
+    assert "gestor_id" not in {c["name"] for c in inspetor.get_columns("empresas")}
+    # nenhum índice/constraint ÚNICO envolve perfil_base: nada limita a empresa a um Gestor
+    unicos = [i for i in inspetor.get_indexes("usuarios") if i.get("unique")] + inspetor.get_unique_constraints("usuarios")
+    assert not any("perfil_base" in (u.get("column_names") or []) for u in unicos)

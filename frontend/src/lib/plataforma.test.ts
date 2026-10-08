@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { erroDoCodigoInterno, erroDoSlug, mensagemDeErroDaApi, sugerirSlug, SLUG_RESERVADOS } from "./plataforma.ts";
+import { erroDoCodigoInterno, erroDoSlug, mensagemDeErroDaApi, separarGestores, sugerirSlug, SLUG_RESERVADOS } from "./plataforma.ts";
 
 const ler = (caminho: string) => readFileSync(new URL(`../${caminho}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
@@ -172,4 +172,41 @@ test("rotas e componentes obrigatórios do módulo existem", () => {
   assert.match(ler("app/plataforma/empresas/page.tsx"), /<EmpresasPlataformaView \/>/);
   assert.match(ler("components/plataforma/EmpresaPlataformaView.tsx"), /Dados[\s\S]*Personalização[\s\S]*Usuários/);
   assert.match(ler("components/plataforma/PlataformaShell.tsx"), /Empresa em foco/);
+});
+
+// ── Gestores da empresa: o Gestor é o próprio usuário com perfil Gestor (sem cadastro paralelo) ──────────
+const u = (nome: string, perfilBase: string) => ({ id: nome, nome, perfilBase });
+
+test("separarGestores: zero, um e vários Gestores; Usuário e Admin legado nunca contam como Gestor", () => {
+  const zero = separarGestores([u("Ana", "operador"), u("Beto", "admin")]);
+  assert.equal(zero.gestores.length, 0);
+  assert.equal(zero.demais.length, 2);
+
+  const um = separarGestores([u("Ana", "operador"), u("Carla", "gestor")]);
+  assert.deepEqual(um.gestores.map((g) => g.nome), ["Carla"]);
+  assert.deepEqual(um.demais.map((g) => g.nome), ["Ana"]);
+
+  const varios = separarGestores([u("Zeca", "gestor"), u("Ana", "operador"), u("Bia", "gestor"), u("Ciro", "gestor"), u("Beto", "admin")]);
+  assert.deepEqual(varios.gestores.map((g) => g.nome), ["Bia", "Ciro", "Zeca"]); // todos, ordem estável por nome
+  assert.deepEqual(varios.demais.map((g) => g.nome), ["Ana", "Beto"]);
+  // adicionar mais um Gestor não remove nem altera os existentes
+  const mais = separarGestores([...[u("Zeca", "gestor"), u("Bia", "gestor"), u("Ciro", "gestor")], u("Dora", "gestor")]);
+  assert.deepEqual(mais.gestores.map((g) => g.nome), ["Bia", "Ciro", "Dora", "Zeca"]);
+  assert.deepEqual(separarGestores([]), { gestores: [], demais: [] });
+});
+
+test("aba Usuários: bloco 'Gestores da empresa · N' com os próprios usuários, ação conforme a quantidade e recarga imediata", () => {
+  const secao = ler("components/plataforma/EmpresaUsuariosSection.tsx");
+  assert.match(secao, /separarGestores\(usuarios\)/); // a lista de Gestores sai da mesma lista de usuários (sem cadastro à parte)
+  assert.match(secao, /Gestores da empresa · \{usuarios \? gestores\.length : "…"\}/);
+  assert.match(secao, /semGestor \? "Definir Gestor" : "Adicionar Gestor"/);
+  assert.match(secao, /quantidade = usuarios \? gestores\.length : empresa\.gestoresAtivos/);
+  assert.match(secao, /Demais usuários · \{demais\.length\}/);
+  // promover/criar → recarrega a lista na hora (e a contagem da empresa), sem reload manual
+  assert.match(secao, /onDefinido=\{\(\) => \{\s*void carregar\(\);\s*onMudou\(\);/);
+  // o perfil técnico "operador" nunca é exibido: o rótulo vem de perfilUsuarioLabels ("Usuário")
+  assert.match(secao, /operador: perfilUsuarioLabels\.operador/);
+  assert.doesNotMatch(secao.replace(/operador: perfilUsuarioLabels\.operador/, ""), />\s*operador\s*</i);
+  // nenhum limite de um Gestor / "principal" na UI
+  assert.doesNotMatch(secao, /principal|único Gestor|apenas um Gestor/i);
 });
