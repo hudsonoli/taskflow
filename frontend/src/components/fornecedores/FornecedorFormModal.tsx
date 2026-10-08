@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Truck, X } from "lucide-react";
+import { Loader2, Search, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -15,7 +15,9 @@ import {
   statusFornecedorEditaveis,
   statusFornecedorLabels,
 } from "@/lib/fornecedores";
+import { cnpjValido } from "@/lib/brasilApi";
 import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
+import { useConsultaCnpj } from "@/lib/useConsultaCnpj";
 import type { Fornecedor, FornecedorFormDraft, FornecedorStatusEditavel } from "@/types/fornecedor";
 
 const ufsDisponiveis = [
@@ -68,6 +70,7 @@ export function FornecedorFormModal({
 }) {
   const [draft, setDraft] = useState<FornecedorFormDraft>(() => createInitialDraft(fornecedor));
   const [activeTab, setActiveTab] = useState("dados");
+  const consulta = useConsultaCnpj(ufsDisponiveis);
 
   const editing = fornecedor !== undefined;
   const canSave = draft.nome.trim().length > 0 && !salvando;
@@ -80,6 +83,24 @@ export function FornecedorFormModal({
   function handleDocumentoChange(rawValue: string) {
     const tipo = detectDocumentType(rawValue) ?? draft.tipoDocumento;
     updateDraft({ documento: formatDocument(rawValue), tipoDocumento: tipo });
+    consulta.limparAviso();
+  }
+
+  // Mesma consulta REAL de CNPJ do cadastro de Clientes (BrasilAPI via BFF, lógica compartilhada em lib/brasilApi.ts).
+  // Só o que veio com valor é preenchido; o telefone vai para o campo "WhatsApp / telefone". Falha → aviso e cadastro manual.
+  function handleBuscarDocumento() {
+    void consulta.buscar(draft.documento, ({ nome, email, telefone, cep, bairro, enderecoCompleto, cidade, uf }) =>
+      updateDraft({
+        ...(nome ? { nome } : {}),
+        ...(email ? { email } : {}),
+        ...(telefone ? { whatsapp: telefone } : {}),
+        ...(cep ? { cep } : {}),
+        ...(bairro ? { bairro } : {}),
+        ...(enderecoCompleto ? { enderecoCompleto } : {}),
+        ...(cidade ? { cidade } : {}),
+        ...(uf ? { uf } : {}),
+      }),
+    );
   }
 
   return (
@@ -140,12 +161,28 @@ export function FornecedorFormModal({
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                label={documentoLabel}
-                value={draft.documento}
-                onChange={(event) => handleDocumentoChange(event.target.value)}
-                placeholder="00.000.000/0000-00"
-              />
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <Input
+                    label={documentoLabel}
+                    value={draft.documento}
+                    onChange={(event) => handleDocumentoChange(event.target.value)}
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
+                {draft.tipoDocumento === "cnpj" && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleBuscarDocumento}
+                    disabled={consulta.buscando || !cnpjValido(draft.documento)}
+                    className="mb-0.5"
+                  >
+                    {consulta.buscando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                    {consulta.buscando ? "Buscando…" : "Buscar CNPJ"}
+                  </Button>
+                )}
+              </div>
               {/* Só ativo e inativo: `arquivado` entra pela ação Arquivar, com motivo. */}
               <Select
                 label="Status"
@@ -157,6 +194,14 @@ export function FornecedorFormModal({
                 }))}
               />
             </div>
+            {consulta.aviso && (
+              <p
+                role={consulta.aviso.tipo === "erro" ? "alert" : "status"}
+                className={consulta.aviso.tipo === "erro" ? "-mt-2 text-xs font-medium text-danger" : "-mt-2 text-xs font-medium text-success"}
+              >
+                {consulta.aviso.texto}
+              </p>
+            )}
 
             <div>
               <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Cor de identificação</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Plus, Search, Trash2, User, X } from "lucide-react";
+import { Loader2, Mail, Plus, Search, Trash2, User, X } from "lucide-react";
 import { ArquivosContextView } from "@/components/arquivos/ArquivosContextView";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -15,7 +15,8 @@ import { Textarea } from "@/components/ui/Textarea";
 import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
 import { generateId } from "@/lib/ids";
 import { detectDocumentType, formatDocument } from "@/lib/mascaras";
-import { buscarDadosPorDocumento } from "@/lib/documento-lookup";
+import { cnpjValido } from "@/lib/brasilApi";
+import { useConsultaCnpj } from "@/lib/useConsultaCnpj";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeVerFinanceiroEfetivo } from "@/lib/escopo-operacional";
 import { resolverGrupoClientePorReferencia } from "@/lib/referencias";
@@ -87,6 +88,7 @@ export function ClienteFormModal({
   const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector();
   const [draft, setDraft] = useState<ClienteFormDraft>(() => createInitialDraft(cliente));
   const [activeTab, setActiveTab] = useState("dados");
+  const consulta = useConsultaCnpj(ufsDisponiveis);
 
   const editing = cliente !== undefined;
   const canSave = draft.nome.trim().length > 0;
@@ -114,12 +116,25 @@ export function ClienteFormModal({
   function handleDocumentoChange(rawValue: string) {
     const tipo = detectDocumentType(rawValue) ?? draft.tipoDocumento;
     updateDraft({ documento: formatDocument(rawValue), tipoDocumento: tipo });
+    consulta.limparAviso();
   }
 
+  // Consulta REAL de CNPJ (BrasilAPI, via BFF). Só preenche o que veio com valor — o que a pessoa já digitou nunca é
+  // apagado por um campo vazio da API — e, se falhar, o cadastro manual segue intacto. Cliente não tem campo de telefone
+  // (só WhatsApp), então o telefone da consulta não é usado aqui.
   function handleBuscarDocumento() {
-    if (!draft.documento.trim()) return;
-    const resultado = buscarDadosPorDocumento(draft.documento, draft.tipoDocumento);
-    updateDraft({ nome: resultado.nome, razaoSocial: resultado.razaoSocial });
+    void consulta.buscar(draft.documento, ({ nome, razaoSocial, email, cep, bairro, enderecoCompleto, cidade, uf }) =>
+      updateDraft({
+        ...(nome ? { nome } : {}),
+        ...(razaoSocial ? { razaoSocial } : {}),
+        ...(email ? { email } : {}),
+        ...(cep ? { cep } : {}),
+        ...(bairro ? { bairro } : {}),
+        ...(enderecoCompleto ? { enderecoCompleto } : {}),
+        ...(cidade ? { cidade } : {}),
+        ...(uf ? { uf } : {}),
+      }),
+    );
   }
 
   function addContato() {
@@ -179,11 +194,27 @@ export function ClienteFormModal({
                   placeholder="00.000.000/0000-00"
                 />
               </div>
-              <Button type="button" variant="secondary" onClick={handleBuscarDocumento} className="mb-0.5">
-                <Search className="h-3.5 w-3.5" />
-                Buscar {documentoLabel}
-              </Button>
+              {draft.tipoDocumento === "cnpj" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleBuscarDocumento}
+                  disabled={consulta.buscando || !cnpjValido(draft.documento)}
+                  className="mb-0.5"
+                >
+                  {consulta.buscando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                  {consulta.buscando ? "Buscando…" : "Buscar CNPJ"}
+                </Button>
+              )}
             </div>
+            {consulta.aviso && (
+              <p
+                role={consulta.aviso.tipo === "erro" ? "alert" : "status"}
+                className={consulta.aviso.tipo === "erro" ? "-mt-2 text-xs font-medium text-danger" : "-mt-2 text-xs font-medium text-success"}
+              >
+                {consulta.aviso.texto}
+              </p>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2">
               <Input label="Nome (como é chamado)" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
