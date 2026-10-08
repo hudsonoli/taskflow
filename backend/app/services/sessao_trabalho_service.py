@@ -8,7 +8,7 @@ from app.core.escopo import EscopoHorasNaoAutorizadoError, pode_consultar_horas_
 from app.models.sessao_trabalho import SessaoTrabalho
 from app.models.usuario import Usuario
 from app.repositories.departamento_repository import DepartamentoRepository
-from app.repositories.sessao_trabalho_repository import SessaoTrabalhoRepository
+from app.repositories.sessao_trabalho_repository import FiltrosSessaoAvancados, SessaoTrabalhoRepository
 from app.repositories.usuario_repository import UsuarioRepository
 
 # Mesmo conjunto usado em Projeto/Demanda: um usuário nestes estados não pode ser DEFINIDO
@@ -271,6 +271,7 @@ class SessaoTrabalhoService:
         usuario_ids: list[str] | None = None,
         departamento_ids: list[str] | None = None,
         demanda_query: str | None = None,
+        avancados: FiltrosSessaoAvancados | None = None,
     ) -> dict[str, int]:
         return self.repository.indicadores_trafego(
             db,
@@ -280,6 +281,7 @@ class SessaoTrabalhoService:
             usuario_ids=usuario_ids,
             departamento_ids=departamento_ids,
             demanda_query=demanda_query,
+            avancados=avancados,
         )
 
     def carga_trafego(
@@ -290,6 +292,7 @@ class SessaoTrabalhoService:
         usuario_ids: list[str] | None = None,
         departamento_ids: list[str] | None = None,
         demanda_query: str | None = None,
+        avancados: FiltrosSessaoAvancados | None = None,
     ) -> dict[str, list[dict]]:
         return self.repository.carga_trafego(
             db,
@@ -297,6 +300,7 @@ class SessaoTrabalhoService:
             usuario_ids=usuario_ids,
             departamento_ids=departamento_ids,
             demanda_query=demanda_query,
+            avancados=avancados,
         )
 
     def agora_trafego(
@@ -307,6 +311,7 @@ class SessaoTrabalhoService:
         usuario_ids: list[str] | None = None,
         departamento_ids: list[str] | None = None,
         demanda_query: str | None = None,
+        avancados: FiltrosSessaoAvancados | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
@@ -316,6 +321,7 @@ class SessaoTrabalhoService:
             usuario_ids=usuario_ids,
             departamento_ids=departamento_ids,
             demanda_query=demanda_query,
+            avancados=avancados,
             limit=limit,
             offset=offset,
         )

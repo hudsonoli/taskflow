@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Row, or_, select
@@ -16,6 +17,16 @@ from app.models.usuario import Usuario
 # regra de escopo (ver diagnóstico do Gerenciador de Arquivos). É um @staticmethod, chamável
 # sem instanciar DemandaRepository; não há acoplamento de estado, só da regra.
 from app.repositories.demanda_repository import DemandaRepository
+
+
+def _aplicar_lista(statement, coluna, incluir: Sequence[str] | None, excluir: Sequence[str] | None):
+    """Filtro de um campo: `incluir` = "é um de" (OR); `excluir` = "não é um de". NULL não é igual a nenhum valor,
+    então "não é" mantém as linhas em que o campo é NULL (um `NOT IN` puro as descartaria)."""
+    if incluir:
+        statement = statement.where(coluna.in_(list(incluir)))
+    if excluir:
+        statement = statement.where(or_(coluna.is_(None), coluna.not_in(list(excluir))))
+    return statement
 
 
 class DemandaArquivoRepository:
@@ -53,12 +64,18 @@ class DemandaArquivoRepository:
         *,
         escopo: EscopoDemanda,
         search: str | None = None,
-        cliente_id: str | None = None,
-        projeto_id: str | None = None,
-        demanda_id: str | None = None,
-        tipo: str | None = None,
-        status_layout: str | None = None,
-        usuario_id: str | None = None,
+        cliente_ids: Sequence[str] | None = None,
+        projeto_ids: Sequence[str] | None = None,
+        demanda_ids: Sequence[str] | None = None,
+        tipos: Sequence[str] | None = None,
+        status_layouts: Sequence[str] | None = None,
+        usuario_ids: Sequence[str] | None = None,
+        cliente_ids_excluir: Sequence[str] | None = None,
+        projeto_ids_excluir: Sequence[str] | None = None,
+        demanda_ids_excluir: Sequence[str] | None = None,
+        tipos_excluir: Sequence[str] | None = None,
+        status_layouts_excluir: Sequence[str] | None = None,
+        usuario_ids_excluir: Sequence[str] | None = None,
         data_inicio: datetime | None = None,
         data_fim: datetime | None = None,
         limit: int = 50,
@@ -73,6 +90,10 @@ class DemandaArquivoRepository:
         é `DemandaArquivoService.to_central_read`, não este repository (mesma divisão de
         responsabilidade do resto do projeto: repository traduz escopo em SQL, service decide
         formato de saída).
+
+        Filtros estruturados (filtros avançados): entre campos diferentes vale AND; dentro de um campo,
+        `*_ids`/`tipos`/... é OR ("é um de") e `*_excluir` é "não é um de" (ver `_aplicar_lista`). Tudo dentro
+        do SQL, antes do `limit`/`offset`.
         """
         if escopo.vazio:
             return []
@@ -101,18 +122,12 @@ class DemandaArquivoRepository:
         if predicado is not None:
             statement = statement.where(predicado)
 
-        if cliente_id:
-            statement = statement.where(Demanda.cliente_id == cliente_id)
-        if projeto_id:
-            statement = statement.where(Demanda.projeto_id == projeto_id)
-        if demanda_id:
-            statement = statement.where(DemandaArquivo.demanda_id == demanda_id)
-        if tipo:
-            statement = statement.where(DemandaArquivo.tipo == tipo)
-        if status_layout:
-            statement = statement.where(DemandaArquivo.status_layout == status_layout)
-        if usuario_id:
-            statement = statement.where(DemandaArquivo.enviado_por_usuario_id == usuario_id)
+        statement = _aplicar_lista(statement, Demanda.cliente_id, cliente_ids, cliente_ids_excluir)
+        statement = _aplicar_lista(statement, Demanda.projeto_id, projeto_ids, projeto_ids_excluir)
+        statement = _aplicar_lista(statement, DemandaArquivo.demanda_id, demanda_ids, demanda_ids_excluir)
+        statement = _aplicar_lista(statement, DemandaArquivo.tipo, tipos, tipos_excluir)
+        statement = _aplicar_lista(statement, DemandaArquivo.status_layout, status_layouts, status_layouts_excluir)
+        statement = _aplicar_lista(statement, DemandaArquivo.enviado_por_usuario_id, usuario_ids, usuario_ids_excluir)
         if data_inicio:
             statement = statement.where(DemandaArquivo.created_at >= data_inicio)
         if data_fim:

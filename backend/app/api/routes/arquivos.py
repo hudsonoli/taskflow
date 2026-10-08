@@ -13,11 +13,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.escopo import resolver_escopo_demanda
+from app.core.filtros_lista import parse_csv_enum, parse_csv_uuids
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.models.usuario import Usuario
 from app.schemas.demanda_arquivo import ArquivoCentralRead
 from app.services.demanda_arquivo_service import DemandaArquivoService
+
+TIPOS_ARQUIVO = ("anexo", "layout", "link")
+STATUS_LAYOUT_ARQUIVO = ("novo", "aprovado", "reprovado", "solicitar_alteracao")
 
 router = APIRouter(
     prefix="/arquivos",
@@ -50,6 +54,12 @@ def listar_arquivos_central(
     tipo: str | None = Query(default=None),
     status_layout: str | None = Query(default=None, alias="status"),
     usuario_id: str | None = Query(default=None, alias="usuarioId"),
+    cliente_id_excluir: str | None = Query(default=None, alias="clienteIdExcluir"),
+    projeto_id_excluir: str | None = Query(default=None, alias="projetoIdExcluir"),
+    demanda_id_excluir: str | None = Query(default=None, alias="demandaIdExcluir"),
+    tipo_excluir: str | None = Query(default=None, alias="tipoExcluir"),
+    status_layout_excluir: str | None = Query(default=None, alias="statusExcluir"),
+    usuario_id_excluir: str | None = Query(default=None, alias="usuarioIdExcluir"),
     data_inicio: datetime | None = Query(default=None, alias="dataInicio"),
     data_fim: datetime | None = Query(default=None, alias="dataFim"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -62,12 +72,18 @@ def listar_arquivos_central(
         db,
         escopo=escopo,
         search=search,
-        cliente_id=cliente_id,
-        projeto_id=projeto_id,
-        demanda_id=demanda_id,
-        tipo=tipo,
-        status_layout=status_layout,
-        usuario_id=usuario_id,
+        cliente_ids=parse_csv_uuids(cliente_id, "clienteId"),
+        projeto_ids=parse_csv_uuids(projeto_id, "projetoId"),
+        demanda_ids=parse_csv_uuids(demanda_id, "demandaId"),
+        tipos=parse_csv_enum(tipo, "tipo", TIPOS_ARQUIVO),
+        status_layouts=parse_csv_enum(status_layout, "status", STATUS_LAYOUT_ARQUIVO),
+        usuario_ids=parse_csv_uuids(usuario_id, "usuarioId"),
+        cliente_ids_excluir=parse_csv_uuids(cliente_id_excluir, "clienteIdExcluir"),
+        projeto_ids_excluir=parse_csv_uuids(projeto_id_excluir, "projetoIdExcluir"),
+        demanda_ids_excluir=parse_csv_uuids(demanda_id_excluir, "demandaIdExcluir"),
+        tipos_excluir=parse_csv_enum(tipo_excluir, "tipoExcluir", TIPOS_ARQUIVO),
+        status_layouts_excluir=parse_csv_enum(status_layout_excluir, "statusExcluir", STATUS_LAYOUT_ARQUIVO),
+        usuario_ids_excluir=parse_csv_uuids(usuario_id_excluir, "usuarioIdExcluir"),
         data_inicio=_normalize_datetime(data_inicio),
         data_fim=_normalize_datetime(data_fim),
         limit=limit,

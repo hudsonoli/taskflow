@@ -26,10 +26,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.escopo import EscopoHorasNaoAutorizadoError
+from app.core.filtros_lista import parse_csv_enum, parse_csv_uuids
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.permissoes import require_trafego_gerenciar
 from app.models.usuario import Usuario
+from app.repositories.sessao_trabalho_repository import FiltrosSessaoAvancados
 from app.schemas.evento import EventoCreate
 from app.schemas.sessao_trabalho import (
     SessaoTrabalhoAbrir,
@@ -89,6 +91,38 @@ def _parse_uuid_csv(raw: str | None, campo: str) -> list[str] | None:
                 detail=f"{campo} inválido: '{segmento}' não é um UUID",
             ) from exc
     return segmentos or None
+
+
+PRIORIDADES_DEMANDA = ("baixa", "media", "alta")
+
+
+def filtros_avancados_trafego(
+    usuario_ids_excluir: str | None = Query(default=None, alias="usuarioIdsExcluir"),
+    departamento_ids_excluir: str | None = Query(default=None, alias="departamentoIdsExcluir"),
+    cliente_ids: str | None = Query(default=None, alias="clienteIds"),
+    cliente_ids_excluir: str | None = Query(default=None, alias="clienteIdsExcluir"),
+    projeto_ids: str | None = Query(default=None, alias="projetoIds"),
+    projeto_ids_excluir: str | None = Query(default=None, alias="projetoIdsExcluir"),
+    prioridades: str | None = Query(default=None),
+    prioridades_excluir: str | None = Query(default=None, alias="prioridadesExcluir"),
+    prazo_inicio: datetime | None = Query(default=None, alias="prazoInicio"),
+    prazo_fim: datetime | None = Query(default=None, alias="prazoFim"),
+) -> FiltrosSessaoAvancados:
+    """Filtros avançados da Central de Tráfego (dependência compartilhada por indicadores/carga/agora): a MESMA
+    regra nos três, definida em `_filtros_sessao`. Listas em CSV (UUID ou valor de enumeração); valor inválido é
+    422. Datas de prazo devem ter timezone, como as demais datas desta API."""
+    return FiltrosSessaoAvancados(
+        usuario_ids_excluir=parse_csv_uuids(usuario_ids_excluir, "usuarioIdsExcluir"),
+        departamento_ids_excluir=parse_csv_uuids(departamento_ids_excluir, "departamentoIdsExcluir"),
+        cliente_ids=parse_csv_uuids(cliente_ids, "clienteIds"),
+        cliente_ids_excluir=parse_csv_uuids(cliente_ids_excluir, "clienteIdsExcluir"),
+        projeto_ids=parse_csv_uuids(projeto_ids, "projetoIds"),
+        projeto_ids_excluir=parse_csv_uuids(projeto_ids_excluir, "projetoIdsExcluir"),
+        prioridades=parse_csv_enum(prioridades, "prioridades", PRIORIDADES_DEMANDA),
+        prioridades_excluir=parse_csv_enum(prioridades_excluir, "prioridadesExcluir", PRIORIDADES_DEMANDA),
+        prazo_inicio=normalize_datetime(prazo_inicio) if prazo_inicio is not None else None,
+        prazo_fim=normalize_datetime(prazo_fim) if prazo_fim is not None else None,
+    )
 
 
 @router.post("/abrir", response_model=SessaoTrabalhoRead, status_code=status.HTTP_201_CREATED)
@@ -258,6 +292,7 @@ def indicadores_trafego(
     usuario_ids: str | None = Query(default=None, alias="usuarioIds"),
     departamento_ids: str | None = Query(default=None, alias="departamentoIds"),
     demanda_query: str | None = Query(default=None, alias="demandaQuery"),
+    avancados: FiltrosSessaoAvancados = Depends(filtros_avancados_trafego),
     current_user: Usuario = Depends(require_trafego_gerenciar()),
     db: Session = Depends(get_db),
 ):
@@ -280,6 +315,7 @@ def indicadores_trafego(
             usuario_ids=_parse_uuid_csv(usuario_ids, "usuarioIds"),
             departamento_ids=_parse_uuid_csv(departamento_ids, "departamentoIds"),
             demanda_query=demanda_query,
+            avancados=avancados,
         )
     )
 
@@ -291,6 +327,7 @@ def agora_trafego(
     demanda_query: str | None = Query(default=None, alias="demandaQuery"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    avancados: FiltrosSessaoAvancados = Depends(filtros_avancados_trafego),
     current_user: Usuario = Depends(require_trafego_gerenciar()),
     db: Session = Depends(get_db),
 ):
@@ -310,6 +347,7 @@ def agora_trafego(
             usuario_ids=_parse_uuid_csv(usuario_ids, "usuarioIds"),
             departamento_ids=_parse_uuid_csv(departamento_ids, "departamentoIds"),
             demanda_query=demanda_query,
+            avancados=avancados,
             limit=limit,
             offset=offset,
         )
@@ -321,6 +359,7 @@ def carga_trafego(
     usuario_ids: str | None = Query(default=None, alias="usuarioIds"),
     departamento_ids: str | None = Query(default=None, alias="departamentoIds"),
     demanda_query: str | None = Query(default=None, alias="demandaQuery"),
+    avancados: FiltrosSessaoAvancados = Depends(filtros_avancados_trafego),
     current_user: Usuario = Depends(require_trafego_gerenciar()),
     db: Session = Depends(get_db),
 ):
@@ -340,6 +379,7 @@ def carga_trafego(
             usuario_ids=_parse_uuid_csv(usuario_ids, "usuarioIds"),
             departamento_ids=_parse_uuid_csv(departamento_ids, "departamentoIds"),
             demanda_query=demanda_query,
+            avancados=avancados,
         )
     )
 

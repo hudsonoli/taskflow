@@ -8,6 +8,7 @@ Departamento por nome, `0008`; aqui sempre foi id). Pós expand/contract (`0015`
 
 import unicodedata
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select, text
@@ -48,10 +49,59 @@ def _mapa_acentos() -> tuple[str, str]:
 _ACENTOS_ORIGEM, _ACENTOS_DESTINO = _mapa_acentos()
 
 
+@dataclass(frozen=True)
+class FiltrosSessaoAvancados:
+    """Filtros avançados da Central de Tráfego (além de usuário/departamento "é um de" e da busca de Demanda).
+
+    Entre campos diferentes vale AND; dentro de um campo, `x` é "é um de" (OR) e `x_excluir` é "não é um de".
+    Cliente, projeto, prioridade e prazo são atributos da DEMANDA da sessão (junção à esquerda, mesma empresa):
+    sessão cuja Demanda não existe não casa com "é", e casa com "não é" (NULL não é igual a nenhum valor).
+    `prazo_inicio`/`prazo_fim` delimitam `demandas.prazo_etapa_atual` (inclusivo); demanda sem prazo nunca casa.
+    """
+
+    usuario_ids_excluir: Sequence[str] | None = None
+    departamento_ids_excluir: Sequence[str] | None = None
+    cliente_ids: Sequence[str] | None = None
+    cliente_ids_excluir: Sequence[str] | None = None
+    projeto_ids: Sequence[str] | None = None
+    projeto_ids_excluir: Sequence[str] | None = None
+    prioridades: Sequence[str] | None = None
+    prioridades_excluir: Sequence[str] | None = None
+    prazo_inicio: datetime | None = None
+    prazo_fim: datetime | None = None
+
+    @property
+    def exige_demanda(self) -> bool:
+        return any(
+            (
+                self.cliente_ids,
+                self.cliente_ids_excluir,
+                self.projeto_ids,
+                self.projeto_ids_excluir,
+                self.prioridades,
+                self.prioridades_excluir,
+                self.prazo_inicio,
+                self.prazo_fim,
+            )
+        )
+
+
+def _lista_demanda(
+    clausulas: list[str], parametros: dict, coluna: str, nome: str, incluir: Sequence[str] | None, excluir: Sequence[str] | None
+) -> None:
+    if incluir:
+        clausulas.append(f"{coluna} = ANY(:{nome})")
+        parametros[nome] = list(incluir)
+    if excluir:
+        clausulas.append(f"({coluna} IS NULL OR {coluna} <> ALL(:{nome}_excluir))")
+        parametros[f"{nome}_excluir"] = list(excluir)
+
+
 def _filtros_sessao(
     usuario_ids: Sequence[str] | None,
     departamento_ids: Sequence[str] | None,
     demanda_query: str | None,
+    avancados: FiltrosSessaoAvancados | None = None,
 ) -> tuple[str, list[str], dict]:
     """Filtros de sessão da tela de Tráfego (`filterSessoes` no cliente), compartilhados pelos
     agregados de D3C1 (`indicadores_trafego`) e D3C2 (`carga_trafego`) — a MESMA regra, em um
@@ -62,7 +112,9 @@ def _filtros_sessao(
       departamento nunca casa quando o filtro está ativo); vazio/None = sem filtro;
     - `demanda_query`: busca `"<demandaId> #<número> — <nome>"` (ou `"<demandaId> <demandaId>"`
       quando a Demanda não existe), sem acento/caixa, SEM aparar a consulta (o cliente só usa
-      `trim()` para decidir se há filtro). Só aplicada se `demanda_query.strip()` não for vazio.
+      `trim()` para decidir se há filtro). Só aplicada se `demanda_query.strip()` não for vazio;
+    - `avancados` (`FiltrosSessaoAvancados`): "não é um de" de usuário/departamento e os filtros por atributo da
+      Demanda (cliente, projeto, prioridade, prazo). Os que dependem da Demanda ligam a junção abaixo.
     """
     clausulas: list[str] = []
     parametros: dict = {}
@@ -74,7 +126,26 @@ def _filtros_sessao(
         clausulas.append("s.departamento_id = ANY(:departamento_ids)")
         parametros["departamento_ids"] = list(departamento_ids)
 
+    if avancados is not None:
+        if avancados.usuario_ids_excluir:
+            clausulas.append("(s.usuario_id IS NULL OR s.usuario_id <> ALL(:usuario_ids_excluir))")
+            parametros["usuario_ids_excluir"] = list(avancados.usuario_ids_excluir)
+        if avancados.departamento_ids_excluir:
+            clausulas.append("(s.departamento_id IS NULL OR s.departamento_id <> ALL(:departamento_ids_excluir))")
+            parametros["departamento_ids_excluir"] = list(avancados.departamento_ids_excluir)
+        _lista_demanda(clausulas, parametros, "d.cliente_id", "cliente_ids", avancados.cliente_ids, avancados.cliente_ids_excluir)
+        _lista_demanda(clausulas, parametros, "d.projeto_id", "projeto_ids", avancados.projeto_ids, avancados.projeto_ids_excluir)
+        _lista_demanda(clausulas, parametros, "d.prioridade", "prioridades", avancados.prioridades, avancados.prioridades_excluir)
+        if avancados.prazo_inicio is not None:
+            clausulas.append("d.prazo_etapa_atual >= :prazo_inicio")
+            parametros["prazo_inicio"] = avancados.prazo_inicio
+        if avancados.prazo_fim is not None:
+            clausulas.append("d.prazo_etapa_atual <= :prazo_fim")
+            parametros["prazo_fim"] = avancados.prazo_fim
+
     juncao_demanda = ""
+    if avancados is not None and avancados.exige_demanda:
+        juncao_demanda = "LEFT JOIN demandas d ON d.id = s.demanda_id AND d.empresa_id = s.empresa_id"
     if demanda_query is not None and demanda_query.strip():
         # Demanda é junção À ESQUERDA: sessão cuja Demanda não existe continua no universo
         # (o cliente também a mantinha, casando só pelo próprio `demandaId`). `d.empresa_id`
@@ -278,6 +349,7 @@ class SessaoTrabalhoRepository:
         usuario_ids: Sequence[str] | None = None,
         departamento_ids: Sequence[str] | None = None,
         demanda_query: str | None = None,
+        avancados: FiltrosSessaoAvancados | None = None,
     ) -> dict[str, int]:
         """D2-D3C1 — métricas de `TrafegoResumoCards`/`TempoOperacionalCard`, UMA consulta
         agregada sobre o universo INTEGRAL (nunca a listagem paginada de 100). Reproduz, campo
@@ -321,7 +393,7 @@ class SessaoTrabalhoRepository:
             clausulas.append("s.status = 'ativa'")
 
         juncao_demanda, clausulas_filtros, parametros_filtros = _filtros_sessao(
-            usuario_ids, departamento_ids, demanda_query
+            usuario_ids, departamento_ids, demanda_query, avancados
         )
         clausulas.extend(clausulas_filtros)
         parametros.update(parametros_filtros)
@@ -381,6 +453,7 @@ class SessaoTrabalhoRepository:
         usuario_ids: Sequence[str] | None = None,
         departamento_ids: Sequence[str] | None = None,
         demanda_query: str | None = None,
+        avancados: FiltrosSessaoAvancados | None = None,
     ) -> Mapping[str, Sequence[dict]]:
         """D2-D3C2 — "Carga por usuário/departamento/equipe" da Central de Tráfego: três
         agrupamentos agregados em SQL (3 consultas, NÃO proporcionais ao número de grupos) sobre
@@ -421,7 +494,7 @@ class SessaoTrabalhoRepository:
         como o fallback do cliente.
         """
         juncao_demanda, clausulas_filtros, parametros_filtros = _filtros_sessao(
-            usuario_ids, departamento_ids, demanda_query
+            usuario_ids, departamento_ids, demanda_query, avancados
         )
         clausulas = ["s.empresa_id = :empresa_id", "s.status = 'ativa'", *clausulas_filtros]
         parametros = {"empresa_id": empresa_id, **parametros_filtros}
@@ -508,6 +581,7 @@ class SessaoTrabalhoRepository:
         usuario_ids: Sequence[str] | None = None,
         departamento_ids: Sequence[str] | None = None,
         demanda_query: str | None = None,
+        avancados: FiltrosSessaoAvancados | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> Mapping[str, object]:
@@ -539,7 +613,7 @@ class SessaoTrabalhoRepository:
         `decorrido_segundos`: mesmo cálculo de `elapsedSeconds` (`GREATEST(0, FLOOR(...))`),
         "as of" `NOW()` — o frontend o faz andar sem novo fetch.
         """
-        _, clausulas_filtros, parametros_filtros = _filtros_sessao(usuario_ids, departamento_ids, demanda_query)
+        _, clausulas_filtros, parametros_filtros = _filtros_sessao(usuario_ids, departamento_ids, demanda_query, avancados)
         clausulas = ["s.empresa_id = :empresa_id", "s.status = 'ativa'", *clausulas_filtros]
         parametros = {"empresa_id": empresa_id, **parametros_filtros}
 
