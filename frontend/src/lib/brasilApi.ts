@@ -1,5 +1,6 @@
-// Consulta de CNPJ na BrasilAPI (integração PÚBLICA: sem chave nem segredo) — lógica compartilhada por Clientes e
-// Fornecedores. Parte pura (sem React, sem `server-only`), testável com `node --test`:
+// Consultas na BrasilAPI (integração PÚBLICA: sem chave nem segredo): CNPJ (Clientes e Fornecedores) e CEP (Usuários).
+// Compartilham a MESMA infraestrutura — chamada ao BFF, timeout, abort, classificação de falhas e mensagens —, cada uma
+// com o seu modelo de dados. Parte pura (sem React, sem `server-only`), testável com `node --test`:
 //
 //   • validação/normalização do CNPJ (14 dígitos, dígitos verificadores) — só CNPJ válido é consultado; CPF nunca;
 //   • mapeamento da resposta da BrasilAPI → `DadosConsultaCnpj` (só propriedades conhecidas, tudo opcional);
@@ -36,6 +37,7 @@ export const MENSAGENS_CONSULTA: Record<FalhaConsulta, string> = {
 };
 
 export const URL_BRASILAPI_CNPJ = "https://brasilapi.com.br/api/cnpj/v1";
+export const URL_BRASILAPI_CEP = "https://brasilapi.com.br/api/cep/v2";
 // A BrasilAPI recusa (403) clientes sem User-Agent identificável (o padrão do Node/Python cai nesse filtro).
 export const USER_AGENT_CONSULTA = "TaskFloww/1.0";
 export const TIMEOUT_SERVIDOR_MS = 8_000;
@@ -66,7 +68,7 @@ function texto(valor: unknown, max = 255): string | null {
   return limpo ? limpo.slice(0, max) : null;
 }
 
-function formatarCep(valor: unknown): string | null {
+function cepDaResposta(valor: unknown): string | null {
   const digitos = typeof valor === "string" || typeof valor === "number" ? somenteDigitos(String(valor)) : "";
   return digitos.length === 8 ? `${digitos.slice(0, 5)}-${digitos.slice(5)}` : null;
 }
@@ -100,7 +102,7 @@ export function mapearRespostaBrasilApi(bruto: unknown): DadosConsultaCnpj | nul
   return {
     razaoSocial,
     nomeFantasia,
-    cep: formatarCep(r.cep),
+    cep: cepDaResposta(r.cep),
     bairro: texto(r.bairro),
     enderecoCompleto,
     cidade: texto(r.municipio),
@@ -150,40 +152,124 @@ export function camposParaFormulario(dados: DadosConsultaCnpj, ufsValidas: reado
 }
 
 type Fetch = (entrada: string, init?: RequestInit) => Promise<Response>;
+type OpcoesConsulta = { fetchImpl?: Fetch; timeoutMs?: number };
+type Resultado<D> = { ok: true; dados: D } | { ok: false; falha: FalhaConsulta; mensagem: string };
+
+const FALHAS: readonly FalhaConsulta[] = ["invalido", "nao_encontrado", "limite", "indisponivel", "timeout", "rede"];
 
 /**
- * Consulta um CNPJ pelo BFF. Nunca lança: toda falha vira `{ ok: false, falha, mensagem }`. CNPJ inválido nem sai do
- * navegador. Cancelável por timeout (aborta a requisição) e por rede indisponível.
+ * Infraestrutura ÚNICA das consultas pelo BFF (CNPJ e CEP): chamada, timeout (aborta a requisição), classificação das
+ * falhas (corpo do BFF → senão pelo status HTTP) e rede indisponível. Nunca lança: toda falha vira
+ * `{ ok: false, falha, mensagem }`. O modelo de dados fica com quem chama (`normalizarDados`).
  */
-export async function consultarCnpj(
-  valor: string,
-  opcoes: { fetchImpl?: Fetch; timeoutMs?: number } = {},
-): Promise<ResultadoConsulta> {
-  const falhar = (falha: FalhaConsulta): ResultadoConsulta => ({ ok: false, falha, mensagem: MENSAGENS_CONSULTA[falha] });
-  if (!cnpjValido(valor)) return falhar("invalido");
-
+async function executarConsultaBff<D>(
+  caminho: string,
+  normalizarDados: (bruto: unknown) => D | null,
+  mensagens: Record<FalhaConsulta, string>,
+  opcoes: OpcoesConsulta,
+): Promise<Resultado<D>> {
+  const falhar = (falha: FalhaConsulta): Resultado<D> => ({ ok: false, falha, mensagem: mensagens[falha] });
   const fetchImpl: Fetch = opcoes.fetchImpl ?? ((entrada, init) => fetch(entrada, init));
   const controlador = new AbortController();
   const temporizador = setTimeout(() => controlador.abort(), opcoes.timeoutMs ?? TIMEOUT_CLIENTE_MS);
   try {
-    const resposta = await fetchImpl(`/api/consulta/cnpj/${somenteDigitos(valor)}`, { cache: "no-store", signal: controlador.signal });
+    const resposta = await fetchImpl(caminho, { cache: "no-store", signal: controlador.signal });
     if (resposta.ok) {
       const corpo = (await resposta.json().catch(() => null)) as { dados?: unknown } | null;
-      const dados = mapearDadosJaNormalizados(corpo?.dados);
+      const dados = normalizarDados(corpo?.dados);
       return dados ? { ok: true, dados } : falhar("nao_encontrado");
     }
     const corpo = (await resposta.json().catch(() => null)) as { falha?: unknown } | null;
-    const falha = corpo?.falha;
-    if (falha === "invalido" || falha === "nao_encontrado" || falha === "limite" || falha === "indisponivel" || falha === "timeout" || falha === "rede") {
-      return falhar(falha);
-    }
-    return falhar(falhaPorStatus(resposta.status));
+    const falha = FALHAS.find((f) => f === corpo?.falha);
+    return falhar(falha ?? falhaPorStatus(resposta.status));
   } catch (erro) {
     const abortou = erro instanceof Error && (erro.name === "AbortError" || erro.name === "TimeoutError");
     return falhar(abortou ? "timeout" : "rede");
   } finally {
     clearTimeout(temporizador);
   }
+}
+
+/** Consulta um CNPJ pelo BFF. CNPJ inválido (ou CPF) nem sai do navegador. */
+export async function consultarCnpj(valor: string, opcoes: OpcoesConsulta = {}): Promise<ResultadoConsulta> {
+  if (!cnpjValido(valor)) return { ok: false, falha: "invalido", mensagem: MENSAGENS_CONSULTA.invalido };
+  return executarConsultaBff(`/api/consulta/cnpj/${somenteDigitos(valor)}`, mapearDadosJaNormalizados, MENSAGENS_CONSULTA, opcoes);
+}
+
+// ── CEP ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export type DadosConsultaCep = {
+  /** só a rua/avenida (sem número nem complemento — esses a pessoa digita) */
+  logradouro: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+};
+
+export type ResultadoConsultaCep = Resultado<DadosConsultaCep>;
+
+export const MENSAGENS_CONSULTA_CEP: Record<FalhaConsulta, string> = {
+  invalido: "Informe um CEP completo (8 dígitos) para buscar o endereço.",
+  nao_encontrado: "Não foi possível localizar esse CEP. Você pode preencher o endereço manualmente.",
+  limite: "Muitas consultas em pouco tempo. Aguarde alguns segundos ou preencha o endereço manualmente.",
+  indisponivel: "O serviço de consulta de CEP está indisponível agora. Você pode preencher o endereço manualmente.",
+  timeout: "A consulta de CEP demorou demais e foi interrompida. Preencha o endereço manualmente se preferir.",
+  rede: "Não foi possível consultar o CEP agora (sem conexão com o serviço). Preencha o endereço manualmente.",
+};
+
+/** CEP completo: exatamente 8 dígitos (com ou sem máscara). */
+export function cepValido(valor: string): boolean {
+  return somenteDigitos(valor).length === 8;
+}
+
+/** Máscara de digitação `00000-000` (no máximo 8 dígitos). */
+export function formatarCep(valor: string): string {
+  const digitos = somenteDigitos(valor).slice(0, 8);
+  return digitos.length > 5 ? `${digitos.slice(0, 5)}-${digitos.slice(5)}` : digitos;
+}
+
+/** Resposta de `GET /api/cep/v2/{cep}` → endereço. `null` se não traz nem rua nem cidade (nada utilizável). */
+export function mapearRespostaBrasilApiCep(bruto: unknown): DadosConsultaCep | null {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return null;
+  const r = bruto as Record<string, unknown>;
+  const uf = texto(r.state, 2)?.toUpperCase() ?? null;
+  const dados: DadosConsultaCep = {
+    logradouro: texto(r.street),
+    bairro: texto(r.neighborhood),
+    cidade: texto(r.city),
+    uf: uf && /^[A-Z]{2}$/.test(uf) ? uf : null,
+  };
+  return dados.logradouro || dados.cidade ? dados : null;
+}
+
+export type CamposDoEndereco = Partial<{ enderecoCompleto: string; bairro: string; cidade: string; uf: string }>;
+
+/**
+ * Campos de endereço que a consulta de CEP pode preencher — SÓ os que vieram com valor (vazio/null da API nunca apaga o que a
+ * pessoa digitou). O número e o complemento NUNCA são preenchidos (a API não os conhece). `uf` só entra se for opção do formulário.
+ */
+export function camposCepParaFormulario(dados: DadosConsultaCep, ufsValidas: readonly string[]): CamposDoEndereco {
+  const campos: CamposDoEndereco = {};
+  if (dados.logradouro) campos.enderecoCompleto = dados.logradouro;
+  if (dados.bairro) campos.bairro = dados.bairro;
+  if (dados.cidade) campos.cidade = dados.cidade;
+  if (dados.uf && ufsValidas.includes(dados.uf)) campos.uf = dados.uf;
+  return campos;
+}
+
+/** O BFF já devolve `DadosConsultaCep`; revalida o formato antes de chegar ao formulário. */
+function mapearEnderecoJaNormalizado(bruto: unknown): DadosConsultaCep | null {
+  if (!bruto || typeof bruto !== "object") return null;
+  const d = bruto as Record<string, unknown>;
+  const campo = (valor: unknown): string | null => (typeof valor === "string" && valor.trim() ? valor : null);
+  const dados: DadosConsultaCep = { logradouro: campo(d.logradouro), bairro: campo(d.bairro), cidade: campo(d.cidade), uf: campo(d.uf) };
+  return dados.logradouro || dados.cidade ? dados : null;
+}
+
+/** Consulta um CEP pelo BFF. CEP incompleto nem sai do navegador. */
+export async function consultarCep(valor: string, opcoes: OpcoesConsulta = {}): Promise<ResultadoConsultaCep> {
+  if (!cepValido(valor)) return { ok: false, falha: "invalido", mensagem: MENSAGENS_CONSULTA_CEP.invalido };
+  return executarConsultaBff(`/api/consulta/cep/${somenteDigitos(valor)}`, mapearEnderecoJaNormalizado, MENSAGENS_CONSULTA_CEP, opcoes);
 }
 
 /** O BFF já devolve `DadosConsultaCnpj`; revalida o formato para nunca confiar às cegas no que chega ao formulário. */

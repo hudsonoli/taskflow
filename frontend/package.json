@@ -16,7 +16,8 @@
     "test:multitenant": "node --test src/lib/multitenant.test.ts",
     "test:onboarding": "node --test src/lib/onboarding.test.ts",
     "test:platform-dashboard": "node --test src/lib/plataformaDashboard.test.ts",
-    "test:gestor-departamento": "node --test src/lib/gestorDepartamento.test.ts"
+    "test:gestor-departamento": "node --test src/lib/gestorDepartamento.test.ts",
+    "test:cep": "node --test src/lib/cep.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

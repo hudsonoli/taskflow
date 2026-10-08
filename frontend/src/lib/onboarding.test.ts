@@ -85,8 +85,8 @@ test("resposta parcial: campos ausentes/nulos viram null; sem nome nenhum não �
 test("número 'SN' vira S/N e o User-Agent identificável é enviado pelo BFF", () => {
   const d = mapearRespostaBrasilApi({ razao_social: "X LTDA", logradouro: "SAUN QUADRA 5", numero: "SN", complemento: null });
   assert.equal(d?.enderecoCompleto, "SAUN QUADRA 5, S/N");
-  const rota = ler("app/api/consulta/cnpj/[cnpj]/route.ts");
-  assert.match(rota, /"User-Agent": USER_AGENT_CONSULTA/);
+  const bff = ler("lib/server/brasilApiBff.ts"); // infraestrutura de servidor compartilhada (CNPJ e CEP)
+  assert.match(bff, /"User-Agent": USER_AGENT_CONSULTA/);
   assert.match(ler("lib/brasilApi.ts"), /USER_AGENT_CONSULTA = "TaskFloww\/1\.0"/);
 });
 
@@ -212,16 +212,19 @@ test("os formulários só preenchem campos que existem no rascunho e só com val
 });
 
 test("BFF da consulta: exige sessão, valida o CNPJ, tem timeout, não envia nem guarda dado do usuário e não tem segredo", () => {
-  const rota = ler("app/api/consulta/cnpj/[cnpj]/route.ts");
-  const codigo = semComentarios(rota);
-  assert.match(codigo, /SESSION_COOKIE_NAME/);
-  assert.match(codigo, /status: 401/);
-  assert.match(codigo, /cnpjValido\(digitos\)/);
-  assert.match(codigo, /AbortSignal\.timeout\(TIMEOUT_SERVIDOR_MS\)/);
-  assert.match(codigo, /erro\("timeout", 504\)/);
-  assert.match(codigo, /erro\("rede", 502\)/);
-  assert.doesNotMatch(codigo, /process\.env|API_KEY|apikey|Authorization|token|secret|senha/i); // integração pública, sem segredo
-  assert.doesNotMatch(codigo, /console\./);
+  const rota = semComentarios(ler("app/api/consulta/cnpj/[cnpj]/route.ts"));
+  const bff = semComentarios(ler("lib/server/brasilApiBff.ts")); // timeout/sessão/classificação compartilhados com o CEP
+  assert.match(rota, /exigirSessaoTenant\(\)/);
+  assert.match(bff, /SESSION_COOKIE_NAME/);
+  assert.match(bff, /status: 401/);
+  assert.match(rota, /cnpjValido\(digitos\)/);
+  assert.match(bff, /AbortSignal\.timeout\(TIMEOUT_SERVIDOR_MS\)/);
+  assert.match(bff, /timeout: 504/);
+  assert.match(bff, /rede: 502/);
+  for (const codigo of [rota, bff]) {
+    assert.doesNotMatch(codigo, /process\.env|API_KEY|apikey|Authorization|token|secret|senha/i); // integração pública, sem segredo
+    assert.doesNotMatch(codigo, /console\./);
+  }
   // a URL externa vive num único lugar
   assert.match(ler("lib/brasilApi.ts"), /https:\/\/brasilapi\.com\.br\/api\/cnpj\/v1/);
 });

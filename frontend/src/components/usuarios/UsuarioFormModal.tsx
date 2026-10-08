@@ -11,6 +11,8 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
 import { generateId } from "@/lib/ids";
 import { formatCPF } from "@/lib/mascaras";
+import { formatarCep } from "@/lib/brasilApi";
+import { useConsultaCep } from "@/lib/useConsultaCep";
 import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
 import { opcoesDePerfil, perfilTecnico, podeAlterarPerfilDe } from "@/lib/autoridadeUsuarios";
 import { useAppData } from "@/lib/AppDataContext";
@@ -85,6 +87,8 @@ export function UsuarioFormModal({
   // usuário novo. Na edição, mantém o campo "Nome" único de sempre: separar um nome já
   // salvo em nome/sobrenome seria uma suposição, não um fato.
   const [sobrenome, setSobrenome] = useState("");
+  // Endereço automático: ao completar o CEP (8 dígitos) preenche rua, bairro, cidade e UF; número/complemento ficam com a pessoa.
+  const consultaCep = useConsultaCep(ufsDisponiveis);
 
   const editing = usuario !== undefined;
   const canSave =
@@ -272,7 +276,34 @@ export function UsuarioFormModal({
         {effectiveTab === "endereco" && (
           <>
             <div className="grid gap-4 md:grid-cols-2">
-              <Input label="CEP" value={draft.cep} onChange={(event) => updateDraft({ cep: event.target.value })} />
+              <div>
+                <Input
+                  label="CEP"
+                  value={draft.cep}
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  placeholder="00000-000"
+                  onChange={(event) => {
+                    const cep = formatarCep(event.target.value);
+                    updateDraft({ cep });
+                    consultaCep.agendar(cep, updateDraft);
+                  }}
+                />
+                {consultaCep.aviso && (
+                  <p
+                    role={consultaCep.aviso.tipo === "erro" ? "alert" : "status"}
+                    className={
+                      consultaCep.aviso.tipo === "erro"
+                        ? "mt-1.5 text-xs font-medium text-danger"
+                        : consultaCep.aviso.tipo === "sucesso"
+                          ? "mt-1.5 text-xs font-medium text-success"
+                          : "mt-1.5 text-xs font-medium text-fg-subtle"
+                    }
+                  >
+                    {consultaCep.aviso.texto}
+                  </p>
+                )}
+              </div>
               <Input label="Bairro" value={draft.bairro} onChange={(event) => updateDraft({ bairro: event.target.value })} />
             </div>
 
