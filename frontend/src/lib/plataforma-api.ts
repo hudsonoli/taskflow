@@ -10,6 +10,7 @@ import type {
   PlataformaEmpresaUpdate,
   PlataformaGestorCreate,
   PlataformaGestorCriado,
+  PlataformaDashboard,
   PlataformaMe,
   PlataformaUsuario,
 } from "@/types/plataforma";
@@ -74,6 +75,9 @@ async function pedir<T>(caminho: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const obterMePlataforma = () => pedir<PlataformaMe>("/me");
+
+/** Métricas agregadas de adoção/uso por empresa (sem dados individuais nem conteúdo operacional). */
+export const obterDashboardPlataforma = () => pedir<PlataformaDashboard>("/dashboard");
 
 // ── Empresas ──────────────────────────────────────────────────────────────────────────────────────
 export function listarEmpresasPlataforma(filtros: { status?: string; search?: string } = {}): Promise<PlataformaEmpresa[]> {

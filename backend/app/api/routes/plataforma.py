@@ -25,6 +25,7 @@ from app.dependencies.plataforma import ContextoPlataforma, require_platform_adm
 from app.models.usuario import Usuario
 from app.schemas.configuracao_personalizacao import PersonalizacaoRead, PersonalizacaoUpdate
 from app.schemas.empresa import EmpresaCreate, EmpresaInativar, EmpresaUpdate
+from app.schemas.plataforma_dashboard import PlataformaDashboardRead
 from app.schemas.plataforma import (
     PlataformaAcessoRead,
     PlataformaEmpresaRead,
@@ -41,6 +42,7 @@ from app.services.empresa_service import (
     EmpresaInvalidTransitionError,
     EmpresaNotFoundError,
 )
+from app.services.plataforma_dashboard_service import PlataformaDashboardService
 from app.services.plataforma_service import (
     PlataformaAcessoNegadoError,
     PlataformaGestorSenhaError,
@@ -52,6 +54,7 @@ from app.services.usuario_service import UsuarioArquivadoConflictError, UsuarioC
 
 router = APIRouter(prefix="/plataforma", tags=["plataforma"])
 plataforma_service = PlataformaService()
+plataforma_dashboard_service = PlataformaDashboardService()
 
 
 def _tratar_erro(exc: Exception) -> None:
@@ -93,6 +96,18 @@ def iniciar_sessao(current_user: Usuario = Depends(get_current_user_password_rea
 @router.get("/me", response_model=PlataformaMeRead)
 def me(ctx: ContextoPlataforma = Depends(require_platform_admin)):
     return plataforma_service.me(ctx.administrador, ctx.usuario)
+
+
+# --------------------------------------------------------------------------------------
+# Dashboard (métricas agregadas de adoção/uso — nenhum conteúdo operacional)
+# --------------------------------------------------------------------------------------
+
+
+@router.get("/dashboard", response_model=PlataformaDashboardRead)
+def dashboard(ctx: ContextoPlataforma = Depends(require_platform_admin), db: Session = Depends(get_db)):
+    """Resumo global + uso por empresa + "precisa de atenção". Só contagens e datas de acesso: nunca nomes de usuários,
+    clientes, demandas, comentários ou documentos. Exclusivo do Administrador da Plataforma."""
+    return plataforma_dashboard_service.montar(db)
 
 
 # --------------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
-import { PlataformaHomeView } from "@/components/plataforma/PlataformaHomeView";
+import { PlataformaDashboardView } from "@/components/plataforma/PlataformaDashboardView";
 
 export default function PlataformaPage() {
-  return <PlataformaHomeView />;
+  return <PlataformaDashboardView />;
 }

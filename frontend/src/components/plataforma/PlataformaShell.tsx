@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { usePlataforma } from "@/components/plataforma/PlataformaContext";
 
 const ITENS = [
-  { href: "/plataforma", rotulo: "Início", icone: LayoutDashboard, exato: true },
+  { href: "/plataforma", rotulo: "Dashboard", icone: LayoutDashboard, exato: true },
   { href: "/plataforma/empresas", rotulo: "Empresas", icone: Building2, exato: false },
 ] as const;
 

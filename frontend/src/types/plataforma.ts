@@ -61,3 +61,54 @@ export type PlataformaMe = {
   ativo: boolean;
   criadoEm: string;
 };
+
+// ── Dashboard (GET /plataforma/dashboard): só métricas agregadas e datas de acesso ──────────────────────────
+export type DashboardResumo = {
+  empresasTotal: number;
+  empresasAtivas: number;
+  usuarios: number;
+  cadastrados: number;
+  jaAcessaram: number;
+  nuncaAcessaram: number;
+  ativos7d: number;
+  ativos30d: number;
+  gestores: number;
+};
+
+export type DashboardEmpresa = {
+  id: string;
+  nome: string;
+  nomeFantasia: string | null;
+  slug: string;
+  status: PlataformaEmpresaStatus;
+  createdAt: string;
+  /** usuários humanos utilizáveis (ativos, com acesso, sem conta de sistema) */
+  usuarios: number;
+  /** inclui inativos/bloqueados; arquivados e conta de sistema nunca entram */
+  cadastrados: number;
+  jaAcessaram: number;
+  nuncaAcessaram: number;
+  ativos7d: number;
+  ativos30d: number;
+  gestores: number;
+  /** último LOGIN de qualquer usuário humano (só o login é rastreado) */
+  ultimoAcesso: string | null;
+  projetos: number;
+  demandas: number;
+};
+
+export type DashboardAtencao = {
+  tipo: "sem_gestor" | "nunca_acessaram" | "sem_acesso_30d";
+  severidade: "aviso" | "info";
+  empresaId: string;
+  empresaNome: string;
+  mensagem: string;
+  quantidade: number | null;
+};
+
+export type PlataformaDashboard = {
+  geradoEm: string;
+  resumo: DashboardResumo;
+  empresas: DashboardEmpresa[];
+  atencoes: DashboardAtencao[];
+};
