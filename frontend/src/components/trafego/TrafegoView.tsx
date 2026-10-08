@@ -1,12 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAgoraTrafegoSessoes, getCargaTrafegoSessoes, getIndicadoresTrafegoSessoes, getResumoTrafegoSessoes } from "@/lib/api";
-import { getResumoOperacional, listDiretorioDemandas, type ResumoOperacional } from "@/lib/api-backend";
+import {
+  getResumoOperacional,
+  listDiretorioClientes,
+  listDiretorioDemandas,
+  listDiretorioProjetos,
+  type ClienteDiretorioItem,
+  type ProjetoDiretorioItem,
+  type ResumoOperacional,
+} from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { podeAcessarCentralTrafego } from "@/lib/escopo-operacional";
+import { filtrosTrafegoParaApi } from "@/lib/filtros-trafego";
 import { cargaComRelogio, periodoParaDataInicio, resumoDeIndicadores } from "@/lib/trafego";
+import { useFiltrosNaUrl } from "@/lib/useFiltrosNaUrl";
 import { useNow } from "@/lib/useNow";
 import type { DemandaDiretorio } from "@/types/demanda";
 import type { TrafegoAgoraLinha, TrafegoCarga, TrafegoFiltersState, TrafegoIndicadores } from "@/types/trafego";
@@ -21,22 +31,33 @@ import { TrafegoHeader } from "./TrafegoHeader";
 import { TrafegoIndicadoresDemandas } from "./TrafegoIndicadoresDemandas";
 import { TrafegoIniciarSessao } from "./TrafegoIniciarSessao";
 import { TrafegoResumoCards } from "./TrafegoResumoCards";
+import { useDefinicoesFiltrosTrafego } from "./useDefinicoesFiltrosTrafego";
 
 // D2-D3C3 — tamanho da página de "Quem está trabalhando agora" (+ "Carregar mais").
 const TAMANHO_PAGINA_AGORA = 50;
 
-const initialFilters: TrafegoFiltersState = {
-  usuarioIds: [],
-  departamentoIds: [],
-  demandaQuery: "",
-  status: "todos",
-  periodo: "24h",
-};
+const PERIODOS_VALIDOS: ReadonlyArray<TrafegoFiltersState["periodo"]> = ["hoje", "24h", "7d", "30d"];
+const PERIODO_PADRAO: TrafegoFiltersState["periodo"] = "24h";
+
+/** Período vindo da URL: só os quatro valores conhecidos; qualquer outro volta ao padrão (nunca confia no parâmetro). */
+function periodoDaUrl(valor: string | null): TrafegoFiltersState["periodo"] {
+  return PERIODOS_VALIDOS.find((periodo) => periodo === valor) ?? PERIODO_PADRAO;
+}
 
 export function TrafegoView() {
   const { usuarioAtual } = useAppData();
   const { departamentos } = useDiretorioDepartamentos();
-  const [filters, setFilters] = useState<TrafegoFiltersState>(initialFilters);
+  // Filtros avançados + período + busca de Demanda vivem na URL (refresh, link compartilhado e "voltar" preservam a tela).
+  // Cliente/projeto são diretórios carregados uma vez; o usuário é buscado no servidor pelo próprio filtro.
+  const [clientes, setClientes] = useState<ClienteDiretorioItem[]>([]);
+  const [projetos, setProjetos] = useState<ProjetoDiretorioItem[]>([]);
+  const [diretoriosProntos, setDiretoriosProntos] = useState(false);
+  const definicoesFiltros = useDefinicoesFiltrosTrafego({ departamentos, clientes, projetos, diretoriosProntos });
+  const { filtros, definirFiltros, param, definirParam } = useFiltrosNaUrl(definicoesFiltros, true);
+  const periodo = periodoDaUrl(param("periodo"));
+  const demandaQuery = param("q") ?? "";
+  // Atalhos de data ("hoje", "atrasado") viram intervalos aqui, uma vez por mudança de filtro (não a cada render).
+  const filtrosApi = useMemo(() => filtrosTrafegoParaApi(filtros, new Date()), [filtros]);
   // D2-C — diretório para vincular uma sessão NOVA: semântica de `/diretorio` (não
   // arquivada), carregado uma vez, independente de filtro/período.
   const [diretorioNovaSessao, setDiretorioNovaSessao] = useState<DemandaDiretorio[]>([]);
@@ -91,7 +112,7 @@ export function TrafegoView() {
   // rápida hoje → 24h → 7d) sobrescreva a mais nova.
   useEffect(() => {
     let cancelado = false;
-    getResumoOperacional(periodoParaDataInicio[filters.periodo]())
+    getResumoOperacional(periodoParaDataInicio[periodo]())
       .then((resultado) => {
         if (!cancelado) {
           setResumoOperacional(resultado);
@@ -106,14 +127,14 @@ export function TrafegoView() {
     return () => {
       cancelado = true;
     };
-  }, [filters.periodo]);
+  }, [periodo]);
 
   // D2-D3B — "Horas executadas", refeito a cada troca de período (mesma dependência de
   // `resumoOperacional` acima — o servidor só recebe `periodoInicio`). `cancelado` evita que
   // uma resposta de um período antigo sobrescreva a mais nova.
   useEffect(() => {
     let cancelado = false;
-    getResumoTrafegoSessoes(periodoParaDataInicio[filters.periodo]())
+    getResumoTrafegoSessoes(periodoParaDataInicio[periodo]())
       .then((resultado) => {
         if (!cancelado) {
           setHorasExecutadas(resultado.horasExecutadas);
@@ -128,7 +149,7 @@ export function TrafegoView() {
     return () => {
       cancelado = true;
     };
-  }, [filters.periodo]);
+  }, [periodo]);
 
   // D2-D3C1 — indicadores, refeitos quando QUALQUER filtro muda (período, status, usuários,
   // departamentos, busca de demanda) ou quando uma sessão é aberta/fechada/atualizada
@@ -138,11 +159,9 @@ export function TrafegoView() {
     let cancelado = false;
     const timeout = setTimeout(() => {
       getIndicadoresTrafegoSessoes({
-        periodoInicio: periodoParaDataInicio[filters.periodo](),
-        status: filters.status,
-        usuarioIds: filters.usuarioIds,
-        departamentoIds: filters.departamentoIds,
-        demandaQuery: filters.demandaQuery,
+        ...filtrosApi,
+        periodoInicio: periodoParaDataInicio[periodo](),
+        demandaQuery,
       })
         .then((dados) => {
           if (cancelado) return;
@@ -158,7 +177,7 @@ export function TrafegoView() {
       cancelado = true;
       clearTimeout(timeout);
     };
-  }, [filters.periodo, filters.status, filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
+  }, [periodo, filtrosApi, demandaQuery, versaoIndicadores]);
 
   // D2-D3C2 — carga, refeita quando usuários, departamentos ou a busca de demanda mudam, ou em
   // `atualizar`. NÃO depende de período/status (nunca afetaram os rankings). Debounce e
@@ -166,11 +185,7 @@ export function TrafegoView() {
   useEffect(() => {
     let cancelado = false;
     const timeout = setTimeout(() => {
-      getCargaTrafegoSessoes({
-        usuarioIds: filters.usuarioIds,
-        departamentoIds: filters.departamentoIds,
-        demandaQuery: filters.demandaQuery,
-      })
+      getCargaTrafegoSessoes({ ...filtrosApi, demandaQuery })
         .then((dados) => {
           if (cancelado) return;
           setCarga({ dados, recebidoEm: Date.now() });
@@ -185,21 +200,20 @@ export function TrafegoView() {
       cancelado = true;
       clearTimeout(timeout);
     };
-  }, [filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
+  }, [filtrosApi, demandaQuery, versaoIndicadores]);
 
   // D2-D3C3 — "agora" (primeira página), refeito quando usuários, departamentos ou a busca de
   // demanda mudam, ou em `atualizar`. NÃO depende de período/status (nunca afetaram a tabela).
   // Trocar filtro/atualizar volta à primeira página. Debounce e `cancelado` como nos efeitos acima.
   useEffect(() => {
     let cancelado = false;
-    chaveAgoraRef.current = JSON.stringify([filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
+    chaveAgoraRef.current = JSON.stringify([filtrosApi, demandaQuery, versaoIndicadores]);
     const timeout = setTimeout(() => {
       setCarregandoAgora(true);
       setErroMaisAgora(null);
       getAgoraTrafegoSessoes({
-        usuarioIds: filters.usuarioIds,
-        departamentoIds: filters.departamentoIds,
-        demandaQuery: filters.demandaQuery,
+        ...filtrosApi,
+        demandaQuery,
         limit: TAMANHO_PAGINA_AGORA,
         offset: 0,
       })
@@ -221,7 +235,7 @@ export function TrafegoView() {
       cancelado = true;
       clearTimeout(timeout);
     };
-  }, [filters.usuarioIds, filters.departamentoIds, filters.demandaQuery, versaoIndicadores]);
+  }, [filtrosApi, demandaQuery, versaoIndicadores]);
 
   // "Carregar mais": próxima página a partir de quantas linhas já estão na tela. Se os filtros
   // mudarem (ou houver `atualizar`) enquanto a página está em voo, ela é descartada.
@@ -231,9 +245,8 @@ export function TrafegoView() {
     setCarregandoMaisAgora(true);
     setErroMaisAgora(null);
     getAgoraTrafegoSessoes({
-      usuarioIds: filters.usuarioIds,
-      departamentoIds: filters.departamentoIds,
-      demandaQuery: filters.demandaQuery,
+      ...filtrosApi,
+      demandaQuery,
       limit: TAMANHO_PAGINA_AGORA,
       offset: agora.linhas.length,
     })
@@ -252,7 +265,7 @@ export function TrafegoView() {
         setErroMaisAgora(error instanceof Error ? error.message : "Não foi possível carregar mais sessões.");
       })
       .finally(() => setCarregandoMaisAgora(false));
-  }, [agora, filters.usuarioIds, filters.departamentoIds, filters.demandaQuery]);
+  }, [agora, filtrosApi, demandaQuery]);
 
   // Atualização completa: indicadores + carga + "agora". Usada pelo botão de refresh e por toda
   // ação que muda sessões (iniciar, encerrar) — nada fica para trás do que o servidor tem.
@@ -262,6 +275,23 @@ export function TrafegoView() {
 
   // D2-C — diretório de vínculo (autocomplete de "Iniciar sessão"): não arquivada, escopo
   // padrão da listagem, carregado uma vez — não depende de filtro/período de sessões.
+  useEffect(() => {
+    // Opções dos filtros de Cliente/Projeto: listas completas, carregadas uma vez. Falha aqui não derruba a tela
+    // (os filtros ficam sem opções, mas o resto funciona). `diretoriosProntos` evita "Indisponível" enquanto carrega.
+    let cancelado = false;
+    Promise.all([
+      listDiretorioClientes().then((lista) => !cancelado && setClientes(lista)),
+      listDiretorioProjetos().then((lista) => !cancelado && setProjetos(lista)),
+    ])
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelado) setDiretoriosProntos(true);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
   useEffect(() => {
     let cancelado = false;
     listDiretorioDemandas()
@@ -302,7 +332,15 @@ export function TrafegoView() {
     <div className="flex flex-col gap-6">
       <TrafegoHeader onRefresh={atualizar} refreshing={carregandoAgora} />
       <TrafegoIniciarSessao onCreated={atualizar} demandas={diretorioNovaSessao} />
-      <TrafegoFilters filters={filters} onChange={setFilters} departamentos={departamentos} />
+      <TrafegoFilters
+        periodo={periodo}
+        onPeriodoChange={(proximo) => definirParam("periodo", proximo === PERIODO_PADRAO ? null : proximo)}
+        demandaQuery={demandaQuery}
+        onDemandaQueryChange={(texto) => definirParam("q", texto)}
+        definicoes={definicoesFiltros}
+        filtros={filtros}
+        onFiltrosChange={definirFiltros}
+      />
 
       {erroIndicadores && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">

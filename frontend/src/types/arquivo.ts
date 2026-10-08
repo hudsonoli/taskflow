@@ -35,14 +35,24 @@ export type ArquivoCentral = {
   previewDisponivel: boolean;
 };
 
+/**
+ * Filtros de `GET /arquivos`. Os campos de id/tipo/status aceitam VÁRIOS valores em CSV ("é um de", OR) e têm a versão
+ * `...Excluir` ("não é um de"). Entre campos diferentes vale AND — tudo aplicado no servidor, antes da paginação.
+ */
 export type ArquivosCentralFiltros = {
   search?: string;
   clienteId?: string;
   projetoId?: string;
   demandaId?: string;
-  tipo?: DemandaArquivoTipo;
-  status?: DemandaArquivoStatusLayout;
+  tipo?: string;
+  status?: string;
   usuarioId?: string;
+  clienteIdExcluir?: string;
+  projetoIdExcluir?: string;
+  demandaIdExcluir?: string;
+  tipoExcluir?: string;
+  statusExcluir?: string;
+  usuarioIdExcluir?: string;
   dataInicio?: string;
   dataFim?: string;
   limit?: number;

@@ -1,38 +1,40 @@
 "use client";
 
-import { SlidersHorizontal } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
+import { FiltrosAvancados } from "@/components/filtros/FiltrosAvancados";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { MemberSelector } from "@/components/ui/MemberSelector";
-import { MultiSelect } from "@/components/ui/MultiSelect";
-import { Select } from "@/components/ui/Select";
-import { buscarDiretorioUsuarios, type DepartamentoDiretorioItem } from "@/lib/api-backend";
+import type { DefinicaoFiltro, FiltroAtivo } from "@/types/filtros";
 import type { TrafegoFiltersState } from "@/types/trafego";
 
+const PERIODOS: Array<{ value: TrafegoFiltersState["periodo"]; label: string }> = [
+  { value: "hoje", label: "Hoje" },
+  { value: "24h", label: "24h" },
+  { value: "7d", label: "7 dias" },
+  { value: "30d", label: "30 dias" },
+];
+
 /**
- * O filtro de usuário pesquisa NO SERVIDOR (uma página por busca, "Carregar mais") em vez de
- * receber o diretório inteiro — esse terminava no usuário nº 200 por nome, e quem vinha depois
- * nem aparecia para ser filtrado. O que sai do filtro continua sendo `usuarioIds` (UUIDs), os
- * mesmos parâmetros de `/trafego/indicadores|carga|agora`.
+ * Filtros da Central de Tráfego: período (botões rápidos), busca de Demanda e os filtros avançados em chips.
+ * Os filtros estruturados rodam NO SERVIDOR (indicadores, carga e "quem está trabalhando agora" usam a mesma regra), então
+ * os totais e a paginação já refletem o recorte — nada é filtrado só sobre a página carregada.
  */
-async function buscarUsuarios({ busca, limit, offset }: { busca: string; limit: number; offset: number }) {
-  const usuarios = await buscarDiretorioUsuarios({ search: busca, limit, offset });
-  return usuarios.map((usuario) => ({ id: usuario.id, nome: usuario.nome }));
-}
-
 export function TrafegoFilters({
-  filters,
-  onChange,
-  departamentos,
+  periodo,
+  onPeriodoChange,
+  demandaQuery,
+  onDemandaQueryChange,
+  definicoes,
+  filtros,
+  onFiltrosChange,
 }: {
-  filters: TrafegoFiltersState;
-  onChange: (filters: TrafegoFiltersState) => void;
-  departamentos: DepartamentoDiretorioItem[];
+  periodo: TrafegoFiltersState["periodo"];
+  onPeriodoChange: (periodo: TrafegoFiltersState["periodo"]) => void;
+  demandaQuery: string;
+  onDemandaQueryChange: (texto: string) => void;
+  definicoes: readonly DefinicaoFiltro[];
+  filtros: readonly FiltroAtivo[];
+  onFiltrosChange: (filtros: FiltroAtivo[]) => void;
 }) {
-  function updateFilter<Key extends keyof TrafegoFiltersState>(key: Key, value: TrafegoFiltersState[Key]) {
-    onChange({ ...filters, [key]: value });
-  }
-
   return (
     <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -46,57 +48,35 @@ export function TrafegoFilters({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {[
-            { value: "hoje", label: "Hoje" },
-            { value: "24h", label: "24h" },
-            { value: "7d", label: "7 dias" },
-            { value: "30d", label: "30 dias" },
-          ].map((periodo) => (
+        <div role="group" aria-label="Período" className="flex flex-wrap items-center gap-2">
+          {PERIODOS.map((item) => (
             <Button
-              key={periodo.value}
+              key={item.value}
               type="button"
-              variant={filters.periodo === periodo.value ? "primary" : "secondary"}
-              onClick={() => updateFilter("periodo", periodo.value as TrafegoFiltersState["periodo"])}
+              variant={periodo === item.value ? "primary" : "secondary"}
+              aria-pressed={periodo === item.value}
+              onClick={() => onPeriodoChange(item.value)}
               className="px-3 py-1.5 text-xs"
             >
-              {periodo.label}
+              {item.label}
             </Button>
           ))}
         </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[1.15fr_1.15fr_1fr_0.85fr]">
-        <MemberSelector
-          label="Usuário"
-          values={filters.usuarioIds}
-          onChange={(values) => updateFilter("usuarioIds", values)}
-          placeholder="Selecionar usuários…"
-          buscarOpcoes={buscarUsuarios}
-          emptyLabel="Nenhum usuário encontrado"
-        />
-        <MultiSelect
-          label="Departamento"
-          values={filters.departamentoIds}
-          onChange={(values) => updateFilter("departamentoIds", values)}
-          options={departamentos.map((departamento) => ({ value: departamento.id, label: departamento.nome }))}
-        />
-        <Input
-          label="Demanda"
-          placeholder="Buscar demanda"
-          value={filters.demandaQuery}
-          onChange={(event) => updateFilter("demandaQuery", event.target.value)}
-        />
-        <Select
-          label="Status"
-          value={filters.status}
-          onChange={(event) => updateFilter("status", event.target.value as TrafegoFiltersState["status"])}
-          options={[
-            { value: "todos", label: "Todos" },
-            { value: "ativa", label: "Em execução" },
-            { value: "encerrada", label: "Encerradas" },
-          ]}
-        />
+      <div className="flex flex-col gap-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" aria-hidden />
+          <input
+            type="search"
+            value={demandaQuery}
+            onChange={(event) => onDemandaQueryChange(event.target.value)}
+            placeholder="Buscar demanda"
+            aria-label="Buscar demanda"
+            className="field w-full rounded-xl py-2.5 pl-10 pr-3 text-sm"
+          />
+        </div>
+        <FiltrosAvancados definicoes={definicoes} filtros={filtros} onChange={onFiltrosChange} />
       </div>
     </div>
   );

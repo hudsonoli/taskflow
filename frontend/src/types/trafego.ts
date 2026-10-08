@@ -1,12 +1,16 @@
+import type { FiltroAtivo } from "@/types/filtros";
+
 export type TrafegoPeriodoFiltro = "hoje" | "24h" | "7d" | "30d";
 
 export type TrafegoStatusFiltro = "todos" | "ativa" | "encerrada";
 
+/**
+ * Estado dos filtros da Central de Tráfego: período (botões rápidos), busca de Demanda (texto) e os filtros avançados
+ * estruturados (usuário, departamento, cliente, projeto, prioridade, prazo, status da sessão) — ver `lib/filtros-trafego.ts`.
+ */
 export type TrafegoFiltersState = {
-  usuarioIds: string[];
-  departamentoIds: string[];
+  filtros: FiltroAtivo[];
   demandaQuery: string;
-  status: TrafegoStatusFiltro;
   periodo: TrafegoPeriodoFiltro;
 };
 

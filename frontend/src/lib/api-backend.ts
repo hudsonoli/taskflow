@@ -2034,6 +2034,12 @@ export async function listArquivosCentral(filtros: ArquivosCentralFiltros = {}):
   if (filtros.tipo) search.set("tipo", filtros.tipo);
   if (filtros.status) search.set("status", filtros.status);
   if (filtros.usuarioId) search.set("usuarioId", filtros.usuarioId);
+  if (filtros.clienteIdExcluir) search.set("clienteIdExcluir", filtros.clienteIdExcluir);
+  if (filtros.projetoIdExcluir) search.set("projetoIdExcluir", filtros.projetoIdExcluir);
+  if (filtros.demandaIdExcluir) search.set("demandaIdExcluir", filtros.demandaIdExcluir);
+  if (filtros.tipoExcluir) search.set("tipoExcluir", filtros.tipoExcluir);
+  if (filtros.statusExcluir) search.set("statusExcluir", filtros.statusExcluir);
+  if (filtros.usuarioIdExcluir) search.set("usuarioIdExcluir", filtros.usuarioIdExcluir);
   if (filtros.dataInicio) search.set("dataInicio", filtros.dataInicio);
   if (filtros.dataFim) search.set("dataFim", filtros.dataFim);
   search.set("limit", String(filtros.limit ?? 50));

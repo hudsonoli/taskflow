@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -12,6 +12,8 @@ import {
   listDiretorioDemandas,
   listDiretorioProjetos,
 } from "@/lib/api-backend";
+import { filtrosArquivosParaApi } from "@/lib/filtros-arquivos";
+import { useFiltrosNaUrl } from "@/lib/useFiltrosNaUrl";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type { ClienteDiretorioItem, ProjetoDiretorioItem } from "@/lib/api-backend";
 import type { DemandaArquivoStatusLayout, DemandaDiretorio } from "@/types/demanda";
@@ -19,6 +21,7 @@ import { ArquivoCard } from "./ArquivoCard";
 import { ArquivoPreviewModal } from "./ArquivoPreviewModal";
 import { ArquivosFiltros } from "./ArquivosFiltros";
 import { ArquivoUploadModal } from "./ArquivoUploadModal";
+import { useDefinicoesFiltrosArquivos } from "./useDefinicoesFiltrosArquivos";
 
 const TAMANHO_PAGINA = 24;
 
@@ -36,21 +39,26 @@ function chaveFiltros(filtros: ArquivosCentralFiltros): string {
  * (nunca um filtro local sobre um dataset global) e o servidor continua aplicando o escopo da
  * Demanda. Passar um id aqui NUNCA amplia visibilidade; o frontend não é autoridade de
  * segurança.
+ *
+ * Filtros avançados (chips) e busca: `persistirNaUrl` (só o Gerenciador central) grava o estado na URL —
+ * refresh, "voltar" do detalhe e link compartilhado preservam a tela. Nas abas de Cliente/Projeto vivem só na memória.
  */
 export function ArquivosContextView({
   clienteId,
   projetoId,
   compacto = false,
+  persistirNaUrl = false,
 }: {
   clienteId?: string;
   projetoId?: string;
   compacto?: boolean;
+  persistirNaUrl?: boolean;
 }) {
   const [clientes, setClientes] = useState<ClienteDiretorioItem[]>([]);
   const [projetos, setProjetos] = useState<ProjetoDiretorioItem[]>([]);
   const [demandasDiretorio, setDemandasDiretorio] = useState<DemandaDiretorio[]>([]);
 
-  const [filtrosUsuario, setFiltros] = useState<ArquivosCentralFiltros>({});
+  const [diretoriosProntos, setDiretoriosProntos] = useState(false);
   const [itens, setItens] = useState<ArquivoCentral[]>([]);
   const [carregandoInicial, setCarregandoInicial] = useState(true);
   const [carregandoMais, setCarregandoMais] = useState(false);
@@ -60,27 +68,51 @@ export function ArquivosContextView({
   const [indicePreview, setIndicePreview] = useState<number | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
-  // O recorte fixo sempre prevalece sobre o que estiver no estado dos filtros — assim uma
-  // troca de Projeto/Cliente pelo chamador nunca deixa o id antigo vazar para a consulta.
+  const projetosDoRecorte = clienteId ? projetos.filter((projeto) => projeto.clienteId === clienteId) : projetos;
+  const demandasDoRecorte = demandasDiretorio.filter(
+    (demanda) => (!clienteId || demanda.clienteId === clienteId) && (!projetoId || demanda.projetoId === projetoId),
+  );
+
+  const definicoes = useDefinicoesFiltrosArquivos({
+    clientes,
+    projetos: projetosDoRecorte,
+    demandas: demandasDoRecorte,
+    ocultarCliente: Boolean(clienteId || projetoId),
+    ocultarProjeto: Boolean(projetoId),
+    diretoriosProntos,
+  });
+  const { filtros: filtrosAvancados, definirFiltros, param, definirParam } = useFiltrosNaUrl(definicoes, persistirNaUrl);
+  const busca = param("q") ?? "";
+
+  // Os atalhos de data ("hoje", "esta semana"…) viram intervalos aqui — uma vez por mudança de filtro, para a chave da consulta
+  // não oscilar a cada render. O recorte fixo (Cliente/Projeto da aba) sempre prevalece sobre qualquer filtro.
+  const parametrosAvancados = useMemo(() => filtrosArquivosParaApi(filtrosAvancados, new Date()), [filtrosAvancados]);
   const filtros: ArquivosCentralFiltros = {
-    ...filtrosUsuario,
-    clienteId: clienteId ?? filtrosUsuario.clienteId,
-    projetoId: projetoId ?? filtrosUsuario.projetoId,
+    ...parametrosAvancados,
+    search: busca || undefined,
+    clienteId: clienteId ?? parametrosAvancados.clienteId,
+    projetoId: projetoId ?? parametrosAvancados.projetoId,
   };
 
   // Diretórios completos (não capados) carregados uma vez — alimentam os filtros e o modal
   // de upload. Só carrega o que o recorte ainda não resolve (Projeto fixo não precisa da lista
   // de Clientes/Projetos). Mesmo padrão de TrafegoView/RelatoriosView.
   useEffect(() => {
-    if (!clienteId && !projetoId) listDiretorioClientes().then(setClientes).catch(() => {});
-    if (!projetoId) listDiretorioProjetos().then(setProjetos).catch(() => {});
-    listDiretorioDemandas().then(setDemandasDiretorio).catch(() => {});
+    // `diretoriosProntos` só vira true quando TODAS as listas pedidas terminaram (com ou sem erro): até lá, um filtro vindo
+    // da URL mostra "Carregando…" em vez de "Indisponível".
+    const pedidos = [
+      !clienteId && !projetoId ? listDiretorioClientes().then(setClientes) : Promise.resolve(),
+      !projetoId ? listDiretorioProjetos().then(setProjetos) : Promise.resolve(),
+      listDiretorioDemandas().then(setDemandasDiretorio),
+    ].map((pedido) => pedido.catch(() => {}));
+    let cancelado = false;
+    Promise.all(pedidos).then(() => {
+      if (!cancelado) setDiretoriosProntos(true);
+    });
+    return () => {
+      cancelado = true;
+    };
   }, [clienteId, projetoId]);
-
-  const projetosDoRecorte = clienteId ? projetos.filter((projeto) => projeto.clienteId === clienteId) : projetos;
-  const demandasDoRecorte = demandasDiretorio.filter(
-    (demanda) => (!clienteId || demanda.clienteId === clienteId) && (!projetoId || demanda.projetoId === projetoId),
-  );
 
   // Troca de filtro comparada durante o RENDER (mesmo padrão de ProjetoDemandasSection/
   // DemandasView) — evita setState síncrono dentro do efeito.
@@ -151,8 +183,8 @@ export function ArquivosContextView({
   // que foi enviado). O mesmo `itens` alimenta o card e o preview — um único estado.
   async function alterarStatus(arquivo: ArquivoCentral, status: DemandaArquivoStatusLayout) {
     const atualizado = await atualizarStatusLayoutArquivo(arquivo.demandaId, arquivo.id, status);
-    if (filtros.status && atualizado.statusLayout !== filtros.status) {
-      // Com filtro de status ativo, o item deixou de pertencer à lista: reconcilia com o servidor
+    if (filtrosAvancados.some((filtro) => filtro.campo === "status")) {
+      // Com filtro de status ativo, o item pode ter deixado de pertencer à lista: reconcilia com o servidor
       // em vez de manter na tela algo que a própria consulta não devolveria mais.
       setIndicePreview(null);
       recarregar();
@@ -186,14 +218,11 @@ export function ArquivosContextView({
       </div>
 
       <ArquivosFiltros
-        filtros={filtros}
-        onChange={setFiltros}
-        clientes={clientes}
-        projetos={projetosDoRecorte}
-        demandas={demandasDoRecorte}
-        ocultarCliente={Boolean(clienteId || projetoId)}
-        ocultarProjeto={Boolean(projetoId)}
-        compacto={compacto}
+        busca={busca}
+        onBuscaChange={(texto) => definirParam("q", texto)}
+        definicoes={definicoes}
+        filtros={filtrosAvancados}
+        onFiltrosChange={definirFiltros}
       />
 
       {erro && (

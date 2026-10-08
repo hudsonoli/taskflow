@@ -12,7 +12,7 @@ export function ArquivosView() {
         title="Arquivos"
         description="Visão central de anexos, layouts e links — o mesmo arquivo de uma Demanda aparece aqui, sem duplicação."
       />
-      <ArquivosContextView />
+      <ArquivosContextView persistirNaUrl />
     </div>
   );
 }

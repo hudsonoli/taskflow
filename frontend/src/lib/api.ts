@@ -1,4 +1,5 @@
 import type { TrafegoAgoraPagina, TrafegoCarga, TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
+import { parametrosFiltrosTrafego, type FiltrosTrafegoApi } from "@/lib/filtros-trafego";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import type { DemandaArquivo } from "@/types/demanda";
 import type { EventoApi } from "@/types/acesso";
@@ -161,16 +162,15 @@ export async function getResumoTrafegoSessoes(periodoInicio: string): Promise<{ 
  * filtros são os da própria tela: o servidor aplica a mesma regra que `filterSessoes` aplicava
  * aqui. `demandaQuery` vai como digitada (a regra de casamento não apara).
  */
-export async function getIndicadoresTrafegoSessoes(filtros: {
-  periodoInicio: string;
-  status: TrafegoStatusFiltro;
-  usuarioIds: string[];
-  departamentoIds: string[];
-  demandaQuery: string;
-}): Promise<TrafegoIndicadores> {
+export async function getIndicadoresTrafegoSessoes(
+  filtros: FiltrosTrafegoApi & {
+    periodoInicio: string;
+    status: TrafegoStatusFiltro;
+    demandaQuery: string;
+  },
+): Promise<TrafegoIndicadores> {
   const search = new URLSearchParams({ periodoInicio: filtros.periodoInicio, status: filtros.status });
-  if (filtros.usuarioIds.length > 0) search.set("usuarioIds", filtros.usuarioIds.join(","));
-  if (filtros.departamentoIds.length > 0) search.set("departamentoIds", filtros.departamentoIds.join(","));
+  for (const [nome, valor] of parametrosFiltrosTrafego(filtros)) search.set(nome, valor);
   if (filtros.demandaQuery.trim()) search.set("demandaQuery", filtros.demandaQuery);
 
   const response = await fetch(`${API_PROXY}/sessoes-trabalho/trafego/indicadores?${search.toString()}`, {
@@ -189,14 +189,9 @@ export async function getIndicadoresTrafegoSessoes(filtros: {
  * sempre afetaram esses rankings (usuários, departamentos, busca de demanda): período e status
  * da tela nunca os mudaram, então não são enviados.
  */
-export async function getCargaTrafegoSessoes(filtros: {
-  usuarioIds: string[];
-  departamentoIds: string[];
-  demandaQuery: string;
-}): Promise<TrafegoCarga> {
+export async function getCargaTrafegoSessoes(filtros: FiltrosTrafegoApi & { demandaQuery: string }): Promise<TrafegoCarga> {
   const search = new URLSearchParams();
-  if (filtros.usuarioIds.length > 0) search.set("usuarioIds", filtros.usuarioIds.join(","));
-  if (filtros.departamentoIds.length > 0) search.set("departamentoIds", filtros.departamentoIds.join(","));
+  for (const [nome, valor] of parametrosFiltrosTrafego(filtros)) search.set(nome, valor);
   if (filtros.demandaQuery.trim()) search.set("demandaQuery", filtros.demandaQuery);
 
   const consulta = search.toString();
@@ -216,16 +211,15 @@ export async function getCargaTrafegoSessoes(filtros: {
  * 100) nem diretórios do cliente. Só os filtros que sempre afetaram a tabela (usuários,
  * departamentos, busca de demanda); período e status da tela nunca a mudaram.
  */
-export async function getAgoraTrafegoSessoes(filtros: {
-  usuarioIds: string[];
-  departamentoIds: string[];
-  demandaQuery: string;
-  limit: number;
-  offset: number;
-}): Promise<TrafegoAgoraPagina> {
+export async function getAgoraTrafegoSessoes(
+  filtros: FiltrosTrafegoApi & {
+    demandaQuery: string;
+    limit: number;
+    offset: number;
+  },
+): Promise<TrafegoAgoraPagina> {
   const search = new URLSearchParams({ limit: String(filtros.limit), offset: String(filtros.offset) });
-  if (filtros.usuarioIds.length > 0) search.set("usuarioIds", filtros.usuarioIds.join(","));
-  if (filtros.departamentoIds.length > 0) search.set("departamentoIds", filtros.departamentoIds.join(","));
+  for (const [nome, valor] of parametrosFiltrosTrafego(filtros)) search.set(nome, valor);
   if (filtros.demandaQuery.trim()) search.set("demandaQuery", filtros.demandaQuery);
 
   const response = await fetch(`${API_PROXY}/sessoes-trabalho/trafego/agora?${search.toString()}`, {
