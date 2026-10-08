@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.escopo import resolver_escopo_demanda
+from app.core.identidade_sistema import ids_de_contas_de_sistema
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.models.demanda import Demanda
@@ -54,7 +55,15 @@ def listar_comentarios(
     try:
         demanda = _demanda_no_escopo(demanda_id, current_user, db)
         comentarios = comentario_service.list_comentarios(db, demanda.id)
-        return [comentario_service.to_read(comentario) for comentario in comentarios]
+        sistema = (
+            set()
+            if current_user.is_system_account
+            else ids_de_contas_de_sistema(db, (comentario.autor_usuario_id for comentario in comentarios))
+        )
+        return [
+            comentario_service.to_read(comentario, autor_sistema=comentario.autor_usuario_id in sistema)
+            for comentario in comentarios
+        ]
     except Exception as exc:
         handle_comentario_error(exc)
 

@@ -88,6 +88,7 @@ class DemandaArquivoRepository:
                 Cliente.nome.label("cliente_nome"),
                 Projeto.nome.label("projeto_nome"),
                 Usuario.nome.label("usuario_nome"),
+                Usuario.is_system_account.label("usuario_sistema"),
             )
             .join(Demanda, DemandaArquivo.demanda_id == Demanda.id)
             .outerjoin(Cliente, Demanda.cliente_id == Cliente.id)

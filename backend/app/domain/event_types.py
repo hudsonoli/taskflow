@@ -6,6 +6,9 @@ class DomainEventType(StrEnum):
     EMPRESA_ALTERADA = "empresa.alterada"
     EMPRESA_INATIVADA = "empresa.inativada"
     EMPRESA_REATIVADA = "empresa.reativada"
+    # Administração da Plataforma (Fase 1B). Nenhum payload carrega senha: a temporária só existe na resposta.
+    EMPRESA_PERSONALIZACAO_ALTERADA = "empresa.personalizacao_alterada"
+    EMPRESA_GESTOR_CRIADO = "empresa.gestor_criado"
 
     USUARIO_CRIADO = "usuario.criado"
     USUARIO_ALTERADO = "usuario.alterado"

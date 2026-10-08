@@ -9,6 +9,7 @@ from app.core.escopo import EscopoDemanda
 from app.core.relogio import agora_utc
 from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
+from app.core.identidade_sistema import AUTOR_SISTEMA
 from app.models.demanda_arquivo import DemandaArquivo
 from app.repositories.demanda_arquivo_repository import DemandaArquivoRepository
 from app.schemas.demanda_arquivo import (
@@ -431,14 +432,16 @@ class DemandaArquivoService:
         return _MIME_CANONICO[extensao], _DISPOSITION_INLINE[extensao]
 
     @staticmethod
-    def to_read(arquivo: DemandaArquivo) -> DemandaArquivoRead:
+    def to_read(arquivo: DemandaArquivo, *, remetente_sistema: bool = False) -> DemandaArquivoRead:
+        """`remetente_sistema`: o tenant não recebe o id de uma conta de sistema (vira None + `enviadoPorSistema`)."""
         return DemandaArquivoRead(
             id=arquivo.id,
             demandaId=arquivo.demanda_id,
             nomeOriginal=arquivo.nome_original,
             contentType=arquivo.content_type,
             tamanhoBytes=arquivo.tamanho_bytes,
-            enviadoPorUsuarioId=arquivo.enviado_por_usuario_id,
+            enviadoPorUsuarioId=None if remetente_sistema else arquivo.enviado_por_usuario_id,
+            enviadoPorSistema=remetente_sistema,
             createdAt=arquivo.created_at,
             tipo=arquivo.tipo,
             statusLayout=arquivo.status_layout,
@@ -463,6 +466,7 @@ class DemandaArquivoService:
         data_fim=None,
         limit: int = 50,
         offset: int = 0,
+        ocultar_remetente_de_sistema: bool = False,
     ) -> list[ArquivoCentralRead]:
         linhas = self.repository.list_central(
             db,
@@ -479,15 +483,18 @@ class DemandaArquivoService:
             limit=limit,
             offset=offset,
         )
-        return [self._to_central_read(linha) for linha in linhas]
+        return [self._to_central_read(linha, ocultar_remetente_de_sistema=ocultar_remetente_de_sistema) for linha in linhas]
 
     @staticmethod
-    def _to_central_read(linha: Row) -> ArquivoCentralRead:
+    def _to_central_read(linha: Row, *, ocultar_remetente_de_sistema: bool = False) -> ArquivoCentralRead:
         """Monta o item autossuficiente a partir da Row já com todos os JOINs resolvidos
         (ver `DemandaArquivoRepository.list_central`) — nenhum fetch adicional aqui."""
         arquivo: DemandaArquivo = linha[0]
         nome = arquivo.nome_original if arquivo.tipo != "link" else arquivo.titulo
         preview_disponivel = arquivo.tipo in ("anexo", "layout") and arquivo.content_type in _CONTENT_TYPES_PREVIEW
+        # Privacidade da conta de sistema: o arquivo e as informações dele continuam; só a identidade do remetente é
+        # mascarada para o tenant ("Sistema", sem id). A própria conta de sistema vê o seu nome.
+        mascarar = ocultar_remetente_de_sistema and bool(linha.usuario_sistema)
         return ArquivoCentralRead(
             id=arquivo.id,
             demandaId=arquivo.demanda_id,
@@ -499,8 +506,9 @@ class DemandaArquivoService:
             url=arquivo.url,
             descricao=arquivo.descricao,
             createdAt=arquivo.created_at,
-            enviadoPorUsuarioId=arquivo.enviado_por_usuario_id,
-            usuarioNome=linha.usuario_nome,
+            enviadoPorUsuarioId=None if mascarar else arquivo.enviado_por_usuario_id,
+            enviadoPorSistema=mascarar,
+            usuarioNome=AUTOR_SISTEMA if mascarar else linha.usuario_nome,
             demanda=ArquivoCentralDemandaRead(
                 id=arquivo.demanda_id,
                 numeroOperacional=linha.numero_operacional,

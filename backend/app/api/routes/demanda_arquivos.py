@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.escopo import resolver_escopo_demanda
+from app.core.identidade_sistema import ids_de_contas_de_sistema
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.models.demanda import Demanda
@@ -85,7 +86,15 @@ def listar_arquivos(
     try:
         demanda = _demanda_no_escopo(demanda_id, current_user, db)
         arquivos = arquivo_service.listar(db, demanda.id)
-        return [arquivo_service.to_read(arquivo) for arquivo in arquivos]
+        sistema = (
+            set()
+            if current_user.is_system_account
+            else ids_de_contas_de_sistema(db, (arquivo.enviado_por_usuario_id for arquivo in arquivos))
+        )
+        return [
+            arquivo_service.to_read(arquivo, remetente_sistema=arquivo.enviado_por_usuario_id in sistema)
+            for arquivo in arquivos
+        ]
     except Exception as exc:
         handle_arquivo_error(exc)
 

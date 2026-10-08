@@ -19,6 +19,8 @@ export type ArquivoCentral = {
   descricao: string | null;
   createdAt: string;
   enviadoPorUsuarioId: string | null;
+  /** Remetente é conta de sistema: sem id; `usuarioNome` já vem "Sistema". */
+  enviadoPorSistema?: boolean;
   usuarioNome: string | null;
   demanda: {
     id: string;

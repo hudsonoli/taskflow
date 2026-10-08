@@ -45,6 +45,8 @@ class DemandaComentarioRead(BaseModel):
     id: UUID
     demanda_id: UUID = Field(alias="demandaId")
     autor_usuario_id: UUID | None = Field(default=None, alias="autorUsuarioId")
+    # Autor é conta de sistema: para o tenant o id some (None) e esta marca faz a UI mostrar "Sistema".
+    autor_sistema: bool = Field(default=False, alias="autorSistema")
     texto: str
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")

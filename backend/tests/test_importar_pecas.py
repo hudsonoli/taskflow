@@ -39,8 +39,8 @@ def empresa_import(test_engine: Engine):
     with test_engine.begin() as conexao:
         conexao.execute(
             text(
-                "INSERT INTO empresas (id, nome, documento, codigo_interno, status, created_at, updated_at) "
-                "VALUES (:id, :nome, NULL, :codigo, 'ativa', :agora, :agora) "
+                "INSERT INTO empresas (id, nome, documento, codigo_interno, slug, status, created_at, updated_at) "
+                "VALUES (:id, :nome, NULL, :codigo, lower(CAST(:codigo AS varchar)), 'ativa', :agora, :agora) "
                 "ON CONFLICT (codigo_interno) DO NOTHING"
             ),
             {"id": empresa_id, "nome": "Empresa Import Peças", "codigo": settings.empresa_codigo, "agora": agora},

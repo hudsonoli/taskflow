@@ -174,11 +174,14 @@ class DemandaComentarioService:
             raise
 
     @staticmethod
-    def to_read(comentario: DemandaComentario) -> DemandaComentarioRead:
+    def to_read(comentario: DemandaComentario, *, autor_sistema: bool = False) -> DemandaComentarioRead:
+        """`autor_sistema`: o tenant não recebe o id de uma conta de sistema (vira None + `autorSistema`); o
+        comentário, o texto e os horários seguem intactos."""
         return DemandaComentarioRead(
             id=comentario.id,
             demandaId=comentario.demanda_id,
-            autorUsuarioId=comentario.autor_usuario_id,
+            autorUsuarioId=None if autor_sistema else comentario.autor_usuario_id,
+            autorSistema=autor_sistema,
             texto=comentario.texto,
             createdAt=comentario.created_at,
             updatedAt=comentario.updated_at,

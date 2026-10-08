@@ -17,6 +17,10 @@ class EmpresaRepository:
         statement = select(Empresa).where(Empresa.codigo_interno == codigo_interno)
         return db.scalars(statement).first()
 
+    def get_by_slug(self, db: Session, slug: str) -> Empresa | None:
+        statement = select(Empresa).where(Empresa.slug == slug)
+        return db.scalars(statement).first()
+
     def get_by_documento(self, db: Session, documento: str) -> Empresa | None:
         statement = select(Empresa).where(Empresa.documento == documento)
         return db.scalars(statement).first()

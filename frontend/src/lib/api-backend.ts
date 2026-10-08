@@ -2051,6 +2051,8 @@ export type DemandaComentarioReadApi = {
   id: string;
   demandaId: string;
   autorUsuarioId: string | null;
+  /** Autor é conta de sistema: o backend não envia o id e a UI mostra "Sistema". */
+  autorSistema?: boolean;
   texto: string;
   createdAt: string;
   updatedAt: string;

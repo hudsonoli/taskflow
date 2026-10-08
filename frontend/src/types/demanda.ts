@@ -95,6 +95,8 @@ export type DemandaComentario = {
   id: string;
   demandaId: string;
   autorUsuarioId: string | null;
+  /** Autor é conta de sistema (privacidade): sem id, exibido como "Sistema". */
+  autorSistema?: boolean;
   texto: string;
   createdAt: string;
   updatedAt: string;

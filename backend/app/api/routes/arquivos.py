@@ -72,4 +72,5 @@ def listar_arquivos_central(
         data_fim=_normalize_datetime(data_fim),
         limit=limit,
         offset=offset,
+        ocultar_remetente_de_sistema=not current_user.is_system_account,
     )

@@ -33,6 +33,10 @@ class Settings:
     auth_access_token_expire_minutes: int = field(
         default_factory=lambda: int(os.getenv("AUTH_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     )
+    # Sessão de PLATAFORMA (token `tipo="plataforma"`, cookie `tf_platform`): curta, como a sessão tenant.
+    platform_token_expire_minutes: int = field(
+        default_factory=lambda: int(os.getenv("PLATFORM_TOKEN_EXPIRE_MINUTES", "30"))
+    )
     auth_max_failed_attempts: int = field(default_factory=lambda: int(os.getenv("AUTH_MAX_FAILED_ATTEMPTS", "5")))
     auth_lockout_minutes: int = field(default_factory=lambda: int(os.getenv("AUTH_LOCKOUT_MINUTES", "15")))
     empresa_codigo: str = field(default_factory=lambda: os.getenv("EMPRESA_CODIGO", "DEMO"))
@@ -80,6 +84,8 @@ class Settings:
             raise ValueError(f"APP_TIMEZONE inválido: {self.app_timezone!r}") from exc
         if self.auth_access_token_expire_minutes <= 0:
             raise ValueError("AUTH_ACCESS_TOKEN_EXPIRE_MINUTES deve ser positivo")
+        if self.platform_token_expire_minutes <= 0:
+            raise ValueError("PLATFORM_TOKEN_EXPIRE_MINUTES deve ser positivo")
         if self.auth_max_failed_attempts <= 0:
             raise ValueError("AUTH_MAX_FAILED_ATTEMPTS deve ser positivo")
         if self.auth_lockout_minutes <= 0:

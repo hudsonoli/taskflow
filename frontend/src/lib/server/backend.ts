@@ -24,3 +24,19 @@ export function sessionCookieOptions() {
     maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
   };
 }
+
+// Sessão da Administração da Plataforma: cookie PRÓPRIO, separado de `tf_session`. O token tenant e o de plataforma
+// nunca se misturam (o backend recusa um no lugar do outro). Escopo de caminho restrito ao BFF da plataforma — o
+// navegador não o envia para nenhuma outra rota — e HttpOnly: o JS da página nunca o lê.
+export const PLATFORM_COOKIE_NAME = "tf_platform";
+export const PLATFORM_COOKIE_PATH = "/api/plataforma";
+
+export function platformCookieOptions(maxAgeSeconds: number) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict" as const,
+    path: PLATFORM_COOKIE_PATH,
+    maxAge: maxAgeSeconds,
+  };
+}

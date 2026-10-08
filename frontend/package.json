@@ -11,7 +11,8 @@
     "test:tema": "node --test src/lib/tema.test.ts",
     "test:perfil": "node --test src/lib/notificacoes.test.ts",
     "test:kpi": "node --test src/lib/kpiStrip.test.ts",
-    "test:rbac": "node --test src/lib/autoridadeUsuarios.test.ts"
+    "test:rbac": "node --test src/lib/autoridadeUsuarios.test.ts",
+    "test:plataforma": "node --test src/lib/plataforma.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

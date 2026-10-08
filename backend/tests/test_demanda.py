@@ -304,8 +304,8 @@ def test_falha_na_criacao_nao_queima_nenhum_dos_dois_numeros(test_engine) -> Non
     with SessionRaw(bind=test_engine) as setup:
         setup.execute(
             text(
-                "INSERT INTO empresas (id, nome, documento, codigo_interno, status, created_at, updated_at) "
-                "VALUES (:id, 'Empresa Rollback', NULL, :ci, 'ativa', now(), now())"
+                "INSERT INTO empresas (id, nome, documento, codigo_interno, slug, status, created_at, updated_at) "
+                "VALUES (:id, 'Empresa Rollback', NULL, :ci, lower(CAST(:ci AS varchar)), 'ativa', now(), now())"
             ),
             {"id": empresa_id, "ci": f"ROLL-{uuid.uuid4().hex[:8]}".upper()},
         )
@@ -360,8 +360,8 @@ def test_concorrencia_nao_gera_numero_operacional_duplicado(test_engine, empresa
     with SessionRaw(bind=test_engine) as setup:
         setup.execute(
             text(
-                "INSERT INTO empresas (id, nome, documento, codigo_interno, status, created_at, updated_at) "
-                "VALUES (:id, 'Empresa Concorrencia', NULL, :ci, 'ativa', now(), now())"
+                "INSERT INTO empresas (id, nome, documento, codigo_interno, slug, status, created_at, updated_at) "
+                "VALUES (:id, 'Empresa Concorrencia', NULL, :ci, lower(CAST(:ci AS varchar)), 'ativa', now(), now())"
             ),
             {"id": (empresa_id := str(uuid.uuid4())), "ci": f"CONC-{uuid.uuid4().hex[:8]}".upper()},
         )

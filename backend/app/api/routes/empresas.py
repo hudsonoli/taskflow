@@ -18,9 +18,6 @@ from app.services.empresa_service import (
 router = APIRouter(prefix="/empresas", tags=["empresas"])
 empresa_service = EmpresaService()
 
-PATCH_ALLOWED_FIELDS = {"nome", "documento", "codigoInterno"}
-
-
 def handle_empresa_error(exc: Exception) -> None:
     if isinstance(exc, EmpresaNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -45,7 +42,7 @@ def list_empresas(
     status_empresa: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_admin_or_gestor),
     db: Session = Depends(get_db),
 ):
     try:
@@ -78,24 +75,15 @@ def get_empresa(
 def update_empresa(
     empresa_id: UUID,
     payload: dict[str, Any] = Body(...),
-    current_user: Usuario = Depends(require_admin),
+    current_user: Usuario = Depends(require_admin_or_gestor),
     db: Session = Depends(get_db),
 ):
-    ensure_same_empresa(empresa_id, current_user)
-    unexpected_fields = set(payload) - PATCH_ALLOWED_FIELDS
-    if unexpected_fields:
-        fields = ", ".join(sorted(unexpected_fields))
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Campos não permitidos no PATCH de Empresa: {fields}",
-        )
-
-    try:
-        data = EmpresaUpdate.model_validate(payload)
-        empresa = empresa_service.update_empresa(db, str(empresa_id), data, actor_usuario_id=current_user.id)
-        return empresa_service.to_read(empresa)
-    except Exception as exc:
-        handle_empresa_error(exc)
+    # Fase 1B: o tenant só LÊ a própria empresa. Nome, documento, código interno e slug são administrados pela
+    # Plataforma (`/plataforma/empresas`) — o código interno é o identificador de login e o slug é o de URL.
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="A alteração de dados da empresa é feita pela Administração da Plataforma",
+    )
 
 
 @router.post("/{empresa_id}/inativar", response_model=EmpresaRead)

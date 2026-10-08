@@ -16,6 +16,7 @@ export function LogoField({
   onEscolher,
   onRemover,
   onDesfazer,
+  logoAtualSrc,
 }: {
   arquivo: File | null;
   previaUrl: string | null;
@@ -24,6 +25,8 @@ export function LogoField({
   onEscolher: (arquivo: File) => void;
   onRemover: () => void;
   onDesfazer: () => void;
+  /** logo SALVO de OUTRA empresa (Administração da Plataforma). Sem isto, mostra o logo da própria empresa. */
+  logoAtualSrc?: string | null;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -38,7 +41,7 @@ export function LogoField({
   }
 
   // undefined → logo salvo (BrandLogo decide) · null → sem logo (removido) · string → arquivo escolhido
-  const srcPrevia = arquivo && previaUrl ? previaUrl : removendo ? null : undefined;
+  const srcPrevia = arquivo && previaUrl ? previaUrl : removendo ? null : logoAtualSrc;
   const temLogo = arquivo !== null || (logoAtual && !removendo);
 
   return (

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, KeyRound, LogOut, Monitor, Moon, Sun, UserRound } from "lucide-react";
+import { Bell, KeyRound, LogOut, Monitor, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
 import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,6 +14,7 @@ import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { formatarBadge } from "@/lib/notificacoes";
 import { useNotificacoes } from "@/lib/NotificacoesContext";
 import type { TemaPreferencia } from "@/lib/tema";
+import { usePlataformaAcesso } from "@/lib/usePlataformaAcesso";
 import { perfilUsuarioLabels } from "@/types/usuario";
 
 const OPCOES_TEMA = [
@@ -50,6 +51,8 @@ export function ProfileMenu() {
   const [open, setOpen] = useState(false);
   const [saindo, setSaindo] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Entrada "Administração da Plataforma": só aparece se o backend confirmar a autoridade (nunca por e-mail/perfil).
+  const administradorPlataforma = usePlataformaAcesso(usuarioAtual?.id);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -159,6 +162,12 @@ export function ProfileMenu() {
                     <KeyRound className="h-4 w-4 text-fg-subtle" />
                     Alterar senha
                   </Link>
+                  {administradorPlataforma && (
+                    <Link href="/plataforma" onClick={() => setOpen(false)} className={itemClassName}>
+                      <ShieldCheck className="h-4 w-4 text-fg-subtle" />
+                      Administração da Plataforma
+                    </Link>
+                  )}
                 </nav>
 
                 <div className="border-b border-line px-4 py-3">

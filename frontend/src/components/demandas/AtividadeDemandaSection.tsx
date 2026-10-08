@@ -73,7 +73,8 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
     };
   }, [demanda.id]);
 
-  function nomeAutor(autorUsuarioId: string | null): string {
+  function nomeAutor(autorUsuarioId: string | null, autorSistema?: boolean): string {
+    if (autorSistema) return "Sistema";
     if (!autorUsuarioId) return "Usuário removido";
     return usuarios.find((usuario) => usuario.id === autorUsuarioId)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido");
   }
@@ -171,7 +172,7 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-fg">
-                      {nomeAutor(comentario.autorUsuarioId)}
+                      {nomeAutor(comentario.autorUsuarioId, comentario.autorSistema)}
                     </p>
                     <p className="text-xs text-fg-subtle">
                       {formatarDataHora(comentario.createdAt)}

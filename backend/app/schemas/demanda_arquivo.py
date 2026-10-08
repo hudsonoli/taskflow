@@ -70,6 +70,8 @@ class DemandaArquivoRead(BaseModel):
     content_type: str | None = Field(default=None, alias="contentType")
     tamanho_bytes: int | None = Field(default=None, alias="tamanhoBytes")
     enviado_por_usuario_id: UUID | None = Field(default=None, alias="enviadoPorUsuarioId")
+    # Remetente é conta de sistema: para o tenant o id some (None) e esta marca indica "Sistema".
+    enviado_por_sistema: bool = Field(default=False, alias="enviadoPorSistema")
     created_at: datetime = Field(alias="createdAt")
     tipo: DemandaArquivoTipo = "anexo"
     status_layout: DemandaArquivoStatusLayout | None = Field(default=None, alias="statusLayout")
@@ -116,6 +118,7 @@ class ArquivoCentralRead(BaseModel):
     descricao: str | None = None
     created_at: datetime = Field(alias="createdAt")
     enviado_por_usuario_id: UUID | None = Field(default=None, alias="enviadoPorUsuarioId")
+    enviado_por_sistema: bool = Field(default=False, alias="enviadoPorSistema")
     usuario_nome: str | None = Field(default=None, alias="usuarioNome")
     demanda: ArquivoCentralDemandaRead
     projeto_id: UUID | None = Field(default=None, alias="projetoId")

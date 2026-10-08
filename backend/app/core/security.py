@@ -14,6 +14,11 @@ from app.core.config import Settings, get_settings
 
 password_hash = PasswordHash.recommended()
 REQUIRED_ACCESS_TOKEN_CLAIMS = {"sub", "empresa_id", "perfil_base", "iat", "exp", "tipo"}
+# Token da PLATAFORMA: tipo próprio, SEM `empresa_id`/`perfil_base` (a autoridade não é de nenhuma empresa nem de
+# nenhum perfil). `adm` = id da linha em `administradores_plataforma`. Os dois decoders são mutuamente exclusivos:
+# `decode_access_token` recusa tipo != "access" e `decode_platform_token` recusa tipo != "plataforma".
+REQUIRED_PLATFORM_TOKEN_CLAIMS = {"sub", "adm", "iat", "exp", "tipo"}
+TIPO_TOKEN_PLATAFORMA = "plataforma"
 ALLOWED_PERFIS_BASE = {"admin", "gestor", "operador"}
 
 
@@ -135,6 +140,55 @@ def decode_access_token(
     _validate_uuid_claim("empresa_id", payload.get("empresa_id"))
     _validate_perfil_base(payload.get("perfil_base"))
 
+    return payload
+
+
+def create_platform_token(
+    *,
+    sub: str,
+    administrador_id: str,
+    settings: Settings | None = None,
+    now: datetime | None = None,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Token curto da Administração da Plataforma. `sub` = usuário; `adm` = administrador de plataforma. Quem o
+    aceita (`require_platform_admin`) NÃO confia nele para autorizar: reconfere a linha ativa a cada requisição."""
+    resolved_settings = settings or get_settings()
+    secret = _require_auth_secret(resolved_settings)
+    issued_at = _ensure_utc(now or datetime.now(timezone.utc))
+    expiration = issued_at + (expires_delta or timedelta(minutes=resolved_settings.platform_token_expire_minutes))
+    _validate_uuid_claim("sub", sub)
+    _validate_uuid_claim("adm", administrador_id)
+    payload = {
+        "sub": sub,
+        "adm": administrador_id,
+        "iat": issued_at,
+        "exp": expiration,
+        "tipo": TIPO_TOKEN_PLATAFORMA,
+    }
+    return jwt.encode(payload, secret, algorithm=resolved_settings.auth_algorithm)
+
+
+def decode_platform_token(token: str, *, settings: Settings | None = None) -> dict[str, Any]:
+    if not isinstance(token, str) or not token:
+        raise AuthTokenError("Token inválido")
+    resolved_settings = settings or get_settings()
+    secret = _require_auth_secret(resolved_settings)
+    try:
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=[resolved_settings.auth_algorithm],
+            options={"require": sorted(REQUIRED_PLATFORM_TOKEN_CLAIMS)},
+        )
+    except ExpiredSignatureError as exc:
+        raise AuthTokenError("Token expirado") from exc
+    except InvalidTokenError as exc:
+        raise AuthTokenError("Token inválido") from exc
+    if payload.get("tipo") != TIPO_TOKEN_PLATAFORMA:
+        raise AuthTokenError("Tipo do token inválido")
+    _validate_uuid_claim("sub", payload.get("sub"))
+    _validate_uuid_claim("adm", payload.get("adm"))
     return payload
 
 
