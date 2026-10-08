@@ -128,7 +128,7 @@ export function GruposClienteView() {
                 value={novoNome}
                 onChange={(event) => setNovoNome(event.target.value)}
                 onKeyDown={(event) => event.key === "Enter" && handleCriar()}
-                placeholder="Nome do novo grupo (ex.: GRUPO BRETAS)"
+                placeholder="Nome do novo grupo (ex.: GRUPO ACME)"
                 className="field w-full flex-1 rounded-xl px-3 py-2.5 text-sm"
               />
               <Button onClick={handleCriar} disabled={!novoNome.trim() || criando}>
