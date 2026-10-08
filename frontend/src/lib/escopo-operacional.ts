@@ -15,6 +15,7 @@
 import { elapsedSeconds } from "@/lib/trafego";
 import { demandaTemResponsavel, normalizarUsuarioId } from "@/lib/demandas";
 import { correspondeDepartamento, resolverDepartamentoPorReferencia } from "@/lib/referencias";
+import { escolherDepartamentoHead } from "@/lib/sessaoUsuario";
 import { converterQuantidadeEmHoras } from "@/lib/workflow-modelo";
 import { perfisComAcessoAdministrativo, perfisComAcessoFinanceiro } from "@/types/usuario";
 import { PERFIL_PARA_PERFIL_BASE } from "@/lib/api-backend";
@@ -137,11 +138,13 @@ const NOME_DEPARTAMENTO_ATENDIMENTO = "atendimento";
  * criar tarefa), para não divergir de comportamento já aprovado.
  */
 export function resolverHeadDepartamento(usuario: Usuario, departamentos: DepartamentoDiretorioItem[]): DepartamentoDiretorioItem | undefined {
-  return departamentos.find(
+  const candidatos = departamentos.filter(
     (departamento) =>
       departamento.responsavelUsuarioId === usuario.id ||
       (usuario.liderDepartamento && correspondeDepartamento(usuario.departamentoId, departamento)),
   );
+  // Com mais de um (ex.: dono formal do TI que hoje está em Criação), vale o departamento ATUAL — nunca a ordem da lista.
+  return escolherDepartamentoHead(candidatos, (departamento) => correspondeDepartamento(usuario.departamentoId, departamento));
 }
 
 /**

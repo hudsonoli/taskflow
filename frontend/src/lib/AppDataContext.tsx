@@ -5,6 +5,10 @@ import { useBranding } from "@/lib/BrandingContext";
 import { normalizarPreferencia } from "@/lib/tema";
 import { fetchSessao, fetchUsuarioAtualCompleto, logout as logoutRequest } from "@/lib/auth";
 import { listDemandasReais } from "@/lib/api-backend";
+import { invalidarDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { invalidarDiretorioEquipes } from "@/lib/diretorioEquipes";
+import { invalidarDiretorioUsuarios } from "@/lib/diretorioUsuarios";
+import { REVALIDACAO_PERIODO_MS, contextoOperacionalMudou, podeRevalidar, usuarioMudou } from "@/lib/sessaoUsuario";
 import type { Demanda } from "@/types/demanda";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
 
@@ -102,6 +106,57 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }, 0);
     return () => clearTimeout(timeout);
   }, []);
+
+  // REVALIDAÇÃO DO USUÁRIO ATUAL. Perfil, permissões, departamento e Head são decididos pelo backend a cada requisição, mas
+  // `usuarioAtual` era carregado só no login/montagem: promoção ou troca de departamento feita por OUTRA pessoa com a sessão
+  // aberta deixava menus, "Meu Departamento" e rótulos no estado antigo. Agora a sessão se atualiza sozinha — ao voltar para a
+  // aba (foco/visibilidade) e a cada 2 min com a aba visível — sem logout/login e sem reload. Uma só chamada (`/usuarios/me`);
+  // só troca o estado (e descarta os diretórios em cache) se algo relevante mudou. Falha de rede nunca derruba a sessão.
+  const usuarioAtualRef = useRef<Usuario | undefined>(usuarioAtual);
+  const ultimaRevalidacaoRef = useRef(0);
+  useEffect(() => {
+    usuarioAtualRef.current = usuarioAtual;
+  }, [usuarioAtual]);
+
+  const habilitarRevalidacao = autenticado && !mustChangePassword && usuarioAtual !== undefined;
+  useEffect(() => {
+    if (!habilitarRevalidacao) return;
+    let cancelado = false;
+
+    async function revalidar() {
+      const agora = Date.now();
+      if (!podeRevalidar(ultimaRevalidacaoRef.current, agora)) return;
+      ultimaRevalidacaoRef.current = agora;
+      try {
+        const completo = await fetchUsuarioAtualCompleto();
+        if (cancelado || !completo) return; // 401/erro: o fluxo normal de sessão cuida; aqui nunca se "desloga" por falha
+        const anterior = usuarioAtualRef.current;
+        if (!usuarioMudou(anterior, completo)) return;
+        if (contextoOperacionalMudou(anterior, completo)) {
+          // departamento/perfil/Head mudaram: diretórios em cache (departamentos, usuários, equipes) ficaram velhos
+          invalidarDiretorioDepartamentos();
+          invalidarDiretorioUsuarios();
+          invalidarDiretorioEquipes();
+        }
+        setUsuarioAtual(completo);
+      } catch {
+        // sem rede/backend fora: mantém o que está em tela
+      }
+    }
+
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") void revalidar();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("focus", aoVoltar);
+    const periodico = window.setInterval(aoVoltar, REVALIDACAO_PERIODO_MS);
+    return () => {
+      cancelado = true;
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("focus", aoVoltar);
+      window.clearInterval(periodico);
+    };
+  }, [habilitarRevalidacao]);
 
   // A pausa automática por expediente saiu daqui na Fase 2E.1.
   //
