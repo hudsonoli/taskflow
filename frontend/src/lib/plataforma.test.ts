@@ -102,7 +102,7 @@ test("sair do sistema também encerra a sessão de plataforma", () => {
 
 // ── senha temporária: exibida uma vez, nunca persistida ──────────────────────────────────────────────
 test("a senha temporária não é gravada em storage, URL, console ou rota", () => {
-  const modal = ler("components/plataforma/NovoGestorModal.tsx");
+  const modal = ler("components/plataforma/DefinirGestorModal.tsx");
   const api = ler("lib/plataforma-api.ts");
   for (const arquivo of [modal, api, ler("components/plataforma/EmpresaUsuariosSection.tsx")]) {
     assert.doesNotMatch(arquivo, /localStorage|sessionStorage|indexedDB|document\.cookie|console\.(log|info|debug|warn|error)/);
@@ -115,7 +115,7 @@ test("a senha temporária não é gravada em storage, URL, console ou rota", () 
 });
 
 test("criar Gestor não oferece escolha de perfil nem de senha", () => {
-  const modal = ler("components/plataforma/NovoGestorModal.tsx");
+  const modal = ler("components/plataforma/DefinirGestorModal.tsx");
   assert.doesNotMatch(modal, /<Select|type="password"|perfilBase/);
   const tipos = ler("types/plataforma.ts");
   assert.match(tipos, /PlataformaGestorCreate = \{ nome: string; email: string \}/);

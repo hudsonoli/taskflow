@@ -149,3 +149,12 @@ export const criarGestorEmpresa = (id: string, dados: PlataformaGestorCreate) =>
     method: "POST",
     body: JSON.stringify(dados),
   });
+
+/** Usuários da PRÓPRIA empresa que podem ser promovidos a Gestor (só elegíveis; o servidor é quem decide). */
+export const listarCandidatosGestor = (id: string) => pedir<PlataformaUsuario[]>(`/empresas/${encodeURIComponent(id)}/candidatos-gestor`);
+
+/** Promove um Usuário existente da empresa a Gestor (mesmo cadastro e mesma senha; nada é gerado). */
+export const promoverGestorEmpresa = (id: string, usuarioId: string) =>
+  pedir<PlataformaUsuario>(`/empresas/${encodeURIComponent(id)}/usuarios/${encodeURIComponent(usuarioId)}/promover-gestor`, {
+    method: "POST",
+  });

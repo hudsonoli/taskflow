@@ -52,7 +52,8 @@ plataforma não entra em rota tenant) e `decode_platform_token` exige `tipo="pla
 
 `GET /acesso`, `POST /sessao` (sessão tenant) · `GET /me` · `GET|POST /empresas` · `GET|PATCH /empresas/{id}` ·
 `POST /empresas/{id}/inativar|reativar` · `GET|PATCH|DELETE /empresas/{id}/personalizacao` ·
-`GET|POST|DELETE /empresas/{id}/personalizacao/logo` · `GET /empresas/{id}/usuarios` · `POST /empresas/{id}/gestores`.
+`GET|POST|DELETE /empresas/{id}/personalizacao/logo` · `GET /empresas/{id}/usuarios` · `POST /empresas/{id}/gestores` ·
+`GET /empresas/{id}/candidatos-gestor` · `POST /empresas/{id}/usuarios/{usuario_id}/promover-gestor`.
 
 - **Não há DELETE de empresa** (empresa nunca é apagada); só inativar/reativar. A empresa que hospeda um Administrador da
   Plataforma ativo **não pode ser inativada**.
@@ -64,10 +65,18 @@ plataforma não entra em rota tenant) e `decode_platform_token` exige `tipo="pla
   extras), senha temporária gerada no servidor, `deve_alterar_senha=true`. A senha existe **apenas** na resposta da
   criação — nunca em log, evento (`Evento.payload`), listagem ou consulta posterior.
 
+- **Definir Gestor (Fase 3)** — duas formas no mesmo modal da aba Usuários: *criar novo Gestor* (acima) ou *promover um
+  Usuário existente da própria empresa*. Candidato = Usuário (`operador`) **ativo**, **com acesso ao sistema** e que não é conta
+  de sistema; inativo, bloqueado, sem acesso, admin legado ou já Gestor **não** são oferecidos (promover não reativa ninguém).
+  `promover-gestor` reaproveita `UsuarioService.update_usuario` e só troca `perfil_base` para `gestor`: mesmo id, mesma
+  credencial (nenhuma senha é gerada ou alterada), exceções de permissão e histórico intactos. Usuário de outra empresa, conta
+  de sistema ou arquivado respondem 404 igual (nunca promove cross-tenant); já-Gestor/inelegível respondem 409. A empresa pode
+  ter vários Gestores. Gestor tenant continua sem criar nem promover Gestor (Fase 1A).
+
 ## Auditoria e privacidade
 
 Toda ação de plataforma reaproveita os eventos existentes (`empresa.criada|alterada|inativada|reativada`) e dois novos
-(`empresa.personalizacao_alterada`, `empresa.gestor_criado`), com `usuario_id` do ator. Não há colunas
+(`empresa.personalizacao_alterada`, `empresa.gestor_criado`, `empresa.gestor_promovido`), com `usuario_id` do ator. Não há colunas
 `ator_plataforma_admin_id`/`sessao_suporte_id`. Como o ator é conta de sistema, o tenant **não vê** esses eventos
 (filtro da Fase 1A). Arquivos (`GET /arquivos`, anexos de demanda) e comentários também mascaram a conta de sistema como
 **"Sistema"** na leitura (por `is_system_account`, nunca por nome/e-mail).

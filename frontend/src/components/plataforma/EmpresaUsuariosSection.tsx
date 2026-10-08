@@ -6,7 +6,7 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
-import { NovoGestorModal } from "@/components/plataforma/NovoGestorModal";
+import { DefinirGestorModal } from "@/components/plataforma/DefinirGestorModal";
 import { listarUsuariosEmpresa } from "@/lib/plataforma-api";
 import { perfilUsuarioLabels } from "@/types/usuario";
 import type { PlataformaEmpresa, PlataformaUsuario } from "@/types/plataforma";
@@ -53,13 +53,13 @@ export function EmpresaUsuariosSection({ empresa, onMudou }: { empresa: Platafor
           <h3 className="text-sm font-semibold text-fg">{semGestor ? "Esta empresa ainda não tem Gestor" : "Gestores"}</h3>
           <p className="mt-0.5 max-w-2xl text-xs text-fg-muted">
             {semGestor
-              ? "O Gestor é quem administra a empresa por dentro (usuários, equipes, cadastros). Crie o primeiro: ele recebe uma senha temporária e precisa trocá-la no primeiro acesso."
-              : `${empresa.gestoresAtivos} ${empresa.gestoresAtivos === 1 ? "Gestor ativo" : "Gestores ativos"}. Os demais usuários são criados pelo próprio Gestor, dentro da empresa.`}
+              ? "O Gestor é quem administra a empresa por dentro (usuários, equipes, cadastros). Escolha um usuário existente da empresa ou crie o primeiro Gestor (com senha temporária, trocada no primeiro acesso)."
+              : `${empresa.gestoresAtivos} ${empresa.gestoresAtivos === 1 ? "Gestor ativo" : "Gestores ativos"}. A empresa pode ter mais de um: adicione outro escolhendo um usuário existente ou criando um novo.`}
           </p>
           {!podeCriar && <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">Reative a empresa para criar um Gestor.</p>}
         </div>
         <Button type="button" disabled={!podeCriar} onClick={() => setNovoAberto(true)}>
-          <UserPlus size={14} /> {semGestor ? "Criar primeiro Gestor" : "Adicionar Gestor"}
+          <UserPlus size={14} /> {semGestor ? "Definir Gestor" : "Adicionar Gestor"}
         </Button>
       </div>
 
@@ -100,11 +100,11 @@ export function EmpresaUsuariosSection({ empresa, onMudou }: { empresa: Platafor
         </div>
       )}
 
-      <NovoGestorModal
+      <DefinirGestorModal
         open={novoAberto}
         empresa={empresa}
         onClose={() => setNovoAberto(false)}
-        onCriado={() => {
+        onDefinido={() => {
           void carregar();
           onMudou();
         }}

@@ -41,7 +41,13 @@ from app.services.empresa_service import (
     EmpresaInvalidTransitionError,
     EmpresaNotFoundError,
 )
-from app.services.plataforma_service import PlataformaAcessoNegadoError, PlataformaGestorSenhaError, PlataformaService
+from app.services.plataforma_service import (
+    PlataformaAcessoNegadoError,
+    PlataformaGestorSenhaError,
+    PlataformaService,
+    PlataformaUsuarioNaoElegivelError,
+    PlataformaUsuarioNaoEncontradoError,
+)
 from app.services.usuario_service import UsuarioArquivadoConflictError, UsuarioConflictError, UsuarioInvalidEmpresaError
 
 router = APIRouter(prefix="/plataforma", tags=["plataforma"])
@@ -49,8 +55,10 @@ plataforma_service = PlataformaService()
 
 
 def _tratar_erro(exc: Exception) -> None:
-    if isinstance(exc, EmpresaNotFoundError):
+    if isinstance(exc, (EmpresaNotFoundError, PlataformaUsuarioNaoEncontradoError)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if isinstance(exc, PlataformaUsuarioNaoElegivelError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, (EmpresaConflictError, EmpresaInvalidTransitionError, EmpresaHospedaPlataformaError)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, (UsuarioConflictError, UsuarioArquivadoConflictError)):
@@ -286,6 +294,33 @@ def listar_usuarios(
 ):
     try:
         return plataforma_service.listar_usuarios(db, str(empresa_id), search=search, limit=limit, offset=offset)
+    except Exception as exc:
+        _tratar_erro(exc)
+
+
+@router.get("/empresas/{empresa_id}/candidatos-gestor", response_model=list[PlataformaUsuarioRead])
+def listar_candidatos_gestor(
+    empresa_id: UUID,
+    ctx: ContextoPlataforma = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+):
+    """Usuários da PRÓPRIA empresa que podem ser promovidos a Gestor (Usuário ativo, com acesso, sem conta de sistema)."""
+    try:
+        return plataforma_service.listar_candidatos_gestor(db, str(empresa_id))
+    except Exception as exc:
+        _tratar_erro(exc)
+
+
+@router.post("/empresas/{empresa_id}/usuarios/{usuario_id}/promover-gestor", response_model=PlataformaUsuarioRead)
+def promover_gestor(
+    empresa_id: UUID,
+    usuario_id: UUID,
+    ctx: ContextoPlataforma = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+):
+    """Promove um Usuário existente da empresa a Gestor. Usuário de outra empresa → 404 (nunca promove cross-tenant)."""
+    try:
+        return plataforma_service.promover_gestor(db, str(empresa_id), str(usuario_id), ator=ctx.usuario)
     except Exception as exc:
         _tratar_erro(exc)
 

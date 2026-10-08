@@ -37,7 +37,7 @@ from app.schemas.plataforma import (
     PlataformaSessaoRead,
     PlataformaUsuarioRead,
 )
-from app.schemas.usuario import UsuarioCreate
+from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
 from app.services.auth_service import AuthService
 from app.services.configuracao_personalizacao_service import ConfiguracaoPersonalizacaoService
 from app.services.domain_event_publisher import DomainEventPublisher
@@ -51,6 +51,15 @@ _TAMANHO_SENHA = 14
 
 class PlataformaAcessoNegadoError(PermissionError):
     pass
+
+
+class PlataformaUsuarioNaoEncontradoError(LookupError):
+    """Usuário inexistente NESTA empresa (outra empresa, conta de sistema e arquivado respondem igual: não revela nada)."""
+
+
+class PlataformaUsuarioNaoElegivelError(ValueError):
+    """O usuário existe nesta empresa, mas não pode ser promovido a Gestor (já é Gestor, é admin legado, está
+    inativo/bloqueado ou sem acesso ao sistema)."""
 
 
 class PlataformaGestorSenhaError(RuntimeError):
@@ -245,6 +254,59 @@ class PlataformaService:
         # `UsuarioRepository.list` já exclui a conta de sistema (incondicional) e arquivados.
         usuarios = self.usuario_repository.list(db, empresa_id=empresa.id, search=search, limit=limit, offset=offset)
         return [self._usuario_read(usuario) for usuario in usuarios]
+
+    # ------------------------------------------------------------------------------------
+    # Gestor a partir de um Usuário EXISTENTE da própria empresa
+    # ------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _elegivel_para_gestor(usuario: Usuario) -> bool:
+        """Candidato = Usuário (`operador`) ATIVO e com acesso ao sistema, que não é conta de sistema. Inativo,
+        bloqueado ou sem acesso NÃO é oferecido: promover não reativa ninguém (a reativação é uma ação explícita à parte)."""
+        return (
+            usuario.perfil_base == "operador"
+            and usuario.status == "ativo"
+            and bool(usuario.acesso_sistema)
+            and not usuario.is_system_account
+        )
+
+    def listar_candidatos_gestor(self, db: Session, empresa_id: str) -> list[PlataformaUsuarioRead]:
+        empresa = self.empresa_service.get_empresa(db, empresa_id)
+        usuarios = self.usuario_repository.list(
+            db, empresa_id=empresa.id, status="ativo", perfil_base="operador", search=None, limit=200, offset=0
+        )
+        return [self._usuario_read(u) for u in usuarios if self._elegivel_para_gestor(u)]
+
+    def promover_gestor(self, db: Session, empresa_id: str, usuario_id: str, *, ator: Usuario) -> PlataformaUsuarioRead:
+        """Promove um Usuário JÁ existente da empresa a Gestor. Mesmo registro (id, credencial, histórico e exceções
+        individuais de permissão intactos); nenhuma senha é gerada ou alterada. Reaproveita `UsuarioService.update_usuario`
+        (mesmas validações do projeto) e registra um evento de plataforma próprio."""
+        empresa = self.empresa_service.get_empresa(db, empresa_id)
+        usuario = self.usuario_repository.get_by_id(db, usuario_id)
+        # outra empresa, inexistente, conta de sistema ou arquivado: a MESMA resposta (nunca promove cross-tenant)
+        if usuario is None or usuario.empresa_id != empresa.id or usuario.is_system_account or usuario.status == "arquivado":
+            raise PlataformaUsuarioNaoEncontradoError("Usuário não encontrado nesta empresa")
+        if usuario.perfil_base == "gestor":
+            raise PlataformaUsuarioNaoElegivelError("Este usuário já é Gestor.")
+        if not self._elegivel_para_gestor(usuario):
+            raise PlataformaUsuarioNaoElegivelError(
+                "Só um Usuário ativo, com acesso ao sistema, pode ser promovido a Gestor."
+            )
+
+        atualizado = self.usuario_service.update_usuario(
+            db, usuario.id, UsuarioUpdate(perfilBase="gestor"), actor_usuario_id=ator.id
+        )
+        self.event_publisher.publish(
+            db,
+            tipo=DomainEventType.EMPRESA_GESTOR_PROMOVIDO,
+            empresa_id=empresa.id,
+            entidade_tipo="empresa",
+            entidade_id=empresa.id,
+            usuario_id=ator.id,
+            payload={"usuarioId": atualizado.id, "perfilAnterior": "operador", "nome": empresa.nome},
+        )
+        db.commit()
+        return self._usuario_read(atualizado)
 
     def criar_gestor(
         self, db: Session, empresa_id: str, data: PlataformaGestorCreate, *, ator: Usuario
