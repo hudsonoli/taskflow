@@ -1593,7 +1593,9 @@ function demandaDraftParaPayload(draft: DemandaFormDraft) {
   };
 }
 
-export type DemandaSort = "numero_operacional_desc" | "prazo_asc" | "sinalizada_desc";
+// "fila_pessoal" (Meu Dia): sessão ativa do próprio usuário, atrasadas, vencem hoje, prazo futuro, sem prazo — exige `agora`,
+// `hojeInicio` e `hojeFim` (fuso local do cliente), como o resumo pessoal.
+export type DemandaSort = "numero_operacional_desc" | "prazo_asc" | "sinalizada_desc" | "fila_pessoal";
 
 // D2-B5: mesmo par de `OrigemDemanda` (lib/escopo-operacional.ts) — definido aqui de novo
 // (não importado de lá) porque escopo-operacional.ts já importa DESTE arquivo; importar na
@@ -1628,6 +1630,9 @@ export async function listDemandasReais(params?: {
   equipeId?: string;
   prioridade?: string;
   origem?: DemandaOrigemFiltro;
+  agora?: string;
+  hojeInicio?: string;
+  hojeFim?: string;
   statusExcluir?: string;
   clienteIdExcluir?: string;
   projetoIdExcluir?: string;
@@ -1657,6 +1662,9 @@ export async function listDemandasReais(params?: {
   if (params?.equipeId) query.set("equipeId", params.equipeId);
   if (params?.prioridade) query.set("prioridade", params.prioridade);
   if (params?.origem) query.set("origem", params.origem);
+  if (params?.agora) query.set("agora", params.agora);
+  if (params?.hojeInicio) query.set("hojeInicio", params.hojeInicio);
+  if (params?.hojeFim) query.set("hojeFim", params.hojeFim);
   if (params?.statusExcluir) query.set("statusExcluir", params.statusExcluir);
   if (params?.clienteIdExcluir) query.set("clienteIdExcluir", params.clienteIdExcluir);
   if (params?.projetoIdExcluir) query.set("projetoIdExcluir", params.projetoIdExcluir);
@@ -1667,6 +1675,15 @@ export async function listDemandasReais(params?: {
   if (params?.naoFinalizada) query.set("naoFinalizada", "true");
   const data = await request<DemandaReadApi[]>(`/demandas?${query.toString()}`);
   return data.map(mapDemandaReadToDemanda);
+}
+
+/**
+ * Meu Dia — ids das demandas em que o PRÓPRIO usuário tem uma sessão de trabalho ativa agora. Usuário e empresa vêm do token
+ * (sem parâmetro). Só ids: nenhum tempo/duração.
+ */
+export async function listarMinhasSessoesAtivas(): Promise<string[]> {
+  const resposta = await request<{ demandaIds: string[] }>("/sessoes-trabalho/minhas-ativas");
+  return resposta.demandaIds;
 }
 
 export async function getDemandaReal(demandaId: string): Promise<Demanda> {
