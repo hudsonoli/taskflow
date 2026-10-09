@@ -25,6 +25,7 @@ export type ArquivoCentral = {
   demanda: {
     id: string;
     numeroOperacional: number;
+    identificador: string;
     codigoReferencia: string;
     nome: string;
   };

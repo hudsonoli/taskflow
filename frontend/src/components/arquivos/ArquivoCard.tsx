@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDemanda } from "@/lib/referencias";
 import { FileText, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { STATUS_LAYOUT_LABELS, STATUS_LAYOUT_TONE } from "@/lib/arquivo-status-layout";
@@ -52,7 +53,7 @@ export function ArquivoCard({ arquivo, onAbrir }: { arquivo: ArquivoCentral; onA
       </div>
 
       <div className="flex items-center justify-between text-xs text-fg-subtle">
-        <span className="truncate">#{arquivo.demanda.numeroOperacional} — {arquivo.demanda.nome}</span>
+        <span className="truncate">{rotuloDemanda(arquivo.demanda)} — {arquivo.demanda.nome}</span>
       </div>
       <div className="flex items-center justify-between text-[11px] text-fg-subtle">
         <span>{arquivo.usuarioNome ?? "—"}</span>

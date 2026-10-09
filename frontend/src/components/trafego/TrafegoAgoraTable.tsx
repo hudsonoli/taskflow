@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDemanda } from "@/lib/referencias";
 import { useState } from "react";
 import { Activity, Inbox, StopCircle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -22,7 +23,7 @@ function formatInicio(value: string) {
 /** `#2063 — Nome`; Demanda inexistente cai no id (nem inventa nome nem esconde a sessão). */
 function nomeDaDemanda(linha: TrafegoAgoraLinha): string {
   return linha.demandaNumero !== null && linha.demandaNome !== null
-    ? `#${linha.demandaNumero} — ${linha.demandaNome}`
+    ? `${rotuloDemanda({ numeroOperacional: linha.demandaNumero, identificador: linha.demandaIdentificador })} — ${linha.demandaNome}`
     : linha.demandaId;
 }
 

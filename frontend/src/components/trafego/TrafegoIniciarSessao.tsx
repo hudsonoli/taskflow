@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDemanda } from "@/lib/referencias";
 import { useState } from "react";
 import { PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -67,7 +68,7 @@ export function TrafegoIniciarSessao({
             onChange={(event) => setDemandaId(event.target.value)}
             options={demandas.map((demanda) => ({
                 value: demanda.id,
-                label: `#${demanda.numeroOperacional} — ${demanda.nome}`,
+                label: `${rotuloDemanda(demanda)} — ${demanda.nome}`,
               }))}
           />
         </div>

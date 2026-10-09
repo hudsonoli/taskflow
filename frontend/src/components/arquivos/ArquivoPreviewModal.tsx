@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDemanda } from "@/lib/referencias";
 import { useState } from "react";
 import { Download, ExternalLink, FileText, Link2, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -160,7 +161,7 @@ export function ArquivoPreviewModal({
             <dd className="text-zinc-700 dark:text-zinc-200">{arquivo.projetoNome ?? "—"}</dd>
             <dt className="text-fg-subtle">Demanda</dt>
             <dd className="truncate text-zinc-700 dark:text-zinc-200">
-              #{arquivo.demanda.numeroOperacional} — {arquivo.demanda.nome}
+              {rotuloDemanda(arquivo.demanda)} — {arquivo.demanda.nome}
             </dd>
             {arquivo.descricao && (
               <>

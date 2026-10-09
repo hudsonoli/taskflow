@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDemanda } from "@/lib/referencias";
 import { useState } from "react";
 import { Inbox } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -84,7 +85,7 @@ export function AnalisePecasReport() {
                   <tr key={peca.demandaId}>
                     <td className="py-2">
                       <p className="font-medium text-fg">{peca.nome}</p>
-                      <p className="text-xs text-fg-subtle">#{peca.numeroOperacional}</p>
+                      <p className="text-xs text-fg-subtle">{rotuloDemanda(peca)}</p>
                     </td>
                     <td className="py-2 text-fg-muted">{peca.redatorNome ?? "Sem responsável"}</td>
                     <td className="py-2 text-right text-fg-muted">

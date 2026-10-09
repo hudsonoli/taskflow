@@ -1482,6 +1482,7 @@ type DemandaReadApi = {
   anoReferencia: number;
   sequencialReferencia: number;
   numeroOperacional: number;
+  identificador: string;
   nome: string;
   pit: string | null;
   briefing: string | null;
@@ -1528,6 +1529,7 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
     anoReferencia: data.anoReferencia,
     sequencialReferencia: data.sequencialReferencia,
     numeroOperacional: data.numeroOperacional,
+    identificador: data.identificador,
     nome: data.nome,
     pit: data.pit,
     briefing: data.briefing,
@@ -1692,7 +1694,7 @@ export type MembroEquipeAgora = {
   nome: string;
   corIdentificacao: string | null;
   fotoUrl: string | null;
-  emExecucao: Array<{ demandaId: string; numeroOperacional: number | null; nome: string | null }>;
+  emExecucao: Array<{ demandaId: string; numeroOperacional: number | null; identificador: string | null; nome: string | null }>;
 };
 
 /** Quem do departamento está trabalhando agora e em quê. Só o Head DESTE departamento (403 para qualquer outro). */
@@ -2879,11 +2881,20 @@ export async function testarConfiguracaoEmailReal(): Promise<ConfiguracaoEmailTe
 // ---------------------------------------------------------------------------------
 //
 // Representa `numero_operacional` (contínuo, sem ano — ver types/configuracao-numeracao-
-// tarefa.ts), nunca `codigoReferencia`. Só GET: não existe PATCH nem endpoint de ajuste —
-// o único mecanismo de inicialização do contador é o CLI administrativo do backend.
+// tarefa.ts), nunca `codigoReferencia`. GET lê o estado; PATCH (Fase 7D.1) configura o formato das próximas tarefas.
 
 export async function obterNumeracaoTarefaReal(): Promise<ConfiguracaoNumeracaoTarefaRead> {
   return request<ConfiguracaoNumeracaoTarefaRead>("/configuracoes/numeracao-tarefas");
+}
+
+/** Fase 7D.1 — altera só o formato das PRÓXIMAS tarefas e/ou o próximo número (campo omitido = não muda). O servidor valida tudo. */
+export async function atualizarNumeracaoTarefaReal(
+  patch: Partial<{ prefixo: string; separador: string; incluirAno: boolean; digitos: number; proximoNumero: number }>,
+): Promise<ConfiguracaoNumeracaoTarefaRead> {
+  return request<ConfiguracaoNumeracaoTarefaRead>("/configuracoes/numeracao-tarefas", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
 
 

@@ -23,6 +23,7 @@ export type RelatorioPeca = {
   demandaId: string;
   nome: string;
   numeroOperacional: number;
+  identificador: string;
   /** Primeiro responsável (por id); `null` = "Sem responsável". */
   redatorNome: string | null;
   /** Só existe para Demanda concluída/cancelada. */

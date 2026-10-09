@@ -193,17 +193,20 @@ export function resolverProjetoNome(referencia: string | null | undefined, diret
 }
 
 /**
- * Rótulo operacional da Demanda — `#2063`.
+ * Rótulo operacional da Demanda — `#2063` (histórico) ou `BOX-2026-02064` (emitido com o padrão configurado).
  *
- * É o identificador que a operação reconhece e o que aparece em listagem, card e cabeçalho.
- * O `#` é **apresentação**: no banco `numero_operacional` é inteiro, ordenado e comparado
- * como número. Centralizado aqui para que mudar a forma de escrever seja uma edição só.
+ * É o identificador que a operação reconhece e o que aparece em listagem, card e cabeçalho. Desde a Fase 7D.1 é o
+ * `identificador` EMITIDO e gravado na criação (imutável): nunca é recalculado com a configuração atual. O fallback `#<número>`
+ * só existe para respostas legadas que ainda não trazem o campo — e reproduz exatamente o formato histórico.
+ * No banco `numero_operacional` continua inteiro, ordenado e comparado como número. Centralizado aqui: é a ÚNICA função que
+ * decide como uma tarefa é escrita na tela.
  *
  * O UUID nunca é exibido; `codigoReferencia` (`T26000001`) é a identidade oficial e aparece
  * em detalhe, busca e auditoria — ver `rotuloReferenciaDemanda`.
  */
-export function rotuloDemanda(demanda: { numeroOperacional: number }): string {
-  return `#${demanda.numeroOperacional}`;
+export function rotuloDemanda(demanda: { numeroOperacional: number | null; identificador?: string | null }): string {
+  if (demanda.identificador) return demanda.identificador;
+  return demanda.numeroOperacional === null ? "" : `#${demanda.numeroOperacional}`;
 }
 
 /** Identidade oficial, para detalhe/tooltip/auditoria. Reinicia por ano, ao contrário de `#2063`. */

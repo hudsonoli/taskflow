@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDemanda } from "@/lib/referencias";
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
@@ -89,7 +90,7 @@ export function EquipeAgoraCard({ departamentoId }: { departamentoId: string }) 
                   membro.emExecucao.map((atividade) => (
                     <p key={atividade.demandaId} className="truncate text-xs text-emerald-700 dark:text-emerald-400">
                       <span className="font-medium">Em execução:</span>{" "}
-                      {atividade.numeroOperacional !== null ? `#${atividade.numeroOperacional} — ` : ""}
+                      {atividade.numeroOperacional !== null ? `${rotuloDemanda(atividade)} — ` : ""}
                       {atividade.nome ?? "Tarefa"}
                     </p>
                   ))

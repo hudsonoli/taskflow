@@ -65,6 +65,7 @@ export type TrafegoAgoraItem = {
   decorridoSegundos: number;
   demandaId: string;
   demandaNumero: number | null;
+  demandaIdentificador?: string | null;
   demandaNome: string | null;
   usuarioId: string | null;
   usuarioNome: string | null;

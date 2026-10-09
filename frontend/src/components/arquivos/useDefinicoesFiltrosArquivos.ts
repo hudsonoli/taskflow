@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDemanda } from "@/lib/referencias";
 import { useMemo } from "react";
 import { Building2, CalendarDays, CircleDot, FileType, FolderKanban, ListTodo, User } from "lucide-react";
 import type { MemberOption } from "@/components/ui/MemberSelector";
@@ -83,7 +84,7 @@ export function useDefinicoesFiltrosArquivos({
         tipo: "enum",
         valoresAbertos: true,
         opcoesCarregadas: diretoriosProntos,
-        opcoes: demandas.map((demanda) => ({ value: demanda.id, label: `#${demanda.numeroOperacional} — ${demanda.nome}` })),
+        opcoes: demandas.map((demanda) => ({ value: demanda.id, label: `${rotuloDemanda(demanda)} — ${demanda.nome}` })),
         placeholderBusca: "Buscar demanda…",
         buscavel: true,
       },

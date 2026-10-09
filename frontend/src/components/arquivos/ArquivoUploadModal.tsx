@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDemanda } from "@/lib/referencias";
 import { useRef, useState } from "react";
 import { Link2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -141,7 +142,7 @@ export function ArquivoUploadModal({
           onChange={(event) => setDemandaId(event.target.value)}
           options={[
             { value: "", label: "Selecionar…" },
-            ...demandasFiltradas.map((demanda) => ({ value: demanda.id, label: `#${demanda.numeroOperacional} — ${demanda.nome}` })),
+            ...demandasFiltradas.map((demanda) => ({ value: demanda.id, label: `${rotuloDemanda(demanda)} — ${demanda.nome}` })),
           ]}
         />
         {demandasFiltradas.length === 0 && (

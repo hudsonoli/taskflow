@@ -155,6 +155,8 @@ export type Demanda = {
   anoReferencia: number;
   sequencialReferencia: number;
   numeroOperacional: number;
+  /** Identificador EMITIDO (imutável): `#845` ou `BOX-2026-00846`. É o que a tela exibe. */
+  identificador: string;
   projetoId: string | null;
   clienteId: string | null;
   criadoPorUsuarioId: string | null;
@@ -200,6 +202,7 @@ export type Demanda = {
 export type DemandaDiretorio = {
   id: string;
   numeroOperacional: number;
+  identificador: string;
   codigoReferencia: string;
   nome: string;
   status: DemandaStatus;
