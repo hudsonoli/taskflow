@@ -35,6 +35,12 @@ services:
       # arquivo enviado por usuário. Metadado (Postgres) já era persistente; isto cobre o lado
       # do filesystem que faltava.
       - taskfloww_uploads:/app/uploads
+      # GeoIP local (Fase 7E.1): a base MaxMind GeoLite2-City fica FORA do Git, em /docker/taskflow/geoip/ no host, montada SOMENTE
+      # LEITURA. Monta-se o DIRETÓRIO (não o arquivo): se a base ainda não foi colocada, nada quebra — o GeoIP fica desabilitado e a
+      # tela mostra "Não disponível". Procedimento de instalação/atualização: docs/geoip-e-proxy-confiavel.md.
+      - ./geoip:/app/geoip:ro
+    environment:
+      GEOIP_DB_PATH: /app/geoip/GeoLite2-City.mmdb
     networks:
       - taskfloww_net
     healthcheck:

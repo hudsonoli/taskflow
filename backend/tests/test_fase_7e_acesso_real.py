@@ -139,6 +139,16 @@ class _Leitor:
         return self.registro
 
 
+class _ProviderFalso:
+    """Troca o provider do processo por um leitor controlado (o login chama `geoip_provider().regiao`)."""
+
+    def __init__(self, leitor) -> None:
+        self.leitor = leitor
+
+    def regiao(self, ip):
+        return regiao_do_ip(ip, self.leitor)
+
+
 BRASILIA = {
     "city": {"names": {"pt-BR": "Brasília", "en": "Brasilia"}},
     "subdivisions": [{"iso_code": "DF", "names": {"en": "Federal District"}}],
@@ -174,9 +184,10 @@ def test_falha_do_geoip_vira_none_nunca_excecao() -> None:
 
 
 def test_sem_base_configurada_a_regiao_e_indisponivel(monkeypatch) -> None:
-    geoip._leitor_padrao.cache_clear()
+    monkeypatch.delenv("GEOIP_DB_PATH", raising=False)
+    geoip.reiniciar_geoip()
     assert regiao_do_ip("187.1.2.3") is None  # GEOIP_DB_PATH ausente: sem consulta externa, sem erro
-    geoip._leitor_padrao.cache_clear()
+    geoip.reiniciar_geoip()
 
 
 # ======================================================================================
@@ -247,7 +258,7 @@ def test_login_sem_user_agent_e_ipv6(app, db_session, empresa, client_admin) -> 
 
 def test_regiao_encontrada_aparece_e_ip_privado_nao_consulta(app, db_session, empresa, client_admin, monkeypatch) -> None:
     leitor = _Leitor(BRASILIA)
-    monkeypatch.setattr(geoip, "_leitor_padrao", lambda: leitor)
+    monkeypatch.setattr(geoip, "geoip_provider", lambda: _ProviderFalso(leitor))
     publico = _criar_usuario_com_credencial(db_session, empresa=empresa, perfil_base="operador", email_prefixo="geo1")
     interno = _criar_usuario_com_credencial(db_session, empresa=empresa, perfil_base="operador", email_prefixo="geo2")
     db_session.commit()
@@ -259,7 +270,7 @@ def test_regiao_encontrada_aparece_e_ip_privado_nao_consulta(app, db_session, em
 
 
 def test_falha_do_geoip_nao_bloqueia_o_login(app, db_session, empresa, client_admin, monkeypatch) -> None:
-    monkeypatch.setattr(geoip, "_leitor_padrao", lambda: _Leitor(erro=RuntimeError("base corrompida")))
+    monkeypatch.setattr(geoip, "geoip_provider", lambda: _ProviderFalso(_Leitor(erro=RuntimeError("base corrompida"))))
     usuario = _criar_usuario_com_credencial(db_session, empresa=empresa, perfil_base="operador", email_prefixo="geof")
     db_session.commit()
     _login(app, empresa, usuario, peer=PROXY_DOCKER, headers={"X-Forwarded-For": "187.1.2.3"})

@@ -80,12 +80,11 @@ class Settings:
     # ranges privados/loopback: a API nunca é publicada na internet (só o proxy/BFF na rede Docker a alcança). Em outra topologia,
     # fixe a sub-rede exata (ex.: TRUSTED_PROXY_CIDRS=172.18.0.0/16). Valor inválido falha no boot.
     trusted_proxy_cidrs: str = field(
-        default_factory=lambda: os.getenv(
-            "TRUSTED_PROXY_CIDRS", "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
-        )
+        default_factory=lambda: os.getenv("TRUSTED_PROXY_CIDRS", "").strip()
+        or "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
     )
-    # Fase 7E — base GeoIP LOCAL (.mmdb, ex.: GeoLite2-City) para a região aproximada do IP no login. Ausente = região "Não disponível".
-    # Nada é baixado nem consultado em serviço externo.
+    # Fases 7E/7E.1 — base GeoIP LOCAL (MaxMind GeoLite2-City, .mmdb) para a região aproximada do IP no login. Ausente/inválida =
+    # GeoIP desabilitado e região "Não disponível". Nada é baixado nem consultado em serviço externo; o arquivo não é versionado.
     geoip_db_path: str | None = field(default_factory=lambda: os.getenv("GEOIP_DB_PATH") or None)
 
     @property

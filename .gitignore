@@ -15,6 +15,12 @@ backend/.dev-server.log
 backend/backups/
 
 *.pyc
+
+# GeoIP (Fase 7E.1): a base MaxMind GeoLite2 e qualquer credencial/licença NUNCA entram no Git.
+*.mmdb
+/geoip/
+*.mmdb.tar.gz
+GeoIP.conf
 .env
 .env.local
 .env.*.local
