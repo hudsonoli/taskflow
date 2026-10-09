@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { BACKEND_URL, EMPRESA_CODIGO, SESSION_COOKIE_NAME, sessionCookieOptions } from "@/lib/server/backend";
+import { cabecalhosDoCliente } from "@/lib/server/cliente-http";
 import { dadosVisuaisDaSessao, sincronizarCookieTema, sincronizarCookieTenant } from "@/lib/server/tema";
 import { normalizarSlug } from "@/lib/tenant";
 
@@ -25,7 +26,8 @@ export async function POST(request: Request) {
 
   const backendResponse = await fetch(`${BACKEND_URL}/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    // IP original e User-Agent do navegador: sem isto a auditoria de acesso registraria o IP do container do BFF.
+    headers: { "Content-Type": "application/json", ...cabecalhosDoCliente(request.headers) },
     body: JSON.stringify({ ...empresa, email, senha }),
     cache: "no-store",
   });

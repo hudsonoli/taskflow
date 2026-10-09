@@ -10,12 +10,10 @@ import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { listEventos } from "@/lib/api";
+import { TIPO_LOGIN_SUCESSO, resolverAcessoLogin, rotuloRegiao } from "@/lib/acessos";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeAcessarAcessos } from "@/lib/escopo-operacional";
-import { parseNavegador, parseSistemaOperacional } from "@/lib/user-agent";
 import type { AcessoLoginEvento } from "@/types/acesso";
-
-const TIPO_LOGIN_SUCESSO = "auth.login_sucesso";
 
 function formatDataHora(iso: string): string {
   const data = new Date(iso);
@@ -36,21 +34,8 @@ export function AcessosView() {
     setErro(null);
     try {
       const resultado = await listEventos({ tipo: TIPO_LOGIN_SUCESSO, limit: 100 });
-      const resolvidos: AcessoLoginEvento[] = resultado.map((evento) => {
-        const payload = evento.payload ?? {};
-        const userAgent = typeof payload.user_agent === "string" ? payload.user_agent : null;
-        return {
-          id: evento.id,
-          usuarioId: evento.usuarioId,
-          nome: typeof payload.nome === "string" ? payload.nome : "Usuário desconhecido",
-          ip: typeof payload.ip_address === "string" ? payload.ip_address : null,
-          userAgent,
-          navegador: parseNavegador(userAgent),
-          sistemaOperacional: parseSistemaOperacional(userAgent),
-          ocorridoEm: evento.occurredAt,
-        };
-      });
-      setEventos(resolvidos);
+      // O servidor é a fonte de IP, região, navegador e sistema operacional (lidos da requisição HTTP do login); a tela só exibe.
+      setEventos(resultado.map(resolverAcessoLogin));
     } catch {
       setErro("Não foi possível carregar o histórico de acessos.");
     } finally {
@@ -109,12 +94,13 @@ export function AcessosView() {
     <div className="flex flex-col gap-6">
       {header}
 
-      <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-400">
+      <div className="flex items-start gap-2 rounded-2xl border border-line bg-surface-2 p-3.5 text-xs text-fg-muted">
         <MapPinOff className="h-4 w-4 shrink-0" />
         <p>
-          Região do IP indisponível nesta fase — exigiria um serviço externo de geolocalização, fora do escopo do
-          protótipo. IP, navegador e sistema operacional são reais, capturados no login. A lista não filtra por
-          empresa: o login real ainda não está integrado ao usuário simulado do cabeçalho.
+          Lista dos logins da sua empresa. IP, navegador e sistema operacional são registrados pelo servidor a partir da
+          requisição de login; a região é aproximada (por IP) e aparece como «Não disponível» quando não pode ser
+          determinada. Registros anteriores a esta atualização podem mostrar o endereço interno do servidor e navegador
+          desconhecido: essa informação não foi guardada e não é reconstruída.
         </p>
       </div>
 
@@ -159,7 +145,11 @@ export function AcessosView() {
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-300">{formatDataHora(evento.ocorridoEm)}</td>
                     <td className="px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-300">{evento.ip ?? "—"}</td>
                     <td className="px-4 py-3">
-                      <Badge tone="neutral">Não disponível</Badge>
+                      {evento.regiao ? (
+                        <span className="text-zinc-600 dark:text-zinc-300">{evento.regiao}</span>
+                      ) : (
+                        <Badge tone="neutral">{rotuloRegiao(evento)}</Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-300">{evento.navegador}</td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-300">{evento.sistemaOperacional}</td>

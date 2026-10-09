@@ -17,8 +17,10 @@ export type AcessoLoginEvento = {
   id: string;
   usuarioId: string | null;
   nome: string;
+  /** IP público/original do cliente, resolvido pelo servidor (eventos antigos podem ter o IP interno do proxy). */
   ip: string | null;
-  userAgent: string | null;
+  /** Região aproximada do IP (GeoIP local, quando configurado); `null` = "Não disponível". */
+  regiao: string | null;
   navegador: string;
   sistemaOperacional: string;
   ocorridoEm: string;
