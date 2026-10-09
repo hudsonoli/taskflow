@@ -1619,10 +1619,18 @@ export async function listDemandasReais(params?: {
   sort?: DemandaSort;
   // D2-B5 (MeuDepartamentoView): filtros "Colaborador" (é responsável), "Equipe" (algum
   // responsável é membro), "Prioridade" e "Origem" (derivada — cliente vinculado ou não).
+  // Fase 6.1 (filtros avançados): `responsavelId`/`equipeId`/`clienteId`/`projetoId`/`prioridade` aceitam VÁRIOS valores em CSV
+  // ("é um de", OR) e têm a versão `...Excluir` ("não é um de"). Só refinam: o escopo de segurança é derivado no servidor.
   responsavelId?: string;
   equipeId?: string;
-  prioridade?: DemandaPrioridade;
+  prioridade?: string;
   origem?: DemandaOrigemFiltro;
+  statusExcluir?: string;
+  clienteIdExcluir?: string;
+  projetoIdExcluir?: string;
+  responsavelIdExcluir?: string;
+  equipeIdExcluir?: string;
+  prioridadeExcluir?: string;
   // D2-B5: período "Atrasadas" — `!finalizada && prazo IS NOT NULL && prazo < agora`,
   // mesma fórmula do resumo de Atendimento (D2-B4), agora também filtrável na lista.
   atrasada?: boolean;
@@ -1646,6 +1654,12 @@ export async function listDemandasReais(params?: {
   if (params?.equipeId) query.set("equipeId", params.equipeId);
   if (params?.prioridade) query.set("prioridade", params.prioridade);
   if (params?.origem) query.set("origem", params.origem);
+  if (params?.statusExcluir) query.set("statusExcluir", params.statusExcluir);
+  if (params?.clienteIdExcluir) query.set("clienteIdExcluir", params.clienteIdExcluir);
+  if (params?.projetoIdExcluir) query.set("projetoIdExcluir", params.projetoIdExcluir);
+  if (params?.responsavelIdExcluir) query.set("responsavelIdExcluir", params.responsavelIdExcluir);
+  if (params?.equipeIdExcluir) query.set("equipeIdExcluir", params.equipeIdExcluir);
+  if (params?.prioridadeExcluir) query.set("prioridadeExcluir", params.prioridadeExcluir);
   if (params?.atrasada) query.set("atrasada", "true");
   if (params?.naoFinalizada) query.set("naoFinalizada", "true");
   const data = await request<DemandaReadApi[]>(`/demandas?${query.toString()}`);

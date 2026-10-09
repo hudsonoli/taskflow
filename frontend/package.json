@@ -20,7 +20,8 @@
     "test:cep": "node --test src/lib/cep.test.ts",
     "test:advanced-filters": "node --test src/lib/filtros-avancados.test.ts",
     "test:filtros-arquivos": "node --test src/lib/filtros-arquivos.test.ts",
-    "test:filtros-trafego": "node --test src/lib/filtros-trafego.test.ts"
+    "test:filtros-trafego": "node --test src/lib/filtros-trafego.test.ts",
+    "test:filtros-meu-departamento": "node --test src/lib/filtros-meu-departamento.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

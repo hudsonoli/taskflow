@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -15,19 +15,13 @@ import {
   UserX,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { MemberSelector } from "@/components/ui/MemberSelector";
-import { Select } from "@/components/ui/Select";
+import { FiltrosAvancados } from "@/components/filtros/FiltrosAvancados";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { type IndicadorItem } from "@/components/operacional/IndicadoresGrid";
 import { KpiStrip } from "@/components/ui/KpiStrip";
 import { TarefasLista } from "@/components/operacional/TarefasLista";
-import {
-  getResumoDepartamento,
-  listDemandasReais,
-  type DemandaOrigemFiltro,
-  type ResumoDepartamento,
-} from "@/lib/api-backend";
+import { getResumoDepartamento, listDemandasReais, type ResumoDepartamento } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useEstadoExpediente } from "@/lib/estadoExpediente";
 import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
@@ -35,74 +29,42 @@ import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { getHorasDepartamento } from "@/lib/api";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
-import { prioridadeDemandaLabels, statusDemandaLabels } from "@/lib/demandas";
+import { filtrosMeuDepartamentoParaApi } from "@/lib/filtros-meu-departamento";
+import { useFiltrosNaUrl } from "@/lib/useFiltrosNaUrl";
 import {
   capacidadeAproximada,
-  fimDaSemana,
   formatHoras,
-  inicioDaSemana,
   podeAcessarMeuDepartamento,
   resolverHeadDepartamento,
 } from "@/lib/escopo-operacional";
-import type { Demanda, DemandaPrioridade, DemandaStatus } from "@/types/demanda";
+import type { Demanda } from "@/types/demanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
-
-type PeriodoFiltro = "todos" | "hoje" | "semana" | "atrasadas";
-type OrigemFiltro = "todos" | DemandaOrigemFiltro;
+import { useDefinicoesFiltrosMeuDepartamento } from "./useDefinicoesFiltrosMeuDepartamento";
 
 const DIAS_UTEIS_SEMANA = 5;
 const TAMANHO_PAGINA = 50;
 
 // D2-B5: mesma razão do D2-B1/B2/B3/B4 — AppDataContext.demandas vem limitado a 200 itens.
-// MeuDepartamentoView filtrava esse array localmente E calculava os 11 indicadores sobre o
-// mesmo array truncado. A lista passa a consultar GET /demandas com escopo=meu-departamento
-// (autoridade RBAC — 403 se não for head) + departamentoId=<departamentoHead.id> (recorte
-// funcional singular, mesma lógica de resolverHeadDepartamento já existente — nunca "todos
-// os departamentos que ele lidera"); os 7 contadores + horasEstimadas + sobrecarga passam a
-// vir de GET /demandas/meu-departamento/resumo, agregados no servidor sobre o universo
-// INTEGRAL do departamento. horasConsumidas (GET /sessoes-trabalho/horas) e
-// capacidadeDisponivel (headcount + expediente, sem depender de Demanda) já eram corretos e
-// não mudam. Tela permanece somente-leitura — sem drawer, sem mutation, sem refetchTick.
-function periodoParaFiltros(periodo: PeriodoFiltro): {
-  prazoInicio?: string;
-  prazoFim?: string;
-  atrasada?: boolean;
-} {
-  if (periodo === "hoje") {
-    const inicio = new Date();
-    inicio.setHours(0, 0, 0, 0);
-    const fim = new Date(inicio);
-    fim.setHours(23, 59, 59, 999);
-    return { prazoInicio: inicio.toISOString(), prazoFim: fim.toISOString() };
-  }
-  if (periodo === "semana") {
-    const agora = new Date();
-    return { prazoInicio: inicioDaSemana(agora).toISOString(), prazoFim: fimDaSemana(agora).toISOString() };
-  }
-  if (periodo === "atrasadas") {
-    return { atrasada: true };
-  }
-  return {};
-}
+// A lista consulta GET /demandas com escopo=meu-departamento (autoridade RBAC — 403 se não for
+// head) + departamentoId=<departamentoHead.id> (recorte funcional singular, mesma lógica de
+// resolverHeadDepartamento — nunca "todos os departamentos que ele lidera"); os 7 contadores +
+// horasEstimadas + sobrecarga vêm de GET /demandas/meu-departamento/resumo, agregados no servidor
+// sobre o universo INTEGRAL do departamento. Tela somente-leitura.
+//
+// Fase 6.1: os filtros são os AVANÇADOS compartilhados (chips, operadores, vários valores, estado na
+// URL) e REFINAM a lista no servidor, antes da paginação. O departamento NÃO é filtro — é o escopo.
+// Os indicadores (KPIs) continuam sendo do departamento INTEIRO, como sempre foram: os filtros
+// afetam só a lista (decisão antiga e deliberada da tela, mantida).
 
 export function MeuDepartamentoView() {
   const { usuarioAtual } = useAppData();
   const { estado: estadoExpediente } = useEstadoExpediente();
-  const { clientes } = useDiretorioClientes();
-  const { equipes } = useDiretorioEquipes();
+  const { clientes, carregando: carregandoClientes } = useDiretorioClientes();
+  const { equipes, carregando: carregandoEquipes } = useDiretorioEquipes();
   const { departamentos } = useDiretorioDepartamentos();
   const { usuarios } = useDiretorioUsuarios();
-  const { projetos } = useDiretorioProjetos();
+  const { projetos, carregando: carregandoProjetos } = useDiretorioProjetos();
 
-  const [colaboradorId, setColaboradorId] = useState("");
-  const [equipeId, setEquipeId] = useState("");
-  const [clienteId, setClienteId] = useState("");
-  const [projetoId, setProjetoId] = useState("");
-  const [status, setStatus] = useState<DemandaStatus | "todos">("todos");
-  const [prioridade, setPrioridade] = useState<DemandaPrioridade | "todos">("todos");
-  const [periodo, setPeriodo] = useState<PeriodoFiltro>("todos");
-  const [origem, setOrigem] = useState<OrigemFiltro>("todos");
   const [offset, setOffset] = useState(0);
 
   const [horasConsumidas, setHorasConsumidas] = useState(0);
@@ -110,7 +72,16 @@ export function MeuDepartamentoView() {
   const [erroHoras, setErroHoras] = useState<string | null>(null);
 
   const departamentoHead = usuarioAtual ? resolverHeadDepartamento(usuarioAtual, departamentos) : undefined;
-  const { buscarOpcoes: buscarColaboradores } = useUsuariosSelector({ departamentoId: departamentoHead?.id });
+  const definicoesFiltros = useDefinicoesFiltrosMeuDepartamento({
+    departamentoId: departamentoHead?.id,
+    equipes,
+    clientes,
+    projetos,
+    diretoriosProntos: !carregandoEquipes && !carregandoClientes && !carregandoProjetos,
+  });
+  const { filtros, definirFiltros } = useFiltrosNaUrl(definicoesFiltros, true);
+  // Atalhos de data ("hoje", "atrasado"…) viram intervalos uma vez por mudança de filtro (não a cada render).
+  const parametrosFiltros = useMemo(() => filtrosMeuDepartamentoParaApi(filtros, new Date()), [filtros]);
   const podeAcessar = usuarioAtual ? podeAcessarMeuDepartamento(usuarioAtual, departamentos) : false;
 
   // Página do servidor — fonte autoritativa da lista exibida.
@@ -148,16 +119,18 @@ export function MeuDepartamentoView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [departamentoHead?.id]);
 
-  function alterarFiltro<T>(setter: (valor: T) => void) {
-    return (valor: T) => {
-      setter(valor);
-      setOffset(0); // qualquer filtro novo sempre volta pra primeira página
-    };
+  // Qualquer mudança de filtro — ou de departamento atual (Fase 5: a revalidação do contexto troca o Head) — volta à
+  // primeira página. Comparado durante o RENDER (mesmo padrão das demais telas), nunca em efeito.
+  const chaveContexto = `${departamentoHead?.id ?? ""}\u0000${JSON.stringify(parametrosFiltros)}`;
+  const [chaveContextoVista, setChaveContextoVista] = useState(chaveContexto);
+  if (chaveContexto !== chaveContextoVista) {
+    setChaveContextoVista(chaveContexto);
+    setOffset(0);
   }
 
   // Colaboradores ativos do departamento a partir do diretório (até 200): usado SÓ no cálculo de
-  // capacidade abaixo — a métrica segue exatamente como estava. O filtro "Colaborador" busca no
-  // servidor (`buscarColaboradores`).
+  // capacidade abaixo — a métrica segue exatamente como estava. O filtro "Responsável" busca no
+  // servidor (definição em useDefinicoesFiltrosMeuDepartamento).
   const colaboradoresOptions = departamentoHead
     ? usuarios.filter((usuario) => usuario.departamentoId === departamentoHead.id && usuario.status === "ativo")
     : [];
@@ -168,18 +141,7 @@ export function MeuDepartamentoView() {
 
   // Chave da busca atual — comparada durante o RENDER, mesma técnica de
   // DemandasView.tsx/PautaView.tsx/MinhasDemandasView.tsx.
-  const chaveBusca = [
-    departamentoHead?.id ?? "",
-    colaboradorId,
-    equipeId,
-    clienteId,
-    projetoId,
-    status,
-    prioridade,
-    periodo,
-    origem,
-    offset,
-  ].join("\u0000");
+  const chaveBusca = [departamentoHead?.id ?? "", JSON.stringify(parametrosFiltros), offset].join("\u0000");
   const [chaveConsultada, setChaveConsultada] = useState<string | null>(null);
   if (chaveBusca !== chaveConsultada) {
     setChaveConsultada(chaveBusca);
@@ -190,20 +152,11 @@ export function MeuDepartamentoView() {
   useEffect(() => {
     if (!podeAcessar || !departamentoHead) return;
     let cancelado = false;
-    const { prazoInicio, prazoFim, atrasada } = periodoParaFiltros(periodo);
     listDemandasReais({
+      ...parametrosFiltros,
+      // O escopo de segurança é o do servidor (`escopo=meu-departamento`); `departamentoId` só estreita ao departamento ATUAL.
       escopo: "meu-departamento",
       departamentoId: departamentoHead.id,
-      responsavelId: colaboradorId || undefined,
-      equipeId: equipeId || undefined,
-      clienteId: clienteId || undefined,
-      projetoId: projetoId || undefined,
-      status: status === "todos" ? undefined : status,
-      prioridade: prioridade === "todos" ? undefined : prioridade,
-      origem: origem === "todos" ? undefined : origem,
-      prazoInicio,
-      prazoFim,
-      atrasada,
       limit: TAMANHO_PAGINA,
       offset,
     })
@@ -224,7 +177,7 @@ export function MeuDepartamentoView() {
     return () => {
       cancelado = true;
     };
-  }, [podeAcessar, departamentoHead, colaboradorId, equipeId, clienteId, projetoId, status, prioridade, periodo, origem, offset]);
+  }, [podeAcessar, departamentoHead, parametrosFiltros, offset]);
 
   useEffect(() => {
     if (!podeAcessar || !departamentoHead) return;
@@ -318,70 +271,7 @@ export function MeuDepartamentoView() {
 
       <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
         <p className="mb-3 text-sm font-semibold text-fg">Filtros</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Filtro (não vínculo): colaboradores ATIVOS do departamento do Head, buscados no servidor
-              (sem o corte de 200). Clicar de novo no selecionado volta para "Todos". */}
-          <MemberSelector
-            label="Colaborador"
-            multiple={false}
-            values={colaboradorId ? [colaboradorId] : []}
-            onChange={(values) => alterarFiltro(setColaboradorId)(values[0] ?? "")}
-            placeholder="Todos"
-            buscarOpcoes={buscarColaboradores}
-            emptyLabel="Nenhum colaborador encontrado"
-          />
-          <Select
-            label="Equipe"
-            value={equipeId}
-            onChange={(event) => alterarFiltro(setEquipeId)(event.target.value)}
-            options={[{ value: "", label: "Todas" }, ...equipes.map((equipe) => ({ value: equipe.id, label: equipe.nome }))]}
-          />
-          <Select
-            label="Cliente"
-            value={clienteId}
-            onChange={(event) => alterarFiltro(setClienteId)(event.target.value)}
-            options={[{ value: "", label: "Todos" }, ...clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome }))]}
-          />
-          <Select
-            label="Projeto"
-            value={projetoId}
-            onChange={(event) => alterarFiltro(setProjetoId)(event.target.value)}
-            options={[{ value: "", label: "Todos" }, ...projetos.map((projeto) => ({ value: projeto.id, label: projeto.nome }))]}
-          />
-          <Select
-            label="Status"
-            value={status}
-            onChange={(event) => alterarFiltro(setStatus)(event.target.value as DemandaStatus | "todos")}
-            options={[{ value: "todos", label: "Todos" }, ...Object.entries(statusDemandaLabels).map(([value, label]) => ({ value, label }))]}
-          />
-          <Select
-            label="Prioridade"
-            value={prioridade}
-            onChange={(event) => alterarFiltro(setPrioridade)(event.target.value as DemandaPrioridade | "todos")}
-            options={[{ value: "todos", label: "Todas" }, ...Object.entries(prioridadeDemandaLabels).map(([value, label]) => ({ value, label }))]}
-          />
-          <Select
-            label="Período"
-            value={periodo}
-            onChange={(event) => alterarFiltro(setPeriodo)(event.target.value as PeriodoFiltro)}
-            options={[
-              { value: "todos", label: "Todos" },
-              { value: "hoje", label: "Previstas para hoje" },
-              { value: "semana", label: "Previstas para a semana" },
-              { value: "atrasadas", label: "Atrasadas" },
-            ]}
-          />
-          <Select
-            label="Origem"
-            value={origem}
-            onChange={(event) => alterarFiltro(setOrigem)(event.target.value as OrigemFiltro)}
-            options={[
-              { value: "todos", label: "Todas" },
-              { value: "cliente", label: "Cliente" },
-              { value: "interna", label: "Interna" },
-            ]}
-          />
-        </div>
+        <FiltrosAvancados definicoes={definicoesFiltros} filtros={filtros} onChange={definirFiltros} />
       </div>
 
       {carregandoInicial ? (
