@@ -3,6 +3,7 @@ import { PERFIL_PARA_PERFIL_BASE, type Usuario, type UsuarioFormDraft, type Usua
 // Reexportados: o mapeamento mora em types/usuario (puro, testável sem alias); quem já importava daqui segue funcionando.
 export { PERFIL_PARA_PERFIL_BASE };
 export type { UsuarioPerfilBaseApi };
+import { inputLocalParaIso } from "@/lib/prazo-operacional";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type {
   FatiaPizza,
@@ -1585,6 +1586,8 @@ function demandaDraftParaPayload(draft: DemandaFormDraft) {
     clienteId: draft.clienteId || null,
     projetoId: draft.projetoId || null,
     dataFimPrevista: draft.dataFimPrevista || null,
+    // Prazo operacional (instante): do `datetime-local` local para ISO com fuso. Ausente (`undefined`) = não mexe no campo.
+    ...(draft.prazoEtapaAtual !== undefined ? { prazoEtapaAtual: inputLocalParaIso(draft.prazoEtapaAtual) } : {}),
     usuarioResponsavelIds: draft.usuarioResponsavelIds,
     departamentoResponsavelIds: draft.departamentoResponsavelIds,
   };

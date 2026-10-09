@@ -19,6 +19,7 @@ import {
 import { obterWorkflowModeloReal } from "@/lib/api-backend";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { dataDoInputLocal, isoParaInputLocal } from "@/lib/prazo-operacional";
 import { useResponsaveisSelector } from "@/lib/useResponsaveisSelector";
 import { useDiretorioWorkflowModelos } from "@/lib/diretorioWorkflowModelos";
 import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
@@ -38,6 +39,7 @@ function createInitialDraft(demanda?: Demanda): DemandaFormDraft {
     usuarioResponsavelIds: demanda?.usuarioResponsavelIds ?? [],
     departamentoResponsavelIds: demanda?.departamentoResponsavelIds ?? [],
     dataFimPrevista: demanda?.dataFimPrevista ?? "",
+    prazoEtapaAtual: isoParaInputLocal(demanda?.prazoEtapaAtual),
     workflowModeloId: null,
   };
 }
@@ -201,11 +203,19 @@ export function NovaDemandaModal({
           placeholder="Buscar cliente…"
           emptyLabel="Nenhum cliente encontrado"
         />
+        {/* Prazo operacional: DATA + HORÁRIO (relógio local). Grava `prazoEtapaAtual` (instante, o que as listas mostram) e o dia
+            escolhido em `dataFimPrevista` (planejamento). Limpar o campo não apaga a data planejada já existente. */}
         <Input
-          label="Prazo previsto"
-          type="date"
-          value={draft.dataFimPrevista ?? ""}
-          onChange={(event) => updateDraft({ dataFimPrevista: event.target.value })}
+          label="Prazo (data e horário)"
+          type="datetime-local"
+          value={draft.prazoEtapaAtual ?? ""}
+          onChange={(event) => {
+            const valor = event.target.value;
+            updateDraft({
+              prazoEtapaAtual: valor,
+              ...(valor ? { dataFimPrevista: dataDoInputLocal(valor) } : {}),
+            });
+          }}
         />
         <Select
           label="Prioridade"

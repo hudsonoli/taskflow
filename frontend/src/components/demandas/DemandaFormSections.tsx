@@ -28,6 +28,7 @@ import { EnvioClienteCard } from "./EnvioClienteCard";
 import { RegistrarAjusteCard } from "./RegistrarAjusteCard";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { rotuloDemanda } from "@/lib/referencias";
+import { inputLocalParaIso, isoParaInputLocal } from "@/lib/prazo-operacional";
 
 type DemandaSectionProps = {
   demanda: Demanda;
@@ -115,7 +116,7 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
   // próprio componente iniciou — sucesso já deixa local e prop iguais; falha já reverte
   // explicitamente em `salvarPit`/`salvarPrazo`, sem precisar de um efeito para isso.
   const [pit, setPit] = useState(demanda.pit ?? "");
-  const [prazo, setPrazo] = useState(demanda.prazoEtapaAtual ?? "");
+  const [prazo, setPrazo] = useState(isoParaInputLocal(demanda.prazoEtapaAtual));
 
   // Vínculo novo não pode ser um Projeto arquivado (mesma regra do backend, ver
   // `_ensure_projeto_valido`) — mas o Projeto já vinculado a esta Demanda continua na lista,
@@ -152,9 +153,10 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
   }
 
   async function salvarPrazo() {
-    if (prazo === (demanda.prazoEtapaAtual ?? "")) return;
-    const ok = await salvarCampo(demanda, { prazoEtapaAtual: prazo || null }, onChange, setErro);
-    if (!ok) setPrazo(demanda.prazoEtapaAtual ?? "");
+    if (prazo === isoParaInputLocal(demanda.prazoEtapaAtual)) return;
+    // O campo é `datetime-local` (relógio local, sem fuso): vira o instante ISO com fuso antes de ir à API.
+    const ok = await salvarCampo(demanda, { prazoEtapaAtual: inputLocalParaIso(prazo) }, onChange, setErro);
+    if (!ok) setPrazo(isoParaInputLocal(demanda.prazoEtapaAtual));
   }
 
   return (

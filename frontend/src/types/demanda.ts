@@ -224,6 +224,11 @@ export type DemandaFormDraft = {
   usuarioResponsavelIds: string[];
   departamentoResponsavelIds: string[];
   dataFimPrevista: string | null;
+  /**
+   * Prazo operacional como o campo `datetime-local` o entrega ("2026-10-15T16:30", relógio LOCAL, sem fuso). Na hora de enviar
+   * vira o instante ISO com `Z` (`inputLocalParaIso`) em `prazoEtapaAtual`; `dataFimPrevista` guarda o dia local escolhido.
+   */
+  prazoEtapaAtual?: string | null;
   /** Só tem efeito na criação (materializa as etapas do template). Editar depois não
    * reaplica nem troca o workflow já materializado nesta fase. */
   workflowModeloId?: string | null;
