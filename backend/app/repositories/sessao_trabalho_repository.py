@@ -179,6 +179,20 @@ class SessaoTrabalhoRepository:
     def get_by_id(self, db: Session, sessao_id: str) -> SessaoTrabalho | None:
         return db.get(SessaoTrabalho, sessao_id)
 
+    def demanda_ids_ativas_do_usuario(self, db: Session, *, empresa_id: str, usuario_id: str) -> list[str]:
+        """Demandas em que o PRÓPRIO usuário tem uma sessão de trabalho ATIVA agora (Meu Dia). Só ids, ordem estável."""
+        statement = (
+            select(SessaoTrabalho.demanda_id)
+            .where(
+                SessaoTrabalho.empresa_id == empresa_id,
+                SessaoTrabalho.usuario_id == usuario_id,
+                SessaoTrabalho.status == "ativa",
+            )
+            .distinct()
+            .order_by(SessaoTrabalho.demanda_id.asc())
+        )
+        return list(db.scalars(statement).all())
+
     def get_by_evento_inicio_id(self, db: Session, evento_inicio_id: str) -> SessaoTrabalho | None:
         statement = select(SessaoTrabalho).where(SessaoTrabalho.evento_inicio_id == evento_inicio_id)
         return db.scalar(statement)

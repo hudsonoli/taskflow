@@ -245,6 +245,10 @@ def list_demandas(
     responsavel_id_excluir: str | None = Query(default=None, alias="responsavelIdExcluir"),
     equipe_id_excluir: str | None = Query(default=None, alias="equipeIdExcluir"),
     prioridade_excluir: str | None = Query(default=None, alias="prioridadeExcluir"),
+    # Só para `sort=fila_pessoal` (Meu Dia): "agora" e as fronteiras de "hoje" vêm do cliente (fuso local), como no resumo pessoal.
+    agora: datetime | None = Query(default=None),
+    hoje_inicio: datetime | None = Query(default=None, alias="hojeInicio"),
+    hoje_fim: datetime | None = Query(default=None, alias="hojeFim"),
     sort: SortDemandas = Query(default=SortDemandas.NUMERO_OPERACIONAL_DESC),
     escopo_solicitado: EscopoSolicitado | None = Query(default=None, alias="escopo"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -254,6 +258,11 @@ def list_demandas(
 ):
     """**Sem parâmetro nenhum já vem escopado.** `escopo=` só estreita, nunca amplia."""
     escopo = _escopo(db, current_user, escopo_solicitado)
+    if sort == SortDemandas.FILA_PESSOAL and (agora is None or hoje_inicio is None or hoje_fim is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="sort=fila_pessoal exige agora, hojeInicio e hojeFim",
+        )
     demandas = demanda_service.list_demandas(
         db,
         escopo=escopo,
@@ -276,6 +285,9 @@ def list_demandas(
         prazo_fim=_normalize_datetime(prazo_fim),
         atrasada=atrasada,
         nao_finalizada=nao_finalizada,
+        agora=_normalize_datetime(agora),
+        hoje_inicio=_normalize_datetime(hoje_inicio),
+        hoje_fim=_normalize_datetime(hoje_fim),
         sort=sort,
         limit=limit,
         offset=offset,

@@ -384,6 +384,22 @@ def carga_trafego(
     )
 
 
+@router.get("/minhas-ativas")
+def minhas_sessoes_ativas(
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+) -> dict[str, list[str]]:
+    """Meu Dia (Fase 7B) — em quais demandas EU tenho uma sessão de trabalho ativa agora. Usuário e empresa vêm SEMPRE do
+    token (nenhum parâmetro): ninguém consulta a sessão de outra pessoa por aqui. Devolve só ids de demanda — nenhuma duração
+    nem hora — então não expõe métrica de tempo (as rotas de horas/produtividade continuam restritas a admin/gestor).
+    Registrada ANTES de `/{sessao_id}`."""
+    return {
+        "demandaIds": sessao_service.demanda_ids_ativas_do_usuario(
+            db, empresa_id=current_user.empresa_id, usuario_id=current_user.id
+        )
+    }
+
+
 @router.get("/{sessao_id}", response_model=SessaoTrabalhoRead)
 def get_sessao_trabalho(
     sessao_id: UUID,

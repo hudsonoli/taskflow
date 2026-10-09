@@ -326,6 +326,9 @@ class SessaoTrabalhoService:
             offset=offset,
         )
 
+    def demanda_ids_ativas_do_usuario(self, db: Session, *, empresa_id: str, usuario_id: str) -> list[str]:
+        return self.repository.demanda_ids_ativas_do_usuario(db, empresa_id=empresa_id, usuario_id=usuario_id)
+
     def get_session(self, db: Session, sessao_id: str) -> SessaoTrabalho | None:
         return self.repository.get_by_id(db, sessao_id)
 

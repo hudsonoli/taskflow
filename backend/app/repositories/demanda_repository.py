@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import ColumnElement, and_, case, func, or_, select
+from sqlalchemy import ColumnElement, and_, case, exists, func, or_, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaRe
 from app.models.departamento import Departamento
 from app.models.equipe_membro import EquipeMembro
 from app.models.projeto import Projeto
+from app.models.sessao_trabalho import SessaoTrabalho
 from app.models.usuario import Usuario
 
 STATUS_ARQUIVADO = "arquivada"
@@ -42,6 +43,9 @@ class SortDemandas(StrEnum):
     NUMERO_OPERACIONAL_DESC = "numero_operacional_desc"
     PRAZO_ASC = "prazo_asc"
     SINALIZADA_DESC = "sinalizada_desc"
+    # Fase 7B (Meu Dia): fila operacional PESSOAL — sessão ativa do próprio usuário, atrasadas, vencem hoje, prazo mais
+    # próximo, sem prazo; dentro de cada faixa: sinalizada, prazo, prioridade, número. Exige `agora`/`hoje_inicio`/`hoje_fim`.
+    FILA_PESSOAL = "fila_pessoal"
 
 
 class OrigemDemanda(StrEnum):
@@ -280,6 +284,9 @@ class DemandaRepository:
         equipe_ids_excluir: Sequence[str] | None = None,
         prioridades_excluir: Sequence[str] | None = None,
         nao_finalizada: bool = False,
+        agora: datetime | None = None,
+        hoje_inicio: datetime | None = None,
+        hoje_fim: datetime | None = None,
         sort: SortDemandas = SortDemandas.NUMERO_OPERACIONAL_DESC,
         limit: int = 50,
         offset: int = 0,
@@ -479,6 +486,10 @@ class DemandaRepository:
             statement = statement.order_by(
                 Demanda.prazo_etapa_atual.asc().nulls_last(), Demanda.numero_operacional.desc()
             )
+        elif sort == SortDemandas.FILA_PESSOAL:
+            if agora is None or hoje_inicio is None or hoje_fim is None:
+                raise ValueError("FILA_PESSOAL exige agora, hoje_inicio e hoje_fim")
+            statement = statement.order_by(*self._ordem_fila_pessoal(escopo, agora, hoje_inicio, hoje_fim))
         elif sort == SortDemandas.SINALIZADA_DESC:
             # D2-D2 (Dashboard pessoal): mesmo motivo de desempate do PRAZO_ASC acima.
             statement = statement.order_by(
@@ -489,6 +500,36 @@ class DemandaRepository:
 
         statement = statement.limit(limit).offset(offset)
         return list(db.scalars(statement).all())
+
+    @staticmethod
+    def _ordem_fila_pessoal(escopo: EscopoDemanda, agora: datetime, hoje_inicio: datetime, hoje_fim: datetime):
+        """Ordem do Meu Dia (Fase 7B). Faixas, da mais para a menos urgente:
+
+        0. EM EXECUÇÃO AGORA — há sessão de trabalho ATIVA do próprio usuário (`escopo.usuario_id`, vindo do token) nesta demanda.
+           A fonte é a sessão real; `status == em_execucao` sozinho NÃO conta como "trabalhando agora";
+        1. atrasada (prazo da etapa atual já passou);
+        2. vence hoje (entre `hoje_inicio` e `hoje_fim`, fronteiras calculadas pelo cliente no fuso local, como no resumo);
+        3. tem prazo futuro;
+        4. sem prazo.
+
+        Dentro de cada faixa: sinalizada primeiro (continuidade com a ordem anterior do Dashboard), prazo mais próximo, prioridade
+        (alta, média, baixa) e, para a ordem ser determinística entre requisições (paginação por offset), número operacional DESC."""
+        prazo = Demanda.prazo_etapa_atual
+        sessao_ativa = exists().where(
+            SessaoTrabalho.empresa_id == escopo.empresa_id,
+            SessaoTrabalho.demanda_id == Demanda.id,
+            SessaoTrabalho.usuario_id == escopo.usuario_id,
+            SessaoTrabalho.status == "ativa",
+        )
+        faixa = case(
+            (sessao_ativa, 0),
+            (and_(prazo.is_not(None), prazo < agora), 1),
+            (and_(prazo.is_not(None), prazo >= hoje_inicio, prazo <= hoje_fim), 2),
+            (prazo.is_not(None), 3),
+            else_=4,
+        )
+        prioridade = case((Demanda.prioridade == "alta", 0), (Demanda.prioridade == "media", 1), else_=2)
+        return (faixa.asc(), Demanda.sinalizada.desc(), prazo.asc().nulls_last(), prioridade.asc(), Demanda.numero_operacional.desc())
 
     # Únicos dois status que `classificarTarefa` (frontend) trata como "finalizada" para
     # fins de atraso — fora daqui, nada mais depende dessa noção. Compartilhado por
