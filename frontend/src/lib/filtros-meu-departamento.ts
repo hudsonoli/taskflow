@@ -74,3 +74,12 @@ export function filtrosMeuDepartamentoParaApi(filtros: readonly FiltroAtivo[], a
   }
   return parametros;
 }
+
+/**
+ * Fase 7C.2 — a lista do Meu Departamento abre na operação EM ABERTO (o servidor aplica "não finalizada" quando não há `status`).
+ * Com um filtro de Status ativo (ex.: Concluída) o pedido é respeitado. Só para a UI explicar o que está sendo mostrado: a regra
+ * mora no servidor, antes da paginação.
+ */
+export function listaMostraSoOperacaoAberta(filtros: readonly FiltroAtivo[]): boolean {
+  return !filtros.some((filtro) => filtro.campo === CAMPO_MEU_DEPARTAMENTO.status && filtro.valores.length > 0 && (filtro.operador === "is" || filtro.operador === "in"));
+}

@@ -29,7 +29,7 @@ import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { getHorasDepartamento } from "@/lib/api";
 import { useDiretorioUsuarios } from "@/lib/diretorioUsuarios";
-import { filtrosMeuDepartamentoParaApi } from "@/lib/filtros-meu-departamento";
+import { filtrosMeuDepartamentoParaApi, listaMostraSoOperacaoAberta } from "@/lib/filtros-meu-departamento";
 import { useFiltrosNaUrl } from "@/lib/useFiltrosNaUrl";
 import {
   capacidadeAproximada,
@@ -56,6 +56,9 @@ const TAMANHO_PAGINA = 50;
 // URL) e REFINAM a lista no servidor, antes da paginação. O departamento NÃO é filtro — é o escopo.
 // Os indicadores (KPIs) continuam sendo do departamento INTEIRO, como sempre foram: os filtros
 // afetam só a lista (decisão antiga e deliberada da tela, mantida).
+//
+// Fase 7C.2: a LISTA abre na operação em ABERTO (não finalizada) — regra do servidor, antes da paginação. Concluída/cancelada só
+// aparecem com filtro explícito de Status (preservado na URL pelo mecanismo dos filtros). Os KPIs seguem do departamento inteiro.
 
 export function MeuDepartamentoView() {
   const { usuarioAtual } = useAppData();
@@ -276,6 +279,11 @@ export function MeuDepartamentoView() {
       <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
         <p className="mb-3 text-sm font-semibold text-fg">Filtros</p>
         <FiltrosAvancados definicoes={definicoesFiltros} filtros={filtros} onChange={definirFiltros} />
+        {listaMostraSoOperacaoAberta(filtros) && (
+          <p className="mt-3 text-xs text-fg-subtle">
+            A lista mostra a operação em aberto do departamento. Para ver concluídas ou canceladas, filtre por Status.
+          </p>
+        )}
       </div>
 
       {carregandoInicial ? (
@@ -286,7 +294,7 @@ export function MeuDepartamentoView() {
             demandas={demandasPagina}
             clientes={clientes}
             emptyTitle={erroPagina ? "Não foi possível carregar" : "Nenhuma tarefa encontrada"}
-            emptyDescription={erroPagina ?? "Ajuste os filtros para visualizar tarefas do departamento."}
+            emptyDescription={erroPagina ?? "Não há tarefas em aberto com estes filtros. Ajuste os filtros ou filtre por Status para ver as finalizadas."}
           />
         </div>
       )}

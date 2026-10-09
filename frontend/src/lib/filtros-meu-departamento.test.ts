@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { decodificarFiltros, filtrosParaParametros, filtrosIguais, PRESETS_DATA } from "./filtros-avancados.ts";
-import { CAMPO_MEU_DEPARTAMENTO, filtrosMeuDepartamentoParaApi } from "./filtros-meu-departamento.ts";
+import { CAMPO_MEU_DEPARTAMENTO, filtrosMeuDepartamentoParaApi, listaMostraSoOperacaoAberta } from "./filtros-meu-departamento.ts";
 import type { DefinicaoFiltro, FiltroAtivo } from "../types/filtros.ts";
 
 const ler = (caminho: string) => readFileSync(new URL(`../${caminho}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
@@ -177,4 +177,46 @@ test("API: o cliente HTTP envia as exclusões e aceita CSV; nenhum caller antigo
     assert.ok(api.includes(`query.set("${nome}"`), nome);
   }
   assert.match(api, /prioridade\?: string;/);
+});
+
+// ── Fase 7C.2 — lista aberta por padrão ───────────────────────────────────────────────────────────────────────────
+
+const semComentarios = (texto: string) => texto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+test("7C.2: sem filtro de Status a lista é a operação em aberto; Status = Concluída/Cancelada pede o que terminou; remover volta às abertas", () => {
+  assert.equal(listaMostraSoOperacaoAberta([]), true); // padrão
+  assert.equal(listaMostraSoOperacaoAberta([{ campo: "cliente", operador: "is", valores: [A] }]), true); // outros filtros não mudam o padrão
+  const concluida: FiltroAtivo[] = [{ campo: "status", operador: "is", valores: ["concluida"] }];
+  assert.equal(listaMostraSoOperacaoAberta(concluida), false);
+  assert.equal(listaMostraSoOperacaoAberta([{ campo: "status", operador: "in", valores: ["concluida", "cancelada"] }]), false);
+  assert.equal(listaMostraSoOperacaoAberta([{ campo: "status", operador: "is", valores: [] }]), true);
+  // o pedido explícito chega ao servidor como `status=...` (é isso que desliga o padrão no backend); o padrão não envia status
+  assert.deepEqual(filtrosMeuDepartamentoParaApi(concluida, AGORA), { status: "concluida" });
+  assert.deepEqual(filtrosMeuDepartamentoParaApi([{ campo: "status", operador: "in", valores: ["concluida", "cancelada"] }], AGORA), { status: "concluida,cancelada" });
+  assert.deepEqual(filtrosMeuDepartamentoParaApi([], AGORA), {}); // sem filtro: nada de status → servidor aplica "em aberto"
+});
+
+test("7C.2: Status = Concluída fica na URL e sobrevive ao refresh; a regra de abertas NÃO é feita no navegador", () => {
+  const defs: DefinicaoFiltro[] = [{ id: "status", label: "Status", tipo: "enum", opcoes: [{ value: "concluida", label: "Concluída" }, { value: "cancelada", label: "Cancelada" }] }];
+  const filtros: FiltroAtivo[] = [{ campo: "status", operador: "is", valores: ["concluida"] }];
+  const params = new URLSearchParams();
+  for (const [nome, valor] of filtrosParaParametros(filtros)) params.set(nome, valor);
+  assert.equal(params.get("status"), "is:concluida");
+  const recarregada = new URLSearchParams(params.toString());
+  assert.ok(filtrosIguais(decodificarFiltros((n) => recarregada.get(n), defs), filtros));
+  const view = semComentarios(ler("components/meu-departamento/MeuDepartamentoView.tsx"));
+  assert.doesNotMatch(view, /demandasPagina\.filter\(|\.filter\(\(demanda\) => .*status/); // nada de filtrar status localmente
+  assert.doesNotMatch(view, /naoFinalizada/); // o padrão é do servidor (antes de limit/offset), não um parâmetro do cliente
+  assert.match(view, /useFiltrosNaUrl\(definicoesFiltros, true\)/);
+});
+
+test("7C.2: escopo, KPIs e 'quem está trabalhando agora' intactos; Departamento continua não sendo filtro", () => {
+  const view = semComentarios(ler("components/meu-departamento/MeuDepartamentoView.tsx"));
+  assert.match(view, /escopo: "meu-departamento",\s+departamentoId: departamentoHead\.id,/);
+  assert.match(view, /<EquipeAgoraCard key=\{departamentoHead\.id\} departamentoId=\{departamentoHead\.id\} \/>/);
+  assert.match(view, /key: "concluidas", title: "Concluídas", value: valorIndicador\(resumo\?\.concluidas\)/); // KPI de concluídas preservado
+  assert.equal("departamento" in CAMPO_MEU_DEPARTAMENTO, false);
+  const status = semComentarios(ler("components/meu-departamento/useDefinicoesFiltrosMeuDepartamento.ts"));
+  assert.match(status, /Object\.entries\(statusDemandaLabels\)/); // Concluída/Cancelada continuam entre as opções de Status
+  assert.doesNotMatch(semComentarios(ler("components/meu-departamento/EquipeAgoraCard.tsx")), /status/i); // presença só por sessão real
 });
