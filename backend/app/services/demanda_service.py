@@ -56,6 +56,9 @@ STATUS_CONCLUIDA = "concluida"
 # Mesma regra de Cliente, Projeto e Departamento: um usuário nestes estados não pode ser
 # DEFINIDO como responsável novo. Vínculo histórico continua valendo.
 STATUS_USUARIO_INVALIDO = {"arquivado", "inativo", "bloqueado"}
+# Departamento só aceita VÍNCULO NOVO quando está ativo (mesma ideia de `STATUS_USUARIO_INVALIDO`): o vínculo que já existe
+# com um departamento depois inativado/arquivado é preservado (a sincronização só valida o que ENTRA).
+STATUS_DEPARTAMENTO_INVALIDO = {"arquivado", "inativo"}
 
 # Toda etapa materializada nasce pendente — não há automação de avanço nesta fase (ver
 # docstring de DemandaWorkflowEtapa e a decisão de etapa_atual ser derivada, não persistida).
@@ -1269,6 +1272,9 @@ class DemandaService:
         usuario = self.usuario_repository.get_by_id(db, usuario_id)
         if usuario is None or usuario.empresa_id != empresa_id:
             raise DemandaUsuarioInvalidoError("Usuário não encontrado para esta empresa")
+        if usuario.is_system_account:
+            # Conta de sistema é identidade técnica da plataforma: nunca é responsável por trabalho (e o diretório já a oculta).
+            raise DemandaUsuarioInvalidoError("Usuário não encontrado para esta empresa")
         if usuario.status in STATUS_USUARIO_INVALIDO:
             raise DemandaUsuarioInvalidoError(
                 f"Usuário em status '{usuario.status}' não aceita novos vínculos"
@@ -1278,6 +1284,10 @@ class DemandaService:
         departamento = self.departamento_repository.get_by_id(db, departamento_id)
         if departamento is None or departamento.empresa_id != empresa_id:
             raise DemandaDepartamentoInvalidoError("Departamento não encontrado para esta empresa")
+        if departamento.status in STATUS_DEPARTAMENTO_INVALIDO:
+            raise DemandaDepartamentoInvalidoError(
+                f"Departamento em status '{departamento.status}' não aceita novos vínculos"
+            )
         if departamento.status == "arquivado":
             raise DemandaDepartamentoInvalidoError(
                 "Departamento arquivado não aceita novos vínculos — restaure-o antes"
@@ -1303,6 +1313,10 @@ class DemandaService:
         if not departamento_ids:
             return
         if actor.perfil_base in PERFIS_VISAO_TOTAL:
+            return
+        if eh_atendimento(db, actor):
+            # Fase 7A: Atendimento é transversal — distribui para qualquer departamento ativo da empresa, mesmo que também
+            # seja Head (de Atendimento). Permissão de ATRIBUIR ≠ escopo de LEITURA (este não muda: ver resolver_escopo_demanda).
             return
         departamentos_head = departamentos_como_head(db, actor)
         if not departamentos_head:
@@ -1332,6 +1346,8 @@ class DemandaService:
             return
         if departamentos_como_head(db, actor):
             return
+        if eh_atendimento(db, actor):
+            return  # Fase 7A: Atendimento distribui para qualquer departamento ativo da empresa
         permitidos = {actor.departamento_id} if actor.departamento_id else set()
         if not set(departamento_ids) <= permitidos:
             raise DemandaDepartamentoForaDoEscopoError(
@@ -1369,6 +1385,8 @@ class DemandaService:
             return
         if departamentos_como_head(db, actor):
             return
+        if eh_atendimento(db, actor):
+            return  # Fase 7A: Atendimento atribui a qualquer usuário elegível da empresa (validade em `_ensure_usuario_valido`)
         permitidos = {actor.id}
         if actor.departamento_id:
             permitidos |= set(self._usuarios_do_departamento(db, actor.empresa_id, actor.departamento_id))

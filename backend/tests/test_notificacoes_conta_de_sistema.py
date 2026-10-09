@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token
+from app.models.demanda_responsavel import DemandaResponsavel
 from app.models.empresa import Empresa
 from app.models.evento import Evento
 from app.models.usuario import Usuario
@@ -181,7 +182,10 @@ def test_conta_de_sistema_consulta_normalmente_e_nao_recebe_a_propria_acao(
     app, db_session: Session, empresa: Empresa, usuario_operador: Usuario, usuario_gestor: Usuario, client_admin: TestClient
 ) -> None:
     sistema = _conta_de_sistema(db_session, empresa)
-    demanda = _demanda(client_admin, [sistema.id])
+    # Fase 7A: a API não aceita mais conta de sistema como responsável; o vínculo é criado direto no banco só para montar o cenário
+    demanda = _demanda(client_admin, [])
+    db_session.add(DemandaResponsavel(demanda_id=demanda["id"], usuario_id=sistema.id, created_at=datetime.now(timezone.utc)))
+    db_session.flush()
     cliente_sistema = _client_de(app, sistema)
     propria = _evento(db_session, demanda["id"], empresa.id, ator=sistema.id)
     de_pessoa = _evento(db_session, demanda["id"], empresa.id, ator=usuario_gestor.id)

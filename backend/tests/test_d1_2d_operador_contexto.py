@@ -357,12 +357,13 @@ def test_head_com_grant_responsavel_de_outro_departamento_continua_livre(
 
 
 # --------------------------------------------------------------------------------------
-# Atendimento (não-Head) + grant — departamento/responsável seguem D1.2D, cliente D1.2C
-# (item 28).
+# Atendimento (não-Head) + grant — Fase 7A: Atendimento é TRANSVERSAL e distribui para qualquer departamento ativo/usuário
+# elegível da empresa (supera a restrição D1.2D para este contexto); cliente segue D1.2C (carteira). Operador comum de outro
+# departamento continua restrito (ver os testes acima e tests/test_fase_7a_prazo_atendimento.py).
 # --------------------------------------------------------------------------------------
 
 
-def test_atendimento_nao_head_com_grant_departamento_alheio_e_rejeitado(
+def test_atendimento_nao_head_com_grant_departamento_alheio_e_aceito(
     app, db_session: Session, empresa: Empresa
 ) -> None:
     atendimento = _operador_comum(db_session, empresa, sufixo="atend-grant-1")
@@ -372,10 +373,10 @@ def test_atendimento_nao_head_com_grant_departamento_alheio_e_rejeitado(
     resposta = _client_para(app, atendimento).post(
         "/demandas", json=_payload(departamentoResponsavelIds=[departamento_outro.id])
     )
-    assert resposta.status_code == 422, resposta.text
+    assert resposta.status_code == 201, resposta.text
 
 
-def test_atendimento_nao_head_com_grant_responsavel_alheio_e_rejeitado(
+def test_atendimento_nao_head_com_grant_responsavel_alheio_e_aceito(
     app, db_session: Session, empresa: Empresa
 ) -> None:
     atendimento = _operador_comum(db_session, empresa, sufixo="atend-grant-2")
@@ -387,7 +388,7 @@ def test_atendimento_nao_head_com_grant_responsavel_alheio_e_rejeitado(
     resposta = _client_para(app, atendimento).post(
         "/demandas", json=_payload(usuarioResponsavelIds=[outro.id])
     )
-    assert resposta.status_code == 422, resposta.text
+    assert resposta.status_code == 201, resposta.text
 
 
 # --------------------------------------------------------------------------------------
