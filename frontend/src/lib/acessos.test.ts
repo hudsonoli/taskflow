@@ -128,3 +128,16 @@ test("a tela não analisa mais o User-Agent do evento por conta própria (só o 
   assert.doesNotMatch(semComentarios(ler("components/acessos/AcessosView.tsx")), /user-agent|parseNavegador|parseSistemaOperacional/);
   assert.match(semComentarios(ler("lib/acessos.ts")), /parseNavegador\(userAgentLegado\)/);
 });
+
+test("região formatada do GeoIP (Fase 7E.1) cabe na célula: texto normal, sem truncar nem esconder, e a mais longa quebra de linha", () => {
+  const regioes = ["Brasília, DF, Brasil", "São Paulo, SP, Brasil", "Lisboa, Portugal", "Seattle, Washington, Estados Unidos"];
+  for (const regiao of regioes) {
+    const acesso = resolverAcessoLogin(evento({ nome: "Maria", ip_address: "8.8.8.8", regiao }));
+    assert.equal(acesso.regiao, regiao);
+    assert.equal(rotuloRegiao(acesso), regiao);
+  }
+  const codigo = semComentarios(ler("components/acessos/AcessosView.tsx"));
+  const celula = codigo.slice(codigo.indexOf("{evento.regiao ? ("), codigo.indexOf("rotuloRegiao(evento)"));
+  assert.doesNotMatch(celula, /truncate|whitespace-nowrap|overflow-hidden|text-ellipsis/); // a região inteira fica visível
+  assert.match(celula, /<span className="text-zinc-600 dark:text-zinc-300">\{evento\.regiao\}<\/span>/);
+});
