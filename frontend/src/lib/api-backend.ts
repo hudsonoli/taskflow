@@ -1708,8 +1708,19 @@ export async function listarDemandasEmExecucaoNaPauta(): Promise<string[]> {
   return resposta.demandaIds;
 }
 
-export async function getDemandaReal(demandaId: string): Promise<Demanda> {
-  return mapDemandaReadToDemanda(await request<DemandaReadApi>(`/demandas/${demandaId}`));
+/**
+ * Fase 7C.1 — escopo de LEITURA do detalhe de uma demanda. `"pauta"` = leitura pela Pauta global (Atendimento, Heads e Gestão veem
+ * demandas de toda a empresa); o servidor valida (403 para os demais) e restringe ao tenant do token. SOMENTE LEITURA: só as
+ * funções de listagem/leitura abaixo aceitam; nenhuma escrita (PATCH/POST/DELETE) envia este parâmetro.
+ */
+export type EscopoLeituraDemanda = "pauta";
+
+function sufixoEscopoLeitura(escopo?: EscopoLeituraDemanda): string {
+  return escopo ? `?escopo=${escopo}` : "";
+}
+
+export async function getDemandaReal(demandaId: string, escopo?: EscopoLeituraDemanda): Promise<Demanda> {
+  return mapDemandaReadToDemanda(await request<DemandaReadApi>(`/demandas/${demandaId}${sufixoEscopoLeitura(escopo)}`));
 }
 
 export async function listDiretorioDemandas(): Promise<DemandaDiretorio[]> {
@@ -1937,8 +1948,8 @@ function mapChecklistItemReadToItem(data: DemandaChecklistItemReadApi): DemandaC
   return { ...data };
 }
 
-export async function listChecklistDemanda(demandaId: string): Promise<DemandaChecklistItem[]> {
-  const itens = await request<DemandaChecklistItemReadApi[]>(`/demandas/${demandaId}/checklist`);
+export async function listChecklistDemanda(demandaId: string, escopo?: EscopoLeituraDemanda): Promise<DemandaChecklistItem[]> {
+  const itens = await request<DemandaChecklistItemReadApi[]>(`/demandas/${demandaId}/checklist${sufixoEscopoLeitura(escopo)}`);
   return itens.map(mapChecklistItemReadToItem);
 }
 
@@ -2010,8 +2021,8 @@ function mapArquivoReadToArquivo(data: DemandaArquivoReadApi): DemandaArquivo {
   return { ...data };
 }
 
-export async function listArquivosDemanda(demandaId: string): Promise<DemandaArquivo[]> {
-  const arquivos = await request<DemandaArquivoReadApi[]>(`/demandas/${demandaId}/arquivos`);
+export async function listArquivosDemanda(demandaId: string, escopo?: EscopoLeituraDemanda): Promise<DemandaArquivo[]> {
+  const arquivos = await request<DemandaArquivoReadApi[]>(`/demandas/${demandaId}/arquivos${sufixoEscopoLeitura(escopo)}`);
   return arquivos.map(mapArquivoReadToArquivo);
 }
 
@@ -2071,8 +2082,8 @@ export async function excluirArquivoDemanda(demandaId: string, arquivoId: string
 // Usada direto num `<a href>` — o proxy lê o cookie de sessão, então o navegador autentica
 // a navegação normalmente, sem JS extra. Nunca aponta pro FastAPI direto. Nunca para
 // `tipo:"link"` — link abre `arquivo.url` direto, não tem conteúdo físico pra baixar.
-export function urlDownloadArquivoDemanda(demandaId: string, arquivoId: string): string {
-  return `/api/backend/demandas/${demandaId}/arquivos/${arquivoId}/download`;
+export function urlDownloadArquivoDemanda(demandaId: string, arquivoId: string, escopo?: EscopoLeituraDemanda): string {
+  return `/api/backend/demandas/${demandaId}/arquivos/${arquivoId}/download${sufixoEscopoLeitura(escopo)}`;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -2125,8 +2136,8 @@ function mapComentarioReadToComentario(data: DemandaComentarioReadApi): DemandaC
   return { ...data };
 }
 
-export async function listComentariosDemanda(demandaId: string): Promise<DemandaComentario[]> {
-  const comentarios = await request<DemandaComentarioReadApi[]>(`/demandas/${demandaId}/comentarios`);
+export async function listComentariosDemanda(demandaId: string, escopo?: EscopoLeituraDemanda): Promise<DemandaComentario[]> {
+  const comentarios = await request<DemandaComentarioReadApi[]>(`/demandas/${demandaId}/comentarios${sufixoEscopoLeitura(escopo)}`);
   return comentarios.map(mapComentarioReadToComentario);
 }
 
@@ -2171,8 +2182,8 @@ function mapHistoricoEventoReadToEvento(data: DemandaHistoricoEventoReadApi): De
   return { ...data };
 }
 
-export async function listHistoricoDemanda(demandaId: string): Promise<DemandaHistoricoEvento[]> {
-  const eventos = await request<DemandaHistoricoEventoReadApi[]>(`/demandas/${demandaId}/historico`);
+export async function listHistoricoDemanda(demandaId: string, escopo?: EscopoLeituraDemanda): Promise<DemandaHistoricoEvento[]> {
+  const eventos = await request<DemandaHistoricoEventoReadApi[]>(`/demandas/${demandaId}/historico${sufixoEscopoLeitura(escopo)}`);
   return eventos.map(mapHistoricoEventoReadToEvento);
 }
 

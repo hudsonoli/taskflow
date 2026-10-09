@@ -26,6 +26,7 @@ import { DemandaArquivosCard } from "./DemandaArquivosCard";
 import { DemandaChecklistCard } from "./DemandaChecklistCard";
 import { EnvioClienteCard } from "./EnvioClienteCard";
 import { RegistrarAjusteCard } from "./RegistrarAjusteCard";
+import { useEscopoLeituraDemanda } from "./leituraDemanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { rotuloDemanda } from "@/lib/referencias";
 import { inputLocalParaIso, isoParaInputLocal } from "@/lib/prazo-operacional";
@@ -100,6 +101,7 @@ async function salvarCampo(
 }
 
 export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) {
+  const somenteLeitura = useEscopoLeituraDemanda() !== undefined; // Pauta global: só leitura (campos desabilitados pelo drawer)
   const { projetos } = useDiretorioProjetos();
   const { clientes } = useDiretorioClientes();
   const [erro, setErro] = useState<string | null>(null);
@@ -236,15 +238,18 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
         />
       </div>
 
-      <div className="mt-4 flex flex-col gap-3">
-        <EnvioClienteCard demanda={demanda} onChange={onChange} />
-        <RegistrarAjusteCard demanda={demanda} />
-      </div>
+      {!somenteLeitura && (
+        <div className="mt-4 flex flex-col gap-3">
+          <EnvioClienteCard demanda={demanda} onChange={onChange} />
+          <RegistrarAjusteCard demanda={demanda} />
+        </div>
+      )}
     </SectionShell>
   );
 }
 
 export function BriefingDemandaSection({ demanda, onChange }: DemandaSectionProps) {
+  const somenteLeitura = useEscopoLeituraDemanda() !== undefined; // Pauta global: só leitura
   const [erro, setErro] = useState<string | null>(null);
   // Sem efeito de ressincronização — mesmo raciocínio de DadosDemandaSection: o chamador já
   // usa `key={demanda.id}` (ver DemandaDetailsDrawer.tsx), então este componente remonta do
@@ -252,19 +257,19 @@ export function BriefingDemandaSection({ demanda, onChange }: DemandaSectionProp
   const [briefing, setBriefing] = useState(demanda.briefing ?? "");
 
   async function salvarBriefing() {
-    if (briefing === (demanda.briefing ?? "")) return;
+    if (somenteLeitura || briefing === (demanda.briefing ?? "")) return;
     const ok = await salvarCampo(demanda, { briefing: briefing || null }, onChange, setErro);
     if (!ok) setBriefing(demanda.briefing ?? "");
   }
 
   return (
-    <SectionShell title="Briefing" description="Use negrito, grifo e cor de fonte para destacar pontos do briefing." icon={<FileText className="h-5 w-5" />}>
+    <SectionShell title="Briefing" description={somenteLeitura ? "Briefing da tarefa (somente leitura)." : "Use negrito, grifo e cor de fonte para destacar pontos do briefing."} icon={<FileText className="h-5 w-5" />}>
       {erro && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{erro}</p>}
       {/* RichTextEditor não expõe onBlur próprio — o blur do editable interno borbulha até
           aqui (React trata focus/blur como bubbling), então o wrapper capta o momento certo
           de salvar sem precisar alterar o componente compartilhado. */}
       <div onBlur={() => void salvarBriefing()}>
-        <RichTextEditor value={briefing} onChange={setBriefing} />
+        <RichTextEditor value={briefing} onChange={setBriefing} readOnly={somenteLeitura} />
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
@@ -422,6 +427,7 @@ export function ResponsaveisDemandaSection({ demanda, onChange }: DemandaSection
  * fallback para autor removido/inativado (ver `descreverEventoHistorico`).
  */
 export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
+  const escopoLeitura = useEscopoLeituraDemanda(); // Pauta global: lê com `escopo=pauta`
   const [eventos, setEventos] = useState<DemandaHistoricoEvento[]>([]);
   // Autor do evento e, nos eventos de responsável, o usuário citado em `dados` — qualquer um pode
   // estar além da janela de 200 do diretório global.
@@ -434,7 +440,7 @@ export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
 
   useEffect(() => {
     let cancelado = false;
-    listHistoricoDemanda(demanda.id)
+    listHistoricoDemanda(demanda.id, escopoLeitura)
       .then((dados) => {
         if (!cancelado) setEventos(dados);
       })
@@ -447,7 +453,7 @@ export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
     return () => {
       cancelado = true;
     };
-  }, [demanda.id]);
+  }, [demanda.id, escopoLeitura]);
 
   function nomeUsuario(usuarioId: string | null): string {
     if (!usuarioId) return "Sistema";

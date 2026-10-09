@@ -3,17 +3,14 @@
 import type { ReactNode } from "react";
 import { CalendarRange, List, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { MultiSelect } from "@/components/ui/MultiSelect";
-import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 
 export type PautaViewMode = "lista" | "gantt";
-export type PautaPeriodoFiltro = "hoje" | "7d" | "30d";
+/** "todas" (padrão) = sem recorte de prazo: toda demanda em aberto, com ou sem prazo. Hoje/7 dias/30 dias são filtros opcionais. */
+export type PautaPeriodoFiltro = "todas" | "hoje" | "7d" | "30d";
 
 export function PautaToolbar({
   query,
   onQueryChange,
-  departamentoIds,
-  onDepartamentoIdsChange,
   periodo,
   onPeriodoChange,
   viewMode,
@@ -22,17 +19,13 @@ export function PautaToolbar({
 }: {
   query: string;
   onQueryChange: (value: string) => void;
-  departamentoIds: string[];
-  onDepartamentoIdsChange: (values: string[]) => void;
   periodo: PautaPeriodoFiltro;
   onPeriodoChange: (value: PautaPeriodoFiltro) => void;
   viewMode: PautaViewMode;
   onViewModeChange: (value: PautaViewMode) => void;
-  /** Pauta GLOBAL: filtros avançados (com Departamento como filtro) no lugar do seletor simples de departamentos. */
-  filtrosAvancados?: ReactNode;
+  /** Filtros avançados da Pauta (com Departamento como filtro). */
+  filtrosAvancados: ReactNode;
 }) {
-  const { departamentos } = useDiretorioDepartamentos();
-
   return (
     <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -51,6 +44,7 @@ export function PautaToolbar({
 
         <div className="flex flex-wrap items-center gap-2">
           {[
+            { value: "todas" as const, label: "Todas" },
             { value: "hoje" as const, label: "Hoje" },
             { value: "7d" as const, label: "7 dias" },
             { value: "30d" as const, label: "30 dias" },
@@ -69,22 +63,7 @@ export function PautaToolbar({
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0 flex-1">
-          {filtrosAvancados ?? (
-          <MultiSelect
-            label="Departamento"
-            values={departamentoIds}
-            onChange={onDepartamentoIdsChange}
-            // Filtro sobre Demandas existentes, não seleção de vínculo novo — inclui
-            // departamento arquivado de propósito, senão um departamento descontinuado
-            // ficaria impossível de filtrar nas demandas antigas que ainda o referenciam.
-            options={departamentos.map((departamento) => ({
-              value: departamento.id,
-              label: departamento.status === "arquivado" ? `${departamento.nome} (arquivado)` : departamento.nome,
-            }))}
-          />
-          )}
-        </div>
+        <div className="min-w-0 flex-1">{filtrosAvancados}</div>
 
         <div className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-800">
           {[

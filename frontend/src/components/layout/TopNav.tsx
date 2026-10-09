@@ -26,6 +26,7 @@ import {
   podeAcessarCentralTrafego,
   podeAcessarMeuDepartamento,
   podeAcessarMinhasDemandas,
+  podeAcessarPautaGlobal,
 } from "@/lib/escopo-operacional";
 import { BrandLogo } from "@/components/branding/BrandLogo";
 import { NotificationBell } from "@/components/layout/NotificationBell";
@@ -38,7 +39,6 @@ import type { Usuario } from "@/types/usuario";
 const NAV_ITEMS_BASE = [
   { label: "Meu dia", href: "/meu-dia", icon: Sun },
   { label: "Tarefas", href: "/tarefas", icon: ListChecks },
-  { label: "Pauta", href: "/pauta", icon: CalendarClock },
   // Mesmo escopo de Demanda do resto do app (backend: get_current_user_password_ready +
   // resolver_escopo_demanda) — sem gate extra de menu, cada um só vê o que já veria em
   // Tarefas/Pauta/Minhas Demandas.
@@ -62,6 +62,12 @@ function buildNavItems(usuarioAtual: Usuario | undefined, departamentos: Departa
 
   if (podeAcessarMeuDepartamento(usuarioAtual, departamentos)) {
     items.splice(1, 0, { label: "Meu Departamento", href: "/meu-departamento", icon: Building2 });
+  }
+  // Pauta = visão operacional da empresa: só Atendimento, Heads e Gestão. Operador comum não tem Pauta (tem o Meu dia); a rota
+  // também nega a URL direta e o servidor responde 403 a `escopo=pauta`.
+  if (podeAcessarPautaGlobal(usuarioAtual, departamentos)) {
+    const indiceTarefas = items.findIndex((item) => item.href === "/tarefas");
+    items.splice(indiceTarefas + 1, 0, { label: "Pauta", href: "/pauta", icon: CalendarClock });
   }
   if (podeAcessarMinhasDemandas(usuarioAtual, departamentos)) {
     items.splice(1, 0, { label: "Minhas Demandas", href: "/minhas-demandas", icon: Headset });

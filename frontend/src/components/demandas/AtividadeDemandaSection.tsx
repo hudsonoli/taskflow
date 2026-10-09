@@ -12,6 +12,7 @@ import { useAppData } from "@/lib/AppDataContext";
 import { podeAcessarAreaAdministrativa } from "@/lib/escopo-operacional";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Demanda, DemandaComentario } from "@/types/demanda";
+import { useEscopoLeituraDemanda } from "./leituraDemanda";
 
 function SectionShell({ children }: { children: ReactNode }) {
   return (
@@ -45,6 +46,9 @@ function formatarDataHora(iso: string): string {
  */
 export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
   const { usuarioAtual } = useAppData();
+  // Leitura pela Pauta global: só consulta (com `escopo=pauta`); sem comentar, editar nem excluir.
+  const escopoLeitura = useEscopoLeituraDemanda();
+  const somenteLeitura = escopoLeitura !== undefined;
   const [comentarios, setComentarios] = useState<DemandaComentario[]>([]);
   const { usuarios, resolvendo } = useUsuariosComIds(comentarios.map((comentario) => comentario.autorUsuarioId));
   const [carregando, setCarregando] = useState(true);
@@ -58,7 +62,7 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
 
   useEffect(() => {
     let cancelado = false;
-    listComentariosDemanda(demanda.id)
+    listComentariosDemanda(demanda.id, escopoLeitura)
       .then((dados) => {
         if (!cancelado) setComentarios(dados);
       })
@@ -71,7 +75,7 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
     return () => {
       cancelado = true;
     };
-  }, [demanda.id]);
+  }, [demanda.id, escopoLeitura]);
 
   function nomeAutor(autorUsuarioId: string | null, autorSistema?: boolean): string {
     if (autorSistema) return "Sistema";
@@ -128,6 +132,7 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
 
   return (
     <SectionShell>
+      {!somenteLeitura && (
       <div className="flex items-start gap-2">
         <textarea
           value={texto}
@@ -152,6 +157,7 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
           <Send className="h-4 w-4" />
         </button>
       </div>
+      )}
 
       {erro && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{erro}</p>}
 
@@ -162,8 +168,8 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
           <p className="text-sm text-fg-subtle">Nenhum comentário registrado ainda.</p>
         ) : (
           comentarios.map((comentario) => {
-            const ehAutor = usuarioAtual != null && comentario.autorUsuarioId === usuarioAtual.id;
-            const podeExcluir = ehAutor || podeModerar;
+            const ehAutor = !somenteLeitura && usuarioAtual != null && comentario.autorUsuarioId === usuarioAtual.id;
+            const podeExcluir = !somenteLeitura && (ehAutor || podeModerar);
             return (
               <div
                 key={comentario.id}

@@ -7,6 +7,7 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DetailsModal } from "@/components/ui/DetailsModal";
 import { Tabs } from "@/components/ui/Tabs";
+import { type EscopoLeituraDemanda } from "@/lib/api-backend";
 import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
@@ -22,6 +23,7 @@ import {
   ResponsaveisDemandaSection,
   WorkflowDemandaSection,
 } from "./DemandaFormSections";
+import { LeituraDemandaProvider } from "./leituraDemanda";
 
 const tabs = [
   { id: "dados", label: "Dados" },
@@ -45,22 +47,31 @@ export function DemandaDetailsDrawer({
   onEdit,
   onChange,
   initialTab,
+  modoLeitura,
 }: {
   demanda?: Demanda;
   onClose: () => void;
   onEdit: (demandaId: string) => void;
   onChange: (demanda: Demanda) => void;
   initialTab?: string;
+  /**
+   * Fase 7C.1 — `"pauta"`: demanda aberta pela Pauta GLOBAL, de um departamento fora do escopo-base de quem olha. O drawer vira
+   * SOMENTE LEITURA: consulta o detalhe e os subrecursos com `escopo=pauta`, desabilita os campos e esconde as ações de escrita.
+   * Ler pela Pauta global não é poder escrever (o servidor também recusa).
+   */
+  modoLeitura?: EscopoLeituraDemanda;
 }) {
+  const somenteLeitura = modoLeitura !== undefined;
   const [activeTab, setActiveTab] = useState(initialTab ?? "dados");
   const { usuarios } = useUsuariosComIds(demanda?.usuarioResponsavelIds ?? []);
   const { projetos } = useDiretorioProjetos();
 
   return (
+    <LeituraDemandaProvider value={modoLeitura}>
     <DetailsModal
       open={demanda !== undefined}
       onClose={onClose}
-      onEdit={demanda ? () => onEdit(demanda.id) : undefined}
+      onEdit={demanda && !somenteLeitura ? () => onEdit(demanda.id) : undefined}
       editLabel="Editar tarefa"
       title={demanda?.nome ?? "Tarefa"}
       description={demanda ? `${rotuloDemanda(demanda)} · ${resolverProjetoNome(demanda.projetoId, projetos)}` : undefined}
@@ -74,7 +85,13 @@ export function DemandaDetailsDrawer({
     >
       {demanda && (
         <div className="space-y-5">
-          <DemandaConclusaoBanner demanda={demanda} onChange={onChange} />
+          {somenteLeitura ? (
+            <p role="status" className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3.5 py-2.5 text-xs leading-5 text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200">
+              Visualização somente leitura: esta tarefa é de outro departamento. Você pode consultar o detalhe, mas não alterá-la.
+            </p>
+          ) : (
+            <DemandaConclusaoBanner demanda={demanda} onChange={onChange} />
+          )}
 
           <div className="rounded-2xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -137,14 +154,19 @@ export function DemandaDetailsDrawer({
 
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-          {activeTab === "dados" && <DadosDemandaSection demanda={demanda} onChange={onChange} />}
-          {activeTab === "briefing" && <BriefingDemandaSection key={demanda.id} demanda={demanda} onChange={onChange} />}
-          {activeTab === "workflow" && <WorkflowDemandaSection demanda={demanda} />}
-          {activeTab === "responsaveis" && <ResponsaveisDemandaSection demanda={demanda} onChange={onChange} />}
-          {activeTab === "atividade" && <AtividadeDemandaSection demanda={demanda} />}
-          {activeTab === "historico" && <HistoricoDemandaSection demanda={demanda} />}
+          {/* Na leitura, `fieldset disabled` desabilita nativamente todo campo/botão do conteúdo (defesa em profundidade além de os
+              cartões esconderem os controles de escrita). Fora dela é só um agrupador sem efeito. */}
+          <fieldset disabled={somenteLeitura} className="m-0 min-w-0 border-0 p-0">
+            {activeTab === "dados" && <DadosDemandaSection demanda={demanda} onChange={onChange} />}
+            {activeTab === "briefing" && <BriefingDemandaSection key={demanda.id} demanda={demanda} onChange={onChange} />}
+            {activeTab === "workflow" && <WorkflowDemandaSection demanda={demanda} />}
+            {activeTab === "responsaveis" && <ResponsaveisDemandaSection demanda={demanda} onChange={onChange} />}
+            {activeTab === "atividade" && <AtividadeDemandaSection demanda={demanda} />}
+            {activeTab === "historico" && <HistoricoDemandaSection demanda={demanda} />}
+          </fieldset>
         </div>
       )}
     </DetailsModal>
+    </LeituraDemandaProvider>
   );
 }

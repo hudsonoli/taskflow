@@ -62,7 +62,7 @@ export function PautaGantt({
   const { projetos } = useDiretorioProjetos();
 
   if (demandas.length === 0) {
-    return <EmptyState title="Nenhuma tarefa na pauta" description="Ajuste a busca ou os filtros para visualizar as tarefas do período." />;
+    return <EmptyState title="Nenhuma tarefa na pauta" description="Ajuste a busca ou os filtros para visualizar as tarefas em aberto." />;
   }
 
   const dias = listarDias(periodoInicio, periodoFim);
@@ -106,6 +106,8 @@ export function PautaGantt({
               const inicioValido = !Number.isNaN(inicio.getTime());
               const fimValido = !Number.isNaN(fim.getTime());
 
+              // Sem prazo (nem fim previsto) não há onde desenhar a barra: mostra o aviso em vez de uma barra enganosa na 1ª coluna.
+              const semPrazo = !fimValido;
               const colStart = inicioValido ? indiceDoDia(inicio, dias) + 1 : 1;
               const colEnd = fimValido ? indiceDoDia(fim, dias) + 2 : colStart + 1;
 
@@ -135,13 +137,19 @@ export function PautaGantt({
                         style={{ left: `${((indiceHoje + 0.5) / dias.length) * 100}%` }}
                       />
                     )}
-                    <motion.div
-                      initial={{ scaleX: 0 }}
-                      animate={{ scaleX: 1 }}
-                      transition={{ duration: 0.35, ease: "easeOut" }}
-                      style={{ gridColumn: `${colStart} / ${colEnd}`, transformOrigin: "left" }}
-                      className={clsx("h-2.5 rounded-full", toneClassNames[statusDemandaTone[demanda.status]])}
-                    />
+                    {semPrazo ? (
+                      <span className="px-2 text-xs italic text-fg-subtle" style={{ gridColumn: `1 / ${dias.length + 1}` }}>
+                        Sem prazo definido
+                      </span>
+                    ) : (
+                      <motion.div
+                        initial={{ scaleX: 0 }}
+                        animate={{ scaleX: 1 }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                        style={{ gridColumn: `${colStart} / ${colEnd}`, transformOrigin: "left" }}
+                        className={clsx("h-2.5 rounded-full", toneClassNames[statusDemandaTone[demanda.status]])}
+                      />
+                    )}
                   </div>
                 </div>
               );

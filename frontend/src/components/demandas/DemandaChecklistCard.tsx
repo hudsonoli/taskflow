@@ -11,6 +11,7 @@ import {
   reordenarChecklist,
 } from "@/lib/api-backend";
 import type { DemandaChecklistItem } from "@/types/demanda";
+import { useEscopoLeituraDemanda } from "./leituraDemanda";
 
 /**
  * Checklist de Demanda — primeira versão (Fase 2E.3). Sem responsável, departamento, prazo
@@ -19,6 +20,9 @@ import type { DemandaChecklistItem } from "@/types/demanda";
  * este card.
  */
 export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
+  // Leitura pela Pauta global: só consulta (com `escopo=pauta`); sem adicionar, concluir, editar, reordenar nem excluir.
+  const escopoLeitura = useEscopoLeituraDemanda();
+  const somenteLeitura = escopoLeitura !== undefined;
   const [itens, setItens] = useState<DemandaChecklistItem[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -29,7 +33,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
 
   useEffect(() => {
     let cancelado = false;
-    listChecklistDemanda(demandaId)
+    listChecklistDemanda(demandaId, escopoLeitura)
       .then((dados) => {
         if (!cancelado) setItens(dados);
       })
@@ -42,7 +46,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
     return () => {
       cancelado = true;
     };
-  }, [demandaId]);
+  }, [demandaId, escopoLeitura]);
 
   async function adicionarItem() {
     const texto = novoTexto.trim();
@@ -138,6 +142,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
 
       {erro && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{erro}</p>}
 
+      {!somenteLeitura && (
       <div className="mt-3 flex items-center gap-2">
         <input
           value={novoTexto}
@@ -161,6 +166,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
           <Send className="h-4 w-4" />
         </button>
       </div>
+      )}
 
       <div className="mt-3 flex flex-col gap-1.5">
         {carregando ? (
@@ -176,8 +182,8 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
               <button
                 type="button"
                 onClick={() => void alternarConcluido(item)}
-                disabled={processandoId === item.id}
-                aria-label={item.concluido ? "Reabrir item" : "Concluir item"}
+                disabled={somenteLeitura || processandoId === item.id}
+                aria-label={somenteLeitura ? (item.concluido ? "Item concluído" : "Item pendente") : item.concluido ? "Reabrir item" : "Concluir item"}
                 className="shrink-0 text-fg-subtle transition hover:text-indigo-600 disabled:opacity-40 dark:hover:text-indigo-400"
               >
                 {item.concluido ? (
@@ -211,6 +217,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                 </span>
               )}
 
+              {!somenteLeitura && (
               <div className="flex shrink-0 items-center gap-0.5">
                 <button
                   type="button"
@@ -259,6 +266,7 @@ export function DemandaChecklistCard({ demandaId }: { demandaId: string }) {
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
+              )}
             </div>
           ))
         )}

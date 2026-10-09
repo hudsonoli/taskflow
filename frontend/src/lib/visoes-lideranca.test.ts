@@ -69,39 +69,129 @@ test("autorização da Pauta global no cliente espelha a do servidor: admin/gest
   assert.doesNotMatch(corpo, /operador|@|\.com|empresaId/i); // nada hardcoded por e-mail, nome ou tenant
 });
 
-test("Pauta GLOBAL: escopo=pauta, só em andamento, prazo até o fim do período (atrasadas entram), mesmos parâmetros em todas as páginas", () => {
+test("Pauta: universo = TODA demanda em aberto (escopo=pauta + naoFinalizada); prazo NÃO é condição, só filtro opcional de período", () => {
   const view = ler("components/pauta/PautaView.tsx");
-  assert.match(view, /escopo: "pauta" as const, naoFinalizada: true, prazoFim: periodoFim\.toISOString\(\), \.\.\.parametrosFiltros/);
-  assert.doesNotMatch(view.slice(view.indexOf("if (modoGlobal) {"), view.indexOf("return { ...base, departamentoId")), /prazoInicio/); // sem teto inferior: atrasadas aparecem
-  assert.match(view, /listDemandasReais\(parametrosDaConsulta\(0\)\)/);
-  assert.match(view, /listDemandasReais\(parametrosDaConsulta\(demandasPauta\.length\)\)/); // "carregar mais" = mesmos filtros
-  assert.doesNotMatch(semComentarios(view), /demandasPauta\.filter\(/); // nunca filtra só o que foi carregado
-  assert.match(view, /if \(!pronto\) return;/); // espera os departamentos: não busca no modo errado
+  const codigo = semComentarios(view);
+  assert.match(codigo, /const prazoDoPeriodo = periodo === "todas" \? \{\} : \{ prazoFim: periodoFim\.toISOString\(\) \};/); // "Todas" não envia prazo
+  assert.match(codigo, /escopo: "pauta" as const, naoFinalizada: true, \.\.\.prazoDoPeriodo, \.\.\.parametrosFiltros/);
+  assert.doesNotMatch(codigo, /prazoInicio/); // sem piso: atrasadas continuam; sem prazo não é excluída por padrão
+  assert.match(codigo, /PERIODOS_VALIDOS\.find\(\(valor\) => valor === param\("periodo"\)\) \?\? "todas"/); // padrão = todas as demandas em aberto
+  assert.doesNotMatch(codigo, /\?\? "7d"/);
+  assert.match(codigo, /listDemandasReais\(parametrosDaConsulta\(0\)\)/);
+  assert.match(codigo, /listDemandasReais\(parametrosDaConsulta\(demandasPauta\.length\)\)/); // "carregar mais" = mesmos filtros
+  assert.doesNotMatch(codigo, /demandasPauta\.filter\(/); // nunca filtra só o que foi carregado
+  assert.match(codigo, /if \(!pronto\) return;/); // espera papel/departamentos: não busca antes de saber quem é
+  const toolbar = semComentarios(ler("components/pauta/PautaToolbar.tsx"));
+  assert.match(toolbar, /export type PautaPeriodoFiltro = "todas" \| "hoje" \| "7d" \| "30d"/);
+  assert.match(toolbar, /\{ value: "todas" as const, label: "Todas" \}/);
 });
 
-test("Pauta LEGADA (operador comum): consulta e filtro de sempre, sem escopo global", () => {
-  const view = ler("components/pauta/PautaView.tsx");
-  assert.match(view, /return \{ \.\.\.base, departamentoId: departamentoIdsParam \|\| undefined, prazoInicio: periodoInicio\.toISOString\(\), prazoFim: periodoFim\.toISOString\(\) \};/);
-  const toolbar = ler("components/pauta/PautaToolbar.tsx");
-  assert.match(toolbar, /\{filtrosAvancados \?\? \(/); // sem filtros avançados, o seletor simples de departamentos continua
-  assert.match(toolbar, /label="Departamento"/);
+test("não existe mais a Pauta legada: sem seletor simples de departamentos, sem consulta por departamento/prazo-janela do operador", () => {
+  const view = semComentarios(ler("components/pauta/PautaView.tsx"));
+  assert.doesNotMatch(view, /modoGlobal|departamentoIds|departamentoIdsParam|setDepartamentoIds/);
+  assert.doesNotMatch(view, /prazoInicio: periodoInicio/);
+  const toolbar = semComentarios(ler("components/pauta/PautaToolbar.tsx"));
+  assert.doesNotMatch(toolbar, /MultiSelect|useDiretorioDepartamentos/);
+  assert.match(toolbar, /filtrosAvancados: ReactNode/); // obrigatório: a Pauta sempre tem os filtros avançados
 });
 
-test("estado da Pauta global na URL: filtros, busca (q), período e modo; inválido volta ao padrão", () => {
+test("operador comum NÃO tem Pauta: some do menu e a rota nega a URL direta (nunca mostra a Pauta antiga)", () => {
+  const nav = semComentarios(ler("components/layout/TopNav.tsx"));
+  const base = nav.slice(nav.indexOf("const NAV_ITEMS_BASE"), nav.indexOf("];", nav.indexOf("const NAV_ITEMS_BASE")));
+  assert.doesNotMatch(base, /Pauta|\/pauta/); // fora dos itens de qualquer autenticado
+  assert.match(nav, /if \(podeAcessarPautaGlobal\(usuarioAtual, departamentos\)\) \{[\s\S]*?label: "Pauta", href: "\/pauta"/); // só com a Pauta global
+  assert.match(base, /label: "Meu dia"/); // Meu Dia segue para todos
+  assert.match(base, /label: "Tarefas"/);
+  const view = semComentarios(ler("components/pauta/PautaView.tsx"));
+  assert.match(view, /import \{ AcessoNegado \} from "@\/components\/operacional\/AcessoNegado"/);
+  assert.match(view, /if \(carregandoDepartamentos\) return/); // espera os departamentos antes de negar (Head/Atendimento dependem deles)
+  assert.match(view, /if \(!podeAcessar\) \{[\s\S]*?<AcessoNegado/);
+  assert.match(view, /const pronto = Boolean\(usuarioAtual\) && !carregandoDepartamentos && podeAcessar;/); // negado nunca consulta
+  const rota = semComentarios(ler("app/pauta/page.tsx"));
+  assert.match(rota, /<PautaView \/>/); // a rota só delega: a regra está na view
+});
+
+test("Meu Dia segue para todos e Meu Departamento só para o Head (sem regressão do menu)", () => {
+  const nav = semComentarios(ler("components/layout/TopNav.tsx"));
+  assert.match(nav, /podeAcessarMeuDepartamento\(usuarioAtual, departamentos\)\) \{\s*items\.splice\(1, 0, \{ label: "Meu Departamento"/);
+  assert.match(nav, /\{ label: "Meu dia", href: "\/meu-dia"/);
+});
+
+test("estado da Pauta na URL: filtros, busca (q), período e modo; inválido volta ao padrão", () => {
   const view = ler("components/pauta/PautaView.tsx");
-  assert.match(view, /useFiltrosNaUrl\(definicoesFiltros, modoGlobal\)/); // só persiste no modo global
-  assert.match(view, /PERIODOS_VALIDOS\.find\(\(valor\) => valor === param\("periodo"\)\) \?\? "7d"/);
+  assert.match(view, /useFiltrosNaUrl\(definicoesFiltros, podeAcessar\)/); // só persiste para quem tem a Pauta
   assert.match(view, /MODOS_VALIDOS\.find\(\(valor\) => valor === param\("modo"\)\) \?\? "gantt"/);
   assert.match(view, /definirParam\("q", texto\)/);
+  assert.match(view, /definirParam\("periodo", valor === "todas" \? null : valor\)/); // padrão não suja a URL
 });
 
-test("selo 'em execução agora' na Pauta: só ids de demanda (sem pessoa nem tempo), só no modo global, falha não derruba a lista", () => {
+test("selo 'em execução agora' na Pauta: só ids de demanda (sem pessoa nem tempo); falha não derruba a lista", () => {
   const view = ler("components/pauta/PautaView.tsx");
-  assert.match(view, /modoGlobal \? listarDemandasEmExecucaoNaPauta\(\)\.catch\(\(\) => \[\] as string\[\]\)/);
+  assert.match(view, /listarDemandasEmExecucaoNaPauta\(\)\.catch\(\(\) => \[\] as string\[\]\)/);
   assert.match(ler("components/pauta/PautaLista.tsx"), /emExecucaoIds\?\.has\(demanda\.id\) && <Badge tone="green">Em execução agora<\/Badge>/);
   assert.match(ler("components/pauta/PautaGantt.tsx"), /aria-label="Em execução agora"/);
   const api = ler("lib/api-backend.ts");
   assert.match(api, /"\/sessoes-trabalho\/pauta\/em-execucao"/);
+});
+
+test("demanda SEM PRAZO aparece na Pauta: na Lista em 'Sem prazo definido' e no Gantt como aviso (sem barra enganosa)", () => {
+  assert.match(ler("components/pauta/PautaLista.tsx"), /Sem prazo definido/);
+  const gantt = semComentarios(ler("components/pauta/PautaGantt.tsx"));
+  assert.match(gantt, /const semPrazo = !fimValido;/);
+  assert.match(gantt, /semPrazo \? \(/);
+  assert.match(gantt, /Sem prazo definido/);
+});
+
+// ── Detalhe SOMENTE LEITURA pela Pauta global ───────────────────────────────────────────────────────────────────
+
+test("o cliente de API só envia ?escopo=pauta nas LEITURAS do detalhe; nenhuma escrita carrega o parâmetro", () => {
+  const api = semComentarios(ler("lib/api-backend.ts"));
+  assert.match(api, /export type EscopoLeituraDemanda = "pauta";/);
+  for (const fn of ["getDemandaReal", "listChecklistDemanda", "listArquivosDemanda", "listComentariosDemanda", "listHistoricoDemanda"]) {
+    assert.match(api, new RegExp(`export async function ${fn}\\(demandaId: string, escopo\\?: EscopoLeituraDemanda\\)`), fn);
+  }
+  assert.match(api, /export function urlDownloadArquivoDemanda\(demandaId: string, arquivoId: string, escopo\?: EscopoLeituraDemanda\)/);
+  // escritas: nunca usam o sufixo
+  for (const fn of ["patchDemandaReal", "criarItemChecklist", "criarComentarioDemanda", "uploadArquivoDemanda", "criarLinkArquivoDemanda", "excluirArquivoDemanda", "registrarAjusteDemanda"]) {
+    const inicio = api.indexOf(`export async function ${fn}(`);
+    assert.ok(inicio >= 0, fn);
+    const corpo = api.slice(inicio, api.indexOf("\nexport ", inicio + 10));
+    assert.doesNotMatch(corpo, /sufixoEscopoLeitura|escopo=/, fn);
+  }
+});
+
+test("drawer aberto pela Pauta: modo leitura (fieldset desabilitado, sem Editar, aviso) e subrecursos consultados com o escopo", () => {
+  const drawer = semComentarios(ler("components/demandas/DemandaDetailsDrawer.tsx"));
+  assert.match(drawer, /modoLeitura\?: EscopoLeituraDemanda/);
+  assert.match(drawer, /onEdit=\{demanda && !somenteLeitura \? \(\) => onEdit\(demanda\.id\) : undefined\}/); // sem "Editar tarefa"
+  assert.match(drawer, /<fieldset disabled=\{somenteLeitura\}/);
+  assert.match(drawer, /<LeituraDemandaProvider value=\{modoLeitura\}>/);
+  assert.match(drawer, /Visualização somente leitura/);
+  assert.match(drawer, /somenteLeitura \? \([\s\S]*?\) : \(\s*<DemandaConclusaoBanner/); // sem ação de conclusão por e-mail
+  const atividade = semComentarios(ler("components/demandas/AtividadeDemandaSection.tsx"));
+  assert.match(atividade, /listComentariosDemanda\(demanda\.id, escopoLeitura\)/);
+  assert.match(atividade, /\{!somenteLeitura && \(\s*<div className="flex items-start gap-2">/); // sem caixa de comentar
+  const checklist = semComentarios(ler("components/demandas/DemandaChecklistCard.tsx"));
+  assert.match(checklist, /listChecklistDemanda\(demandaId, escopoLeitura\)/);
+  assert.match(checklist, /disabled=\{somenteLeitura \|\| processandoId === item\.id\}/);
+  const arquivos = semComentarios(ler("components/demandas/DemandaArquivosCard.tsx"));
+  assert.match(arquivos, /listArquivosDemanda\(demandaId, escopoLeitura\)/);
+  assert.match(arquivos, /urlDownloadArquivoDemanda\(demandaId, arquivo\.id, escopoLeitura\)/); // download pela Pauta, no mesmo tenant
+  assert.match(arquivos, /\{!somenteLeitura && \(\s*<>\s*<div className="mt-3 flex items-center gap-1\.5">/); // sem enviar/link
+  const secoes = semComentarios(ler("components/demandas/DemandaFormSections.tsx"));
+  assert.match(secoes, /listHistoricoDemanda\(demanda\.id, escopoLeitura\)/);
+  assert.match(secoes, /\{!somenteLeitura && \(\s*<div className="mt-4 flex flex-col gap-3">\s*<EnvioClienteCard/); // sem enviar ao cliente / ajuste
+  assert.match(secoes, /readOnly=\{somenteLeitura\}/); // briefing não editável
+  assert.match(semComentarios(ler("components/ui/RichTextEditor.tsx")), /contentEditable=\{!readOnly\}/);
+});
+
+test("PautaView: o drawer é leitura por padrão e só edita se a demanda também está no escopo-BASE (sonda sem escopo)", () => {
+  const view = semComentarios(ler("components/pauta/PautaView.tsx"));
+  assert.match(view, /getDemandaReal\(selectedDemandId\)\s*\.then\(\(\) => \{\s*if \(!cancelado\) setAcessoEscrita\(\{ demandaId: selectedDemandId, editavel: true \}\)/);
+  assert.match(view, /\.catch\(\(\) => \{\s*if \(!cancelado\) setAcessoEscrita\(\{ demandaId: selectedDemandId, editavel: false \}\)/);
+  assert.match(view, /acessoEscrita\?\.demandaId === selectedDemandId && acessoEscrita\.editavel \? undefined : "pauta"/);
+  assert.match(view, /getDemandaReal\(selectedDemandId, "pauta"\)/); // demanda fora da página carregada: lida pela Pauta
+  assert.match(view, /modoLeitura=\{modoLeitura\}/);
 });
 
 // ── Meu Departamento: quem está trabalhando agora ───────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ const FONT_COLORS = [
   { label: "Verde", value: "#15803d" },
 ];
 
-export function RichTextEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+export function RichTextEditor({ value, onChange, readOnly = false }: { value: string; onChange: (html: string) => void; readOnly?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +34,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
 
   return (
     <div>
+      {!readOnly && (
       <div className="border border-line bg-surface-2 mb-2 flex flex-wrap items-center gap-1.5 rounded-xl p-1.5">
         <button
           type="button"
@@ -88,10 +89,11 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
           Limpar
         </button>
       </div>
+      )}
 
       <div
         ref={ref}
-        contentEditable
+        contentEditable={!readOnly}
         suppressContentEditableWarning
         onInput={() => ref.current && onChange(ref.current.innerHTML)}
         className="field min-h-[180px] rounded-xl px-3 py-2.5 text-sm leading-6"

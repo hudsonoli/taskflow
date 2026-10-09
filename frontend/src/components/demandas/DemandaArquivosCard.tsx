@@ -16,6 +16,7 @@ import {
 } from "@/lib/api-backend";
 import { STATUS_LAYOUT_LABELS, STATUS_LAYOUT_OPTIONS, STATUS_LAYOUT_TONE } from "@/lib/arquivo-status-layout";
 import type { DemandaArquivo, DemandaArquivoStatusLayout, DemandaArquivoTipo } from "@/types/demanda";
+import { useEscopoLeituraDemanda } from "./leituraDemanda";
 
 // Espelha ALLOWED_EXTENSIONS de backend/app/services/demanda_arquivo_service.py — só filtra o
 // seletor nativo de arquivo (UX). O backend é quem decide de verdade: enviar uma extensão fora
@@ -42,6 +43,9 @@ function IconeArquivo({ tipo, contentType }: { tipo: DemandaArquivoTipo; content
  * aqui aparece no Gerenciador central (`/arquivos`), sem duplicação.
  */
 export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
+  // Leitura pela Pauta global: lista e baixa (com `escopo=pauta`, dentro da empresa); sem enviar, adicionar link, mudar status nem excluir.
+  const escopoLeitura = useEscopoLeituraDemanda();
+  const somenteLeitura = escopoLeitura !== undefined;
   const [arquivos, setArquivos] = useState<DemandaArquivo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
@@ -56,7 +60,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
 
   useEffect(() => {
     let cancelado = false;
-    listArquivosDemanda(demandaId)
+    listArquivosDemanda(demandaId, escopoLeitura)
       .then((dados) => {
         if (!cancelado) setArquivos(dados);
       })
@@ -69,7 +73,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
     return () => {
       cancelado = true;
     };
-  }, [demandaId]);
+  }, [demandaId, escopoLeitura]);
 
   async function enviarArquivo(file: File) {
     setEnviando(true);
@@ -140,6 +144,8 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
         </div>
       </div>
 
+      {!somenteLeitura && (
+      <>
       <div className="mt-3 flex items-center gap-1.5">
         {(["anexo", "layout", "link"] as const).map((tipo) => (
           <button
@@ -198,6 +204,8 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
           <p className="mt-1.5 text-xs text-fg-subtle">PNG, JPG ou PDF.</p>
         </>
       )}
+      </>
+      )}
 
       {erro && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{erro}</p>}
 
@@ -232,7 +240,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
                     </a>
                   ) : (
                     <a
-                      href={urlDownloadArquivoDemanda(demandaId, arquivo.id)}
+                      href={urlDownloadArquivoDemanda(demandaId, arquivo.id, escopoLeitura)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-700 hover:text-indigo-600 dark:text-zinc-200 dark:hover:text-indigo-400"
@@ -245,6 +253,7 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
                   {arquivo.tipo === "layout" && arquivo.statusLayout && (
                     <Badge tone={STATUS_LAYOUT_TONE[arquivo.statusLayout]}>{STATUS_LAYOUT_LABELS[arquivo.statusLayout]}</Badge>
                   )}
+                  {!somenteLeitura && (
                   <button
                     type="button"
                     onClick={() => void excluir(arquivo.id)}
@@ -254,9 +263,10 @@ export function DemandaArquivosCard({ demandaId }: { demandaId: string }) {
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
+                  )}
                 </div>
 
-                {arquivo.tipo === "layout" && (
+                {arquivo.tipo === "layout" && !somenteLeitura && (
                   <div className="max-w-[220px] pl-11">
                     <Select
                       label="Status"
