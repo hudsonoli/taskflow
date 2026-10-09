@@ -98,7 +98,7 @@ export function AcessosView() {
         <MapPinOff className="h-4 w-4 shrink-0" />
         <p>
           Lista dos logins da sua empresa. IP, navegador e sistema operacional são registrados pelo servidor a partir da
-          requisição de login; a região é aproximada (por IP) e aparece como «Não disponível» quando não pode ser
+          requisição de login. Região aproximada com base no IP da conexão; aparece como «Não disponível» quando não pode ser
           determinada. Registros anteriores a esta atualização podem mostrar o endereço interno do servidor e navegador
           desconhecido: essa informação não foi guardada e não é reconstruída.
         </p>

@@ -1,7 +1,7 @@
 // Auditoria de acesso (Configurações → Acesso) — evento de login → linha da tabela. Lógica PURA (testável com `node --test`).
 //
-// Os dados são gravados pelo SERVIDOR no login (IP original, navegador e sistema operacional lidos da requisição HTTP, região por
-// GeoIP local quando configurada): a tela só EXIBE. Eventos antigos (anteriores à Fase 7E) não têm esses campos: o IP que
+// Os dados são gravados pelo SERVIDOR no login (IP original, navegador e sistema operacional lidos da requisição HTTP, região a partir de
+// cabeçalhos de localização da Cloudflare, quando habilitados): a tela só EXIBE. Eventos antigos (anteriores à Fase 7E) não têm esses campos: o IP que
 // gravaram pode ser o do proxy interno e o User-Agent era o do servidor — não são "corrigidos" nem inventados.
 import { parseNavegador, parseSistemaOperacional } from "./user-agent.ts";
 import type { AcessoLoginEvento, EventoApi } from "../types/acesso.ts";

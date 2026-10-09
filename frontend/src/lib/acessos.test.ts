@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { TEXTO_DESCONHECIDO, TEXTO_NAO_DISPONIVEL, resolverAcessoLogin, rotuloRegiao } from "./acessos.ts";
-import { cabecalhosDoCliente, ipDoCliente } from "./server/cliente-http.ts";
+import { cabecalhosDoCliente, ipDoCliente, textoDeLocalizacao } from "./server/cliente-http.ts";
 import type { EventoApi } from "../types/acesso.ts";
 
 const ler = (caminho: string) => readFileSync(new URL(`../${caminho}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
@@ -63,40 +63,83 @@ test("payload ausente ou com tipos errados não derruba a tela", () => {
   assert.equal(torto.navegador, TEXTO_DESCONHECIDO);
 });
 
-// ── repasse do IP/User-Agent do BFF para a API ──────────────────────────────────────────────────────────────────
+// ── repasse do IP, região e User-Agent do BFF para a API (Cloudflare → NPM → BFF → API) ────────────────────────────
 
-test("BFF: IP do cliente vem de X-Real-IP (definido pelo proxy) ou do ÚLTIMO item do X-Forwarded-For", () => {
-  assert.equal(ipDoCliente(cabecalhos({ "x-real-ip": "187.1.2.3" })), "187.1.2.3");
-  assert.equal(ipDoCliente(cabecalhos({ "x-real-ip": "2804:14d:1::5" })), "2804:14d:1::5");
+test("BFF: IP vem de CF-Connecting-IP (Cloudflare) > X-Real-IP (proxy da origem) > ÚLTIMO item do X-Forwarded-For", () => {
+  assert.equal(ipDoCliente(cabecalhos({ "cf-connecting-ip": "187.1.2.3", "x-real-ip": "162.158.0.1" })), "187.1.2.3"); // X-Real-IP = borda da Cloudflare
+  assert.equal(ipDoCliente(cabecalhos({ "cf-connecting-ip": "2804:14d:1::5" })), "2804:14d:1::5");
+  assert.equal(ipDoCliente(cabecalhos({ "x-real-ip": "187.1.2.3" })), "187.1.2.3"); // sem Cloudflare na frente
   // o primeiro item é o que o cliente escreveu; vale o que o proxy acrescentou (o último)
   assert.equal(ipDoCliente(cabecalhos({ "x-forwarded-for": "6.6.6.6, 187.1.2.3" })), "187.1.2.3");
-  assert.equal(ipDoCliente(cabecalhos({ "x-real-ip": "187.1.2.3", "x-forwarded-for": "6.6.6.6" })), "187.1.2.3");
 });
 
-test("BFF: texto arbitrário nunca é repassado como IP", () => {
-  for (const ruim of ["abc", "<script>", "1.2.3", "999.1.1.1", "1.2.3.4, evil", "", "a".repeat(200)]) {
+test("BFF: texto arbitrário ou lista nunca é repassado como IP (nem o primeiro item)", () => {
+  for (const ruim of ["abc", "<script>", "1.2.3", "999.1.1.1", "1.2.3.4, 5.6.7.8", "1.2.3.4, evil", "", "a".repeat(200)]) {
+    assert.equal(ipDoCliente(cabecalhos({ "cf-connecting-ip": ruim })), null, ruim);
     assert.equal(ipDoCliente(cabecalhos({ "x-real-ip": ruim })), null, ruim);
   }
+  assert.equal(ipDoCliente(cabecalhos({ "cf-connecting-ip": "lixo", "x-real-ip": "187.1.2.3" })), "187.1.2.3"); // inválido cai no próximo
   assert.equal(ipDoCliente(cabecalhos({})), null);
-  assert.deepEqual(cabecalhosDoCliente(cabecalhos({ "x-real-ip": "lixo" })), {});
+  assert.deepEqual(cabecalhosDoCliente(cabecalhos({ "cf-connecting-ip": "lixo" })), {});
 });
 
-test("BFF: repassa X-Forwarded-For (só o IP) e o User-Agent do navegador, limitado", () => {
+test("BFF: com a Cloudflare, repassa só cabeçalhos INTERNOS sanitizados (IP, cidade, região, código, país) e o User-Agent", () => {
   const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/153.0.0.0 Safari/537.36";
-  assert.deepEqual(cabecalhosDoCliente(cabecalhos({ "x-real-ip": "187.1.2.3", "x-forwarded-for": "6.6.6.6, 187.1.2.3", "user-agent": ua })), {
-    "X-Forwarded-For": "187.1.2.3",
-    "User-Agent": ua,
-  });
+  assert.deepEqual(
+    cabecalhosDoCliente(
+      cabecalhos({
+        "cf-connecting-ip": "187.1.2.3", "cf-ipcity": "Brasília", "cf-region": "Federal District", "cf-region-code": "df", "cf-ipcountry": "br", "user-agent": ua,
+      }),
+    ),
+    {
+      "X-Taskflow-Client-IP": "187.1.2.3",
+      "X-Taskflow-CF-City": "Bras%C3%ADlia", // ASCII (percent-encoding): seguro como valor de cabeçalho
+      "X-Taskflow-CF-Region": "Federal%20District",
+      "X-Taskflow-CF-Region-Code": "DF",
+      "X-Taskflow-CF-Country": "BR",
+      "User-Agent": ua,
+    },
+  );
   assert.equal(cabecalhosDoCliente(cabecalhos({ "user-agent": "x".repeat(5000) }))["User-Agent"].length, 512);
   assert.deepEqual(cabecalhosDoCliente(cabecalhos({})), {});
 });
 
-test("as rotas de login (local e Google) repassam IP e User-Agent à API; a empresa continua vindo do servidor", () => {
+test("BFF: NÃO encaminha latitude, longitude, CEP, fuso nem nenhum CF-* do navegador como está", () => {
+  const saida = cabecalhosDoCliente(
+    cabecalhos({
+      "cf-connecting-ip": "187.1.2.3", "cf-iplatitude": "-15.78", "cf-iplongitude": "-47.93", "cf-postal-code": "70040", "cf-timezone": "America/Sao_Paulo",
+      "cf-ipcity": "Brasília", "cf-ray": "abc-GRU", "x-taskflow-client-ip": "6.6.6.6", "x-taskflow-cf-city": "Paris",
+    }),
+  );
+  assert.deepEqual(Object.keys(saida).sort(), ["X-Taskflow-CF-City", "X-Taskflow-Client-IP"]);
+  assert.equal(saida["X-Taskflow-Client-IP"], "187.1.2.3"); // um X-Taskflow-* vindo do navegador é ignorado: o BFF recalcula
+  assert.equal(saida["X-Taskflow-CF-City"], "Bras%C3%ADlia");
+  assert.doesNotMatch(JSON.stringify(saida), /15\.78|47\.93|70040|Sao_Paulo|abc-GRU|Paris/);
+});
+
+test("BFF: valores de localização inválidos são descartados; UTF-8 lido como latin1 é reparado", () => {
+  // `Headers` recusaria NUL/CRLF; um stub simula o pior caso que um cabeçalho de verdade nunca chegaria a ter
+  const valores: Record<string, string> = { "cf-connecting-ip": "187.1.2.3", "cf-ipcity": "<script>" + String.fromCharCode(0, 13, 10), "cf-region": "   ", "cf-region-code": "!!!", "cf-ipcountry": "BRA" };
+  const ruim = cabecalhosDoCliente({ get: (nome: string) => valores[nome] ?? null });
+
+  assert.equal(ruim["X-Taskflow-CF-Region"], undefined);
+  assert.equal(ruim["X-Taskflow-CF-Region-Code"], undefined); // código de região inválido
+  assert.equal(ruim["X-Taskflow-CF-Country"], undefined); // país com 3 letras
+  assert.equal(decodeURIComponent(ruim["X-Taskflow-CF-City"]), "script"); // sem <>/controle
+  assert.equal(textoDeLocalizacao("BrasÃ­lia"), "Brasília"); // o Node lê o UTF-8 cru como latin1
+  assert.equal(textoDeLocalizacao("Bras%C3%ADlia"), "Brasília");
+  assert.equal(textoDeLocalizacao("São Paulo"), "São Paulo");
+  assert.equal(textoDeLocalizacao("x".repeat(500))?.length, 80);
+  assert.equal(textoDeLocalizacao("%E0%A4%A"), "%E0%A4%A"); // percent inválido: segue como texto, sem exceção
+  assert.equal(textoDeLocalizacao(null), null);
+});
+
+test("as rotas de login (local e Google) repassam IP, região e User-Agent à API; a empresa continua vindo do servidor", () => {
   for (const rota of ["app/api/auth/login/route.ts", "app/api/auth/google/route.ts"]) {
     const codigo = semComentarios(ler(rota));
     assert.match(codigo, /import \{ cabecalhosDoCliente \} from "@\/lib\/server\/cliente-http"/, rota);
     assert.match(codigo, /headers: \{ "Content-Type": "application\/json", \.\.\.cabecalhosDoCliente\(request\.headers\) \}/, rota);
-    assert.doesNotMatch(codigo, /empresaId|ip_address|userAgent/, rota); // nada do navegador no corpo
+    assert.doesNotMatch(codigo, /empresaId|ip_address|userAgent|regiao/, rota); // nada do navegador no corpo
   }
 });
 
@@ -129,7 +172,7 @@ test("a tela não analisa mais o User-Agent do evento por conta própria (só o 
   assert.match(semComentarios(ler("lib/acessos.ts")), /parseNavegador\(userAgentLegado\)/);
 });
 
-test("região formatada do GeoIP (Fase 7E.1) cabe na célula: texto normal, sem truncar nem esconder, e a mais longa quebra de linha", () => {
+test("região formatada (Cloudflare, Fase 7E.2) cabe na célula: texto normal, sem truncar nem esconder, e a mais longa quebra de linha", () => {
   const regioes = ["Brasília, DF, Brasil", "São Paulo, SP, Brasil", "Lisboa, Portugal", "Seattle, Washington, Estados Unidos"];
   for (const regiao of regioes) {
     const acesso = resolverAcessoLogin(evento({ nome: "Maria", ip_address: "8.8.8.8", regiao }));
@@ -140,4 +183,16 @@ test("região formatada do GeoIP (Fase 7E.1) cabe na célula: texto normal, sem 
   const celula = codigo.slice(codigo.indexOf("{evento.regiao ? ("), codigo.indexOf("rotuloRegiao(evento)"));
   assert.doesNotMatch(celula, /truncate|whitespace-nowrap|overflow-hidden|text-ellipsis/); // a região inteira fica visível
   assert.match(celula, /<span className="text-zinc-600 dark:text-zinc-300">\{evento\.regiao\}<\/span>/);
+});
+
+test("o proxy genérico da API não repassa cabeçalho algum do navegador (X-Taskflow-* só existe no login)", () => {
+  const proxy = semComentarios(ler("app/api/backend/[...path]/route.ts"));
+  assert.doesNotMatch(proxy, /request\.headers\.(get|forEach|entries)\((?!"content-type")/i);
+  assert.doesNotMatch(proxy, /x-taskflow|cf-/i);
+});
+
+test("não há mais MaxMind/GeoIP local no frontend nem na tela de Acesso", () => {
+  const view = ler("components/acessos/AcessosView.tsx");
+  assert.doesNotMatch(view, /MaxMind|GeoIP|mmdb|base local|serviço externo/i);
+  assert.match(view, /Região aproximada com base no IP da conexão/);
 });
