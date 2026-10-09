@@ -9,11 +9,11 @@ quem pede antes de tocar em disco. Não há mais caminho público para arquivo d
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, status, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.core.escopo import resolver_escopo_demanda
+from app.api.escopo_leitura import EscopoLeitura, escopo_para_leitura
 from app.core.identidade_sistema import ids_de_contas_de_sistema
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
@@ -72,19 +72,23 @@ def handle_arquivo_error(exc: Exception) -> None:
     raise exc
 
 
-def _demanda_no_escopo(demanda_id: UUID, current_user: Usuario, db: Session) -> Demanda:
-    escopo = resolver_escopo_demanda(db, current_user)
+def _demanda_no_escopo(
+    demanda_id: UUID, current_user: Usuario, db: Session, escopo_leitura: EscopoLeitura | None = None
+) -> Demanda:
+    # `escopo_leitura` só é passado pelos GET (lista e download, leitura pela Pauta global); escrita usa sempre o escopo-base.
+    escopo = escopo_para_leitura(db, current_user, escopo_leitura)
     return demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
 
 
 @router.get("/{demanda_id}/arquivos", response_model=list[DemandaArquivoRead])
 def listar_arquivos(
     demanda_id: UUID,
+    escopo: EscopoLeitura | None = Query(default=None),
     current_user: Usuario = Depends(get_current_user_password_ready),
     db: Session = Depends(get_db),
 ):
     try:
-        demanda = _demanda_no_escopo(demanda_id, current_user, db)
+        demanda = _demanda_no_escopo(demanda_id, current_user, db, escopo)
         arquivos = arquivo_service.listar(db, demanda.id)
         sistema = (
             set()
@@ -175,6 +179,7 @@ def atualizar_status_layout(
 def download_arquivo(
     demanda_id: UUID,
     arquivo_id: UUID,
+    escopo: EscopoLeitura | None = Query(default=None),
     current_user: Usuario = Depends(get_current_user_password_ready),
     db: Session = Depends(get_db),
 ):
@@ -188,7 +193,7 @@ def download_arquivo(
     `X-Content-Type-Options: nosniff` em toda resposta: mesmo com o MIME já correto, evita
     que um navegador mais antigo tente adivinhar outro tipo por conta própria."""
     try:
-        demanda = _demanda_no_escopo(demanda_id, current_user, db)
+        demanda = _demanda_no_escopo(demanda_id, current_user, db, escopo)
         arquivo, caminho = arquivo_service.obter_para_download(db, demanda, str(arquivo_id))
         media_type, inline = arquivo_service.resolver_download_seguro(arquivo.nome_fisico, caminho)
         return FileResponse(

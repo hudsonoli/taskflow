@@ -13,6 +13,7 @@ from app.core.escopo import (
 )
 from app.core.filtros_lista import parse_csv_enum, parse_csv_uuids
 from app.db.session import get_db
+from app.api.escopo_leitura import EscopoLeitura
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import require_admin_or_gestor
 from app.dependencies.permissoes import require_demandas_criar, require_permissao
@@ -284,7 +285,8 @@ def list_demandas(
         prazo_inicio=_normalize_datetime(prazo_inicio),
         prazo_fim=_normalize_datetime(prazo_fim),
         atrasada=atrasada,
-        nao_finalizada=nao_finalizada,
+        # A Pauta global é a operação em ABERTO: concluída/cancelada nunca entram (arquivada já fica fora por padrão).
+        nao_finalizada=nao_finalizada or escopo_solicitado is EscopoSolicitado.PAUTA,
         agora=_normalize_datetime(agora),
         hoje_inicio=_normalize_datetime(hoje_inicio),
         hoje_fim=_normalize_datetime(hoje_fim),
@@ -456,12 +458,16 @@ def list_demandas_por_ids(
 @router.get("/{demanda_id}", response_model=DemandaRead)
 def get_demanda(
     demanda_id: UUID,
+    escopo_leitura: EscopoLeitura | None = Query(default=None, alias="escopo"),
     current_user: Usuario = Depends(require_permissao("demandas.visualizar")),
     db: Session = Depends(get_db),
 ):
-    """Fora da empresa **ou fora do escopo** → 404. Conhecer o UUID não autoriza nada."""
+    """Fora da empresa **ou fora do escopo** → 404. Conhecer o UUID não autoriza nada.
+
+    `?escopo=pauta` (Fase 7C.1): LEITURA do detalhe de uma demanda exibida na Pauta global — só para quem tem a Pauta global (403 para
+    os demais) e sempre dentro da empresa do token. Não dá poder de escrita: PATCH/arquivar/etc. seguem no escopo-base."""
     try:
-        escopo = _escopo(db, current_user)
+        escopo = _escopo(db, current_user, EscopoSolicitado.PAUTA if escopo_leitura == "pauta" else None)
         demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
         return demanda_service.to_read(db, demanda)
     except Exception as exc:

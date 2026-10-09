@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.escopo import resolver_escopo_demanda
+from app.api.escopo_leitura import EscopoLeitura, escopo_para_leitura
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.models.demanda import Demanda
@@ -44,19 +44,23 @@ def handle_checklist_error(exc: Exception) -> None:
     raise exc
 
 
-def _demanda_no_escopo(demanda_id: UUID, current_user: Usuario, db: Session) -> Demanda:
-    escopo = resolver_escopo_demanda(db, current_user)
+def _demanda_no_escopo(
+    demanda_id: UUID, current_user: Usuario, db: Session, escopo_leitura: EscopoLeitura | None = None
+) -> Demanda:
+    # `escopo_leitura` só é passado pelo GET (leitura pela Pauta global); escrita usa sempre o escopo-base.
+    escopo = escopo_para_leitura(db, current_user, escopo_leitura)
     return demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
 
 
 @router.get("/{demanda_id}/checklist", response_model=list[DemandaChecklistItemRead])
 def listar_checklist(
     demanda_id: UUID,
+    escopo: EscopoLeitura | None = Query(default=None),
     current_user: Usuario = Depends(get_current_user_password_ready),
     db: Session = Depends(get_db),
 ):
     try:
-        demanda = _demanda_no_escopo(demanda_id, current_user, db)
+        demanda = _demanda_no_escopo(demanda_id, current_user, db, escopo)
         itens = checklist_service.list_itens(db, demanda.id)
         return [checklist_service.to_read(item) for item in itens]
     except Exception as exc:
