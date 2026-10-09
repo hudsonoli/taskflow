@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.empresa_slug import validar_slug
+from app.core.geoip import regiao_do_ip
+from app.core.user_agent import parse_user_agent
 from app.core.security import (
     AuthTokenError,
     create_access_token,
@@ -75,6 +77,20 @@ class AuthGoogleAccessDeniedError(ValueError):
     403 genérico no router, nunca diferenciado (ver GOOGLE_ACCESS_DENIED_MESSAGE)."""
 
     pass
+
+
+
+def _dados_de_acesso(ip_address: str | None, user_agent: str | None) -> dict[str, str | None]:
+    """Contexto do acesso para a trilha de auditoria (Fase 7E): IP resolvido pelo servidor, navegador e sistema operacional lidos
+    do `User-Agent` DA REQUISIÇÃO e região aproximada do IP (GeoIP local, opcional). O `User-Agent` completo NÃO é persistido —
+    só o que a auditoria precisa (minimização). Região indisponível/falha de GeoIP nunca afeta o login: vira `None`."""
+    info = parse_user_agent(user_agent)
+    return {
+        "ip_address": ip_address,
+        "navegador": info.navegador,
+        "sistema_operacional": info.sistema,
+        "regiao": regiao_do_ip(ip_address),
+    }
 
 
 class AuthService:
@@ -650,8 +666,7 @@ class AuthService:
                 "nome": usuario.nome,
                 "timestamp": occurred_at.isoformat(),
                 "resultado": "sucesso",
-                "ip_address": ip_address,
-                "user_agent": user_agent,
+                **_dados_de_acesso(ip_address, user_agent),
             },
             occurred_at=occurred_at,
         )
@@ -673,8 +688,7 @@ class AuthService:
             "empresa_id": empresa.id,
             "timestamp": occurred_at.isoformat(),
             "resultado": "falha",
-            "ip_address": ip_address,
-            "user_agent": user_agent,
+            **_dados_de_acesso(ip_address, user_agent),
         }
         entidade_id = empresa.id
         usuario_id = None

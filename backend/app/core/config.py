@@ -75,6 +75,25 @@ class Settings:
         default_factory=lambda: os.getenv("GOOGLE_WORKSPACE_ALLOWED_DOMAIN")
     )
 
+    # Fase 7E — proxies cuja palavra sobre o IP do cliente (`X-Forwarded-For`) é aceita. Só a conexão IMEDIATA vinda destas redes
+    # habilita o cabeçalho; de qualquer outra origem ele é ignorado (anti-spoofing) — ver app/core/cliente_ip.py. O padrão são os
+    # ranges privados/loopback: a API nunca é publicada na internet (só o proxy/BFF na rede Docker a alcança). Em outra topologia,
+    # fixe a sub-rede exata (ex.: TRUSTED_PROXY_CIDRS=172.18.0.0/16). Valor inválido falha no boot.
+    trusted_proxy_cidrs: str = field(
+        default_factory=lambda: os.getenv(
+            "TRUSTED_PROXY_CIDRS", "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+        )
+    )
+    # Fase 7E — base GeoIP LOCAL (.mmdb, ex.: GeoLite2-City) para a região aproximada do IP no login. Ausente = região "Não disponível".
+    # Nada é baixado nem consultado em serviço externo.
+    geoip_db_path: str | None = field(default_factory=lambda: os.getenv("GEOIP_DB_PATH") or None)
+
+    @property
+    def trusted_proxy_networks(self):
+        from app.core.cliente_ip import parse_redes_confiaveis
+
+        return parse_redes_confiaveis(self.trusted_proxy_cidrs.split(","))
+
     def __post_init__(self) -> None:
         # Falha no boot, não na primeira emissão de código: um APP_TIMEZONE inválido só
         # apareceria muito depois, ao gerar um codigo_referencia.
@@ -90,6 +109,10 @@ class Settings:
             raise ValueError("AUTH_MAX_FAILED_ATTEMPTS deve ser positivo")
         if self.auth_lockout_minutes <= 0:
             raise ValueError("AUTH_LOCKOUT_MINUTES deve ser positivo")
+        try:
+            self.trusted_proxy_networks  # valida os CIDRs no boot: confiança mal configurada não pode passar em silêncio
+        except ValueError as exc:
+            raise ValueError(f"TRUSTED_PROXY_CIDRS inválido: {exc}") from exc
         # Fail-fast: produção nunca pode assinar JWT com o segredo de desenvolvimento, que
         # é público (está versionado logo acima). Sem esta guarda, um deploy sem
         # AUTH_SECRET_KEY sobe silenciosamente e qualquer um com acesso ao repositório

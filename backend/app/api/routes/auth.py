@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.cliente_ip import resolver_ip_cliente_da_requisicao
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.usuario import Usuario
@@ -32,10 +33,8 @@ auth_service = AuthService()
 
 
 def extract_client_ip(request: Request) -> str | None:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else None
+    """IP original do cliente — delega ao helper central (confia em `X-Forwarded-For` só de proxy confiável)."""
+    return resolver_ip_cliente_da_requisicao(request)
 
 
 @router.post("/login", response_model=AccessTokenResponse)
