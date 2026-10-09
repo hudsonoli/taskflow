@@ -16,6 +16,14 @@ a auditoria de acesso.
 - só IPs válidos (IPv4/IPv6); porta, colchetes, zona IPv6 e IPv4-mapeado são normalizados; entrada inválida interrompe a cadeia (fica o
   último salto confiável conhecido) e a cadeia é limitada;
 - o resultado é sempre um IP normalizado (ou `None`) — nunca a lista inteira, a porta ou texto arbitrário.
+
+## Cloudflare (Fase 7E.2)
+
+Com o domínio atrás da Cloudflare, o IP público do visitante chega em `CF-Connecting-IP` (a Cloudflare o sobrescreve na borda); o
+`X-Real-IP`/`X-Forwarded-For` do proxy da origem trazem só o IP da borda da Cloudflare. O BFF (Next.js) sanitiza e repassa um único
+IP válido em `X-Taskflow-Client-IP`. Prioridade, SEMPRE condicionada a o peer imediato ser um proxy confiável: (1) `X-Taskflow-Client-IP`,
+(2) `CF-Connecting-IP`, (3) cadeia do `X-Forwarded-For`, (4) o próprio peer. Cada candidato precisa conter UM IP válido (lista, texto ou
+porta inválida são descartados — nunca "o primeiro item"). De conexão não confiável, todos os cabeçalhos são ignorados.
 """
 
 from __future__ import annotations
@@ -70,15 +78,38 @@ def _confiavel(endereco: IPAddress, redes: Sequence[IPNetwork]) -> bool:
     return any(endereco.version == rede.version and endereco in rede for rede in redes)
 
 
+def conexao_de_proxy_confiavel(peer: str | None, redes_confiaveis: Sequence[IPNetwork]) -> bool:
+    """O peer imediato pertence às redes de proxy confiáveis? É o portão de TODO cabeçalho encaminhado (IP e região)."""
+    endereco = normalizar_ip(peer)
+    return endereco is not None and _confiavel(endereco, redes_confiaveis)
+
+
+def ip_publico(ip: str | None) -> bool:
+    """Só IP público e global tem região: privado, loopback, link-local, multicast, reservado, não especificado e CGNAT → não."""
+    endereco = normalizar_ip(ip)
+    return endereco is not None and endereco.is_global and not endereco.is_multicast and not endereco.is_unspecified
+
+
 def resolver_ip_cliente(
-    peer: str | None, x_forwarded_for: str | None, redes_confiaveis: Sequence[IPNetwork]
+    peer: str | None,
+    x_forwarded_for: str | None,
+    redes_confiaveis: Sequence[IPNetwork],
+    *,
+    ip_encaminhado: Iterable[str | None] = (),
 ) -> str | None:
-    """IP original do cliente a partir do peer imediato e do `X-Forwarded-For`. Função pura (testável sem HTTP)."""
+    """IP original do cliente a partir do peer imediato, dos cabeçalhos dedicados (`ip_encaminhado`, em ordem de prioridade:
+    `X-Taskflow-Client-IP`, `CF-Connecting-IP`) e do `X-Forwarded-For`. Função pura (testável sem HTTP)."""
     atual = normalizar_ip(peer)
     if atual is None:
         return None
-    if not x_forwarded_for or not _confiavel(atual, redes_confiaveis):
-        return str(atual)  # conexão direta (ou de origem não confiável): o cabeçalho é ignorado
+    if not _confiavel(atual, redes_confiaveis):
+        return str(atual)  # conexão direta (ou de origem não confiável): TODOS os cabeçalhos são ignorados
+    for candidato in ip_encaminhado:  # cabeçalho dedicado com UM IP válido vence a cadeia
+        endereco = normalizar_ip(candidato)
+        if endereco is not None:
+            return str(endereco)
+    if not x_forwarded_for:
+        return str(atual)
 
     saltos = [parte for parte in x_forwarded_for.split(",")][-MAX_SALTOS:]
     for bruto in reversed(saltos):
@@ -98,4 +129,9 @@ def resolver_ip_cliente_da_requisicao(request: Request, redes_confiaveis: Sequen
 
         redes_confiaveis = get_settings().trusted_proxy_networks
     peer = request.client.host if request.client else None
-    return resolver_ip_cliente(peer, request.headers.get("x-forwarded-for"), redes_confiaveis)
+    return resolver_ip_cliente(
+        peer,
+        request.headers.get("x-forwarded-for"),
+        redes_confiaveis,
+        ip_encaminhado=(request.headers.get("x-taskflow-client-ip"), request.headers.get("cf-connecting-ip")),
+    )

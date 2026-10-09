@@ -11,6 +11,3 @@ python-dotenv==1.0.1
 cryptography==50.0.1
 google-auth==2.59.1
 requests==2.34.2
-# Leitura local de bancos MaxMind .mmdb (GeoLite2-City) — região aproximada do IP no login (Fase 7E.1). Sem dependências próprias,
-# sem rede: só lê um arquivo do disco.
-maxminddb==3.2.0

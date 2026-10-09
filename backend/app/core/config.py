@@ -83,10 +83,6 @@ class Settings:
         default_factory=lambda: os.getenv("TRUSTED_PROXY_CIDRS", "").strip()
         or "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
     )
-    # Fases 7E/7E.1 — base GeoIP LOCAL (MaxMind GeoLite2-City, .mmdb) para a região aproximada do IP no login. Ausente/inválida =
-    # GeoIP desabilitado e região "Não disponível". Nada é baixado nem consultado em serviço externo; o arquivo não é versionado.
-    geoip_db_path: str | None = field(default_factory=lambda: os.getenv("GEOIP_DB_PATH") or None)
-
     @property
     def trusted_proxy_networks(self):
         from app.core.cliente_ip import parse_redes_confiaveis

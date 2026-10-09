@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.empresa_slug import validar_slug
-from app.core.geoip import regiao_do_ip
 from app.core.user_agent import parse_user_agent
 from app.core.security import (
     AuthTokenError,
@@ -80,16 +79,16 @@ class AuthGoogleAccessDeniedError(ValueError):
 
 
 
-def _dados_de_acesso(ip_address: str | None, user_agent: str | None) -> dict[str, str | None]:
-    """Contexto do acesso para a trilha de auditoria (Fase 7E): IP resolvido pelo servidor, navegador e sistema operacional lidos
-    do `User-Agent` DA REQUISIÇÃO e região aproximada do IP (GeoIP local, opcional). O `User-Agent` completo NÃO é persistido —
-    só o que a auditoria precisa (minimização). Região indisponível/falha de GeoIP nunca afeta o login: vira `None`."""
+def _dados_de_acesso(ip_address: str | None, user_agent: str | None, regiao: str | None = None) -> dict[str, str | None]:
+    """Contexto do acesso para a trilha de auditoria (Fases 7E/7E.2): IP resolvido pelo servidor, navegador e sistema operacional lidos
+    do `User-Agent` DA REQUISIÇÃO e região aproximada (texto, vinda dos cabeçalhos da Cloudflare já validados na rota). O `User-Agent`
+    completo, coordenadas, CEP e fuso NÃO são persistidos — só o que a auditoria precisa (minimização). Região ausente → `None`."""
     info = parse_user_agent(user_agent)
     return {
         "ip_address": ip_address,
         "navegador": info.navegador,
         "sistema_operacional": info.sistema,
-        "regiao": regiao_do_ip(ip_address),
+        "regiao": regiao,
     }
 
 
@@ -124,6 +123,7 @@ class AuthService:
         senha: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        regiao: str | None = None,
     ) -> AccessTokenResponse:
         email_normalizado = self._normalize_email(email)
         now = datetime.now(timezone.utc)
@@ -134,24 +134,24 @@ class AuthService:
         try:
             empresa = self._resolver_empresa(db, empresa_codigo=empresa_codigo, empresa_slug=empresa_slug)
             if empresa is None or empresa.status != EMPRESA_STATUS_ATIVA:
-                self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                 db.commit()
                 raise AuthInvalidCredentialsError(INVALID_CREDENTIALS_MESSAGE)
 
             usuario = self.usuario_repository.get_by_email(db, empresa_id=empresa.id, email=email_normalizado)
             if usuario is None or not self._usuario_can_authenticate(usuario):
-                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                 db.commit()
                 raise AuthInvalidCredentialsError(INVALID_CREDENTIALS_MESSAGE)
 
             credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)
             if credencial is None:
-                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                 db.commit()
                 raise AuthInvalidCredentialsError(INVALID_CREDENTIALS_MESSAGE)
 
             if self._is_locked(credencial, now):
-                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                 db.commit()
                 raise AuthInvalidCredentialsError(INVALID_CREDENTIALS_MESSAGE)
 
@@ -162,7 +162,7 @@ class AuthService:
 
             if not verify_password(senha, credencial.senha_hash):
                 self._register_failed_attempt(db, credencial, now)
-                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                 db.commit()
                 raise AuthInvalidCredentialsError(INVALID_CREDENTIALS_MESSAGE)
 
@@ -170,7 +170,7 @@ class AuthService:
             credencial.bloqueado_ate = None
             credencial.updated_at = now
             self.credencial_repository.update(db, credencial)
-            self._publish_login_sucesso(db, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+            self._publish_login_sucesso(db, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
             token = create_access_token(
                 sub=usuario.id,
                 empresa_id=usuario.empresa_id,
@@ -196,6 +196,7 @@ class AuthService:
         id_token: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        regiao: str | None = None,
     ) -> AccessTokenResponse:
         """Login Google Workspace para usuário PRÉ-CADASTRADO — nunca cria usuário novo.
 
@@ -235,7 +236,7 @@ class AuthService:
         try:
             empresa = self._resolver_empresa(db, empresa_codigo=empresa_codigo, empresa_slug=empresa_slug)
             if empresa is None or empresa.status != EMPRESA_STATUS_ATIVA:
-                self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                 db.commit()
                 raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
 
@@ -245,7 +246,7 @@ class AuthService:
                 # NUNCA é recomparado aqui, e NUNCA cai pra busca por e-mail. Cross-tenant
                 # nunca é aceito, mesmo que a mesma conta Google exista em outra empresa.
                 if usuario.empresa_id != empresa.id:
-                    self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                    self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                     db.commit()
                     raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
             else:
@@ -253,23 +254,23 @@ class AuthService:
                 # claim do Google — é o que ancora a quem o sub será vinculado.
                 email_claim_normalizado = self._normalize_email(email_claim)
                 if email_claim_normalizado != email_digitado:
-                    self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                    self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                     db.commit()
                     raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
 
                 usuario = self.usuario_repository.get_by_email(db, empresa_id=empresa.id, email=email_claim_normalizado)
                 if usuario is None:
-                    self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                    self._publish_login_falha(db, empresa=empresa, usuario=None, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                     db.commit()
                     raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
                 if usuario.google_sub is not None:
                     # Já vinculado a OUTRO sub — nunca revincula/sobrescreve automaticamente.
-                    self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                    self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                     db.commit()
                     raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
 
             if not self._usuario_can_authenticate(usuario):
-                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+                self._publish_login_falha(db, empresa=empresa, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
                 db.commit()
                 raise AuthGoogleAccessDeniedError(GOOGLE_ACCESS_DENIED_MESSAGE)
 
@@ -288,7 +289,7 @@ class AuthService:
             usuario.updated_at = now
             db.flush()
 
-            self._publish_login_sucesso(db, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent)
+            self._publish_login_sucesso(db, usuario=usuario, occurred_at=now, ip_address=ip_address, user_agent=user_agent, regiao=regiao)
             token = create_access_token(
                 sub=usuario.id,
                 empresa_id=usuario.empresa_id,
@@ -653,6 +654,7 @@ class AuthService:
         occurred_at: datetime,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        regiao: str | None = None,
     ) -> None:
         self._publish_auth_event(
             db,
@@ -666,7 +668,7 @@ class AuthService:
                 "nome": usuario.nome,
                 "timestamp": occurred_at.isoformat(),
                 "resultado": "sucesso",
-                **_dados_de_acesso(ip_address, user_agent),
+                **_dados_de_acesso(ip_address, user_agent, regiao),
             },
             occurred_at=occurred_at,
         )
@@ -680,6 +682,7 @@ class AuthService:
         occurred_at: datetime,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        regiao: str | None = None,
     ) -> None:
         if empresa is None:
             return
@@ -688,7 +691,7 @@ class AuthService:
             "empresa_id": empresa.id,
             "timestamp": occurred_at.isoformat(),
             "resultado": "falha",
-            **_dados_de_acesso(ip_address, user_agent),
+            **_dados_de_acesso(ip_address, user_agent, regiao),
         }
         entidade_id = empresa.id
         usuario_id = None

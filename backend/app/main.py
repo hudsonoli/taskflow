@@ -1,5 +1,3 @@
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -42,27 +40,11 @@ from app.api.routes import (
     workflow_modelos,
 )
 from app.core.config import get_settings
-from app.core.geoip import geoip_provider, reiniciar_geoip
 
 settings = get_settings()
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    """GeoIP (Fase 7E.1): abre a base uma vez no startup (e registra no log se está disponível, sem caminho nem dado de usuário) e a
-    fecha no shutdown. Qualquer problema com a base apenas desabilita o GeoIP — nunca impede o boot."""
-    try:
-        geoip_provider().inicializar()
-    except Exception:
-        pass
-    yield
-    try:
-        reiniciar_geoip()
-    except Exception:
-        pass
-
-
-app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     CORSMiddleware,

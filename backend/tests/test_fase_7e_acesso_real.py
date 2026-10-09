@@ -2,7 +2,7 @@
 
 - o IP é o do cliente, não o do proxy: `X-Forwarded-For` só vale quando a conexão IMEDIATA vem de um proxy confiável (anti-spoofing);
 - navegador e SO saem do `User-Agent` DA REQUISIÇÃO (parser local); o User-Agent completo não é persistido;
-- região por GeoIP LOCAL e opcional: IP privado nunca é consultado e nenhuma falha afeta o login;
+- a região (Fase 7E.2) vem dos cabeçalhos da Cloudflare — ver test_fase_7e2_cloudflare_geo.py;
 - a trilha de acesso é da EMPRESA da sessão (admin/gestor), nunca de outra.
 """
 
@@ -11,9 +11,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core import geoip
 from app.core.cliente_ip import normalizar_ip, parse_redes_confiaveis, resolver_ip_cliente
-from app.core.geoip import formatar_regiao, ip_consultavel, regiao_do_ip
 from app.core.user_agent import parse_user_agent
 from tests.fixtures.usuarios import SENHA_CONHECIDA, _criar_usuario_com_credencial
 from tests.test_configuracao_numeracao_tarefa import _cliente_para_outra_empresa
@@ -124,73 +122,6 @@ def test_user_agent_so_o_sistema_quando_nao_ha_navegador() -> None:
 
 
 # ======================================================================================
-# GEOIP (local, opcional, nunca bloqueia)
-# ======================================================================================
-
-
-class _Leitor:
-    def __init__(self, registro=None, erro=None) -> None:
-        self.registro, self.erro, self.chamadas = registro, erro, []
-
-    def get(self, ip):
-        self.chamadas.append(ip)
-        if self.erro:
-            raise self.erro
-        return self.registro
-
-
-class _ProviderFalso:
-    """Troca o provider do processo por um leitor controlado (o login chama `geoip_provider().regiao`)."""
-
-    def __init__(self, leitor) -> None:
-        self.leitor = leitor
-
-    def regiao(self, ip):
-        return regiao_do_ip(ip, self.leitor)
-
-
-BRASILIA = {
-    "city": {"names": {"pt-BR": "Brasília", "en": "Brasilia"}},
-    "subdivisions": [{"iso_code": "DF", "names": {"en": "Federal District"}}],
-    "country": {"iso_code": "BR", "names": {"pt-BR": "Brasil", "en": "Brazil"}},
-}
-
-
-def test_formato_da_regiao() -> None:
-    assert formatar_regiao(BRASILIA) == "Brasília, DF, Brasil"
-    assert formatar_regiao({"subdivisions": BRASILIA["subdivisions"], "country": BRASILIA["country"]}) == "DF, Brasil"
-    assert formatar_regiao({"country": BRASILIA["country"]}) == "Brasil"
-    assert formatar_regiao({"country": {"names": {"en": "Brazil"}}}) == "Brazil"  # cai no inglês
-    for vazio in (None, {}, {"city": {}}, "texto", []):
-        assert formatar_regiao(vazio) is None
-    assert "latitude" not in str(formatar_regiao({**BRASILIA, "location": {"latitude": -15.7, "longitude": -47.9}}))
-
-
-def test_regiao_encontrada_e_nao_encontrada() -> None:
-    assert regiao_do_ip("187.1.2.3", _Leitor(BRASILIA)) == "Brasília, DF, Brasil"
-    assert regiao_do_ip("187.1.2.3", _Leitor(None)) is None
-
-
-@pytest.mark.parametrize("ip", ["10.1.2.3", "172.18.0.4", "192.168.0.9", "127.0.0.1", "::1", "169.254.1.1", "fe80::1", "100.64.0.1", "0.0.0.0", "224.0.0.1", "lixo", "", None])
-def test_ip_privado_local_reservado_ou_invalido_nunca_e_consultado(ip) -> None:
-    leitor = _Leitor(BRASILIA)
-    assert ip_consultavel(ip) is False
-    assert regiao_do_ip(ip, leitor) is None
-    assert leitor.chamadas == []
-
-
-def test_falha_do_geoip_vira_none_nunca_excecao() -> None:
-    assert regiao_do_ip("187.1.2.3", _Leitor(erro=RuntimeError("base corrompida"))) is None
-
-
-def test_sem_base_configurada_a_regiao_e_indisponivel(monkeypatch) -> None:
-    monkeypatch.delenv("GEOIP_DB_PATH", raising=False)
-    geoip.reiniciar_geoip()
-    assert regiao_do_ip("187.1.2.3") is None  # GEOIP_DB_PATH ausente: sem consulta externa, sem erro
-    geoip.reiniciar_geoip()
-
-
-# ======================================================================================
 # LOGIN REAL (HTTP) — o que fica gravado
 # ======================================================================================
 
@@ -221,7 +152,7 @@ def test_login_via_proxy_confiavel_grava_ip_publico_navegador_e_so(app, db_sessi
     assert payload["navegador"] == "Chrome 153"
     assert payload["sistema_operacional"] == "Windows"
     assert "user_agent" not in payload  # minimização: o User-Agent completo não é persistido
-    assert payload["regiao"] is None  # sem base GeoIP configurada: indisponível, nunca erro
+    assert payload["regiao"] is None  # sem cabeçalhos de localização da Cloudflare: "Não disponível", nunca erro
 
 
 def test_login_direto_nao_aceita_x_forwarded_for_forjado(app, db_session, empresa, client_admin) -> None:
@@ -254,28 +185,6 @@ def test_login_sem_user_agent_e_ipv6(app, db_session, empresa, client_admin) -> 
     payload = _acessos(client_admin, usuario.id)[0]["payload"]
     assert payload["ip_address"] == "2804:14d:1::5"
     assert payload["navegador"] is None and payload["sistema_operacional"] is None  # a tela mostra "Desconhecido"
-
-
-def test_regiao_encontrada_aparece_e_ip_privado_nao_consulta(app, db_session, empresa, client_admin, monkeypatch) -> None:
-    leitor = _Leitor(BRASILIA)
-    monkeypatch.setattr(geoip, "geoip_provider", lambda: _ProviderFalso(leitor))
-    publico = _criar_usuario_com_credencial(db_session, empresa=empresa, perfil_base="operador", email_prefixo="geo1")
-    interno = _criar_usuario_com_credencial(db_session, empresa=empresa, perfil_base="operador", email_prefixo="geo2")
-    db_session.commit()
-    _login(app, empresa, publico, peer=PROXY_DOCKER, headers={"X-Forwarded-For": "187.1.2.3"})
-    _login(app, empresa, interno, peer=PROXY_DOCKER)  # sem XFF: o IP é o do próprio proxy (privado)
-    assert _acessos(client_admin, publico.id)[0]["payload"]["regiao"] == "Brasília, DF, Brasil"
-    assert _acessos(client_admin, interno.id)[0]["payload"]["regiao"] is None
-    assert leitor.chamadas == ["187.1.2.3"]  # o IP privado nunca chegou ao GeoIP
-
-
-def test_falha_do_geoip_nao_bloqueia_o_login(app, db_session, empresa, client_admin, monkeypatch) -> None:
-    monkeypatch.setattr(geoip, "geoip_provider", lambda: _ProviderFalso(_Leitor(erro=RuntimeError("base corrompida"))))
-    usuario = _criar_usuario_com_credencial(db_session, empresa=empresa, perfil_base="operador", email_prefixo="geof")
-    db_session.commit()
-    _login(app, empresa, usuario, peer=PROXY_DOCKER, headers={"X-Forwarded-For": "187.1.2.3"})
-    payload = _acessos(client_admin, usuario.id)[0]["payload"]
-    assert (payload["ip_address"], payload["regiao"]) == ("187.1.2.3", None)
 
 
 def test_login_com_falha_tambem_grava_o_ip_real(app, db_session, empresa, client_admin) -> None:

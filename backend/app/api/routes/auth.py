@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.cliente_ip import resolver_ip_cliente_da_requisicao
+from app.core.regiao_cloudflare import regiao_da_requisicao
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.usuario import Usuario
@@ -39,6 +40,7 @@ def extract_client_ip(request: Request) -> str | None:
 
 @router.post("/login", response_model=AccessTokenResponse)
 def login(payload: AuthLoginRequest, request: Request, db: Session = Depends(get_db)):
+    ip = extract_client_ip(request)
     try:
         return auth_service.login(
             db,
@@ -46,8 +48,9 @@ def login(payload: AuthLoginRequest, request: Request, db: Session = Depends(get
             empresa_slug=payload.empresa_slug,
             email=payload.email,
             senha=payload.senha,
-            ip_address=extract_client_ip(request),
+            ip_address=ip,
             user_agent=request.headers.get("user-agent"),
+            regiao=regiao_da_requisicao(request, ip),
         )
     except AuthInvalidCredentialsError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_CREDENTIALS_MESSAGE) from exc
@@ -60,6 +63,7 @@ def login_google(payload: AuthGoogleLoginRequest, request: Request, db: Session 
     Google não confiável → 401 (`AuthUnauthorizedError`); identidade confiável mas sem
     autorização no TaskFloww (inexistente, inativo, conflito de vínculo, cross-tenant,
     domínio fora da allowlist) → 403 genérico, sempre a mesma mensagem."""
+    ip = extract_client_ip(request)
     try:
         return auth_service.login_google(
             db,
@@ -67,8 +71,9 @@ def login_google(payload: AuthGoogleLoginRequest, request: Request, db: Session 
             empresa_slug=payload.empresa_slug,
             email=payload.email,
             id_token=payload.id_token,
-            ip_address=extract_client_ip(request),
+            ip_address=ip,
             user_agent=request.headers.get("user-agent"),
+            regiao=regiao_da_requisicao(request, ip),
         )
     except AuthUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Google inválido") from exc
