@@ -39,6 +39,7 @@ import {
 } from "@/lib/escopo-operacional";
 import type { Demanda } from "@/types/demanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { EquipeAgoraCard } from "./EquipeAgoraCard";
 import { useDefinicoesFiltrosMeuDepartamento } from "./useDefinicoesFiltrosMeuDepartamento";
 
 const DIAS_UTEIS_SEMANA = 5;
@@ -268,6 +269,9 @@ export function MeuDepartamentoView() {
           onRetry={() => void carregarHoras(departamentoHead.id)}
         />
       )}
+
+      {/* Quem está trabalhando agora (sessões reais). `key`: ao trocar o departamento atual, recomeça sem dados do anterior. */}
+      <EquipeAgoraCard key={departamentoHead.id} departamentoId={departamentoHead.id} />
 
       <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
         <p className="mb-3 text-sm font-semibold text-fg">Filtros</p>

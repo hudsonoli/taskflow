@@ -27,7 +27,16 @@ function tituloDoGrupo(chave: string): string {
   return titulo.charAt(0).toUpperCase() + titulo.slice(1);
 }
 
-export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; onOpenDetails: (demandaId: string) => void }) {
+export function PautaLista({
+  demandas,
+  onOpenDetails,
+  emExecucaoIds,
+}: {
+  demandas: Demanda[];
+  onOpenDetails: (demandaId: string) => void;
+  /** Pauta global: demandas com sessão de trabalho ativa agora (selo discreto; sem pessoa nem tempo). */
+  emExecucaoIds?: ReadonlySet<string>;
+}) {
   const { usuarios } = useUsuariosComIds(demandas.flatMap((demanda) => demanda.usuarioResponsavelIds));
   const { projetos } = useDiretorioProjetos();
 
@@ -92,6 +101,7 @@ export function PautaLista({ demandas, onOpenDetails }: { demandas: Demanda[]; o
                     size="h-7 w-7"
                   />
 
+                  {emExecucaoIds?.has(demanda.id) && <Badge tone="green">Em execução agora</Badge>}
                   <Badge tone={statusDemandaTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
 
                   <button

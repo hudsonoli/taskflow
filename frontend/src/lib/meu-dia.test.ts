@@ -112,7 +112,7 @@ test("API: a ordenação e as fronteiras viajam na consulta; a sessão ativa é 
   const api = ler("lib/api-backend.ts");
   assert.match(api, /"fila_pessoal"/);
   for (const nome of ["agora", "hojeInicio", "hojeFim"]) assert.ok(api.includes(`query.set("${nome}"`), nome);
-  const sessao = api.slice(api.indexOf("export async function listarMinhasSessoesAtivas"), api.indexOf("export async function getDemandaReal"));
+  const sessao = api.slice(api.indexOf("export async function listarMinhasSessoesAtivas"), api.indexOf("export type MembroEquipeAgora"));
   assert.match(sessao, /"\/sessoes-trabalho\/minhas-ativas"/);
   assert.doesNotMatch(sessao, /usuarioId|\?/); // sem parâmetro: ninguém consulta a sessão de outra pessoa
 });

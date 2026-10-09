@@ -50,11 +50,14 @@ export function PautaGantt({
   periodoInicio,
   periodoFim,
   onOpenDetails,
+  emExecucaoIds,
 }: {
   demandas: Demanda[];
   periodoInicio: Date;
   periodoFim: Date;
   onOpenDetails: (demandaId: string) => void;
+  /** Pauta global: demandas com sessão ativa agora (selo discreto; sem pessoa nem tempo). */
+  emExecucaoIds?: ReadonlySet<string>;
 }) {
   const { projetos } = useDiretorioProjetos();
 
@@ -114,6 +117,9 @@ export function PautaGantt({
                     className="w-56 shrink-0 px-4 py-3 text-left"
                   >
                     <span className="block truncate text-sm font-semibold text-fg transition hover:text-indigo-600 dark:hover:text-indigo-400">
+                      {emExecucaoIds?.has(demanda.id) && (
+                        <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" title="Em execução agora" aria-label="Em execução agora" />
+                      )}
                       {demanda.nome}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-fg-subtle">{resolverProjetoNome(demanda.projetoId, projetos)}</span>

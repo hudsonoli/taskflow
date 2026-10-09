@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { CalendarRange, List, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -17,6 +18,7 @@ export function PautaToolbar({
   onPeriodoChange,
   viewMode,
   onViewModeChange,
+  filtrosAvancados,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
@@ -26,6 +28,8 @@ export function PautaToolbar({
   onPeriodoChange: (value: PautaPeriodoFiltro) => void;
   viewMode: PautaViewMode;
   onViewModeChange: (value: PautaViewMode) => void;
+  /** Pauta GLOBAL: filtros avançados (com Departamento como filtro) no lugar do seletor simples de departamentos. */
+  filtrosAvancados?: ReactNode;
 }) {
   const { departamentos } = useDiretorioDepartamentos();
 
@@ -65,7 +69,8 @@ export function PautaToolbar({
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
+          {filtrosAvancados ?? (
           <MultiSelect
             label="Departamento"
             values={departamentoIds}
@@ -78,6 +83,7 @@ export function PautaToolbar({
               label: departamento.status === "arquivado" ? `${departamento.nome} (arquivado)` : departamento.nome,
             }))}
           />
+          )}
         </div>
 
         <div className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-800">

@@ -6,13 +6,22 @@ import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { getDemandaReal, listDemandasReais } from "@/lib/api-backend";
+import { FiltrosAvancados } from "@/components/filtros/FiltrosAvancados";
+import { getDemandaReal, listDemandasReais, listarDemandasEmExecucaoNaPauta } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
+import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
+import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
+import { podeAcessarPautaGlobal } from "@/lib/escopo-operacional";
+import { filtrosPautaParaApi } from "@/lib/filtros-pauta";
+import { useFiltrosNaUrl } from "@/lib/useFiltrosNaUrl";
 import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer";
 import type { Demanda } from "@/types/demanda";
 import { PautaGantt } from "./PautaGantt";
 import { PautaLista } from "./PautaLista";
 import { type PautaPeriodoFiltro, type PautaViewMode, PautaToolbar } from "./PautaToolbar";
+import { useDefinicoesFiltrosPauta } from "./useDefinicoesFiltrosPauta";
 
 // D2-B3: mesma razão do D2-B1/D2-B2 — AppDataContext.demandas vem limitado a 200 itens
 // carregados uma única vez no login. A Pauta filtrava esse array localmente (busca,
@@ -20,8 +29,16 @@ import { type PautaPeriodoFiltro, type PautaViewMode, PautaToolbar } from "./Pau
 // nenhum aviso. A Pauta passa a buscar do servidor com search/departamentos/prazo/ordenação
 // reais — ver diagnóstico D2-B3. AppDataContext continua alimentando mutations (patch) e
 // outras telas ainda não migradas.
+//
+// Fase 7C — a Pauta tem DOIS modos, decididos pelo papel (e protegidos no servidor: `escopo=pauta` devolve 403 a quem não pode):
+// - GLOBAL (Atendimento, Heads e Gestão): a visão operacional de TODOS os departamentos da empresa (do tenant do token), só o que
+//   ainda está em andamento (`naoFinalizada`), com atrasadas incluídas (o período limita apenas o prazo máximo) e filtros
+//   avançados com Departamento como filtro, na URL;
+// - LEGADO (operador comum): inalterado — o escopo-base de sempre e o seletor simples de departamentos. Não ganha visão global.
 const TAMANHO_PAGINA = 50;
 const DEBOUNCE_BUSCA_MS = 300;
+const PERIODOS_VALIDOS: ReadonlyArray<PautaPeriodoFiltro> = ["hoje", "7d", "30d"];
+const MODOS_VALIDOS: ReadonlyArray<PautaViewMode> = ["lista", "gantt"];
 
 function periodoParaIntervalo(periodo: PautaPeriodoFiltro): { inicio: Date; fim: Date } {
   const inicio = new Date();
@@ -38,15 +55,51 @@ function periodoParaIntervalo(periodo: PautaPeriodoFiltro): { inicio: Date; fim:
 export function PautaView() {
   const router = useRouter();
   const { demandas, setDemandas, usuarioAtual, setDemandaParaAbrir } = useAppData();
-  const [query, setQuery] = useState("");
+  const { departamentos, carregando: carregandoDepartamentos } = useDiretorioDepartamentos();
+  const { equipes, carregando: carregandoEquipes } = useDiretorioEquipes();
+  const { clientes, carregando: carregandoClientes } = useDiretorioClientes();
+  const { projetos, carregando: carregandoProjetos } = useDiretorioProjetos();
+  const [departamentoIds, setDepartamentoIds] = useState<string[]>([]); // só no modo LEGADO
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [departamentoIds, setDepartamentoIds] = useState<string[]>([]);
-  const [periodo, setPeriodo] = useState<PautaPeriodoFiltro>("7d");
-  const [viewMode, setViewMode] = useState<PautaViewMode>("gantt");
   const [selectedDemandId, setSelectedDemandId] = useState<string | null>(null);
+
+  // Modo GLOBAL: mesma regra de papel do servidor (Atendimento, Head, Gestão). Só decidido com os departamentos carregados (Head e
+  // Atendimento dependem deles) — a primeira consulta espera, para não buscar no modo errado e trocar em seguida.
+  const modoGlobal = usuarioAtual ? podeAcessarPautaGlobal(usuarioAtual, departamentos) : false;
+  const pronto = Boolean(usuarioAtual) && !carregandoDepartamentos;
+
+  const definicoesFiltros = useDefinicoesFiltrosPauta({
+    departamentos,
+    equipes,
+    clientes,
+    projetos,
+    diretoriosProntos: !carregandoDepartamentos && !carregandoEquipes && !carregandoClientes && !carregandoProjetos,
+  });
+  // Estado da Pauta GLOBAL na URL (filtros, busca, período, modo de exibição): ids/códigos estáveis, refresh preserva, inválido ignorado.
+  const { filtros, definirFiltros, param, definirParam } = useFiltrosNaUrl(definicoesFiltros, modoGlobal);
+  const query = param("q") ?? "";
+  const periodo: PautaPeriodoFiltro = PERIODOS_VALIDOS.find((valor) => valor === param("periodo")) ?? "7d";
+  const viewMode: PautaViewMode = MODOS_VALIDOS.find((valor) => valor === param("modo")) ?? "gantt";
+  const setQuery = (texto: string) => definirParam("q", texto);
+  const setPeriodo = (valor: PautaPeriodoFiltro) => definirParam("periodo", valor === "7d" ? null : valor);
+  const setViewMode = (valor: PautaViewMode) => definirParam("modo", valor === "gantt" ? null : valor);
+  const parametrosFiltros = useMemo(() => (modoGlobal ? filtrosPautaParaApi(filtros, new Date()) : {}), [modoGlobal, filtros]);
 
   const { inicio: periodoInicio, fim: periodoFim } = useMemo(() => periodoParaIntervalo(periodo), [periodo]);
   const departamentoIdsParam = departamentoIds.join(",");
+  const chaveFiltros = JSON.stringify(parametrosFiltros);
+
+  // Parâmetros da consulta (a primeira página e o "carregar mais" usam EXATAMENTE os mesmos). GLOBAL: escopo=pauta + só o que está em
+  // andamento + prazo até o fim do período (atrasadas entram) + filtros avançados. LEGADO: o de sempre.
+  function parametrosDaConsulta(offset: number) {
+    const base = { search: debouncedQuery || undefined, sort: "prazo_asc" as const, limit: TAMANHO_PAGINA, offset };
+    if (modoGlobal) {
+      return { ...base, escopo: "pauta" as const, naoFinalizada: true, prazoFim: periodoFim.toISOString(), ...parametrosFiltros };
+    }
+    return { ...base, departamentoId: departamentoIdsParam || undefined, prazoInicio: periodoInicio.toISOString(), prazoFim: periodoFim.toISOString() };
+  }
+  // Demandas com sessão ativa agora (selo discreto) — só na Pauta global; falha não derruba a lista.
+  const [emExecucaoIds, setEmExecucaoIds] = useState<ReadonlySet<string>>(new Set());
 
   // Página acumulada, vinda do servidor — fonte autoritativa da lista exibida (lista e
   // gantt compartilham o mesmo array; trocar de modo não refaz a consulta).
@@ -74,7 +127,7 @@ export function PautaView() {
   // explícito. Comparada durante o RENDER (não dentro do efeito): setState síncrono no corpo
   // do efeito é o padrão que react-hooks/set-state-in-effect rejeita neste projeto — mesma
   // técnica de DemandasView.tsx/ProjetoDemandasSection.tsx.
-  const chaveBusca = `${debouncedQuery}\u0000${departamentoIdsParam}\u0000${periodo}\u0000${refetchTick}`;
+  const chaveBusca = `${modoGlobal}\u0000${chaveFiltros}\u0000${debouncedQuery}\u0000${departamentoIdsParam}\u0000${periodo}\u0000${refetchTick}`;
   const [chaveConsultada, setChaveConsultada] = useState<string | null>(null);
   if (chaveBusca !== chaveConsultada) {
     setChaveConsultada(chaveBusca);
@@ -98,19 +151,15 @@ export function PautaView() {
   }, [chaveBusca]);
 
   useEffect(() => {
+    if (!pronto) return;
     let cancelado = false;
-    listDemandasReais({
-      search: debouncedQuery || undefined,
-      departamentoId: departamentoIdsParam || undefined,
-      prazoInicio: periodoInicio.toISOString(),
-      prazoFim: periodoFim.toISOString(),
-      sort: "prazo_asc",
-      limit: TAMANHO_PAGINA,
-      offset: 0,
-    })
-      .then((resultado) => {
+    const consulta = listDemandasReais(parametrosDaConsulta(0));
+    const sessoes = modoGlobal ? listarDemandasEmExecucaoNaPauta().catch(() => [] as string[]) : Promise.resolve([] as string[]);
+    Promise.all([consulta, sessoes])
+      .then(([resultado, ativas]) => {
         if (cancelado) return; // combinação de filtros obsoleta — outra busca já foi disparada
         setDemandasPauta(resultado);
+        setEmExecucaoIds(new Set(ativas));
         setTemMais(resultado.length === TAMANHO_PAGINA);
         setErro(null);
         setBuscandoPagina(false);
@@ -125,20 +174,13 @@ export function PautaView() {
     return () => {
       cancelado = true;
     };
-  }, [debouncedQuery, departamentoIdsParam, periodoInicio, periodoFim, refetchTick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `parametrosDaConsulta` é função de render; a lista abaixo resume tudo que ela lê
+  }, [pronto, modoGlobal, chaveFiltros, debouncedQuery, departamentoIdsParam, periodoInicio, periodoFim, refetchTick]);
 
   function carregarMais() {
     const chaveDoClique = chaveBusca;
     setCarregandoMais(true);
-    listDemandasReais({
-      search: debouncedQuery || undefined,
-      departamentoId: departamentoIdsParam || undefined,
-      prazoInicio: periodoInicio.toISOString(),
-      prazoFim: periodoFim.toISOString(),
-      sort: "prazo_asc",
-      limit: TAMANHO_PAGINA,
-      offset: demandasPauta.length,
-    })
+    listDemandasReais(parametrosDaConsulta(demandasPauta.length))
       .then((resultado) => {
         if (chaveAtualRef.current !== chaveDoClique) return; // filtros mudaram enquanto carregava
         setDemandasPauta((atual) => [...atual, ...resultado]);
@@ -220,7 +262,9 @@ export function PautaView() {
             <div className="min-w-0">
               <h1 className="text-lg font-semibold tracking-tight text-fg">Pauta</h1>
               <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
-                Ordem das tarefas por prazo, para acompanhar o dia e preparar a reunião de pauta da equipe.
+                {modoGlobal
+                  ? "Visão operacional da agência: o que está em andamento em todos os departamentos, por prazo (atrasadas incluídas)."
+                  : "Ordem das tarefas por prazo, para acompanhar o dia e preparar a reunião de pauta da equipe."}
               </p>
             </div>
           </div>
@@ -236,6 +280,9 @@ export function PautaView() {
         onPeriodoChange={setPeriodo}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
+        filtrosAvancados={
+          modoGlobal ? <FiltrosAvancados definicoes={definicoesFiltros} filtros={filtros} onChange={definirFiltros} /> : undefined
+        }
       />
 
       {carregandoInicial ? (
@@ -245,9 +292,9 @@ export function PautaView() {
       ) : (
         <div className={buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}>
           {viewMode === "lista" ? (
-            <PautaLista demandas={demandasPauta} onOpenDetails={setSelectedDemandId} />
+            <PautaLista demandas={demandasPauta} onOpenDetails={setSelectedDemandId} emExecucaoIds={emExecucaoIds} />
           ) : (
-            <PautaGantt demandas={demandasPauta} periodoInicio={periodoInicio} periodoFim={periodoFim} onOpenDetails={setSelectedDemandId} />
+            <PautaGantt demandas={demandasPauta} periodoInicio={periodoInicio} periodoFim={periodoFim} onOpenDetails={setSelectedDemandId} emExecucaoIds={emExecucaoIds} />
           )}
         </div>
       )}

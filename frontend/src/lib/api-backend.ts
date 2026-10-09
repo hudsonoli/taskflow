@@ -1461,7 +1461,7 @@ export async function restaurarProjetoReal(projetoId: string): Promise<Projeto> 
 // existe conflito de duplicidade aqui — nenhum `DemandaArquivadaConflictError`.
 // =====================================================================================
 
-export type DemandaEscopo = "meus" | "meu-departamento" | "atendimento";
+export type DemandaEscopo = "meus" | "meu-departamento" | "atendimento" | "pauta";
 
 type DemandaWorkflowEtapaReadApi = {
   id: string;
@@ -1683,6 +1683,28 @@ export async function listDemandasReais(params?: {
  */
 export async function listarMinhasSessoesAtivas(): Promise<string[]> {
   const resposta = await request<{ demandaIds: string[] }>("/sessoes-trabalho/minhas-ativas");
+  return resposta.demandaIds;
+}
+
+/** Meu Departamento — um colaborador do departamento e o que ele tem em execução AGORA (sessão real; sem horário nem duração). */
+export type MembroEquipeAgora = {
+  usuarioId: string;
+  nome: string;
+  corIdentificacao: string | null;
+  fotoUrl: string | null;
+  emExecucao: Array<{ demandaId: string; numeroOperacional: number | null; nome: string | null }>;
+};
+
+/** Quem do departamento está trabalhando agora e em quê. Só o Head DESTE departamento (403 para qualquer outro). */
+export async function listarEquipeAgora(departamentoId: string): Promise<MembroEquipeAgora[]> {
+  const query = new URLSearchParams({ departamentoId });
+  const resposta = await request<{ membros: MembroEquipeAgora[] }>(`/sessoes-trabalho/meu-departamento/agora?${query.toString()}`);
+  return resposta.membros;
+}
+
+/** Pauta global — ids das demandas da empresa com sessão ativa agora (selo "em execução agora"). Sem pessoa nem tempo. */
+export async function listarDemandasEmExecucaoNaPauta(): Promise<string[]> {
+  const resposta = await request<{ demandaIds: string[] }>("/sessoes-trabalho/pauta/em-execucao");
   return resposta.demandaIds;
 }
 

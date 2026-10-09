@@ -163,6 +163,17 @@ export function podeAcessarMeuDepartamento(usuario: Usuario, departamentos: Depa
   return resolverHeadDepartamento(usuario, departamentos) !== undefined;
 }
 
+/**
+ * Pauta GLOBAL (visão operacional da empresa): Atendimento, Heads e Gestão (admin/gestor). Espelho de UX de
+ * `pode_visualizar_pauta_global` no servidor — quem decide é o servidor (`escopo=pauta` devolve 403 para os demais). Operador comum
+ * não recebe a Pauta global; continua com o Meu Dia.
+ */
+export function podeAcessarPautaGlobal(usuario: Usuario, departamentos: DepartamentoDiretorioItem[]): boolean {
+  const base = PERFIL_PARA_PERFIL_BASE[usuario.perfil];
+  if (base === "admin" || base === "gestor") return true;
+  return podeAcessarMeuDepartamento(usuario, departamentos) || resolverEhAtendimento(usuario, departamentos);
+}
+
 export function podeAcessarMinhasDemandas(usuario: Usuario, departamentos: DepartamentoDiretorioItem[]): boolean {
   return resolverEhAtendimento(usuario, departamentos);
 }
