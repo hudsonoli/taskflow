@@ -14,8 +14,8 @@ from app.core.escopo import (
 )
 from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente
 from app.core.referencias import gerar_proxima_referencia
-from app.core.relogio import agora_local, agora_utc
-from app.core.sequencias_operacionais import reservar_proximo_operacional
+from app.core.relogio import agora_local, agora_utc, ano_corrente
+from app.core.sequencias_operacionais import reservar_proximo_identificado
 from app.core.sla_resolver import resolver_sla
 from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
@@ -270,9 +270,12 @@ class DemandaService:
             referencia = gerar_proxima_referencia(
                 db, empresa_id=empresa_id, tipo_entidade=TIPO_REFERENCIA
             )
-            numero_operacional = reservar_proximo_operacional(
-                db, empresa_id=empresa_id, tipo_entidade=TIPO_OPERACIONAL
+            # Número + identificador formatado sob o MESMO lock da linha do contador (ver o módulo): o identificador emitido
+            # fica gravado na tarefa e nunca mais muda, mesmo que a empresa troque o padrão depois.
+            reserva = reservar_proximo_identificado(
+                db, empresa_id=empresa_id, tipo_entidade=TIPO_OPERACIONAL, ano=ano_corrente()
             )
+            numero_operacional = reserva.numero
 
             demanda = Demanda(
                 id=str(uuid4()),
@@ -281,6 +284,7 @@ class DemandaService:
                 ano_referencia=referencia.ano_referencia,
                 sequencial_referencia=referencia.sequencial_referencia,
                 numero_operacional=numero_operacional,
+                identificador=reserva.identificador,
                 nome=data.nome,
                 status=status,
                 motivo_bloqueio=data.motivo_bloqueio if status == STATUS_BLOQUEADA else None,
@@ -349,7 +353,7 @@ class DemandaService:
             # adulterado fora da aplicação — o UNIQUE fez o papel de piso.
             db.rollback()
             raise DemandaInvalidTransitionError(
-                "Falha ao emitir número operacional — contador fora de sincronia com as demandas emitidas"
+                "Falha ao emitir número operacional — contador fora de sincronia com as demandas emitidas ou identificador já existente"
             ) from None
         except Exception:
             db.rollback()
@@ -1039,6 +1043,7 @@ class DemandaService:
             "anoReferencia": demanda.ano_referencia,
             "sequencialReferencia": demanda.sequencial_referencia,
             "numeroOperacional": demanda.numero_operacional,
+            "identificador": demanda.identificador,
             "nome": demanda.nome,
             "pit": demanda.pit,
             "briefing": demanda.briefing,
@@ -1476,6 +1481,7 @@ class DemandaService:
             # No payload também, porque é por ele que a operação identifica a demanda ao ler
             # uma auditoria — `T26000001` é oficial, `#2063` é o que a pessoa reconhece.
             "numero_operacional": demanda.numero_operacional,
+            "identificador": demanda.identificador,
             "timestamp": timestamp.isoformat(),
             "status": demanda.status,
         }

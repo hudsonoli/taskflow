@@ -102,6 +102,7 @@ class DemandaArquivoRepository:
             select(
                 DemandaArquivo,
                 Demanda.numero_operacional,
+                Demanda.identificador.label("demanda_identificador"),
                 Demanda.codigo_referencia.label("demanda_codigo_referencia"),
                 Demanda.nome.label("demanda_nome"),
                 Demanda.cliente_id,

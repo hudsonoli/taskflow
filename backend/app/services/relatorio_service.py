@@ -110,6 +110,7 @@ class RelatorioService:
                     demanda_id=linha.id,
                     nome=linha.nome,
                     numero_operacional=linha.numero_operacional,
+                    identificador=linha.identificador,
                     redator_nome=linha.redator_nome,
                     tempo_em_pauta_dias=(
                         float(linha.tempo_em_pauta_dias) if linha.tempo_em_pauta_dias is not None else None

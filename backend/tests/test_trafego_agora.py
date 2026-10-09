@@ -96,7 +96,7 @@ def test_uma_ativa_traz_tudo_resolvido(app, db_session: Session, empresa: Empres
     assert (item["departamentoId"], item["departamentoNome"]) == (depto.id, "Criação")
     assert datetime.fromisoformat(item["inicioEm"].replace("Z", "+00:00")) == sessao.inicio_em
     assert set(item) == {
-        "sessaoId", "inicioEm", "decorridoSegundos", "demandaId", "demandaNumero", "demandaNome",
+        "sessaoId", "inicioEm", "decorridoSegundos", "demandaId", "demandaNumero", "demandaIdentificador", "demandaNome",
         "usuarioId", "usuarioNome", "departamentoId", "departamentoNome",
     }
 

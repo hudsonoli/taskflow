@@ -524,6 +524,7 @@ class DemandaArquivoService:
             demanda=ArquivoCentralDemandaRead(
                 id=arquivo.demanda_id,
                 numeroOperacional=linha.numero_operacional,
+                identificador=linha.demanda_identificador,
                 codigoReferencia=linha.demanda_codigo_referencia,
                 nome=linha.demanda_nome,
             ),

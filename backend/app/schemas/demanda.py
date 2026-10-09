@@ -218,6 +218,8 @@ class DemandaDiretorioRead(BaseModel):
 
     id: UUID
     numero_operacional: int = Field(alias="numeroOperacional")
+    # Identificador EMITIDO (`#845`, `BOX-2026-00846`) — é o que a interface mostra; o inteiro segue para ordenação/compatibilidade.
+    identificador: str
     codigo_referencia: str = Field(alias="codigoReferencia")
     nome: str
     status: DemandaStatus
@@ -235,6 +237,8 @@ class DemandaRead(BaseModel):
     sequencial_referencia: int = Field(alias="sequencialReferencia")
     # Rótulo principal da operação — exibido como `#2063`.
     numero_operacional: int = Field(alias="numeroOperacional")
+    # Fase 7D.1 — identificador EMITIDO (imutável): o que a interface exibe (`#2063` histórico ou `BOX-2026-02064`).
+    identificador: str
     nome: str
     pit: str | None = None
     briefing: str | None = None

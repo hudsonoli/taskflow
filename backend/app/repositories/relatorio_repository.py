@@ -158,6 +158,7 @@ class RelatorioRepository:
                 Demanda.id,
                 Demanda.nome,
                 Demanda.numero_operacional,
+                Demanda.identificador,
                 Demanda.status,
                 Usuario.nome.label("redator_nome"),
                 tempo_em_pauta.label("tempo_em_pauta_dias"),

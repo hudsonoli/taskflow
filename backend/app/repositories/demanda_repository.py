@@ -477,6 +477,9 @@ class DemandaRepository:
             # cujo número contenha 2063.
             if termo.numero is not None:
                 alternativas.append(Demanda.numero_operacional == termo.numero)
+            # Fase 7D.1: o identificador COMPLETO (`BOX-2026-00123`, `#845`) também localiza a demanda — igualdade exata sem
+            # caixa, nunca parcial (como o número). Não substitui a busca por número nem por texto.
+            alternativas.append(func.lower(Demanda.identificador) == termo.texto.lower())
             statement = statement.where(or_(*alternativas))
 
         if sort == SortDemandas.PRAZO_ASC:
@@ -1108,6 +1111,16 @@ class DemandaRepository:
             )
             or 0
         )
+
+    def estatisticas_numeracao(self, db: Session, empresa_id: str) -> tuple[int | None, int]:
+        """(maior `numero_operacional` emitido, quantidade de demandas SEM identificador) numa única consulta — sem N+1."""
+        linha = db.execute(
+            select(
+                func.max(Demanda.numero_operacional),
+                func.count(Demanda.id).filter(or_(Demanda.identificador.is_(None), Demanda.identificador == "")),
+            ).where(Demanda.empresa_id == empresa_id)
+        ).one()
+        return linha[0], int(linha[1] or 0)
 
     def maior_numero_operacional(self, db: Session, empresa_id: str) -> int | None:
         from sqlalchemy import func

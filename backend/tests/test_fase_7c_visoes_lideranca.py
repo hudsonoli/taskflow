@@ -222,7 +222,7 @@ def test_head_ve_quem_esta_trabalhando_e_em_que_tarefa(app, db_session, empresa,
     assert all(m["emExecucao"] == [] for uid, m in membros.items() if uid != c["joao"].id)
     # sem horário nem duração
     assert set(membros[c["joao"].id]) == {"usuarioId", "nome", "corIdentificacao", "fotoUrl", "emExecucao"}
-    assert set(membros[c["joao"].id]["emExecucao"][0]) == {"demandaId", "numeroOperacional", "nome"}
+    assert set(membros[c["joao"].id]["emExecucao"][0]) == {"demandaId", "numeroOperacional", "identificador", "nome"}
 
 
 def test_status_em_execucao_sem_sessao_nao_conta_como_trabalhando(app, db_session, empresa, client_admin) -> None:

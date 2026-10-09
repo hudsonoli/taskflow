@@ -2539,6 +2539,7 @@ def test_por_ids_payload_e_diretorio_read(client_admin: TestClient) -> None:
     assert set(achado.keys()) == {
         "id",
         "numeroOperacional",
+        "identificador",
         "codigoReferencia",
         "nome",
         "status",

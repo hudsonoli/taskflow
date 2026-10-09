@@ -369,6 +369,7 @@ def test_pecas_um_registro_e_em_andamento(client_admin: TestClient, db_session: 
             "demandaId": demanda.id,
             "nome": "Banner",
             "numeroOperacional": 777,
+            "identificador": "#777",
             "redatorNome": "Ana",
             "tempoEmPautaDias": None,
             "emAndamento": True,
@@ -604,7 +605,9 @@ def test_paridade_com_a_logica_antiga_do_frontend(
     obtidas = _pecas(client_admin, projeto["id"])["items"]
     assert len(obtidas) == len(esperadas)
     for obtida, esperada in zip(obtidas, esperadas, strict=True):
-        assert {k: v for k, v in obtida.items() if k != "tempoEmPautaDias"} == {k: v for k, v in esperada.items() if k != "tempoEmPautaDias"}
+        # `identificador` é novo (7D.1): as demandas do cenário nascem no formato histórico `#N`
+        assert obtida["identificador"] == f"#{esperada['numeroOperacional']}"
+        assert {k: v for k, v in obtida.items() if k not in ("tempoEmPautaDias", "identificador")} == {k: v for k, v in esperada.items() if k != "tempoEmPautaDias"}
         if esperada["tempoEmPautaDias"] is None:
             assert obtida["tempoEmPautaDias"] is None
         else:

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, SmallInteger, String, UniqueConstraint, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -37,11 +37,19 @@ class SequenciaOperacional(Base):
         UniqueConstraint("empresa_id", "tipo_entidade", name="uq_sequencias_operacionais_empresa_tipo"),
         # Reforça no banco a regra que o CLI aplica: número operacional nunca é negativo.
         CheckConstraint("ultimo_numero >= 0", name="ck_sequencias_operacionais_ultimo_numero"),
+        CheckConstraint("digitos BETWEEN 1 AND 10", name="ck_sequencias_operacionais_digitos"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     empresa_id: Mapped[str] = mapped_column(ForeignKey("empresas.id"), nullable=False)
     tipo_entidade: Mapped[str] = mapped_column(String(32), nullable=False)
     ultimo_numero: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Fase 7D.1 — FORMATO das próximas emissões (a configuração vive junto do contador: a mesma linha é travada pela emissão e
+    # pelo PATCH, então número e formato são sempre lidos de forma coerente). Defaults = `#<n>`, o comportamento de sempre.
+    # Sem `reinicio_anual`: o número continua contínuo (fase futura).
+    prefixo: Mapped[str] = mapped_column(String(16), nullable=False, default="#", server_default="#")
+    digitos: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1, server_default="1")
+    incluir_ano: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    separador: Mapped[str] = mapped_column(String(4), nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

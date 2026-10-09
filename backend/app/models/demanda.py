@@ -180,6 +180,8 @@ class Demanda(Base):
         # O piso real do número operacional: mesmo que o contador seja adulterado direto no
         # banco, o INSERT falha em vez de reemitir um número já usado.
         UniqueConstraint("empresa_id", "numero_operacional", name="uq_demandas_empresa_numero_operacional"),
+        # Fase 7D.1 — o identificador EMITIDO é único por empresa (nunca global: cada tenant tem o seu padrão).
+        UniqueConstraint("empresa_id", "identificador", name="uq_demandas_empresa_identificador"),
         Index("ix_demandas_empresa_id", "empresa_id"),
         Index("ix_demandas_status", "status"),
         Index("ix_demandas_codigo_referencia", "codigo_referencia"),
@@ -204,6 +206,14 @@ class Demanda(Base):
     ano_referencia: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     sequencial_referencia: Mapped[int] = mapped_column(Integer, nullable=False)
     numero_operacional: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Fase 7D.1 — identificador EMITIDO (`#845`, `BOX-2026-00846`): gravado na criação, na MESMA transação do número, e imutável.
+    # Nunca recalculado na leitura nem reescrito quando a empresa muda o padrão. O `default` só serve a inserts diretos de
+    # fixtures/importações que não passam pelo service (formato histórico `#N`); o service sempre informa o valor emitido.
+    identificador: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default=lambda contexto: f"#{contexto.get_current_parameters()['numero_operacional']}",
+    )
 
     # --- conteúdo -----------------------------------------------------------------
     nome: Mapped[str] = mapped_column(String(255), nullable=False)

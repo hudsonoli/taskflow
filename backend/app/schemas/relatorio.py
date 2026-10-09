@@ -51,6 +51,7 @@ class RelatorioPecaRead(BaseModel):
     demanda_id: str = Field(alias="demandaId")
     nome: str
     numero_operacional: int = Field(alias="numeroOperacional")
+    identificador: str
     redator_nome: str | None = Field(alias="redatorNome")
     tempo_em_pauta_dias: float | None = Field(alias="tempoEmPautaDias")
     em_andamento: bool = Field(alias="emAndamento")

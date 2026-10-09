@@ -154,7 +154,7 @@ def _filtros_sessao(
         clausulas.append(
             """strpos(
                 lower(translate(
-                    s.demanda_id || ' ' || COALESCE('#' || CAST(d.numero_operacional AS text) || ' — ' || d.nome, s.demanda_id),
+                    s.demanda_id || ' ' || COALESCE(d.identificador || ' — ' || d.nome, s.demanda_id),
                     :acentos_origem, :acentos_destino
                 )),
                 :demanda_query
@@ -227,7 +227,7 @@ class SessaoTrabalhoRepository:
         ativas = db.execute(
             text(
                 """
-                SELECT s.usuario_id, s.demanda_id, d.numero_operacional, d.nome AS demanda_nome
+                SELECT s.usuario_id, s.demanda_id, d.numero_operacional, d.identificador, d.nome AS demanda_nome
                 FROM sessoes_trabalho s
                 LEFT JOIN demandas d ON d.id = s.demanda_id AND d.empresa_id = s.empresa_id
                 WHERE s.empresa_id = :empresa_id
@@ -241,7 +241,12 @@ class SessaoTrabalhoRepository:
         por_usuario: dict[str, list[dict]] = {}
         for linha in ativas:
             por_usuario.setdefault(linha.usuario_id, []).append(
-                {"demandaId": linha.demanda_id, "numeroOperacional": linha.numero_operacional, "nome": linha.demanda_nome}
+                {
+                    "demandaId": linha.demanda_id,
+                    "numeroOperacional": linha.numero_operacional,
+                    "identificador": linha.identificador,
+                    "nome": linha.demanda_nome,
+                }
             )
         return [
             {
@@ -715,6 +720,7 @@ class SessaoTrabalhoRepository:
                     GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - s.inicio_em)))) AS decorrido,
                     s.demanda_id,
                     d.numero_operacional AS demanda_numero,
+                    d.identificador AS demanda_identificador,
                     d.nome AS demanda_nome,
                     s.usuario_id,
                     u.nome AS usuario_nome,
@@ -738,6 +744,7 @@ class SessaoTrabalhoRepository:
                     "decorrido_segundos": int(linha.decorrido),
                     "demanda_id": linha.demanda_id,
                     "demanda_numero": linha.demanda_numero,
+                    "demanda_identificador": linha.demanda_identificador,
                     "demanda_nome": linha.demanda_nome,
                     "usuario_id": linha.usuario_id,
                     "usuario_nome": linha.usuario_nome,

@@ -131,6 +131,7 @@ class SessaoTrabalhoTrafegoAgoraItemRead(BaseModel):
     decorrido_segundos: int = Field(alias="decorridoSegundos")
     demanda_id: str = Field(alias="demandaId")
     demanda_numero: int | None = Field(default=None, alias="demandaNumero")
+    demanda_identificador: str | None = Field(default=None, alias="demandaIdentificador")
     demanda_nome: str | None = Field(default=None, alias="demandaNome")
     usuario_id: str | None = Field(default=None, alias="usuarioId")
     usuario_nome: str | None = Field(default=None, alias="usuarioNome")

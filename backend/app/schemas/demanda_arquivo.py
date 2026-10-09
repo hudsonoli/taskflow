@@ -93,6 +93,7 @@ class ArquivoCentralDemandaRead(BaseModel):
 
     id: UUID
     numero_operacional: int = Field(alias="numeroOperacional")
+    identificador: str
     codigo_referencia: str = Field(alias="codigoReferencia")
     nome: str
 
