@@ -286,7 +286,13 @@ def list_demandas(
         prazo_fim=_normalize_datetime(prazo_fim),
         atrasada=atrasada,
         # A Pauta global é a operação em ABERTO: concluída/cancelada nunca entram (arquivada já fica fora por padrão).
-        nao_finalizada=nao_finalizada or escopo_solicitado is EscopoSolicitado.PAUTA,
+        # Meu Departamento (Fase 7C.2) também abre na operação em ABERTO — mas só POR PADRÃO: com `status` explícito (ex.: Concluída),
+        # respeita o pedido, para o Head continuar consultando o que já terminou. Decidido aqui, antes de limit/offset.
+        nao_finalizada=(
+            nao_finalizada
+            or escopo_solicitado is EscopoSolicitado.PAUTA
+            or (escopo_solicitado is EscopoSolicitado.MEU_DEPARTAMENTO and not status_demanda)
+        ),
         agora=_normalize_datetime(agora),
         hoje_inicio=_normalize_datetime(hoje_inicio),
         hoje_fim=_normalize_datetime(hoje_fim),

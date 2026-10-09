@@ -28,7 +28,14 @@ from tests.test_trafego_carga import _equipe, _usuario
 ESCOPO = {"escopo": "meu-departamento"}
 
 
+# Fase 7C.2: sem `status` a lista do Meu Departamento é só a operação EM ABERTO (provado em test_fase_7c2_meu_departamento_abertas.py).
+# Estes testes são sobre o ESCOPO e os FILTROS, não sobre o status padrão: pedem todos os status explicitamente, para continuar
+# enxergando o departamento inteiro (inclusive a concluída do cenário) e provar que nenhum filtro amplia o escopo.
+TODOS_OS_STATUS = "rascunho,planejada,em_execucao,pausada,bloqueada,aguardando_cliente,concluida,cancelada"
+
+
 def _lista(client: TestClient, **params) -> list[dict]:
+    params.setdefault("status", TODOS_OS_STATUS)
     consulta = {**ESCOPO, **{chave: valor for chave, valor in params.items() if valor is not None}}
     resposta = client.get("/demandas?" + urlencode(consulta))
     assert resposta.status_code == 200, resposta.text
