@@ -193,6 +193,67 @@ class SessaoTrabalhoRepository:
         )
         return list(db.scalars(statement).all())
 
+    def demanda_ids_ativas_da_empresa(self, db: Session, *, empresa_id: str) -> list[str]:
+        """Demandas com ALGUMA sessão ativa na empresa (Pauta global: sinal discreto "em execução agora"). Só ids de demanda —
+        sem pessoa, sem tempo."""
+        statement = (
+            select(SessaoTrabalho.demanda_id)
+            .where(SessaoTrabalho.empresa_id == empresa_id, SessaoTrabalho.status == "ativa")
+            .distinct()
+            .order_by(SessaoTrabalho.demanda_id.asc())
+        )
+        return list(db.scalars(statement).all())
+
+    def equipe_do_departamento_agora(self, db: Session, *, empresa_id: str, departamento_id: str) -> list[dict]:
+        """Meu Departamento (Fase 7C): para cada colaborador ATIVO do departamento, em que demandas ele tem sessão de trabalho
+        ATIVA agora. Fonte = sessão real (nunca status da demanda, presença ou último acesso). Duas consultas, sem N+1; conta de
+        sistema nunca aparece. Não devolve horário nem duração: é "quem está fazendo o quê", não vigilância de tempo."""
+        membros = db.execute(
+            text(
+                """
+                SELECT u.id, u.nome, u.cor_identificacao, u.foto_url
+                FROM usuarios u
+                WHERE u.empresa_id = :empresa_id
+                  AND u.departamento_id = :departamento_id
+                  AND u.status = 'ativo'
+                  AND u.is_system_account = false
+                ORDER BY lower(u.nome) ASC, u.id ASC
+                """
+            ),
+            {"empresa_id": empresa_id, "departamento_id": departamento_id},
+        ).all()
+        if not membros:
+            return []
+        ativas = db.execute(
+            text(
+                """
+                SELECT s.usuario_id, s.demanda_id, d.numero_operacional, d.nome AS demanda_nome
+                FROM sessoes_trabalho s
+                LEFT JOIN demandas d ON d.id = s.demanda_id AND d.empresa_id = s.empresa_id
+                WHERE s.empresa_id = :empresa_id
+                  AND s.status = 'ativa'
+                  AND s.usuario_id = ANY(:usuario_ids)
+                ORDER BY s.inicio_em ASC, s.id ASC
+                """
+            ),
+            {"empresa_id": empresa_id, "usuario_ids": [membro.id for membro in membros]},
+        ).all()
+        por_usuario: dict[str, list[dict]] = {}
+        for linha in ativas:
+            por_usuario.setdefault(linha.usuario_id, []).append(
+                {"demandaId": linha.demanda_id, "numeroOperacional": linha.numero_operacional, "nome": linha.demanda_nome}
+            )
+        return [
+            {
+                "usuarioId": membro.id,
+                "nome": membro.nome,
+                "corIdentificacao": membro.cor_identificacao,
+                "fotoUrl": membro.foto_url,
+                "emExecucao": por_usuario.get(membro.id, []),
+            }
+            for membro in membros
+        ]
+
     def get_by_evento_inicio_id(self, db: Session, evento_inicio_id: str) -> SessaoTrabalho | None:
         statement = select(SessaoTrabalho).where(SessaoTrabalho.evento_inicio_id == evento_inicio_id)
         return db.scalar(statement)

@@ -25,7 +25,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.escopo import EscopoHorasNaoAutorizadoError
+from app.core.escopo import EscopoHorasNaoAutorizadoError, departamentos_como_head, pode_visualizar_pauta_global
 from app.core.filtros_lista import parse_csv_enum, parse_csv_uuids
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
@@ -382,6 +382,40 @@ def carga_trafego(
             avancados=avancados,
         )
     )
+
+
+@router.get("/meu-departamento/agora")
+def equipe_do_departamento_agora(
+    departamento_id: UUID = Query(alias="departamentoId"),
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+) -> dict[str, list[dict]]:
+    """Meu Departamento (Fase 7C) — quem do departamento está trabalhando AGORA e em quais demandas, pelas sessões reais.
+
+    Autorização = a MESMA do escopo "meu departamento": só quem é Head DESTE departamento (`departamentos_como_head`). Gestor/admin
+    sem vínculo de liderança NÃO usa esta visão para escolher setor qualquer (403). A empresa vem do token. Registrada ANTES de
+    `/{sessao_id}`."""
+    alvo = str(departamento_id)
+    if alvo not in departamentos_como_head(db, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Somente o responsável por este departamento acessa esta visão",
+        )
+    return {
+        "membros": sessao_service.equipe_do_departamento_agora(db, empresa_id=current_user.empresa_id, departamento_id=alvo)
+    }
+
+
+@router.get("/pauta/em-execucao")
+def demandas_em_execucao_na_pauta(
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+) -> dict[str, list[str]]:
+    """Pauta global (Fase 7C) — quais demandas da empresa têm sessão ativa agora (selo discreto "em execução agora"). Só ids de
+    demanda: nenhuma pessoa, nenhum tempo (isso continua sendo a Central de Tráfego). Mesma autorização da Pauta global."""
+    if not pode_visualizar_pauta_global(db, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="A Pauta global é restrita a Atendimento, Heads e Gestão")
+    return {"demandaIds": sessao_service.demanda_ids_ativas_da_empresa(db, empresa_id=current_user.empresa_id)}
 
 
 @router.get("/minhas-ativas")

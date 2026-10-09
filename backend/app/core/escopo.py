@@ -56,6 +56,8 @@ class EscopoSolicitado(StrEnum):
     MEUS = "meus"
     MEU_DEPARTAMENTO = "meu-departamento"
     ATENDIMENTO = "atendimento"
+    # Fase 7C: Pauta GLOBAL — visão operacional da empresa inteira (do tenant do token), só para Atendimento, Head e Gestor/Admin.
+    PAUTA = "pauta"
 
 
 class EscopoNaoAutorizadoError(PermissionError):
@@ -153,6 +155,23 @@ def eh_atendimento(db: Session, usuario: Usuario) -> bool:
     return departamento.nome.strip().lower() == NOME_DEPARTAMENTO_ATENDIMENTO
 
 
+def pode_visualizar_pauta_global(db: Session, usuario: Usuario) -> bool:
+    """Quem pode ver a PAUTA GLOBAL (Fase 7C): a visão operacional de todos os departamentos da PRÓPRIA empresa.
+
+    Autorizados, pelas fontes únicas já existentes (nada hardcoded por e-mail, nome ou tenant):
+    - admin/gestor (`PERFIS_VISAO_TOTAL`);
+    - Head de pelo menos um departamento (`departamentos_como_head`);
+    - Atendimento (`eh_atendimento`, a regra transitória por nome do departamento — centralizada aqui, não duplicada).
+
+    Operador comum que não é nada disso NÃO recebe a Pauta global. "Global" significa DENTRO do tenant: o escopo devolvido
+    continua preso a `usuario.empresa_id`. Leitura apenas — nenhuma permissão de escrita é concedida por aqui."""
+    if usuario.perfil_base in PERFIS_VISAO_TOTAL:
+        return True
+    if departamentos_como_head(db, usuario):
+        return True
+    return eh_atendimento(db, usuario)
+
+
 def clientes_sob_responsabilidade(db: Session, usuario: Usuario) -> list[str]:
     """Clientes onde `usuario` é o responsável comercial direto (`Cliente.
     responsavel_comercial_id`). Sem filtro de status — arquivado ou não, quem decide se um
@@ -194,6 +213,12 @@ def resolver_escopo_demanda(
             visao_total=False,
             departamento_ids=tuple(departamentos_head),
         )
+
+    if solicitado is EscopoSolicitado.PAUTA:
+        if not (visao_total or departamentos_head or atendimento):
+            raise EscopoNaoAutorizadoError("A Pauta global é restrita a Atendimento, Heads e Gestão")
+        # Tenant do token; sem filtro de departamento/responsável/cliente — o cliente só REFINA com filtros.
+        return EscopoDemanda(empresa_id=usuario.empresa_id, usuario_id=usuario.id, visao_total=True)
 
     if solicitado is EscopoSolicitado.ATENDIMENTO:
         if not atendimento:

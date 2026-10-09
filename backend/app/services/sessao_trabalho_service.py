@@ -326,6 +326,12 @@ class SessaoTrabalhoService:
             offset=offset,
         )
 
+    def demanda_ids_ativas_da_empresa(self, db: Session, *, empresa_id: str) -> list[str]:
+        return self.repository.demanda_ids_ativas_da_empresa(db, empresa_id=empresa_id)
+
+    def equipe_do_departamento_agora(self, db: Session, *, empresa_id: str, departamento_id: str) -> list[dict]:
+        return self.repository.equipe_do_departamento_agora(db, empresa_id=empresa_id, departamento_id=departamento_id)
+
     def demanda_ids_ativas_do_usuario(self, db: Session, *, empresa_id: str, usuario_id: str) -> list[str]:
         return self.repository.demanda_ids_ativas_do_usuario(db, empresa_id=empresa_id, usuario_id=usuario_id)
 
