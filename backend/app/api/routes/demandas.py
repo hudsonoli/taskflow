@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import get_args
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +11,7 @@ from app.core.escopo import (
     EscopoSolicitado,
     resolver_escopo_demanda,
 )
+from app.core.filtros_lista import parse_csv_enum, parse_csv_uuids
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import require_admin_or_gestor
@@ -29,6 +31,7 @@ from app.schemas.demanda import (
     DemandaResumoAtendimentoRead,
     DemandaResumoDepartamentoRead,
     DemandaResumoMinhaHomeRead,
+    DemandaStatus,
     DemandaResumoOperacionalRead,
     DemandaUpdate,
 )
@@ -150,6 +153,9 @@ def _parse_departamento_ids(raw: str | None) -> list[str] | None:
 
 MAX_IDS_LOTE = 100
 
+PRIORIDADES_DEMANDA = ("baixa", "media", "alta")
+STATUS_DEMANDA = get_args(DemandaStatus)
+
 
 def _parse_ids_lote(raw: str) -> list[str]:
     """`ids` de `/demandas/por-ids` — CSV obrigatório, ao contrário de `departamentoId`
@@ -222,17 +228,23 @@ def create_demanda(
 def list_demandas(
     status_demanda: str | None = Query(default=None, alias="status"),
     search: str | None = Query(default=None, alias="search"),
-    cliente_id: UUID | None = Query(default=None, alias="clienteId"),
-    projeto_id: UUID | None = Query(default=None, alias="projetoId"),
+    cliente_id: str | None = Query(default=None, alias="clienteId"),
+    projeto_id: str | None = Query(default=None, alias="projetoId"),
     departamento_id: str | None = Query(default=None, alias="departamentoId"),
-    responsavel_id: UUID | None = Query(default=None, alias="responsavelId"),
-    equipe_id: UUID | None = Query(default=None, alias="equipeId"),
-    prioridade: DemandaPrioridade | None = Query(default=None),
+    responsavel_id: str | None = Query(default=None, alias="responsavelId"),
+    equipe_id: str | None = Query(default=None, alias="equipeId"),
+    prioridade: str | None = Query(default=None),
     origem: OrigemDemanda | None = Query(default=None),
     prazo_inicio: datetime | None = Query(default=None, alias="prazoInicio"),
     prazo_fim: datetime | None = Query(default=None, alias="prazoFim"),
     atrasada: bool = Query(default=False),
     nao_finalizada: bool = Query(default=False, alias="naoFinalizada"),
+    status_excluir: str | None = Query(default=None, alias="statusExcluir"),
+    cliente_id_excluir: str | None = Query(default=None, alias="clienteIdExcluir"),
+    projeto_id_excluir: str | None = Query(default=None, alias="projetoIdExcluir"),
+    responsavel_id_excluir: str | None = Query(default=None, alias="responsavelIdExcluir"),
+    equipe_id_excluir: str | None = Query(default=None, alias="equipeIdExcluir"),
+    prioridade_excluir: str | None = Query(default=None, alias="prioridadeExcluir"),
     sort: SortDemandas = Query(default=SortDemandas.NUMERO_OPERACIONAL_DESC),
     escopo_solicitado: EscopoSolicitado | None = Query(default=None, alias="escopo"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -247,12 +259,18 @@ def list_demandas(
         escopo=escopo,
         status=status_demanda,
         search=search,
-        cliente_id=str(cliente_id) if cliente_id else None,
-        projeto_id=str(projeto_id) if projeto_id else None,
+        cliente_ids=parse_csv_uuids(cliente_id, "clienteId"),
+        projeto_ids=parse_csv_uuids(projeto_id, "projetoId"),
         departamento_ids=_parse_departamento_ids(departamento_id),
-        responsavel_id=str(responsavel_id) if responsavel_id else None,
-        equipe_id=str(equipe_id) if equipe_id else None,
-        prioridade=prioridade,
+        responsavel_ids=parse_csv_uuids(responsavel_id, "responsavelId"),
+        equipe_ids=parse_csv_uuids(equipe_id, "equipeId"),
+        prioridades=parse_csv_enum(prioridade, "prioridade", PRIORIDADES_DEMANDA),
+        status_excluir=parse_csv_enum(status_excluir, "statusExcluir", STATUS_DEMANDA),
+        cliente_ids_excluir=parse_csv_uuids(cliente_id_excluir, "clienteIdExcluir"),
+        projeto_ids_excluir=parse_csv_uuids(projeto_id_excluir, "projetoIdExcluir"),
+        responsavel_ids_excluir=parse_csv_uuids(responsavel_id_excluir, "responsavelIdExcluir"),
+        equipe_ids_excluir=parse_csv_uuids(equipe_id_excluir, "equipeIdExcluir"),
+        prioridades_excluir=parse_csv_enum(prioridade_excluir, "prioridadeExcluir", PRIORIDADES_DEMANDA),
         origem=origem,
         prazo_inicio=_normalize_datetime(prazo_inicio),
         prazo_fim=_normalize_datetime(prazo_fim),

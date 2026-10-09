@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum
 
@@ -267,6 +268,17 @@ class DemandaRepository:
         prazo_inicio: datetime | None = None,
         prazo_fim: datetime | None = None,
         atrasada: bool = False,
+        cliente_ids: Sequence[str] | None = None,
+        projeto_ids: Sequence[str] | None = None,
+        responsavel_ids: Sequence[str] | None = None,
+        equipe_ids: Sequence[str] | None = None,
+        prioridades: Sequence[str] | None = None,
+        status_excluir: Sequence[str] | None = None,
+        cliente_ids_excluir: Sequence[str] | None = None,
+        projeto_ids_excluir: Sequence[str] | None = None,
+        responsavel_ids_excluir: Sequence[str] | None = None,
+        equipe_ids_excluir: Sequence[str] | None = None,
+        prioridades_excluir: Sequence[str] | None = None,
         nao_finalizada: bool = False,
         sort: SortDemandas = SortDemandas.NUMERO_OPERACIONAL_DESC,
         limit: int = 50,
@@ -338,6 +350,59 @@ class DemandaRepository:
 
         if prioridade:
             statement = statement.where(Demanda.prioridade == prioridade)
+
+        # --- filtros avançados (Meu Departamento): vários valores (OR) e "não é um de" ---------------------------
+        # Entre campos vale AND. Só REFINAM: o escopo de segurança (`_predicado_escopo`, acima) já foi aplicado e
+        # nenhum destes filtros o amplia. "Não é" mantém a demanda cujo campo é NULL (cliente/projeto vazio) ou que
+        # não tem ninguém da lista como responsável — NULL não é igual a nenhum valor. Tudo em SQL, antes do limit/offset.
+        if cliente_ids:
+            statement = statement.where(Demanda.cliente_id.in_(list(cliente_ids)))
+        if cliente_ids_excluir:
+            statement = statement.where(
+                or_(Demanda.cliente_id.is_(None), Demanda.cliente_id.not_in(list(cliente_ids_excluir)))
+            )
+        if projeto_ids:
+            statement = statement.where(Demanda.projeto_id.in_(list(projeto_ids)))
+        if projeto_ids_excluir:
+            statement = statement.where(
+                or_(Demanda.projeto_id.is_(None), Demanda.projeto_id.not_in(list(projeto_ids_excluir)))
+            )
+        if prioridades:
+            statement = statement.where(Demanda.prioridade.in_(list(prioridades)))
+        if prioridades_excluir:
+            statement = statement.where(Demanda.prioridade.not_in(list(prioridades_excluir)))
+        if status_excluir:
+            statement = statement.where(Demanda.status.not_in(list(status_excluir)))
+        if responsavel_ids:
+            statement = statement.where(
+                Demanda.id.in_(
+                    select(DemandaResponsavel.demanda_id).where(DemandaResponsavel.usuario_id.in_(list(responsavel_ids)))
+                )
+            )
+        if responsavel_ids_excluir:
+            statement = statement.where(
+                Demanda.id.not_in(
+                    select(DemandaResponsavel.demanda_id).where(
+                        DemandaResponsavel.usuario_id.in_(list(responsavel_ids_excluir))
+                    )
+                )
+            )
+        if equipe_ids:
+            statement = statement.where(
+                Demanda.id.in_(
+                    select(DemandaResponsavel.demanda_id)
+                    .join(EquipeMembro, EquipeMembro.usuario_id == DemandaResponsavel.usuario_id)
+                    .where(EquipeMembro.equipe_id.in_(list(equipe_ids)))
+                )
+            )
+        if equipe_ids_excluir:
+            statement = statement.where(
+                Demanda.id.not_in(
+                    select(DemandaResponsavel.demanda_id)
+                    .join(EquipeMembro, EquipeMembro.usuario_id == DemandaResponsavel.usuario_id)
+                    .where(EquipeMembro.equipe_id.in_(list(equipe_ids_excluir)))
+                )
+            )
 
         if origem is not None:
             # Sempre derivada, nunca persistida — mesmo par de `classificarTarefa` (frontend).
