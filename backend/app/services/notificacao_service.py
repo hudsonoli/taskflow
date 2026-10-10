@@ -60,7 +60,12 @@ TITULOS: dict[str, str] = {
     "demanda.arquivada": "Tarefa arquivada",
     "demanda.restaurada": "Tarefa restaurada",
     TIPO_ETAPA_ATUALIZADA: "Nova etapa de Workflow disponível",  # título por tipo de etapa: ver `_titulo`
+    # Fase 9B — decisão do cliente no Portal de Aprovação (autor = nome declarado do cliente; o motivo dos ajustes fica no histórico)
+    "demanda.aprovacao_externa_aprovada": "Cliente aprovou a etapa de aprovação",
+    "demanda.aprovacao_externa_ajustes": "Cliente solicitou ajustes",
 }
+
+TIPOS_APROVACAO_EXTERNA = ("demanda.aprovacao_externa_aprovada", "demanda.aprovacao_externa_ajustes")
 
 TITULO_ETAPA_APROVACAO = "Uma etapa de aprovação está aguardando você"
 TITULO_ETAPA_DEVOLVIDA = "Etapa devolvida para ajustes"  # Fase 8D: a aprovação rejeitada reabriu a etapa anterior (o motivo fica no histórico)
@@ -103,7 +108,7 @@ def _detalhe(tipo: str, payload: dict | None) -> str | None:
         return dados.get("motivoBloqueio") or None
     if tipo == "demanda.arquivo_enviado":
         return dados.get("nomeOriginal") or None
-    if tipo == TIPO_ETAPA_ATUALIZADA:
+    if tipo == TIPO_ETAPA_ATUALIZADA or tipo in TIPOS_APROVACAO_EXTERNA:
         nome = dados.get("etapaNome")
         return f"Etapa {dados.get('etapaOrdem')}: {nome}" if nome and dados.get("etapaOrdem") else (nome or None)
     return None
@@ -162,10 +167,19 @@ class NotificacaoService:
             select(1).select_from(ator).where(ator.id == Evento.usuario_id, ator.is_system_account.is_(True)).correlate(Evento)
         )
 
+    @staticmethod
+    def _nome_ator_externo():
+        """Fase 9B: nome declarado do cliente que decidiu pelo Portal de Aprovação (`payload.atorExterno.nome`), ou NULL se o evento não é externo."""
+        return Evento.payload["atorExterno"]["nome"].as_string()
+
     @classmethod
     def _eh_sistema(cls):
-        """Sem ator humano: automação (`usuario_id` nulo) ou conta de sistema."""
-        return or_(Evento.usuario_id.is_(None), cls._ator_e_conta_de_sistema())
+        """Sem ator humano: automação (`usuario_id` nulo SEM ator externo) ou conta de sistema. Quem decidiu pelo Portal de Aprovação é uma pessoa
+        (externa): `usuario_id` nulo, mas nunca "Sistema"."""
+        return or_(
+            and_(Evento.usuario_id.is_(None), cls._nome_ator_externo().is_(None)),
+            cls._ator_e_conta_de_sistema(),
+        )
 
     @classmethod
     def _filtro_categoria(cls, categoria: str | None) -> list:
@@ -201,7 +215,11 @@ class NotificacaoService:
         total = db.scalar(select(func.count()).select_from(Evento).where(*condicoes)) or 0
         eh_sistema = self._eh_sistema()
         # O nome real só sai do banco quando o ator é uma pessoa: para conta de sistema o CASE já devolve "Sistema".
-        autor = case((self._ator_e_conta_de_sistema(), literal(AUTOR_SISTEMA)), else_=Usuario.nome)
+        autor = case(
+            (self._ator_e_conta_de_sistema(), literal(AUTOR_SISTEMA)),
+            (self._nome_ator_externo().is_not(None), self._nome_ator_externo()),
+            else_=Usuario.nome,
+        )
         linhas = db.execute(
             select(Evento, Demanda.codigo_referencia, Demanda.nome, autor, NotificacaoLeitura.lida_em, eh_sistema, Demanda.identificador)
             .select_from(Evento)

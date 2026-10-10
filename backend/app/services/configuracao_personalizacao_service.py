@@ -184,10 +184,19 @@ class ConfiguracaoPersonalizacaoService:
         if empresa is None:
             base = self._para_read(None)
             return PublicoEmpresaBrandingRead(**base.model_dump(by_alias=True), disponivel=False, nomeExibicao=None)
+        return self.get_publico_da_empresa(db, empresa)
+
+    def get_publico_da_empresa(self, db: Session, empresa: Empresa) -> PublicoEmpresaBrandingRead:
+        """Branding público de uma empresa JÁ resolvida por quem chama (ex.: Portal de Aprovação, que a deriva do token — nunca de dado do
+        cliente). Quem chama garante que a empresa está ativa."""
         base = self._para_read(self.repository.get_by_empresa(db, empresa.id))
         return PublicoEmpresaBrandingRead(
             **base.model_dump(by_alias=True), disponivel=True, nomeExibicao=empresa.nome_fantasia or empresa.nome
         )
+
+    def ler_logo_da_empresa(self, db: Session, empresa: Empresa) -> tuple[Path, str, str]:
+        """(caminho, mime, versão) do logo de uma empresa já resolvida (mesmo contrato de `ler_logo_publico_por_slug`)."""
+        return self._logo_da_empresa(db, empresa)
 
     def ler_logo_publico_por_slug(self, db: Session, *, slug: str) -> tuple[Path, str, str]:
         empresa = self._empresa_ativa_por_slug(db, slug)

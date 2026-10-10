@@ -2,12 +2,14 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
-from sqlalchemy import Row
+from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
 from app.core.escopo import EscopoDemanda
 from app.core.relogio import agora_utc
+from app.domain.aprovacao_externa import ArquivoVinculadoAprovacaoExternaError
 from app.domain.event_types import DomainEventType
+from app.repositories.aprovacao_externa_repository import AprovacaoExternaRepository
 from app.models.demanda import Demanda
 from app.core.identidade_sistema import AUTOR_SISTEMA
 from app.models.demanda_arquivo import DemandaArquivo
@@ -169,9 +171,11 @@ class DemandaArquivoService:
         self,
         repository: DemandaArquivoRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
+        aprovacao_repository: AprovacaoExternaRepository | None = None,
     ) -> None:
         self.repository = repository or DemandaArquivoRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
+        self.aprovacao_repository = aprovacao_repository or AprovacaoExternaRepository()
 
     def listar(self, db: Session, demanda_id: str) -> list[DemandaArquivo]:
         return self.repository.list_by_demanda(db, demanda_id)
@@ -289,6 +293,11 @@ class DemandaArquivoService:
         caminho = self.caminho_fisico(demanda.id, arquivo.nome_fisico) if arquivo.nome_fisico else None
 
         try:
+            # Fase 9B: trava a linha ANTES de olhar as aprovações externas (criar link × excluir arquivo). Arquivo preso a uma aprovação em aberto
+            # ou decidida (evidência) não é excluído; revogada sem decisão não protege.
+            db.execute(select(DemandaArquivo.id).where(DemandaArquivo.id == arquivo.id).with_for_update())
+            if self.aprovacao_repository.arquivos_protegidos(db, [arquivo.id]):
+                raise ArquivoVinculadoAprovacaoExternaError()
             now = agora_utc()
             self.repository.delete(db, arquivo)
             self._publish_event(

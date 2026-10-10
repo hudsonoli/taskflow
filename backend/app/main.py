@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    aprovacao_externa,
+    aprovacao_publica,
     arquivos,
     categorias_peca,
     clientes,
@@ -94,3 +96,5 @@ app.include_router(expediente.router)
 app.include_router(auth.router)
 app.include_router(plataforma.router)
 app.include_router(publico.router)
+app.include_router(aprovacao_externa.router)
+app.include_router(aprovacao_publica.router)

@@ -6,7 +6,13 @@ from app.schemas.demanda_historico import DemandaHistoricoEventoRead
 
 TIPO_ENTIDADE = "demanda"
 # Eventos que existem só para alimentar outra superfície (a central de notificações) e carregam dados que a timeline não deve mostrar.
-TIPOS_FORA_DA_TIMELINE = ("demanda.workflow_etapa_atualizada",)
+TIPOS_FORA_DA_TIMELINE = (
+    "demanda.workflow_etapa_atualizada",
+    # Fase 9B: a decisão externa já aparece na timeline pelo evento de workflow (`workflow_etapa_aprovada` / `workflow_etapa_rejeitada`, com o ator
+    # externo). Estes dois existem só para a central de notificações — mostrá-los duplicaria a mesma ação.
+    "demanda.aprovacao_externa_aprovada",
+    "demanda.aprovacao_externa_ajustes",
+)
 
 
 class DemandaHistoricoService:

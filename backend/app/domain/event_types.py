@@ -114,6 +114,13 @@ class DomainEventType(StrEnum):
     # Fase 8C — a próxima etapa passou a ser a atual: existe SÓ para a central de notificações (destinatários no payload) e NÃO aparece na
     # timeline da Demanda (a transição já está em workflow_etapa_concluida/aprovada, com a próxima etapa no payload).
     DEMANDA_WORKFLOW_ETAPA_ATUALIZADA = "demanda.workflow_etapa_atualizada"
+    # Fase 9B — Portal Externo de Aprovação. NUNCA carregam o token (nem o hash) nem o e-mail do aprovador externo. A decisão externa grava, além
+    # destes, os eventos de workflow (aprovada/rejeitada) com `atorExterno`; `_aprovada`/`_ajustes` existem para a central de notificações e ficam
+    # FORA da timeline (a linha da timeline é a do próprio workflow — sem duplicar).
+    DEMANDA_APROVACAO_EXTERNA_CRIADA = "demanda.aprovacao_externa_criada"
+    DEMANDA_APROVACAO_EXTERNA_APROVADA = "demanda.aprovacao_externa_aprovada"
+    DEMANDA_APROVACAO_EXTERNA_AJUSTES = "demanda.aprovacao_externa_ajustes"
+    DEMANDA_APROVACAO_EXTERNA_REVOGADA = "demanda.aprovacao_externa_revogada"
     DEMANDA_AJUSTE_INTERNO_REGISTRADO = "demanda.ajuste_interno_registrado"
     DEMANDA_AJUSTE_CLIENTE_REGISTRADO = "demanda.ajuste_cliente_registrado"
     DEMANDA_REFACAO_REGISTRADA = "demanda.refacao_registrada"

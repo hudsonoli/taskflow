@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 import app.services.demanda_arquivo_service as arquivo_modulo
 from app.core.escopo import EscopoDemanda
 from app.core.relogio import agora_utc
+from app.domain.aprovacao_externa import ArquivoVinculadoAprovacaoExternaError
 from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
 from app.models.demanda_arquivo import DemandaArquivo
@@ -302,6 +303,11 @@ class ArquivoLoteService:
                 raise ArquivoLoteNaoEncontradoError("Nenhum arquivo corresponde à seleção")
 
             arquivo_ids = [linha.id for linha in linhas]
+            # Fase 9B: com as linhas JÁ travadas, nenhum arquivo preso a aprovação externa (em aberto ou decidida) pode estar na seleção — a
+            # verificação é de TODOS antes de excluir qualquer um (nada parcial).
+            protegidos = self.arquivo_service.aprovacao_repository.arquivos_protegidos(db, arquivo_ids)
+            if protegidos:
+                raise ArquivoVinculadoAprovacaoExternaError(len(protegidos))
             demanda_ids = sorted({linha.demanda_id for linha in linhas})
             demandas = {
                 d.id: d

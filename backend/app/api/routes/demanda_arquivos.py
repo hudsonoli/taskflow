@@ -17,6 +17,7 @@ from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_workflow
 from app.core.identidade_sistema import ids_de_contas_de_sistema
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
+from app.domain.aprovacao_externa import ArquivoVinculadoAprovacaoExternaError
 from app.models.demanda import Demanda
 from app.models.usuario import Usuario
 from app.schemas.demanda_arquivo import (
@@ -51,6 +52,11 @@ arquivo_service = DemandaArquivoService()
 
 
 def handle_arquivo_error(exc: Exception) -> None:
+    if isinstance(exc, ArquivoVinculadoAprovacaoExternaError):
+        # Fase 9B: evidência de aprovação externa (em aberto ou decidida) não se exclui
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"code": exc.codigo, "message": str(exc)}
+        ) from exc
     if isinstance(exc, (DemandaNotFoundError, DemandaArquivoNotFoundError, DemandaArquivoSemConteudoFisicoError)):
         # Link sem conteúdo físico recebe o mesmo 404 de "arquivo não encontrado" pelo
         # endpoint de download — não existe conteúdo pra baixar, mesma família de resposta.

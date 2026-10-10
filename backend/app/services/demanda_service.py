@@ -30,6 +30,7 @@ from app.models.demanda_workflow_etapa_responsavel import DemandaWorkflowEtapaRe
 from app.models.evento import Evento
 from app.models.projeto import Projeto
 from app.models.usuario import Usuario
+from app.repositories.aprovacao_externa_repository import AprovacaoExternaRepository
 from app.repositories.cliente_repository import ClienteRepository
 from app.repositories.demanda_repository import DemandaRepository, OrigemDemanda, SortDemandas
 from app.repositories.departamento_repository import DepartamentoRepository
@@ -1026,6 +1027,16 @@ class DemandaService:
         usuarios_por_etapa = self.repository.listar_etapa_responsavel_ids_em_lote(db, etapa_ids)
         departamentos_por_etapa = self.repository.listar_etapa_departamento_ids_em_lote(db, etapa_ids)
 
+        # Fase 9B: aprovação concluída SEM usuário (`concluida_por_usuario_id` NULL) pode ter sido feita pelo cliente no Portal de Aprovação —
+        # nome DECLARADO derivado da decisão externa (sem coluna nova no workflow). Só consulta quando existe esse caso.
+        sem_usuario = [
+            etapa.id
+            for etapas in etapas_por_demanda.values()
+            for etapa in etapas
+            if etapa.tipo == "aprovacao" and etapa.status == STATUS_ETAPA_WORKFLOW_CONCLUIDA and etapa.concluida_por_usuario_id is None
+        ]
+        aprovadores_externos = AprovacaoExternaRepository().aprovadores_externos_por_etapa(db, sem_usuario) if sem_usuario else {}
+
         arquivadas = {d.id for d in (demandas or []) if d.status == STATUS_ARQUIVADA}
         pode_calcular = usuario is not None and not somente_leitura and bool(etapa_ids)
         departamentos_head: frozenset[str] = (
@@ -1071,6 +1082,7 @@ class DemandaService:
                         iniciadaEm=etapa.iniciada_em,
                         concluidaEm=etapa.concluida_em,
                         concluidaPorUsuarioId=etapa.concluida_por_usuario_id,
+                        concluidaPorExternoNome=aprovadores_externos.get(etapa.id),
                         podeAvancar=pode_avancar,
                         podeRejeitar=pode_rejeitar,
                     )

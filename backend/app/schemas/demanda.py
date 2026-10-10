@@ -208,6 +208,9 @@ class DemandaWorkflowEtapaRead(BaseModel):
     concluida_em: datetime | None = Field(default=None, alias="concluidaEm")
     # Quem concluiu (tipo execucao) ou aprovou (tipo aprovacao) — um conceito só; NULL no histórico/usuário removido.
     concluida_por_usuario_id: UUID | None = Field(default=None, alias="concluidaPorUsuarioId")
+    # Fase 9B — aprovada pelo CLIENTE no Portal de Aprovação: nome DECLARADO (não verificado), derivado da decisão externa. `concluidaPorUsuarioId`
+    # fica NULL nesse caso (o cliente nunca vira Usuario). Sem e-mail.
+    concluida_por_externo_nome: str | None = Field(default=None, alias="concluidaPorExternoNome")
     # Calculado pelo SERVIDOR para o usuário da requisição: verdadeiro só na etapa ATUAL, para quem tem autoridade real
     # (responsável da etapa, admin/gestor do tenant ou Head de departamento da etapa), fora de leitura global (Pauta) e com a
     # Demanda não arquivada. O frontend não reconstrói RBAC; o endpoint reavalia tudo.

@@ -19,6 +19,7 @@ from app.core.escopo import resolver_escopo_demanda
 from app.core.filtros_lista import parse_csv_enum, parse_csv_uuids
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
+from app.domain.aprovacao_externa import ArquivoVinculadoAprovacaoExternaError
 from app.models.usuario import Usuario
 from app.repositories.demanda_arquivo_repository import FiltrosCentral
 from app.schemas.arquivo_lote import (
@@ -154,6 +155,11 @@ def _parametros_da_selecao(selecao: ArquivosLoteSelecao) -> dict:
 
 
 def _tratar_erro_lote(exc: Exception) -> None:
+    if isinstance(exc, ArquivoVinculadoAprovacaoExternaError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.codigo, "message": str(exc), "quantidade": exc.quantidade},
+        ) from exc
     if isinstance(exc, ArquivoLoteNaoEncontradoError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     if isinstance(exc, ArquivoLoteLimiteError):
