@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ClipboardList, FileText, GitBranch, History, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { Textarea } from "@/components/ui/Textarea";
 import { Combobox } from "@/components/ui/Combobox";
 import { Input } from "@/components/ui/Input";
 import { MemberSelector } from "@/components/ui/MemberSelector";
@@ -12,6 +14,7 @@ import { Select } from "@/components/ui/Select";
 import {
   avancarEtapaWorkflowReal,
   getDemandaReal,
+  rejeitarEtapaWorkflowReal,
   listHistoricoDemanda,
   patchDemandaReal,
   type DemandaPatchCampos,
@@ -29,10 +32,16 @@ import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { corDoEventoHistorico, descreverEventoHistorico } from "@/lib/historicoDemandaLabels";
 import {
   avancarEtapaDoWorkflow,
+  erroDoMotivo,
   estadoDaEtapa,
+  etapaDeRetorno,
   etapasOrdenadas,
+  MOTIVO_REJEICAO_MAX,
   perguntaDeConfirmacao,
   podeExibirAcao,
+  podeExibirRejeitar,
+  rejeitarEtapaDoWorkflow,
+  textoDoRetorno,
   rotuloDaAcao,
   rotuloEstadoConcluido,
   rotuloQuemConcluiu,
@@ -333,6 +342,10 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [avancando, setAvancando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Rejeição (Fase 8D): modal simples com o motivo obrigatório — o próprio motivo é a confirmação.
+  const [rejeitando, setRejeitando] = useState<DemandaWorkflowEtapa | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const [erroRejeicao, setErroRejeicao] = useState<string | null>(null);
 
   if (demanda.workflowEtapas.length === 0) {
     return (
@@ -364,6 +377,40 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
     }
     setErro(resultado.mensagem);
     if (resultado.demanda) onChange(resultado.demanda); // 409: mostra o estado real do servidor
+  }
+
+  function abrirRejeicao(etapa: DemandaWorkflowEtapa) {
+    setMotivo("");
+    setErroRejeicao(null);
+    setConfirmandoId(null);
+    setRejeitando(etapa);
+  }
+
+  async function confirmarRejeicao() {
+    if (avancando || !rejeitando) return;
+    const etapa = rejeitando;
+    setAvancando(true);
+    setErroRejeicao(null);
+    const resultado = await rejeitarEtapaDoWorkflow({
+      etapaId: etapa.id,
+      motivo,
+      rejeitar: (etapaId, texto) => rejeitarEtapaWorkflowReal(demanda.id, etapaId, texto),
+      recarregar: () => getDemandaReal(demanda.id),
+    });
+    setAvancando(false);
+    if (resultado.ok) {
+      setRejeitando(null);
+      onChange(resultado.demanda);
+      return;
+    }
+    if (resultado.conflito) {
+      // O estado mudou enquanto o modal estava aberto: fecha, mostra a mensagem e o workflow já aparece atualizado.
+      setRejeitando(null);
+      setErro(resultado.mensagem);
+      if (resultado.demanda) onChange(resultado.demanda);
+      return;
+    }
+    setErroRejeicao(resultado.mensagem); // erro comum: o modal continua aberto, com o motivo preservado
   }
 
   return (
@@ -420,10 +467,15 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
               )}
 
               {exibirAcao && !confirmando && (
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button type="button" onClick={() => setConfirmandoId(etapa.id)} disabled={avancando}>
                     {rotuloDaAcao(etapa)}
                   </Button>
+                  {podeExibirRejeitar(etapa, demanda.etapaAtualId, somenteLeitura) && (
+                    <Button type="button" variant="secondary" onClick={() => abrirRejeicao(etapa)} disabled={avancando}>
+                      Rejeitar
+                    </Button>
+                  )}
                 </div>
               )}
               {exibirAcao && confirmando && (
@@ -441,6 +493,37 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
           );
         })}
       </div>
+      <Modal open={rejeitando !== null} onClose={() => (avancando ? undefined : setRejeitando(null))} maxWidthClassName="max-w-md">
+        {rejeitando && (
+          <div className="flex flex-col gap-3" role="dialog" aria-label="Rejeitar etapa">
+            <h3 className="text-base font-semibold text-fg">Rejeitar etapa “{rejeitando.nome}”</h3>
+            <p className="text-sm text-fg-muted">{textoDoRetorno(etapaDeRetorno(demanda, rejeitando)?.nome ?? "a etapa anterior")}</p>
+            <Textarea
+              label="Motivo da rejeição *"
+              value={motivo}
+              onChange={(event) => setMotivo(event.target.value)}
+              rows={4}
+              maxLength={MOTIVO_REJEICAO_MAX}
+              disabled={avancando}
+              aria-required="true"
+              autoFocus
+            />
+            {erroRejeicao && (
+              <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+                {erroRejeicao}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setRejeitando(null)} disabled={avancando}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void confirmarRejeicao()} disabled={avancando || erroDoMotivo(motivo) !== null}>
+                {avancando ? "Rejeitando…" : "Rejeitar e devolver"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </SectionShell>
   );
 }

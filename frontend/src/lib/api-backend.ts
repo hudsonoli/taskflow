@@ -1487,6 +1487,7 @@ type DemandaWorkflowEtapaReadApi = {
   concluidaEm: string | null;
   concluidaPorUsuarioId: string | null;
   podeAvancar: boolean;
+  podeRejeitar?: boolean;
 };
 
 type DemandaReadApi = {
@@ -1588,6 +1589,7 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       concluidaEm: etapa.concluidaEm ?? null,
       concluidaPorUsuarioId: etapa.concluidaPorUsuarioId ?? null,
       podeAvancar: etapa.podeAvancar === true,
+      podeRejeitar: etapa.podeRejeitar === true,
     })),
     etapaAtualId: data.etapaAtualId,
     acessoApenasWorkflow: data.acessoApenasWorkflow === true,
@@ -1947,6 +1949,15 @@ export async function arquivarDemandaReal(demandaId: string, motivoArquivamento:
 // (409 → WorkflowEtapaConflitoError). Sem corpo: não existe `nextStepId`. Sempre no escopo-base (a Pauta global é só leitura).
 export async function avancarEtapaWorkflowReal(demandaId: string, etapaId: string, acao: AcaoEtapa): Promise<Demanda> {
   const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/${acao}`, { method: "POST" });
+  return mapDemandaReadToDemanda(atualizada);
+}
+
+// Rejeição (Fase 8D): SÓ o motivo vai no corpo — o servidor devolve o workflow para a etapa imediatamente anterior (não existe `targetStepId`).
+export async function rejeitarEtapaWorkflowReal(demandaId: string, etapaId: string, motivo: string): Promise<Demanda> {
+  const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/rejeitar`, {
+    method: "POST",
+    body: JSON.stringify({ motivo }),
+  });
   return mapDemandaReadToDemanda(atualizada);
 }
 

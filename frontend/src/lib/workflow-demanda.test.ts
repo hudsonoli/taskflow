@@ -199,7 +199,7 @@ test("drawer: a seção de workflow recebe onChange (atualiza sem recarregar); f
 test("API: rotas concluir/aprovar sem corpo; 409 estruturado vira WorkflowEtapaConflitoError", () => {
   const api = ler("lib/api-backend.ts"); // sem semComentarios: o texto tem "/api/backend/**" em comentário (quebraria o regex)
   assert.match(api, /\/demandas\/\$\{demandaId\}\/workflow\/etapas\/\$\{etapaId\}\/\$\{acao\}/);
-  const trecho = api.slice(api.indexOf("export async function avancarEtapaWorkflowReal"), api.indexOf("export async function restaurarDemandaReal"));
+  const trecho = api.slice(api.indexOf("export async function avancarEtapaWorkflowReal"), api.indexOf("export async function rejeitarEtapaWorkflowReal"));
   assert.match(trecho, /method: "POST" \}/);
   assert.doesNotMatch(trecho, /body:/);
   assert.match(api, /response\.status === 409/);

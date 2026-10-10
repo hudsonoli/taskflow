@@ -16,6 +16,7 @@ export const CODIGOS_CONFLITO_WORKFLOW = [
   "ETAPA_JA_CONCLUIDA",
   "ETAPA_PAUSADA",
   "DEMANDA_ARQUIVADA",
+  "SEM_ETAPA_ANTERIOR",
 ] as const;
 
 /** 409 da progressão: o estado do servidor mudou (outra pessoa avançou, workflow já concluído…). A interface recarrega e explica. */
@@ -110,6 +111,69 @@ export async function avancarEtapaDoWorkflow<D extends DemandaComWorkflow & Reco
   } catch (erro) {
     const mensagem = erro instanceof Error && erro.message ? erro.message : "Não foi possível avançar o workflow.";
     if (!ehConflitoDeWorkflow(erro)) return { ok: false, mensagem, conflito: false };
+    try {
+      return { ok: false, mensagem, conflito: true, demanda: await entrada.recarregar() };
+    } catch {
+      return { ok: false, mensagem, conflito: true };
+    }
+  }
+}
+
+// ── Rejeição / devolução (Fase 8D) ───────────────────────────────────────────────────────────────────────────
+
+export const MOTIVO_REJEICAO_MIN = 3;
+export const MOTIVO_REJEICAO_MAX = 1000;
+
+/** A etapa para onde o workflow volta: a imediatamente anterior por `ordem`. Só para MOSTRAR o nome — quem decide o destino é o servidor. */
+export function etapaDeRetorno(
+  demanda: Pick<DemandaComWorkflow, "workflowEtapas">,
+  etapa: Pick<DemandaWorkflowEtapa, "ordem">,
+): DemandaWorkflowEtapa | null {
+  const anteriores = demanda.workflowEtapas.filter((outra) => outra.ordem < etapa.ordem);
+  if (anteriores.length === 0) return null;
+  return anteriores.reduce((maior, outra) => (outra.ordem > maior.ordem ? outra : maior));
+}
+
+/** O botão Rejeitar depende SÓ do `podeRejeitar` do servidor (etapa atual de aprovação, com etapa anterior, autoridade real), e não existe na leitura da Pauta. */
+export function podeExibirRejeitar(
+  etapa: Pick<DemandaWorkflowEtapa, "id" | "status" | "tipo" | "podeRejeitar">,
+  etapaAtualId: string | null,
+  somenteLeitura: boolean,
+): boolean {
+  return !somenteLeitura && etapa.id === etapaAtualId && etapa.status !== "concluida" && etapa.tipo === "aprovacao" && etapa.podeRejeitar === true;
+}
+
+/** Motivo obrigatório: sem espaços nas pontas, de 3 a 1000 caracteres. Devolve a mensagem de erro ou `null` se válido. */
+export function erroDoMotivo(motivo: string): string | null {
+  const texto = motivo.trim();
+  if (texto.length === 0) return "Informe o motivo da rejeição.";
+  if (texto.length < MOTIVO_REJEICAO_MIN) return `O motivo precisa ter ao menos ${MOTIVO_REJEICAO_MIN} caracteres.`;
+  if (texto.length > MOTIVO_REJEICAO_MAX) return `O motivo pode ter no máximo ${MOTIVO_REJEICAO_MAX} caracteres.`;
+  if (texto.includes("<") && texto.includes(">")) return "O motivo não pode conter HTML.";
+  return null;
+}
+
+export function textoDoRetorno(nomeDaEtapaAnterior: string): string {
+  return `A etapa será devolvida para ${nomeDaEtapaAnterior}.`;
+}
+
+/**
+ * Rejeita a etapa e traduz o desfecho, como `avancarEtapaDoWorkflow`: no 409 recarrega o estado do servidor (o chamador fecha o modal e mostra a
+ * mensagem); em outros erros devolve a mensagem sem recarregar e o modal continua aberto com o motivo preservado.
+ */
+export async function rejeitarEtapaDoWorkflow<D extends DemandaComWorkflow & Record<string, unknown>>(entrada: {
+  etapaId: string;
+  motivo: string;
+  rejeitar: (etapaId: string, motivo: string) => Promise<D>;
+  recarregar: () => Promise<D>;
+}): Promise<{ ok: true; demanda: D } | { ok: false; mensagem: string; conflito: boolean; demanda?: D }> {
+  const erro = erroDoMotivo(entrada.motivo);
+  if (erro) return { ok: false, mensagem: erro, conflito: false };
+  try {
+    return { ok: true, demanda: await entrada.rejeitar(entrada.etapaId, entrada.motivo.trim()) };
+  } catch (falha) {
+    const mensagem = falha instanceof Error && falha.message ? falha.message : "Não foi possível rejeitar a etapa.";
+    if (!ehConflitoDeWorkflow(falha)) return { ok: false, mensagem, conflito: false };
     try {
       return { ok: false, mensagem, conflito: true, demanda: await entrada.recarregar() };
     } catch {

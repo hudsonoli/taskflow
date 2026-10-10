@@ -83,6 +83,7 @@ const DESCRITORES: Record<string, (dados: Record<string, unknown>, contexto: Con
   "demanda.workflow_aplicado": () => "Workflow aplicado à tarefa",
   "demanda.workflow_etapa_concluida": (dados) => descreverAvancoDeEtapa("concluída", dados),
   "demanda.workflow_etapa_aprovada": (dados) => descreverAvancoDeEtapa("aprovada", dados),
+  "demanda.workflow_etapa_rejeitada": (dados) => descreverRejeicaoDeEtapa(dados),
   "demanda.ajuste_interno_registrado": () => "Ajuste interno registrado",
   "demanda.ajuste_cliente_registrado": () => "Ajuste solicitado pelo cliente registrado",
   "demanda.refacao_registrada": () => "Refação registrada",
@@ -98,6 +99,14 @@ function descreverAvancoDeEtapa(acao: "concluída" | "aprovada", dados: Record<s
   return `Etapa "${nome}" ${acao}${proxima}`;
 }
 
+/** Fase 8D: um evento descreve a rejeição E o retorno (etapa reaberta), com o motivo. Os eventos anteriores continuam na timeline (append-only). */
+function descreverRejeicaoDeEtapa(dados: Record<string, unknown>): string {
+  const nome = String(dados.etapaNome ?? "");
+  const retorno = dados.etapaRetornoNome ? ` — devolvida para "${String(dados.etapaRetornoNome)}"` : "";
+  const motivo = dados.motivo ? `. Motivo: ${String(dados.motivo)}` : "";
+  return `Etapa "${nome}" rejeitada${retorno}${motivo}`;
+}
+
 export function descreverEventoHistorico(evento: DemandaHistoricoEvento, contexto: Contexto): string {
   const descritor = DESCRITORES[evento.tipo];
   if (!descritor) return evento.tipo;
@@ -108,7 +117,7 @@ export function descreverEventoHistorico(evento: DemandaHistoricoEvento, context
  * mock antigo, é derivado do prefixo do tipo real. */
 export function corDoEventoHistorico(tipo: string): "blue" | "green" | "amber" | "red" | "neutral" {
   if (tipo.includes("removid") || tipo.includes("exclu") || tipo === "demanda.bloqueada") return "red";
-  if (tipo.includes("refacao") || tipo.includes("ajuste_cliente")) return "amber";
+  if (tipo.includes("refacao") || tipo.includes("ajuste_cliente") || tipo.includes("rejeitad")) return "amber";
   if (tipo.includes("concluid") || tipo.includes("aprovad") || tipo.includes("restaurada") || tipo === "demanda.criada") return "green";
   if (tipo.includes("adicionado") || tipo.includes("criado") || tipo.includes("aplicado")) return "blue";
   return "neutral";

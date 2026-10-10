@@ -28,7 +28,8 @@
     "test:numeracao-tarefas": "node --test src/lib/numeracao-tarefas.test.ts",
     "test:acessos": "node --test src/lib/acessos.test.ts",
     "test:workflow-demanda": "node --test src/lib/workflow-demanda.test.ts",
-    "test:arquivos-lote": "node --test src/lib/arquivos-lote.test.ts"
+    "test:arquivos-lote": "node --test src/lib/arquivos-lote.test.ts",
+    "test:workflow-rejeicao": "node --test src/lib/workflow-rejeicao.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

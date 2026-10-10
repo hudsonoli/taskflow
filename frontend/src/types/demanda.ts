@@ -42,6 +42,8 @@ export type DemandaWorkflowEtapa = {
   concluidaPorUsuarioId: string | null;
   /** Calculado pelo SERVIDOR para o usuário logado: só na etapa atual, com autoridade real, fora da leitura da Pauta. */
   podeAvancar: boolean;
+  /** Fase 8D — calculado pelo SERVIDOR: etapa atual de APROVAÇÃO com etapa anterior, para quem tem autoridade real, fora da leitura da Pauta. */
+  podeRejeitar?: boolean;
 };
 
 /**
