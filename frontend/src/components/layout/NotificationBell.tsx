@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { listarNotificacoes, listDemandasReais, marcarNotificacaoLida } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
-import { formatarBadge } from "@/lib/notificacoes";
+import { abaDaNotificacao, contextoDaNotificacao, formatarBadge } from "@/lib/notificacoes";
 import { useNotificacoes } from "@/lib/NotificacoesContext";
 import { rotuloDemanda } from "@/lib/referencias";
 import type { Demanda } from "@/types/demanda";
@@ -78,7 +78,7 @@ export function NotificationBell() {
         void recarregar();
       }
     }
-    if (notificacao.demandaId) abrirDemanda(notificacao.demandaId, "dados");
+    if (notificacao.demandaId) abrirDemanda(notificacao.demandaId, abaDaNotificacao(notificacao.tipo));
   }
 
   return (
@@ -146,7 +146,7 @@ export function NotificationBell() {
                           {!notificacao.lida && <span className="sr-only"> (não lida)</span>}
                         </p>
                         <p className="truncate text-xs text-fg-muted">
-                          {[notificacao.demandaReferencia, notificacao.demandaNome].filter(Boolean).join(" · ")}
+                          {contextoDaNotificacao(notificacao)}
                         </p>
                       </div>
                     </button>

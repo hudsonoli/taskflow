@@ -59,3 +59,20 @@ export function iniciais(nome: string): string {
   const ultima = partes.length > 1 ? partes[partes.length - 1][0] : "";
   return (primeira + ultima).toUpperCase();
 }
+
+/** Tipo do evento que avisa "a etapa de Workflow que é sua virou a atual" (Fase 8C). */
+export const TIPO_ETAPA_DE_WORKFLOW_ATUALIZADA = "demanda.workflow_etapa_atualizada";
+
+/** Aba do drawer da demanda aberta ao clicar na notificação: a de etapa de Workflow vai direto para "workflow"; as demais, "dados". */
+export function abaDaNotificacao(tipo: string): "workflow" | "dados" {
+  return tipo === TIPO_ETAPA_DE_WORKFLOW_ATUALIZADA ? "workflow" : "dados";
+}
+
+/** Contexto secundário da notificação: identificador emitido da demanda (fallback: referência) + nome. Nunca monta `#número` à mão. */
+export function contextoDaNotificacao(n: {
+  demandaIdentificador?: string | null;
+  demandaReferencia: string | null;
+  demandaNome: string | null;
+}): string {
+  return [n.demandaIdentificador || n.demandaReferencia, n.demandaNome].filter(Boolean).join(" · ");
+}

@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { listarNotificacoes, listarPrazosEquipe, marcarNotificacaoLida, marcarTodasNotificacoesLidas } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
-import { formatarBadge } from "@/lib/notificacoes";
+import { abaDaNotificacao, contextoDaNotificacao, formatarBadge } from "@/lib/notificacoes";
 import { useNotificacoes } from "@/lib/NotificacoesContext";
 import type { Demanda } from "@/types/demanda";
 import type { CategoriaNotificacao, GrupoPrazo, Notificacao } from "@/types/notificacoes";
@@ -123,8 +123,8 @@ export function NotificacoesView() {
   }, [aba, filtro, grupo, offset, tentativa]);
 
   const abrirDemanda = useCallback(
-    (demandaId: string) => {
-      setDemandaParaAbrir({ demandaId, aba: "dados" });
+    (demandaId: string, aba: string = "dados") => {
+      setDemandaParaAbrir({ demandaId, aba });
       router.push("/tarefas");
     },
     [router, setDemandaParaAbrir],
@@ -147,7 +147,7 @@ export function NotificacoesView() {
 
   async function abrirNotificacao(notificacao: Notificacao) {
     void marcarLida(notificacao);
-    if (notificacao.demandaId) abrirDemanda(notificacao.demandaId);
+    if (notificacao.demandaId) abrirDemanda(notificacao.demandaId, abaDaNotificacao(notificacao.tipo));
   }
 
   async function marcarTodas() {
@@ -303,7 +303,7 @@ export function NotificacoesView() {
                     </p>
                     {notificacao.detalhe && <p className="mt-0.5 text-xs text-fg-muted">{notificacao.detalhe}</p>}
                     <p className="mt-0.5 truncate text-xs text-fg-muted">
-                      {[notificacao.demandaReferencia, notificacao.demandaNome].filter(Boolean).join(" · ")}
+                      {contextoDaNotificacao(notificacao)}
                       {notificacao.autorNome ? ` — por ${notificacao.autorNome}` : ""}
                     </p>
                   </div>

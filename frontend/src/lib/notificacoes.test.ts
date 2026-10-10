@@ -71,3 +71,32 @@ test("iniciais do fallback", () => {
   assert.equal(iniciais("  maria  clara  "), "MC");
   assert.equal(iniciais(""), "");
 });
+
+// ── Fase 8C: notificação da próxima etapa de Workflow ─────────────────────────────────────────────────────────
+
+import { readFileSync } from "node:fs";
+import { TIPO_ETAPA_DE_WORKFLOW_ATUALIZADA, abaDaNotificacao, contextoDaNotificacao } from "./notificacoes.ts";
+
+test("8C: clicar na notificação da etapa abre a aba Workflow; as demais abrem Dados", () => {
+  assert.equal(TIPO_ETAPA_DE_WORKFLOW_ATUALIZADA, "demanda.workflow_etapa_atualizada");
+  assert.equal(abaDaNotificacao("demanda.workflow_etapa_atualizada"), "workflow");
+  assert.equal(abaDaNotificacao("demanda.status_alterado"), "dados");
+  assert.equal(abaDaNotificacao("demanda.responsavel_adicionado"), "dados");
+});
+
+test("8C: contexto usa o identificador emitido da demanda (fallback: referência) e nunca monta #número", () => {
+  assert.equal(contextoDaNotificacao({ demandaIdentificador: "BOX-2026-00846", demandaReferencia: "T26000012", demandaNome: "Post" }), "BOX-2026-00846 · Post");
+  assert.equal(contextoDaNotificacao({ demandaIdentificador: "#845", demandaReferencia: "T26000012", demandaNome: "Post" }), "#845 · Post");
+  assert.equal(contextoDaNotificacao({ demandaReferencia: "T26000012", demandaNome: "Post" }), "T26000012 · Post");
+  assert.equal(contextoDaNotificacao({ demandaIdentificador: null, demandaReferencia: null, demandaNome: "Post" }), "Post");
+});
+
+test("8C: a central e o sino usam os mesmos helpers (sem segunda UI) e a aba vem do tipo", () => {
+  const ler = (c: string) => readFileSync(new URL(`../${c}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  for (const arquivo of ["components/notificacoes/NotificacoesView.tsx", "components/layout/NotificationBell.tsx"]) {
+    const fonte = ler(arquivo);
+    assert.match(fonte, /abaDaNotificacao\(notificacao\.tipo\)/, arquivo);
+    assert.match(fonte, /contextoDaNotificacao\(notificacao\)/, arquivo);
+    assert.doesNotMatch(fonte, /`#\$\{/, arquivo);
+  }
+});

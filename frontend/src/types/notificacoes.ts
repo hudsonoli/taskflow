@@ -14,6 +14,8 @@ export type Notificacao = {
   lida: boolean;
   demandaId: string | null;
   demandaReferencia: string | null;
+  /** Identificador emitido da demanda (o mesmo de `rotuloDemanda`); a referência `T26…` é o fallback. */
+  demandaIdentificador?: string | null;
   demandaNome: string | null;
   autorNome: string | null;
 };
