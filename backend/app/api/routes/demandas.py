@@ -13,7 +13,7 @@ from app.core.escopo import (
 )
 from app.core.filtros_lista import parse_csv_enum, parse_csv_uuids
 from app.db.session import get_db
-from app.api.escopo_leitura import EscopoLeitura
+from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_workflow
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import require_admin_or_gestor
 from app.dependencies.permissoes import require_demandas_criar, require_permissao
@@ -495,9 +495,12 @@ def get_demanda(
     `?escopo=pauta` (Fase 7C.1): LEITURA do detalhe de uma demanda exibida na Pauta global — só para quem tem a Pauta global (403 para
     os demais) e sempre dentro da empresa do token. Não dá poder de escrita: PATCH/arquivar/etc. seguem no escopo-base."""
     try:
-        escopo = _escopo(db, current_user, EscopoSolicitado.PAUTA if escopo_leitura == "pauta" else None)
-        demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
-        return demanda_service.to_read(db, demanda, usuario=current_user, somente_leitura=escopo_leitura == "pauta")
+        # Escopo-base (ou Pauta) e, se a demanda não estiver nele, o escopo DERIVADO da etapa atual do Workflow (Fase 8C.1): quem é responsável
+        # pela etapa atual (ou Head do departamento dela) abre a demanda para ler e agir no Workflow — sem virar `DemandaResponsavel`.
+        demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service, escopo_leitura)
+        leitura = demanda_service.to_read(db, demanda, usuario=current_user, somente_leitura=escopo_leitura == "pauta")
+        leitura.acesso_apenas_workflow = via_workflow
+        return leitura
     except Exception as exc:
         handle_demanda_error(exc)
 
@@ -625,10 +628,12 @@ def concluir_etapa_workflow(
     """Conclui a etapa ATUAL de tipo `execucao` e ativa a próxima. Etapa de aprovação → 422; sem autoridade → 403; etapa que não é
     (mais) a atual, workflow concluído/sem etapas → 409."""
     try:
-        escopo = _escopo(db, current_user)
-        demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
+        # Escopo-base OU escopo derivado da etapa atual (Fase 8C.1); a autoridade final (responsável/Head/admin-gestor) é do serviço.
+        demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
         atualizada = workflow_service.concluir_etapa(db, demanda, etapa_id=str(etapa_id), actor=current_user)
-        return demanda_service.to_read(db, atualizada, usuario=current_user)
+        resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
+        resposta.acesso_apenas_workflow = via_workflow
+        return resposta
     except Exception as exc:
         handle_demanda_error(exc)
 
@@ -642,9 +647,11 @@ def aprovar_etapa_workflow(
 ):
     """Aprova a etapa ATUAL de tipo `aprovacao` e ativa a próxima. Mesmas regras de `concluir` (etapa de execução → 422)."""
     try:
-        escopo = _escopo(db, current_user)
-        demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
+        # Escopo-base OU escopo derivado da etapa atual (Fase 8C.1); a autoridade final (responsável/Head/admin-gestor) é do serviço.
+        demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
         atualizada = workflow_service.aprovar_etapa(db, demanda, etapa_id=str(etapa_id), actor=current_user)
-        return demanda_service.to_read(db, atualizada, usuario=current_user)
+        resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
+        resposta.acesso_apenas_workflow = via_workflow
+        return resposta
     except Exception as exc:
         handle_demanda_error(exc)

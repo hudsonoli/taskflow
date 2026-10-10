@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.escopo_leitura import EscopoLeitura, escopo_para_leitura
+from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_workflow, escopo_para_leitura
 from app.core.identidade_sistema import ids_de_contas_de_sistema
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
@@ -42,9 +42,17 @@ def handle_comentario_error(exc: Exception) -> None:
 
 
 def _demanda_no_escopo(
-    demanda_id: UUID, current_user: Usuario, db: Session, escopo_leitura: EscopoLeitura | None = None
+    demanda_id: UUID,
+    current_user: Usuario,
+    db: Session,
+    escopo_leitura: EscopoLeitura | None = None,
+    *,
+    leitura: bool = False,
 ) -> Demanda:
     # `escopo_leitura` só é passado pelos GET (leitura pela Pauta global); escrita usa sempre o escopo-base.
+    # `leitura=True` (só o GET da lista): além do escopo-base, vale o escopo DERIVADO da etapa atual do Workflow (Fase 8C.1).
+    if leitura:
+        return demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service, escopo_leitura)[0]
     escopo = escopo_para_leitura(db, current_user, escopo_leitura)
     return demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
 
@@ -57,7 +65,7 @@ def listar_comentarios(
     db: Session = Depends(get_db),
 ):
     try:
-        demanda = _demanda_no_escopo(demanda_id, current_user, db, escopo)
+        demanda = _demanda_no_escopo(demanda_id, current_user, db, escopo, leitura=True)
         comentarios = comentario_service.list_comentarios(db, demanda.id)
         sistema = (
             set()

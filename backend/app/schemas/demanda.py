@@ -330,6 +330,9 @@ class DemandaRead(BaseModel):
     # de verdade. Sem etapas, ou todas concluídas, é `None`.
     workflow_etapas: list[DemandaWorkflowEtapaRead] = Field(default_factory=list, alias="workflowEtapas")
     etapa_atual_id: UUID | None = Field(default=None, alias="etapaAtualId")
+    # Fase 8C.1 — o acesso a esta demanda veio SÓ do escopo derivado da etapa atual do Workflow (não é do escopo-base): a interface lê tudo e age no
+    # Workflow, mas não oferece edição geral (o servidor também recusa). Só o detalhe e as ações do Workflow preenchem; nas listagens é sempre falso.
+    acesso_apenas_workflow: bool = Field(default=False, alias="acessoApenasWorkflow")
     # `checklist`/`arquivos` (2E.3) e `comentarios`/`historico` (2E.4) NÃO aparecem mais
     # aqui — todos têm tabela e endpoint dedicado agora (`/demandas/{id}/checklist`,
     # `/arquivos`, `/comentarios`, `/historico`). Embuti-los de novo infligiria em toda

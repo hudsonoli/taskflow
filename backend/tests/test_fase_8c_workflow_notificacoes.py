@@ -284,15 +284,17 @@ def test_payload_minimo_sem_email(db_session: Session, empresa: Empresa, client_
     assert "@" not in str(evento.payload)
 
 
-def test_notificacao_nao_concede_visibilidade_da_demanda(app, db_session: Session, empresa: Empresa, client_admin: TestClient) -> None:
-    """Quem é responsável só pela ETAPA é avisado, mas continua sem enxergar a demanda fora do próprio escopo (clique → 404 no detalhe)."""
+def test_notificacao_e_acionavel_sem_conceder_edicao_geral(app, db_session: Session, empresa: Empresa, client_admin: TestClient) -> None:
+    """Fase 8C.1: quem é responsável só pela ETAPA atual abre a demanda (escopo derivado do Workflow) e age nela, sem edição geral e sem Pauta."""
     a = _op(db_session, empresa, "vis")
     demanda = _demanda_com_workflow(client_admin, [_etapa("Um"), _etapa("Dois", usuarios=[a.id])])  # `a` não é responsável pela demanda
     db_session.commit()
     assert _avancar(client_admin, demanda, 1).status_code == 200
     ca = _client_para(app, a)
     assert len(_da_etapa(ca, demanda["id"])) == 1
-    assert ca.get(f"/demandas/{demanda['id']}").status_code == 404
+    detalhe = ca.get(f"/demandas/{demanda['id']}")
+    assert detalhe.status_code == 200 and detalhe.json()["acessoApenasWorkflow"] is True  # o clique funciona
+    assert ca.patch(f"/demandas/{demanda['id']}", json={"nome": "x"}).status_code == 404  # sem edição geral
     assert ca.get(f"/demandas/{demanda['id']}", params={"escopo": "pauta"}).status_code == 403  # nem a Pauta global é aberta por notificação
 
 

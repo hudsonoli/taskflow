@@ -82,6 +82,10 @@ class EscopoDemanda:
     departamento_ids: tuple[str, ...] = ()
     cliente_ids: tuple[str, ...] = ()
     incluir_criadas_por_usuario: bool = False
+    # Fase 8C.1 — escopo DERIVADO do Workflow (nada persistido): demandas cuja ETAPA ATUAL (derivada no SQL do snapshot, nunca do template) está
+    # atribuída ao usuário individualmente (`etapa_atual_usuario`) ou a um departamento que ele lidera (`etapa_atual_departamento_ids`).
+    etapa_atual_usuario: bool = False
+    etapa_atual_departamento_ids: tuple[str, ...] = ()
 
     @property
     def vazio(self) -> bool:
@@ -95,6 +99,8 @@ class EscopoDemanda:
             or self.departamento_ids
             or self.cliente_ids
             or self.incluir_criadas_por_usuario
+            or self.etapa_atual_usuario
+            or self.etapa_atual_departamento_ids
         )
 
 
@@ -233,12 +239,14 @@ def resolver_escopo_demanda(
         )
 
     if solicitado is EscopoSolicitado.MEUS:
-        # Sempre permitido: qualquer pessoa pode ver as próprias demandas.
+        # Sempre permitido: qualquer pessoa pode ver as próprias demandas. Fase 8C.1: inclui também as demandas em que a ETAPA ATUAL do
+        # Workflow está atribuída ao usuário INDIVIDUALMENTE (trabalho atribuído a ele); liderança de departamento NÃO entra no Meu Dia.
         return EscopoDemanda(
             empresa_id=usuario.empresa_id,
             usuario_id=usuario.id,
             visao_total=False,
             usuario_responsavel=True,
+            etapa_atual_usuario=True,
         )
 
     # --- escopo-base, sem recorte -----------------------------------------------------
@@ -258,4 +266,23 @@ def resolver_escopo_demanda(
         departamento_ids=tuple(departamentos),
         cliente_ids=tuple(clientes_sob_responsabilidade(db, usuario)) if atendimento else (),
         incluir_criadas_por_usuario=atendimento,
+    )
+
+
+def resolver_escopo_workflow_atual(db: Session, usuario: Usuario) -> EscopoDemanda:
+    """Escopo DERIVADO da etapa atual do Workflow (Fase 8C.1): o que o usuário pode LER e AGIR (concluir/aprovar), além do escopo-base.
+
+    Conceder atribuição operacional sem tornar ninguém `DemandaResponsavel`: vale só enquanto a etapa for a ATUAL, calculada em tempo real sobre o
+    snapshot da Demanda — etapa futura, concluída, workflow concluído ou sem etapas não concedem nada, e nada é persistido. Fontes:
+    responsável individual da etapa atual e Head real (`departamentos_como_head`) de um departamento responsável por ela. Admin/gestor já têm o
+    escopo-base total; Atendimento não ganha nada por ser Atendimento.
+
+    NÃO é um escopo de escrita geral: só as leituras do detalhe/subrecursos e as ações do Workflow o consultam (como FALLBACK do escopo-base).
+    PATCH, comentários, uploads, checklist e demais escritas seguem no escopo-base."""
+    return EscopoDemanda(
+        empresa_id=usuario.empresa_id,
+        usuario_id=usuario.id,
+        visao_total=False,
+        etapa_atual_usuario=True,
+        etapa_atual_departamento_ids=tuple(departamentos_como_head(db, usuario)),
     )

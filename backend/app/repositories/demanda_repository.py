@@ -161,12 +161,48 @@ class DemandaRepository:
         if escopo.incluir_criadas_por_usuario:
             ramos.append(Demanda.criado_por_usuario_id == escopo.usuario_id)
 
+        # Fase 8C.1: atribuição na ETAPA ATUAL do Workflow (derivada no SQL do snapshot).
+        if escopo.etapa_atual_usuario or escopo.etapa_atual_departamento_ids:
+            ramos.append(DemandaRepository._etapa_atual_atribuida(escopo))
+
         # `escopo.vazio` é tratado antes de chegar aqui; se ainda assim não houver ramo,
         # negar tudo é o único fim seguro — jamais devolver a empresa inteira por omissão.
         if not ramos:
             return Demanda.id.is_(None)
 
         return or_(*ramos)
+
+    @staticmethod
+    def _etapa_atual_atribuida(escopo: EscopoDemanda) -> ColumnElement[bool]:
+        """EXISTS: a ETAPA ATUAL da Demanda — menor `ordem` com `status != 'concluida'` no snapshot, a mesma derivação de `_derivar_etapa_atual_id` —
+        está atribuída ao usuário (individual) e/ou a um departamento da lista (Head). Etapa futura/concluída, workflow concluído ou sem etapas
+        nunca casam (`ordem = NULL` é falso). Tudo num único EXISTS correlacionado: sem N+1 e sem carregar etapas em memória."""
+        menor_ordem = (
+            select(func.min(DemandaWorkflowEtapa.ordem))
+            .where(DemandaWorkflowEtapa.demanda_id == Demanda.id, DemandaWorkflowEtapa.status != "concluida")
+            .correlate(Demanda)
+            .scalar_subquery()
+        )
+        atribuicoes: list[ColumnElement[bool]] = []
+        if escopo.etapa_atual_usuario:
+            atribuicoes.append(
+                exists().where(
+                    DemandaWorkflowEtapaResponsavel.demanda_workflow_etapa_id == DemandaWorkflowEtapa.id,
+                    DemandaWorkflowEtapaResponsavel.usuario_id == escopo.usuario_id,
+                )
+            )
+        if escopo.etapa_atual_departamento_ids:
+            atribuicoes.append(
+                exists().where(
+                    DemandaWorkflowEtapaDepartamentoResponsavel.demanda_workflow_etapa_id == DemandaWorkflowEtapa.id,
+                    DemandaWorkflowEtapaDepartamentoResponsavel.departamento_id.in_(escopo.etapa_atual_departamento_ids),
+                )
+            )
+        return exists().where(
+            DemandaWorkflowEtapa.demanda_id == Demanda.id,
+            DemandaWorkflowEtapa.ordem == menor_ordem,
+            or_(*atribuicoes),
+        )
 
     def get_by_id(self, db: Session, demanda_id: str) -> Demanda | None:
         """Sem escopo — uso interno de quem já validou o acesso (ex.: reidratar após escrita).
@@ -750,14 +786,17 @@ class DemandaRepository:
         )
 
         predicado = self._predicado_escopo(escopo)
-        if predicado is not None:
-            statement = statement.where(predicado)
-        statement = statement.where(Demanda.status != STATUS_ARQUIVADO)
-        statement = statement.where(
-            Demanda.id.in_(
-                select(DemandaResponsavel.demanda_id).where(DemandaResponsavel.usuario_id == usuario_id)
-            )
+        # Meu Dia = trabalho atribuído a mim: (escopo normal AND responsável da demanda) OU a ETAPA ATUAL do Workflow é minha (Fase 8C.1).
+        # A segunda via NÃO depende do escopo-base: é atribuição individual derivada do snapshot.
+        sou_responsavel = Demanda.id.in_(
+            select(DemandaResponsavel.demanda_id).where(DemandaResponsavel.usuario_id == usuario_id)
         )
+        da_demanda = sou_responsavel if predicado is None else and_(predicado, sou_responsavel)
+        etapa_atual_minha = self._etapa_atual_atribuida(
+            EscopoDemanda(empresa_id=escopo.empresa_id, usuario_id=usuario_id, visao_total=False, etapa_atual_usuario=True)
+        )
+        statement = statement.where(Demanda.status != STATUS_ARQUIVADO)
+        statement = statement.where(or_(da_demanda, etapa_atual_minha))
 
         resultado = db.execute(statement).one()
         return dict(resultado._mapping)
