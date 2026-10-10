@@ -70,9 +70,23 @@ export function ehRotaDeRecuperacaoDeSenha(pathname: string): boolean {
   return pagina === "esqueci-senha" || pagina === "redefinir-senha";
 }
 
+/** Portal Externo de Aprovação (Fase 9B): rota PÚBLICA nua, sem sessão do tenant. A empresa vem do TOKEN (capability), nunca de slug/cookie. */
+export const ROTA_APROVACAO_EXTERNA = "/aprovacao";
+/** Valor de `x-tf-contexto` que o proxy define no portal (e apaga do que vier do navegador). */
+export const CONTEXTO_APROVACAO = "aprovacao";
+
+export function ehRotaDeAprovacaoExterna(pathname: string): boolean {
+  return pathname === ROTA_APROVACAO_EXTERNA || pathname === `${ROTA_APROVACAO_EXTERNA}/`;
+}
+
 /** Rotas que sempre usam o tema da EMPRESA (não há preferência de usuário a aplicar). */
 export function usaTemaDaEmpresa(pathname: string): boolean {
-  return ehRotaDeLogin(pathname) || ehRotaDeRecuperacaoDeSenha(pathname) || pathname === "/trocar-senha-inicial";
+  return (
+    ehRotaDeLogin(pathname) ||
+    ehRotaDeRecuperacaoDeSenha(pathname) ||
+    ehRotaDeAprovacaoExterna(pathname) ||
+    pathname === "/trocar-senha-inicial"
+  );
 }
 
 /** Slug que deve valer para o contexto VISUAL da página: o da rota; senão, só com sessão, o cookie visual. */

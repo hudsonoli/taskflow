@@ -11,7 +11,7 @@ import { variaveisDaMarca } from "@/lib/branding-tokens";
 import { SESSION_COOKIE_NAME } from "@/lib/server/backend";
 import { obterBrandingPublico } from "@/lib/server/branding";
 import { COOKIE_TEMA, SCRIPT_TEMA_SISTEMA, normalizarPreferencia, resolveEffectiveTheme } from "@/lib/tema";
-import { COOKIE_TENANT_SLUG, HEADER_CONTEXTO, HEADER_TENANT_SLUG, normalizarSlug, slugVisual } from "@/lib/tenant";
+import { CONTEXTO_APROVACAO, COOKIE_TENANT_SLUG, HEADER_CONTEXTO, HEADER_TENANT_SLUG, normalizarSlug, slugVisual } from "@/lib/tenant";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -44,8 +44,11 @@ export default async function RootLayout({
   // servidor). Nunca decide autorização: a empresa dos dados vem sempre do token no backend.
   const cabecalhos = await headers();
   const cookieStore = await cookies();
-  const autenticado = Boolean(cookieStore.get(SESSION_COOKIE_NAME)?.value);
-  const slugCookie = normalizarSlug(cookieStore.get(COOKIE_TENANT_SLUG)?.value);
+  // Portal Externo de Aprovação (Fase 9B): a página ignora qualquer sessão/cookie do tenant. O HTML inicial sai com a marca NEUTRA e sem
+  // contexto de empresa — a marca real chega depois da consulta do token (a empresa vem do link, nunca do navegador).
+  const contextoAprovacao = cabecalhos.get(HEADER_CONTEXTO) === CONTEXTO_APROVACAO;
+  const autenticado = !contextoAprovacao && Boolean(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const slugCookie = contextoAprovacao ? null : normalizarSlug(cookieStore.get(COOKIE_TENANT_SLUG)?.value);
   const slugRota = normalizarSlug(cabecalhos.get(HEADER_TENANT_SLUG));
   const slug = slugVisual({ slugDaRota: slugRota, slugDoCookie: slugCookie, autenticado });
 
@@ -54,7 +57,9 @@ export default async function RootLayout({
   const contextoPlataforma = cabecalhos.get(HEADER_CONTEXTO) === "plataforma";
   const publico = contextoPlataforma
     ? { branding: BRANDING_PADRAO, disponivel: true, nome: null }
-    : await obterBrandingPublico(slug ? { tipo: "slug", slug } : { tipo: "legado" });
+    : contextoAprovacao
+      ? { branding: BRANDING_PADRAO, disponivel: true, nome: null }
+      : await obterBrandingPublico(slug ? { tipo: "slug", slug } : { tipo: "legado" });
   const branding = publico.branding;
   const variaveis = variaveisDaMarca(branding.corPrimaria, branding.corSecundaria);
 

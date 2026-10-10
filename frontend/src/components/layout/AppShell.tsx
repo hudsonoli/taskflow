@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { TopNav } from "@/components/layout/TopNav";
 import { useAppData } from "@/lib/AppDataContext";
 import { useBranding } from "@/lib/BrandingContext";
-import { ehRotaDeLogin, ehRotaDeRecuperacaoDeSenha } from "@/lib/tenant";
+import { ehRotaDeAprovacaoExterna, ehRotaDeLogin, ehRotaDeRecuperacaoDeSenha } from "@/lib/tenant";
 
 // Login (legado `/login` ou `/e/<slug>/login`) e recuperação de senha (idem) são telas públicas "nuas". A recuperação
 // NÃO redireciona quem já tem sessão nem quem precisa trocar a senha — o link do e-mail (com o token no fragmento) tem
@@ -21,9 +21,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const rotaPublica = ehRotaDeLogin(pathname);
   const rotaTrocaSenha = pathname === ROTA_TROCA_SENHA;
   const rotaRecuperacaoSenha = ehRotaDeRecuperacaoDeSenha(pathname);
+  // Portal Externo de Aprovação (Fase 9B): tela pública nua para o CLIENTE. Sem TopNav/sidebar, sem redirecionar (nem para o login, nem para
+  // /meu-dia quando o navegador por acaso tem sessão): a sessão do tenant é simplesmente ignorada aqui.
+  const rotaPortalExterno = ehRotaDeAprovacaoExterna(pathname);
 
   useEffect(() => {
-    if (sessaoCarregando || rotaRecuperacaoSenha) return;
+    if (sessaoCarregando || rotaRecuperacaoSenha || rotaPortalExterno) return;
 
     if (!autenticado && !rotaPublica) {
       router.replace(loginHref);
@@ -36,10 +39,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (autenticado && !mustChangePassword && (rotaPublica || rotaTrocaSenha)) {
       router.replace("/meu-dia");
     }
-  }, [sessaoCarregando, autenticado, mustChangePassword, rotaPublica, rotaTrocaSenha, rotaRecuperacaoSenha, router, loginHref]);
+  }, [sessaoCarregando, autenticado, mustChangePassword, rotaPublica, rotaTrocaSenha, rotaRecuperacaoSenha, rotaPortalExterno, router, loginHref]);
 
-  // Login, recuperação e troca de senha inicial são telas "nuas" — sem TopNav, sem exigir sessão.
-  if (rotaPublica || rotaTrocaSenha || rotaRecuperacaoSenha) {
+  // Login, recuperação, troca de senha inicial e Portal de Aprovação são telas "nuas" — sem TopNav, sem exigir sessão.
+  if (rotaPublica || rotaTrocaSenha || rotaRecuperacaoSenha || rotaPortalExterno) {
     return <>{children}</>;
   }
 

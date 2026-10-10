@@ -1,7 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { usePathname } from "next/navigation";
 import { useBranding } from "@/lib/BrandingContext";
+import { ehRotaDeAprovacaoExterna } from "@/lib/tenant";
 import { normalizarPreferencia } from "@/lib/tema";
 import { fetchSessao, fetchUsuarioAtualCompleto, logout as logoutRequest } from "@/lib/auth";
 import { listDemandasReais } from "@/lib/api-backend";
@@ -100,12 +102,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setUsuarioAtual(undefined);
   }
 
+  // Portal Externo de Aprovação (Fase 9B): a página do CLIENTE nunca consulta nem usa a sessão do tenant (nem `/usuarios/me`): fica anônima
+  // por construção, mesmo que o navegador tenha `tf_session` de um usuário interno.
+  const portalExterno = ehRotaDeAprovacaoExterna(usePathname());
   useEffect(() => {
     const timeout = setTimeout(() => {
+      if (portalExterno) {
+        setSessaoCarregando(false);
+        return;
+      }
       void recarregarSessao();
     }, 0);
     return () => clearTimeout(timeout);
-  }, []);
+  }, [portalExterno]);
 
   // REVALIDAÇÃO DO USUÁRIO ATUAL. Perfil, permissões, departamento e Head são decididos pelo backend a cada requisição, mas
   // `usuarioAtual` era carregado só no login/montagem: promoção ou troca de departamento feita por OUTRA pessoa com a sessão
