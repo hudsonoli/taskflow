@@ -97,10 +97,8 @@ export function AcessosView() {
       <div className="flex items-start gap-2 rounded-2xl border border-line bg-surface-2 p-3.5 text-xs text-fg-muted">
         <MapPinOff className="h-4 w-4 shrink-0" />
         <p>
-          Lista dos logins da sua empresa. IP, navegador e sistema operacional são registrados pelo servidor a partir da
-          requisição de login. Região aproximada com base no IP da conexão; aparece como «Não disponível» quando não pode ser
-          determinada. Registros anteriores a esta atualização podem mostrar o endereço interno do servidor e navegador
-          desconhecido: essa informação não foi guardada e não é reconstruída.
+          A localização é estimada a partir do endereço IP e pode diferir da localização física, especialmente em redes
+          móveis, VPNs e CGNAT. Registros anteriores podem apresentar dados indisponíveis.
         </p>
       </div>
 
@@ -133,7 +131,7 @@ export function AcessosView() {
                   <th className="px-4 py-3">Usuário</th>
                   <th className="px-4 py-3">Data/hora</th>
                   <th className="px-4 py-3">IP</th>
-                  <th className="px-4 py-3">Região do IP</th>
+                  <th className="px-4 py-3">Localização aproximada</th>
                   <th className="px-4 py-3">Navegador</th>
                   <th className="px-4 py-3">Sistema operacional</th>
                 </tr>

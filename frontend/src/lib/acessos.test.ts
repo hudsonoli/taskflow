@@ -148,7 +148,7 @@ test("as rotas de login (local e Google) repassam IP, região e User-Agent à AP
 test("tela de Acesso: colunas, região, estados e escopo da empresa (sem aviso obsoleto)", () => {
   const view = ler("components/acessos/AcessosView.tsx");
   const codigo = semComentarios(view);
-  for (const coluna of ["Usuário", "Data/hora", "IP", "Região do IP", "Navegador", "Sistema operacional"]) {
+  for (const coluna of ["Usuário", "Data/hora", "IP", "Localização aproximada", "Navegador", "Sistema operacional"]) {
     assert.ok(codigo.includes(`>${coluna}</th>`), coluna);
   }
   assert.match(codigo, /setEventos\(resultado\.map\(resolverAcessoLogin\)\)/); // o servidor é a fonte
@@ -194,5 +194,7 @@ test("o proxy genérico da API não repassa cabeçalho algum do navegador (X-Tas
 test("não há mais MaxMind/GeoIP local no frontend nem na tela de Acesso", () => {
   const view = ler("components/acessos/AcessosView.tsx");
   assert.doesNotMatch(view, /MaxMind|GeoIP|mmdb|base local|serviço externo/i);
-  assert.match(view, /Região aproximada com base no IP da conexão/);
+  assert.match(view, /A localização é estimada a partir do endereço IP e pode diferir da localização física, especialmente em redes\s+móveis, VPNs e CGNAT\./);
+  assert.match(view, /Registros anteriores podem apresentar dados indisponíveis\./);
+  assert.doesNotMatch(view, /Região do IP/); // o rótulo antigo saiu: a coluna é estimativa, não "região"
 });
