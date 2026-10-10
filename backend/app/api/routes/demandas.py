@@ -35,6 +35,7 @@ from app.schemas.demanda import (
     DemandaStatus,
     DemandaResumoOperacionalRead,
     DemandaUpdate,
+    DemandaWorkflowRejeicao,
 )
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
 from app.services.demanda_historico_service import DemandaHistoricoService
@@ -650,6 +651,29 @@ def aprovar_etapa_workflow(
         # Escopo-base OU escopo derivado da etapa atual (Fase 8C.1); a autoridade final (responsável/Head/admin-gestor) é do serviço.
         demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
         atualizada = workflow_service.aprovar_etapa(db, demanda, etapa_id=str(etapa_id), actor=current_user)
+        resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
+        resposta.acesso_apenas_workflow = via_workflow
+        return resposta
+    except Exception as exc:
+        handle_demanda_error(exc)
+
+
+@router.post("/{demanda_id}/workflow/etapas/{etapa_id}/rejeitar", response_model=DemandaRead)
+def rejeitar_etapa_workflow(
+    demanda_id: UUID,
+    etapa_id: UUID,
+    payload: DemandaWorkflowRejeicao,
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Fase 8D — rejeita a etapa ATUAL de aprovação, com MOTIVO obrigatório, e devolve o workflow para a etapa imediatamente anterior (o servidor decide o
+    destino). Mesma autoridade e mesmo escopo (base ou derivado da etapa atual) de Aprovar. Etapa de execução → 422; sem etapa anterior, não atual, workflow
+    concluído, pausada ou demanda arquivada → 409; sem autoridade → 403."""
+    try:
+        demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
+        atualizada = workflow_service.rejeitar_etapa(
+            db, demanda, etapa_id=str(etapa_id), motivo=payload.motivo, actor=current_user
+        )
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
         resposta.acesso_apenas_workflow = via_workflow
         return resposta

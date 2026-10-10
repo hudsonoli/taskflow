@@ -85,56 +85,129 @@ class DemandaWorkflowService:
     # Transição central
     # ----------------------------------------------------------------------------------
 
+    def rejeitar_etapa(self, db: Session, demanda: Demanda, *, etapa_id: str, motivo: str, actor: Usuario) -> Demanda:
+        """Fase 8D — rejeita a etapa ATUAL de APROVAÇÃO e DEVOLVE o workflow para a etapa imediatamente anterior (decidida aqui, nunca pelo cliente).
+
+        Mesmo preâmbulo/lock/autoridade da ação Aprovar. A aprovação rejeitada volta a `pendente` sem início (será feita de novo); a anterior é
+        REABERTA (`pendente`, `iniciada_em` = agora, conclusão e ator zerados). O histórico é append-only: o evento de rejeição guarda quem, quando, o
+        motivo e a etapa de retorno, e os eventos de conclusão anteriores continuam intactos. Retry/concorrência (aprovar × rejeitar, rejeitar ×
+        rejeitar) → 409 para quem perde o lock, sem evento nem notificação. Não toca status/prazo/responsáveis da Demanda."""
+        try:
+            etapas, etapa = self._preparar_etapa_atual(db, demanda, etapa_id=etapa_id, tipo_esperado="aprovacao", acao="rejeitar", actor=actor)
+            anterior = max((item for item in etapas if item.ordem < etapa.ordem), key=lambda item: item.ordem, default=None)
+            if anterior is None:
+                raise DemandaWorkflowConflitoError(
+                    "SEM_ETAPA_ANTERIOR", "Esta é a primeira etapa do workflow: não há etapa anterior para devolver"
+                )
+
+            now = agora_utc()
+            # a aprovação que não passou volta a ser uma etapa a fazer — sem início, sem conclusão, sem ator
+            etapa.status = "pendente"
+            etapa.iniciada_em = None
+            etapa.concluida_em = None
+            etapa.concluida_por_usuario_id = None
+            etapa.updated_at = now
+            # a etapa de retorno é reaberta: volta a ser a atual (derivada) e recomeça agora
+            anterior.status = "pendente"
+            anterior.concluida_em = None
+            anterior.concluida_por_usuario_id = None
+            anterior.iniciada_em = now
+            anterior.updated_at = now
+            demanda.updated_at = now
+            db.flush()
+
+            self.demanda_service.publicar_evento_demanda(
+                db,
+                demanda,
+                DomainEventType.DEMANDA_WORKFLOW_ETAPA_REJEITADA,
+                actor.id,
+                extra_payload={
+                    "workflowModeloId": demanda.workflow_modelo_id,
+                    "etapaId": etapa.id,
+                    "etapaNome": etapa.nome,
+                    "etapaOrdem": etapa.ordem,
+                    "etapaTipo": etapa.tipo,
+                    "motivo": motivo,
+                    "atorUsuarioId": actor.id,
+                    "etapaRetornoId": anterior.id,
+                    "etapaRetornoNome": anterior.nome,
+                    "etapaRetornoOrdem": anterior.ordem,
+                },
+                occurred_at=now,
+            )
+            # Notifica quem precisa agir na etapa REABERTA (mesmo mecanismo da 8C, texto de devolução; o motivo fica só no histórico).
+            self._notificar_proxima_etapa(db, demanda, anterior, actor, now, devolvida=True)
+            db.commit()
+            db.refresh(demanda)
+            return demanda
+        except Exception:
+            db.rollback()
+            raise
+
+    # ----------------------------------------------------------------------------------
+    # Preâmbulo compartilhado (lock, snapshot, ação × tipo, autoridade, etapa atual)
+    # ----------------------------------------------------------------------------------
+
+    def _preparar_etapa_atual(
+        self, db: Session, demanda: Demanda, *, etapa_id: str, tipo_esperado: str, acao: str, actor: Usuario
+    ) -> tuple[list[DemandaWorkflowEtapa], DemandaWorkflowEtapa]:
+        """Trava a Demanda, relê o snapshot e valida a etapa pedida: 404 (não é desta demanda) → 422 (tipo × ação) → 403 (autoridade) → 409 (não é a
+        atual / workflow concluído / pausada / demanda arquivada). Devolve `(etapas ordenadas, etapa)`; quem chama muta e comita na MESMA transação."""
+        # 1) trava a Demanda e recarrega o estado COMMITADO mais recente (quem esperou o lock vê o resultado do vencedor)
+        self.repository.bloquear_demanda_para_atualizacao(db, demanda)
+        if demanda.status == STATUS_DEMANDA_ARQUIVADA:
+            raise DemandaWorkflowConflitoError(
+                "DEMANDA_ARQUIVADA", "Demanda arquivada não pode ter o workflow alterado — restaure-a antes"
+            )
+
+        # 2) snapshot atual (já com o lock; `populate_existing` ignora cópias antigas do identity map)
+        etapas = self.repository.listar_etapas_workflow_travadas(db, demanda.id)
+        if not etapas:
+            if demanda.workflow_modelo_id is None:
+                raise DemandaWorkflowConflitoError("SEM_WORKFLOW", "Esta tarefa não possui workflow")
+            raise DemandaWorkflowConflitoError(
+                "WORKFLOW_SEM_ETAPAS", "O workflow desta tarefa não possui etapas materializadas"
+            )
+
+        etapa = next((item for item in etapas if item.id == etapa_id), None)
+        if etapa is None:
+            raise DemandaWorkflowEtapaNaoEncontradaError("Etapa não encontrada nesta tarefa")
+
+        # 3) ação × tipo, e autoridade — ANTES de revelar o estado do fluxo
+        if etapa.tipo != tipo_esperado:
+            if acao == "rejeitar":
+                raise DemandaWorkflowAcaoInvalidaError("Só uma etapa de aprovação pode ser rejeitada")
+            rotulo = "aprovada" if etapa.tipo == "aprovacao" else "concluída"
+            raise DemandaWorkflowAcaoInvalidaError(f"Esta etapa deve ser {rotulo}, não usar a ação '{acao}'")
+        usuarios_por_etapa = self.repository.listar_etapa_responsavel_ids_em_lote(db, [etapa.id])
+        departamentos_por_etapa = self.repository.listar_etapa_departamento_ids_em_lote(db, [etapa.id])
+        if not pode_avancar_etapa(
+            actor,
+            usuario_responsavel_ids=usuarios_por_etapa.get(etapa.id, []),
+            departamento_responsavel_ids=departamentos_por_etapa.get(etapa.id, []),
+            departamentos_head=departamentos_head_para_workflow(db, actor),
+        ):
+            raise DemandaWorkflowSemAutoridadeError("Você não tem autoridade para avançar esta etapa")
+
+        # 4) a etapa precisa ser a ATUAL (derivada) — retry/duplo clique/concorrência caem aqui
+        atual = next((item for item in etapas if item.status != STATUS_ETAPA_CONCLUIDA), None)
+        if atual is None:
+            raise DemandaWorkflowConflitoError("WORKFLOW_CONCLUIDO", "O workflow desta tarefa já foi concluído")
+        if atual.id != etapa.id:
+            codigo = "ETAPA_JA_CONCLUIDA" if etapa.status == STATUS_ETAPA_CONCLUIDA else "ETAPA_NAO_ATUAL"
+            raise DemandaWorkflowConflitoError(codigo, "Esta não é a etapa atual do workflow")
+        if etapa.status == STATUS_ETAPA_PAUSADA:
+            # Nenhum fluxo cria/retoma pausa hoje; conservador: não avança nem rejeita uma etapa pausada.
+            raise DemandaWorkflowConflitoError("ETAPA_PAUSADA", "A etapa atual está pausada")
+        return etapas, etapa
+
     def _avancar_etapa(
         self, db: Session, demanda: Demanda, *, etapa_id: str, acao: AcaoEtapa, actor: Usuario
     ) -> Demanda:
-        """Recebe a Demanda JÁ resolvida no escopo-base pela rota (nunca um id solto)."""
+        """Recebe a Demanda JÁ resolvida no escopo (base ou derivado do Workflow) pela rota (nunca um id solto)."""
         tipo_esperado, tipo_evento = _ACAO[acao]
         try:
-            # 1) trava a Demanda e recarrega o estado COMMITADO mais recente (quem esperou o lock vê o resultado do vencedor)
-            self.repository.bloquear_demanda_para_atualizacao(db, demanda)
-            if demanda.status == STATUS_DEMANDA_ARQUIVADA:
-                raise DemandaWorkflowConflitoError(
-                    "DEMANDA_ARQUIVADA", "Demanda arquivada não pode ter o workflow alterado — restaure-a antes"
-                )
-
-            # 2) snapshot atual (já com o lock; `populate_existing` ignora cópias antigas do identity map)
-            etapas = self.repository.listar_etapas_workflow_travadas(db, demanda.id)
-            if not etapas:
-                if demanda.workflow_modelo_id is None:
-                    raise DemandaWorkflowConflitoError("SEM_WORKFLOW", "Esta tarefa não possui workflow")
-                raise DemandaWorkflowConflitoError(
-                    "WORKFLOW_SEM_ETAPAS", "O workflow desta tarefa não possui etapas materializadas"
-                )
-
-            etapa = next((item for item in etapas if item.id == etapa_id), None)
-            if etapa is None:
-                raise DemandaWorkflowEtapaNaoEncontradaError("Etapa não encontrada nesta tarefa")
-
-            # 3) ação × tipo, e autoridade — ANTES de revelar o estado do fluxo
-            if etapa.tipo != tipo_esperado:
-                rotulo = "aprovada" if etapa.tipo == "aprovacao" else "concluída"
-                raise DemandaWorkflowAcaoInvalidaError(f"Esta etapa deve ser {rotulo}, não usar a ação '{acao}'")
-            usuarios_por_etapa = self.repository.listar_etapa_responsavel_ids_em_lote(db, [etapa.id])
-            departamentos_por_etapa = self.repository.listar_etapa_departamento_ids_em_lote(db, [etapa.id])
-            if not pode_avancar_etapa(
-                actor,
-                usuario_responsavel_ids=usuarios_por_etapa.get(etapa.id, []),
-                departamento_responsavel_ids=departamentos_por_etapa.get(etapa.id, []),
-                departamentos_head=departamentos_head_para_workflow(db, actor),
-            ):
-                raise DemandaWorkflowSemAutoridadeError("Você não tem autoridade para avançar esta etapa")
-
-            # 4) a etapa precisa ser a ATUAL (derivada) — retry/duplo clique/concorrência caem aqui
-            atual = next((item for item in etapas if item.status != STATUS_ETAPA_CONCLUIDA), None)
-            if atual is None:
-                raise DemandaWorkflowConflitoError("WORKFLOW_CONCLUIDO", "O workflow desta tarefa já foi concluído")
-            if atual.id != etapa.id:
-                codigo = "ETAPA_JA_CONCLUIDA" if etapa.status == STATUS_ETAPA_CONCLUIDA else "ETAPA_NAO_ATUAL"
-                raise DemandaWorkflowConflitoError(codigo, "Esta não é a etapa atual do workflow")
-            if etapa.status == STATUS_ETAPA_PAUSADA:
-                # Nenhum fluxo cria/retoma pausa hoje; conservador: não avança uma etapa pausada.
-                raise DemandaWorkflowConflitoError("ETAPA_PAUSADA", "A etapa atual está pausada")
+            etapas, etapa = self._preparar_etapa_atual(db, demanda, etapa_id=etapa_id, tipo_esperado=tipo_esperado, acao=acao, actor=actor)
 
             # 5) conclui a atual e ativa a próxima (menor `ordem` seguinte — decidida aqui, nunca pelo cliente)
             now = agora_utc()
@@ -185,7 +258,7 @@ class DemandaWorkflowService:
             raise
 
     def _notificar_proxima_etapa(
-        self, db: Session, demanda: Demanda, proxima: DemandaWorkflowEtapa, actor: Usuario, now
+        self, db: Session, demanda: Demanda, proxima: DemandaWorkflowEtapa, actor: Usuario, now, *, devolvida: bool = False
     ) -> None:
         usuarios = self.repository.listar_etapa_responsavel_ids_em_lote(db, [proxima.id]).get(proxima.id, [])
         departamentos = self.repository.listar_etapa_departamento_ids_em_lote(db, [proxima.id]).get(proxima.id, [])
@@ -208,6 +281,8 @@ class DemandaWorkflowService:
                 "etapaOrdem": proxima.ordem,
                 "etapaTipo": proxima.tipo,
                 "destinatarioUsuarioIds": destinatarios,
+                # Fase 8D: a etapa voltou a ser a atual por DEVOLUÇÃO (rejeição). Só muda o texto da notificação; o motivo fica no histórico.
+                **({"devolvida": True} if devolvida else {}),
             },
             occurred_at=now,
         )

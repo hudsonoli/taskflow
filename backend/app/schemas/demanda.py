@@ -212,6 +212,9 @@ class DemandaWorkflowEtapaRead(BaseModel):
     # (responsável da etapa, admin/gestor do tenant ou Head de departamento da etapa), fora de leitura global (Pauta) e com a
     # Demanda não arquivada. O frontend não reconstrói RBAC; o endpoint reavalia tudo.
     pode_avancar: bool = Field(default=False, alias="podeAvancar")
+    # Fase 8D — calculado pelo SERVIDOR: etapa ATUAL de APROVAÇÃO, com etapa anterior, autoridade real, não pausada, demanda não arquivada e fora de
+    # leitura global (Pauta). O frontend não reconstrói RBAC nem decide a etapa de retorno (o servidor decide: a imediatamente anterior).
+    pode_rejeitar: bool = Field(default=False, alias="podeRejeitar")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -463,3 +466,22 @@ class DemandaResumoDepartamentoRead(BaseModel):
     colaboradores_sobrecarregados: int = Field(alias="colaboradoresSobrecarregados")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class DemandaWorkflowRejeicao(BaseModel):
+    """`POST /demandas/{id}/workflow/etapas/{etapa_id}/rejeitar` — SÓ o motivo. Não existe `targetStepId`/`previousStepId`/status: o servidor devolve
+    para a etapa imediatamente anterior."""
+
+    motivo: str = Field(min_length=3, max_length=1000)
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("motivo")
+    @classmethod
+    def validar_motivo(cls, value: str) -> str:
+        texto = " ".join(value.split())  # trim + colapsa espaços/quebras
+        if len(texto) < 3:
+            raise ValueError("Informe o motivo da rejeição (mínimo de 3 caracteres)")
+        if "<" in texto and ">" in texto:
+            raise ValueError("O motivo não pode conter HTML")
+        return texto

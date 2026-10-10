@@ -1053,6 +1053,10 @@ class DemandaService:
                         departamentos_head=departamentos_head,
                     )
                 )
+                # Fase 8D: rejeitar = a mesma autoridade de aprovar, só em etapa de APROVAÇÃO atual que tenha etapa anterior (a de retorno).
+                pode_rejeitar = bool(
+                    pode_avancar and etapa.tipo == "aprovacao" and any(outra.ordem < etapa.ordem for outra in etapas)
+                )
                 lista.append(
                     DemandaWorkflowEtapaRead(
                         id=etapa.id,
@@ -1068,6 +1072,7 @@ class DemandaService:
                         concluidaEm=etapa.concluida_em,
                         concluidaPorUsuarioId=etapa.concluida_por_usuario_id,
                         podeAvancar=pode_avancar,
+                        podeRejeitar=pode_rejeitar,
                     )
                 )
             resultado[demanda_id] = lista

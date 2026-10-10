@@ -63,9 +63,12 @@ TITULOS: dict[str, str] = {
 }
 
 TITULO_ETAPA_APROVACAO = "Uma etapa de aprovação está aguardando você"
+TITULO_ETAPA_DEVOLVIDA = "Etapa devolvida para ajustes"  # Fase 8D: a aprovação rejeitada reabriu a etapa anterior (o motivo fica no histórico)
 
 
 def _titulo(tipo: str, payload: dict | None) -> str:
+    if tipo == TIPO_ETAPA_ATUALIZADA and (payload or {}).get("devolvida") is True:
+        return TITULO_ETAPA_DEVOLVIDA
     if tipo == TIPO_ETAPA_ATUALIZADA and (payload or {}).get("etapaTipo") == "aprovacao":
         return TITULO_ETAPA_APROVACAO
     return TITULOS[tipo]
