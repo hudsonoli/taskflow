@@ -1510,6 +1510,7 @@ type DemandaReadApi = {
   workflowModeloId: string | null;
   workflowEtapas: DemandaWorkflowEtapaReadApi[];
   etapaAtualId: string | null;
+  acessoApenasWorkflow?: boolean;
   dataInicio: string | null;
   dataFimPrevista: string | null;
   prazoEtapaAtual: string | null;
@@ -1589,6 +1590,7 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       podeAvancar: etapa.podeAvancar === true,
     })),
     etapaAtualId: data.etapaAtualId,
+    acessoApenasWorkflow: data.acessoApenasWorkflow === true,
   };
 }
 

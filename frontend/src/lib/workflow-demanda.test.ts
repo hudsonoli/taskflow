@@ -225,3 +225,27 @@ test("timeline do histórico descreve o avanço num único evento (etapa + próx
   assert.match(rotulos, /workflow concluído/);
   assert.match(rotulos, /tipo\.includes\("aprovad"\)/); // cor "concluído" também para aprovações
 });
+
+// ── Fase 8C.1: acesso derivado da etapa atual ───────────────────────────────────────────────────────────────
+
+test("8C.1: o drawer trata acesso só pelo Workflow — lê e age no Workflow, sem edição geral", () => {
+  const drawer = semComentarios(ler("components/demandas/DemandaDetailsDrawer.tsx"));
+  assert.match(drawer, /demanda\?\.acessoApenasWorkflow === true/);
+  assert.match(drawer, /onEdit=\{demanda && !somenteLeitura && !somenteWorkflow/); // sem "Editar tarefa"
+  assert.match(drawer, /<fieldset disabled=\{somenteLeitura \|\| somenteWorkflow\}/); // campos gerais desabilitados
+  // a aba Workflow NÃO fica dentro do fieldset geral: a ação da etapa continua habilitada nesse modo; na Pauta segue desabilitada
+  const geral = drawer.slice(drawer.indexOf("<fieldset disabled={somenteLeitura || somenteWorkflow}"));
+  assert.doesNotMatch(geral, /WorkflowDemandaSection/);
+  assert.match(drawer, /<fieldset disabled=\{somenteLeitura\}[^>]*>\s*<WorkflowDemandaSection/);
+});
+
+test("8C.1: o contrato carrega acessoApenasWorkflow (padrão falso)", () => {
+  assert.match(ler("lib/api-backend.ts"), /acessoApenasWorkflow: data\.acessoApenasWorkflow === true/);
+  assert.match(ler("types/demanda.ts"), /acessoApenasWorkflow\?: boolean/);
+});
+
+test("8C.1: demanda aberta por notificação (fora da lista) recebe o estado novo depois de concluir/aprovar", () => {
+  const view = semComentarios(ler("components/demandas/DemandasView.tsx"));
+  const bloco = view.slice(view.indexOf("function handleDemandChange"), view.indexOf("async function aplicarStatus"));
+  assert.match(bloco, /setFallbackDemand\(\(current\) => \(current\?\.id === nextDemand\.id \? nextDemand : current\)\)/);
+});

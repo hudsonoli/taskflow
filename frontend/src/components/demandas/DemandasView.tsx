@@ -260,6 +260,9 @@ export function DemandasView() {
   function handleDemandChange(nextDemand: Demanda) {
     setDemandas((current) => current.map((demanda) => (demanda.id === nextDemand.id ? nextDemand : demanda)));
     setDemandasPagina((current) => current.map((demanda) => (demanda.id === nextDemand.id ? nextDemand : demanda)));
+    // Demanda aberta de fora da lista (notificação → busca individual): o drawer a lê de `fallbackDemand`, então ela também precisa receber o
+    // estado novo — senão, depois de concluir/aprovar uma etapa (Fase 8C.1), a tela ficaria mostrando a etapa antiga.
+    setFallbackDemand((current) => (current?.id === nextDemand.id ? nextDemand : current));
     // O drawer pode ter mudado o status: os cards precisam refletir o servidor.
     setEstatisticasTick((tick) => tick + 1);
   }

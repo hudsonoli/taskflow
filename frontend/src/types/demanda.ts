@@ -203,6 +203,11 @@ export type Demanda = {
   // --- workflow materializado (2E.2) ---
   workflowEtapas: DemandaWorkflowEtapa[];
   etapaAtualId: string | null;
+  /**
+   * Fase 8C.1 — o acesso a esta tarefa veio SÓ da etapa atual do Workflow (responsável individual ou Head do departamento dela), não do escopo-base:
+   * lê tudo e age no Workflow, sem edição geral. Preenchido só no detalhe e nas ações do Workflow.
+   */
+  acessoApenasWorkflow?: boolean;
 };
 
 /** Forma enxuta para seletores (`TrafegoIniciarSessao`) — também escopada no servidor. */

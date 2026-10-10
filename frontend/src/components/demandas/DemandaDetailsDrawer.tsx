@@ -62,6 +62,8 @@ export function DemandaDetailsDrawer({
   modoLeitura?: EscopoLeituraDemanda;
 }) {
   const somenteLeitura = modoLeitura !== undefined;
+  // Fase 8C.1: acesso só pela etapa atual do Workflow — lê tudo e age no Workflow, mas sem edição geral (o servidor também recusa).
+  const somenteWorkflow = demanda?.acessoApenasWorkflow === true;
   const [activeTab, setActiveTab] = useState(initialTab ?? "dados");
   const { usuarios } = useUsuariosComIds(demanda?.usuarioResponsavelIds ?? []);
   const { projetos } = useDiretorioProjetos();
@@ -71,7 +73,7 @@ export function DemandaDetailsDrawer({
     <DetailsModal
       open={demanda !== undefined}
       onClose={onClose}
-      onEdit={demanda && !somenteLeitura ? () => onEdit(demanda.id) : undefined}
+      onEdit={demanda && !somenteLeitura && !somenteWorkflow ? () => onEdit(demanda.id) : undefined}
       editLabel="Editar tarefa"
       title={demanda?.nome ?? "Tarefa"}
       description={demanda ? `${rotuloDemanda(demanda)} · ${resolverProjetoNome(demanda.projetoId, projetos)}` : undefined}
@@ -156,10 +158,22 @@ export function DemandaDetailsDrawer({
 
           {/* Na leitura, `fieldset disabled` desabilita nativamente todo campo/botão do conteúdo (defesa em profundidade além de os
               cartões esconderem os controles de escrita). Fora dela é só um agrupador sem efeito. */}
-          <fieldset disabled={somenteLeitura} className="m-0 min-w-0 border-0 p-0">
+          {somenteWorkflow && (
+            <p className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+              Você acessa esta tarefa pela etapa atual do Workflow: pode consultar e executar a etapa, mas não editar a tarefa.
+            </p>
+          )}
+
+          {/* A aba Workflow fica FORA do fieldset geral: com acesso só pelo Workflow, os campos gerais ficam desabilitados mas a ação da etapa não.
+              Na Pauta (somente leitura) ela continua desabilitada e sem ação. */}
+          {activeTab === "workflow" && (
+            <fieldset disabled={somenteLeitura} className="m-0 min-w-0 border-0 p-0">
+              <WorkflowDemandaSection demanda={demanda} onChange={onChange} />
+            </fieldset>
+          )}
+          <fieldset disabled={somenteLeitura || somenteWorkflow} className="m-0 min-w-0 border-0 p-0">
             {activeTab === "dados" && <DadosDemandaSection demanda={demanda} onChange={onChange} />}
             {activeTab === "briefing" && <BriefingDemandaSection key={demanda.id} demanda={demanda} onChange={onChange} />}
-            {activeTab === "workflow" && <WorkflowDemandaSection demanda={demanda} onChange={onChange} />}
             {activeTab === "responsaveis" && <ResponsaveisDemandaSection demanda={demanda} onChange={onChange} />}
             {activeTab === "atividade" && <AtividadeDemandaSection demanda={demanda} />}
             {activeTab === "historico" && <HistoricoDemandaSection demanda={demanda} />}

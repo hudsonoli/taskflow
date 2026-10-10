@@ -163,8 +163,8 @@ test("o cliente de API só envia ?escopo=pauta nas LEITURAS do detalhe; nenhuma 
 test("drawer aberto pela Pauta: modo leitura (fieldset desabilitado, sem Editar, aviso) e subrecursos consultados com o escopo", () => {
   const drawer = semComentarios(ler("components/demandas/DemandaDetailsDrawer.tsx"));
   assert.match(drawer, /modoLeitura\?: EscopoLeituraDemanda/);
-  assert.match(drawer, /onEdit=\{demanda && !somenteLeitura \? \(\) => onEdit\(demanda\.id\) : undefined\}/); // sem "Editar tarefa"
-  assert.match(drawer, /<fieldset disabled=\{somenteLeitura\}/);
+  assert.match(drawer, /onEdit=\{demanda && !somenteLeitura && !somenteWorkflow \? \(\) => onEdit\(demanda\.id\) : undefined\}/); // sem "Editar tarefa"
+  assert.match(drawer, /<fieldset disabled=\{somenteLeitura( \|\| somenteWorkflow)?\}/); // Pauta: continua desabilitado (8C.1 só acrescenta o acesso por Workflow)
   assert.match(drawer, /<LeituraDemandaProvider value=\{modoLeitura\}>/);
   assert.match(drawer, /Visualização somente leitura/);
   assert.match(drawer, /somenteLeitura \? \([\s\S]*?\) : \(\s*<DemandaConclusaoBanner/); // sem ação de conclusão por e-mail
