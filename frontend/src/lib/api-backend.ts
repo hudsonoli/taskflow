@@ -5,6 +5,7 @@ export { PERFIL_PARA_PERFIL_BASE };
 export type { UsuarioPerfilBaseApi };
 import { inputLocalParaIso } from "@/lib/prazo-operacional";
 import { CODIGOS_CONFLITO_WORKFLOW, WorkflowEtapaConflitoError, type AcaoEtapa } from "@/lib/workflow-demanda";
+import { nomeDoDownload, type CorpoSelecaoLote } from "@/lib/selecao-arquivos";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type {
   FatiaPizza,
@@ -2138,6 +2139,58 @@ export async function listArquivosCentral(filtros: ArquivosCentralFiltros = {}):
   search.set("limit", String(filtros.limit ?? 50));
   search.set("offset", String(filtros.offset ?? 0));
   return request<ArquivoCentral[]>(`/arquivos?${search.toString()}`);
+}
+
+// ---------------------------------------------------------------------------------------
+// Operações em lote sobre Arquivos (Fase 8B). Seleção por IDs explícitos ou "todos os resultados do filtro" (o servidor reexecuta a consulta
+// autorizada — ver `lib/selecao-arquivos.ts`). POST com corpo: nunca centenas de IDs na URL.
+// ---------------------------------------------------------------------------------------
+
+export type ArquivosLoteResumo = {
+  total: number;
+  links: number;
+  arquivosFisicos: number;
+  tamanhoTotalBytes: number;
+  limiteZipArquivos: number;
+  limiteZipBytes: number;
+  limiteExclusao: number;
+};
+
+export type ArquivosLoteExclusao = { excluidos: number; arquivosFisicosNaoRemovidos: number };
+
+export async function resumoLoteArquivos(corpo: CorpoSelecaoLote): Promise<ArquivosLoteResumo> {
+  return request<ArquivosLoteResumo>("/arquivos/resumo-lote", { method: "POST", body: JSON.stringify(corpo) });
+}
+
+export async function excluirArquivosEmLote(corpo: CorpoSelecaoLote): Promise<ArquivosLoteExclusao> {
+  return request<ArquivosLoteExclusao>("/arquivos/excluir-lote", { method: "POST", body: JSON.stringify(corpo) });
+}
+
+/**
+ * ZIP dos selecionados. O corpo é lido como Blob no navegador (o servidor e o proxy fazem streaming; o teto de 500 MB do servidor mantém o
+ * Blob em tamanho razoável). Links não entram no ZIP: `linksIgnorados` informa quantos ficaram de fora.
+ */
+export async function baixarArquivosEmLote(
+  corpo: CorpoSelecaoLote,
+): Promise<{ blob: Blob; nome: string; arquivos: number; linksIgnorados: number }> {
+  const response = await fetch("/api/backend/arquivos/download-lote", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    const detail = data?.detail;
+    const message = typeof detail === "string" ? detail : (detail?.message ?? data?.message);
+    throw new Error(message ?? `Erro ${response.status}`);
+  }
+  return {
+    blob: await response.blob(),
+    nome: nomeDoDownload(response.headers.get("content-disposition")),
+    arquivos: Number(response.headers.get("x-lote-arquivos") ?? 0),
+    linksIgnorados: Number(response.headers.get("x-lote-links-ignorados") ?? 0),
+  };
 }
 
 // ---------------------------------------------------------------------------------------

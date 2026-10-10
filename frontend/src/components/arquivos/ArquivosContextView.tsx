@@ -6,18 +6,38 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   atualizarStatusLayoutArquivo,
+  baixarArquivosEmLote,
   excluirArquivoDemanda,
+  excluirArquivosEmLote,
   listArquivosCentral,
   listDiretorioClientes,
   listDiretorioDemandas,
   listDiretorioProjetos,
+  resumoLoteArquivos,
 } from "@/lib/api-backend";
 import { filtrosArquivosParaApi } from "@/lib/filtros-arquivos";
+import {
+  LIMITE_IDS_EXPLICITOS,
+  alternarArquivo,
+  corpoDaSelecao,
+  desmarcarPagina,
+  deveOferecerTodosOsResultados,
+  estadoDoCabecalho,
+  estaSelecionado,
+  quantidadeSelecionada,
+  removerDaSelecao,
+  selecaoVazia,
+  selecionarPagina,
+  selecionarTodosOsResultados,
+  type FiltrosDoLote,
+  type SelecaoArquivos,
+} from "@/lib/selecao-arquivos";
 import { useFiltrosNaUrl } from "@/lib/useFiltrosNaUrl";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type { ClienteDiretorioItem, ProjetoDiretorioItem } from "@/lib/api-backend";
 import type { DemandaArquivoStatusLayout, DemandaDiretorio } from "@/types/demanda";
 import { ArquivoCard } from "./ArquivoCard";
+import { ArquivosSelecaoBar } from "./ArquivosSelecaoBar";
 import { ArquivoPreviewModal } from "./ArquivoPreviewModal";
 import { ArquivosFiltros } from "./ArquivosFiltros";
 import { ArquivoUploadModal } from "./ArquivoUploadModal";
@@ -48,11 +68,14 @@ export function ArquivosContextView({
   projetoId,
   compacto = false,
   persistirNaUrl = false,
+  podeExcluir = true,
 }: {
   clienteId?: string;
   projetoId?: string;
   compacto?: boolean;
   persistirNaUrl?: boolean;
+  /** Mostra a ação "Excluir" da seleção em lote. O servidor aplica a mesma regra da exclusão individual de qualquer forma. */
+  podeExcluir?: boolean;
 }) {
   const [clientes, setClientes] = useState<ClienteDiretorioItem[]>([]);
   const [projetos, setProjetos] = useState<ProjetoDiretorioItem[]>([]);
@@ -67,6 +90,15 @@ export function ArquivosContextView({
   const [uploadAberto, setUploadAberto] = useState(false);
   const [indicePreview, setIndicePreview] = useState<number | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+
+  // Seleção em lote (Fase 8B). `selecao` guarda IDs (nunca índices) ou "todos os resultados do filtro" + exceções; vale para UM universo (a chave dos filtros).
+  const [selecao, setSelecao] = useState<SelecaoArquivos>(selecaoVazia);
+  const [totalEncontrado, setTotalEncontrado] = useState<{ chave: string; total: number } | null>(null);
+  const [baixando, setBaixando] = useState(false);
+  const [excluindoLote, setExcluindoLote] = useState(false);
+  const [erroLote, setErroLote] = useState<string | null>(null);
+  const [avisoLote, setAvisoLote] = useState<string | null>(null);
+  const checkboxPaginaRef = useRef<HTMLInputElement>(null);
 
   const projetosDoRecorte = clienteId ? projetos.filter((projeto) => projeto.clienteId === clienteId) : projetos;
   const demandasDoRecorte = demandasDiretorio.filter(
@@ -124,6 +156,10 @@ export function ArquivosContextView({
     setTemMais(false);
     setErro(null);
     setCarregandoInicial(true);
+    // Outro universo (filtro, busca, contexto): a seleção antiga NÃO atravessa. Paginar dentro do mesmo filtro não passa por aqui.
+    setSelecao(selecaoVazia());
+    setErroLote(null);
+    setAvisoLote(null);
   }
 
   const filtrosAtualRef = useRef(filtros);
@@ -200,7 +236,115 @@ export function ArquivosContextView({
   async function excluir(arquivo: ArquivoCentral) {
     await excluirArquivoDemanda(arquivo.demandaId, arquivo.id);
     setItens((atual) => atual.filter((existente) => existente.id !== arquivo.id));
+    setSelecao((atual) => removerDaSelecao(atual, [arquivo.id]));
     setIndicePreview(null);
+  }
+
+  // ---- Seleção em lote ----------------------------------------------------------------------------------------------------
+  // Universo do lote = os MESMOS filtros da listagem (busca + filtros avançados) + o recorte fixo (Cliente/Projeto da aba) em `contexto`: o
+  // servidor aplica o contexto por AND, então nenhum filtro o amplia. Os IDs/filtros vão no corpo do POST, nunca na URL.
+  const universoDoLote: { filtros: FiltrosDoLote; contexto: { clienteId?: string; projetoId?: string } } = {
+    filtros: { ...parametrosAvancados, search: busca || undefined },
+    contexto: { clienteId, projetoId },
+  };
+  const idsDaPagina = itens.map((item) => item.id);
+  const estadoCabecalho = estadoDoCabecalho(selecao, idsDaPagina);
+  const quantidade = quantidadeSelecionada(selecao);
+  const total = totalEncontrado?.chave === chaveAtual ? totalEncontrado.total : null;
+  const oferecerTodos = deveOferecerTodosOsResultados(selecao, idsDaPagina, total);
+  const paginaInteiraMarcada = selecao.modo === "ids" && idsDaPagina.length > 0 && estadoCabecalho === "todos";
+
+  const universoDoLoteRef = useRef(universoDoLote);
+  const chaveAtualRef = useRef(chaveAtual);
+  useEffect(() => {
+    universoDoLoteRef.current = universoDoLote;
+    chaveAtualRef.current = chaveAtual;
+  });
+
+  useEffect(() => {
+    if (checkboxPaginaRef.current) checkboxPaginaRef.current.indeterminate = estadoCabecalho === "parcial";
+  }, [estadoCabecalho]);
+
+  // Com a página inteira marcada e mais resultados além dos carregados, busca o TOTAL (agregado no servidor) para oferecer "todos os N".
+  const precisaDoTotal = paginaInteiraMarcada && temMais && total === null;
+  useEffect(() => {
+    if (!precisaDoTotal) return;
+    let cancelado = false;
+    const chave = chaveFiltros(filtrosAtualRef.current);
+    resumoLoteArquivos(corpoDaSelecao(selecionarTodosOsResultados(0), universoDoLoteRef.current))
+      .then((resumo) => {
+        // resposta velha (o filtro mudou no meio do caminho) é descartada
+        if (!cancelado && chaveFiltros(filtrosAtualRef.current) === chave) setTotalEncontrado({ chave: chaveAtualRef.current, total: resumo.total });
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [precisaDoTotal]);
+
+  function alternarPagina() {
+    setErroLote(null);
+    setSelecao((atual) => (estadoCabecalho === "todos" ? desmarcarPagina(atual, idsDaPagina) : selecionarPagina(atual, idsDaPagina)));
+  }
+
+  async function baixarSelecao() {
+    if (baixando) return;
+    const chaveDoClique = chaveFiltros(filtrosAtualRef.current);
+    setBaixando(true);
+    setErroLote(null);
+    setAvisoLote(null);
+    try {
+      const resultado = await baixarArquivosEmLote(corpoDaSelecao(selecao, universoDoLote));
+      const url = URL.createObjectURL(resultado.blob);
+      const ancora = document.createElement("a");
+      ancora.href = url;
+      ancora.download = resultado.nome;
+      document.body.appendChild(ancora);
+      ancora.click();
+      ancora.remove();
+      URL.revokeObjectURL(url);
+      // A seleção é mantida (dá para excluir depois). Só mexe na tela se o universo ainda é o mesmo.
+      if (chaveFiltros(filtrosAtualRef.current) === chaveDoClique && resultado.linksIgnorados > 0) {
+        setAvisoLote(`${resultado.linksIgnorados} link(s) da seleção não entram no ZIP (não têm arquivo).`);
+      }
+    } catch (error) {
+      if (chaveFiltros(filtrosAtualRef.current) === chaveDoClique) {
+        setErroLote(error instanceof Error ? error.message : "Não foi possível gerar o ZIP.");
+      }
+    } finally {
+      setBaixando(false);
+    }
+  }
+
+  async function excluirSelecao() {
+    if (excluindoLote) return;
+    const chaveDoClique = chaveFiltros(filtrosAtualRef.current);
+    const idsExplicitos = selecao.modo === "ids" ? [...selecao.ids] : null;
+    setExcluindoLote(true);
+    setErroLote(null);
+    setAvisoLote(null);
+    try {
+      const resultado = await excluirArquivosEmLote(corpoDaSelecao(selecao, universoDoLote));
+      if (chaveFiltros(filtrosAtualRef.current) !== chaveDoClique || !idsExplicitos) {
+        // "todos os resultados" (ou o universo mudou): o servidor volta a ser a fonte da lista, nos MESMOS filtros e contexto.
+        setSelecao(selecaoVazia());
+        recarregar();
+        return;
+      }
+      setItens((atual) => atual.filter((item) => !idsExplicitos.includes(item.id)));
+      setSelecao((atual) => removerDaSelecao(atual, idsExplicitos));
+      setIndicePreview(null);
+      if (resultado.arquivosFisicosNaoRemovidos > 0) {
+        setAvisoLote(`${resultado.excluidos} arquivo(s) excluído(s); ${resultado.arquivosFisicosNaoRemovidos} arquivo(s) físico(s) não puderam ser removidos do armazenamento.`);
+      }
+    } catch (error) {
+      // Erro: a seleção é PRESERVADA (nada foi alterado no servidor — a exclusão é tudo-ou-nada).
+      if (chaveFiltros(filtrosAtualRef.current) === chaveDoClique) {
+        setErroLote(error instanceof Error ? error.message : "Não foi possível excluir os arquivos.");
+      }
+    } finally {
+      setExcluindoLote(false);
+    }
   }
 
   return (
@@ -231,6 +375,47 @@ export function ArquivosContextView({
         </div>
       )}
 
+      {!carregandoInicial && itens.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              ref={checkboxPaginaRef}
+              type="checkbox"
+              className="h-4 w-4 accent-indigo-600"
+              checked={estadoCabecalho === "todos"}
+              onChange={alternarPagina}
+              aria-label="Selecionar todos os arquivos carregados"
+            />
+            Selecionar página
+          </label>
+          {oferecerTodos && total !== null && (
+            <span>
+              Os {idsDaPagina.length} arquivos carregados estão selecionados.{" "}
+              <button
+                type="button"
+                className="font-semibold text-indigo-600 underline underline-offset-2 hover:text-indigo-700 dark:text-indigo-400"
+                onClick={() => setSelecao(selecionarTodosOsResultados(total))}
+              >
+                Selecionar todos os {total} arquivos encontrados
+              </button>
+            </span>
+          )}
+          {selecao.modo === "todos" && (
+            <span>
+              Todos os {selecao.total} arquivos encontrados estão selecionados
+              {selecao.excluidos.size > 0 ? ` (${selecao.excluidos.size} desmarcado(s))` : ""}.{" "}
+              <button
+                type="button"
+                className="font-semibold text-indigo-600 underline underline-offset-2 hover:text-indigo-700 dark:text-indigo-400"
+                onClick={() => setSelecao(selecaoVazia())}
+              >
+                Limpar seleção
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
       {carregandoInicial ? (
         <p className="text-sm text-fg-subtle">Carregando…</p>
       ) : itens.length === 0 ? (
@@ -245,7 +430,12 @@ export function ArquivosContextView({
             }
           >
             {itens.map((arquivo, indice) => (
-              <ArquivoCard key={arquivo.id} arquivo={arquivo} onAbrir={() => setIndicePreview(indice)} />
+              <ArquivoCard
+                key={arquivo.id}
+                arquivo={arquivo}
+                onAbrir={() => setIndicePreview(indice)}
+                selecao={{ selecionado: estaSelecionado(selecao, arquivo.id), onAlternar: () => setSelecao((atual) => alternarArquivo(atual, arquivo.id)) }}
+              />
             ))}
           </div>
           {temMais && (
@@ -258,6 +448,23 @@ export function ArquivosContextView({
         </>
       )}
 
+      <ArquivosSelecaoBar
+        selecao={selecao}
+        podeExcluir={podeExcluir}
+        baixando={baixando}
+        excluindo={excluindoLote}
+        aviso={avisoLote}
+        erro={erroLote}
+        limiteAtingido={selecao.modo === "ids" && quantidade >= LIMITE_IDS_EXPLICITOS}
+        onBaixar={() => void baixarSelecao()}
+        onExcluir={excluirSelecao}
+        onLimpar={() => {
+          setSelecao(selecaoVazia());
+          setErroLote(null);
+          setAvisoLote(null);
+        }}
+      />
+
       <ArquivoPreviewModal
         itens={itens}
         indiceAtual={indicePreview}
@@ -265,7 +472,7 @@ export function ArquivosContextView({
         onNavegar={setIndicePreview}
         onExcluir={excluir}
         onAlterarStatus={alterarStatus}
-        podeExcluir
+        podeExcluir={podeExcluir}
       />
 
       <ArquivoUploadModal

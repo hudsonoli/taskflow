@@ -17,14 +17,37 @@ function formatarData(iso: string): string {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(new Date(iso));
 }
 
-export function ArquivoCard({ arquivo, onAbrir }: { arquivo: ArquivoCentral; onAbrir: () => void }) {
+/** Seleção em lote (Fase 8B): o checkbox é IRMÃO do botão do cartão (um controle interativo dentro de outro seria inválido e quebraria o teclado). */
+export type SelecaoDoCartao = { selecionado: boolean; onAlternar: () => void };
+
+export function ArquivoCard({
+  arquivo,
+  onAbrir,
+  selecao,
+}: {
+  arquivo: ArquivoCentral;
+  onAbrir: () => void;
+  selecao?: SelecaoDoCartao;
+}) {
   const tamanho = formatarTamanho(arquivo.tamanhoBytes);
 
   return (
+    <div className="relative">
+    {selecao && (
+      <input
+        type="checkbox"
+        checked={selecao.selecionado}
+        onChange={selecao.onAlternar}
+        aria-label={`Selecionar ${arquivo.nome}`}
+        className="absolute left-3.5 top-3.5 z-10 h-5 w-5 cursor-pointer accent-indigo-600"
+      />
+    )}
     <button
       type="button"
       onClick={onAbrir}
-      className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-500/50"
+      className={`flex h-full w-full flex-col gap-2 rounded-2xl border bg-surface p-3 text-left shadow-sm transition hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-500/50 ${
+        selecao?.selecionado ? "border-indigo-400 ring-2 ring-indigo-300/60 dark:border-indigo-500/60" : "border-line"
+      }`}
     >
       <div className="flex h-24 items-center justify-center overflow-hidden rounded-xl bg-zinc-50 dark:bg-zinc-950/40">
         {arquivo.previewDisponivel ? (
@@ -60,5 +83,6 @@ export function ArquivoCard({ arquivo, onAbrir }: { arquivo: ArquivoCentral; onA
         <span>{tamanho ? `${tamanho} · ` : ""}{formatarData(arquivo.createdAt)}</span>
       </div>
     </button>
+    </div>
   );
 }

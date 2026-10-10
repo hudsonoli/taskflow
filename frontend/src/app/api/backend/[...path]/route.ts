@@ -43,6 +43,21 @@ async function proxy(request: NextRequest, path: string[]) {
   }
 
   const contentType = backendResponse.headers.get("content-type") ?? "";
+
+  // ZIP de arquivos em lote (Fase 8B): repassa como STREAM, sem `arrayBuffer()` — o servidor Next não segura o ZIP inteiro em memória.
+  // Só os cabeçalhos necessários; `x-lote-*` leva as contagens (arquivos/links ignorados) para a interface.
+  if (contentType.includes("application/zip") && backendResponse.body) {
+    const zipHeaders = new Headers({ "content-type": contentType });
+    for (const nome of ["content-disposition", "content-length", "x-content-type-options", "cache-control"]) {
+      const valor = backendResponse.headers.get(nome);
+      if (valor) zipHeaders.set(nome, valor);
+    }
+    backendResponse.headers.forEach((valor, nome) => {
+      if (nome.startsWith("x-lote-")) zipHeaders.set(nome, valor);
+    });
+    return new NextResponse(backendResponse.body, { status: backendResponse.status, headers: zipHeaders });
+  }
+
   if (!contentType.includes("application/json")) {
     // `.text()` decodifica como UTF-8 — corrompe binário (PDF, imagem) exatamente como
     // `.text()` do lado do upload corromperia multipart. Download de arquivo de Demanda
