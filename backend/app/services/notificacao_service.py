@@ -19,7 +19,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import DateTime, and_, case, exists, func, literal, or_, select
+from sqlalchemy import DateTime, and_, case, cast, exists, func, literal, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, aliased
 
@@ -42,6 +43,9 @@ AUTOR_SISTEMA = "Sistema"  # autor exibido quando o ator é conta de sistema (nu
 JANELA_DIAS = 30  # histórico exibido: últimos 30 dias (a central não é um arquivo morto)
 
 TIPO_ATRIBUICAO = "demanda.responsavel_adicionado"
+# Fase 8C: avisa quem precisa agir na etapa que acabou de virar a atual. Os destinatários vêm EXPLÍCITOS no payload (`destinatarioUsuarioIds`,
+# calculados na progressão — `core/workflow_destinatarios.py`): quem é responsável pela ETAPA nem sempre é responsável pela DEMANDA.
+TIPO_ETAPA_ATUALIZADA = "demanda.workflow_etapa_atualizada"
 
 # tipo do evento → título. Só entra na central o que está aqui; evento novo não "vaza" sozinho.
 TITULOS: dict[str, str] = {
@@ -55,7 +59,16 @@ TITULOS: dict[str, str] = {
     "demanda.arquivo_enviado": "Novo arquivo na tarefa",
     "demanda.arquivada": "Tarefa arquivada",
     "demanda.restaurada": "Tarefa restaurada",
+    TIPO_ETAPA_ATUALIZADA: "Nova etapa de Workflow disponível",  # título por tipo de etapa: ver `_titulo`
 }
+
+TITULO_ETAPA_APROVACAO = "Uma etapa de aprovação está aguardando você"
+
+
+def _titulo(tipo: str, payload: dict | None) -> str:
+    if tipo == TIPO_ETAPA_ATUALIZADA and (payload or {}).get("etapaTipo") == "aprovacao":
+        return TITULO_ETAPA_APROVACAO
+    return TITULOS[tipo]
 
 
 # mesmos rótulos de `statusDemandaLabels` (frontend/src/lib/demandas.ts)
@@ -87,6 +100,9 @@ def _detalhe(tipo: str, payload: dict | None) -> str | None:
         return dados.get("motivoBloqueio") or None
     if tipo == "demanda.arquivo_enviado":
         return dados.get("nomeOriginal") or None
+    if tipo == TIPO_ETAPA_ATUALIZADA:
+        nome = dados.get("etapaNome")
+        return f"Etapa {dados.get('etapaOrdem')}: {nome}" if nome and dados.get("etapaOrdem") else (nome or None)
     return None
 
 
@@ -111,17 +127,27 @@ class NotificacaoService:
     @staticmethod
     def _predicado(usuario: Usuario) -> list:
         desde = agora_utc() - timedelta(days=JANELA_DIAS)
-        return [
-            Evento.empresa_id == usuario.empresa_id,
-            Evento.entidade_tipo == "demanda",
-            Evento.tipo.in_(list(TITULOS)),
-            Evento.occurred_at >= desde,
+        # (a) eventos das demandas em que eu sou RESPONSÁVEL (regra de sempre)
+        das_minhas_demandas = and_(
+            Evento.tipo.in_([t for t in TITULOS if t != TIPO_ETAPA_ATUALIZADA]),
             # só das demandas em que eu sou responsável (hoje)
             Evento.entidade_id.in_(select(DemandaResponsavel.demanda_id).where(DemandaResponsavel.usuario_id == usuario.id)),
             # nunca a minha própria ação
             or_(Evento.usuario_id.is_(None), Evento.usuario_id != usuario.id),
             # atribuição só é notificação para QUEM foi atribuído
             or_(Evento.tipo != TIPO_ATRIBUICAO, Evento.payload["usuarioId"].as_string() == usuario.id),
+        )
+        # (b) Fase 8C: a etapa que acabou de virar a atual é minha (destinatário EXPLÍCITO). Vale mesmo sem eu ser responsável pela demanda e
+        # mesmo que eu tenha sido quem concluiu a etapa anterior (sem exceção especial); a notificação não concede visibilidade da demanda.
+        etapa_para_mim = and_(
+            Evento.tipo == TIPO_ETAPA_ATUALIZADA,
+            cast(Evento.payload, JSONB).contains({"destinatarioUsuarioIds": [usuario.id]}),
+        )
+        return [
+            Evento.empresa_id == usuario.empresa_id,
+            Evento.entidade_tipo == "demanda",
+            Evento.occurred_at >= desde,
+            or_(das_minhas_demandas, etapa_para_mim),
         ]
 
     @staticmethod
@@ -174,7 +200,7 @@ class NotificacaoService:
         # O nome real só sai do banco quando o ator é uma pessoa: para conta de sistema o CASE já devolve "Sistema".
         autor = case((self._ator_e_conta_de_sistema(), literal(AUTOR_SISTEMA)), else_=Usuario.nome)
         linhas = db.execute(
-            select(Evento, Demanda.codigo_referencia, Demanda.nome, autor, NotificacaoLeitura.lida_em, eh_sistema)
+            select(Evento, Demanda.codigo_referencia, Demanda.nome, autor, NotificacaoLeitura.lida_em, eh_sistema, Demanda.identificador)
             .select_from(Evento)
             .join(Demanda, and_(Demanda.id == Evento.entidade_id, Demanda.empresa_id == usuario.empresa_id))
             .outerjoin(Usuario, Usuario.id == Evento.usuario_id)
@@ -192,16 +218,17 @@ class NotificacaoService:
                 id=evento.id,
                 categoria="sistema" if sistema else "minhas",
                 tipo=evento.tipo,
-                titulo=TITULOS[evento.tipo],
+                titulo=_titulo(evento.tipo, evento.payload),
                 detalhe=_detalhe(evento.tipo, evento.payload),
                 ocorridaEm=evento.occurred_at,
                 lida=lida_em is not None,
                 demandaId=evento.entidade_id,
                 demandaReferencia=referencia,
+                demandaIdentificador=identificador,
                 demandaNome=nome_demanda,
                 autorNome=autor,
             )
-            for evento, referencia, nome_demanda, autor, lida_em, sistema in linhas
+            for evento, referencia, nome_demanda, autor, lida_em, sistema, identificador in linhas
         ]
         return NotificacoesPaginaRead(itens=itens, total=total, limit=limit, offset=offset)
 

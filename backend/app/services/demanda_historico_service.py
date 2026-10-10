@@ -5,6 +5,8 @@ from app.repositories.evento_repository import EventoRepository
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
 
 TIPO_ENTIDADE = "demanda"
+# Eventos que existem só para alimentar outra superfície (a central de notificações) e carregam dados que a timeline não deve mostrar.
+TIPOS_FORA_DA_TIMELINE = ("demanda.workflow_etapa_atualizada",)
 
 
 class DemandaHistoricoService:
@@ -38,6 +40,7 @@ class DemandaHistoricoService:
             entidade_id=demanda_id,
             limit=limit,
             ocultar_atores_de_sistema=ocultar_atores_de_sistema,
+            excluir_tipos=TIPOS_FORA_DA_TIMELINE,
         )
 
     @staticmethod

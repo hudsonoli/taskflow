@@ -22,6 +22,8 @@ class NotificacaoRead(BaseModel):
     lida: bool
     demanda_id: UUID | None = Field(default=None, alias="demandaId")
     demanda_referencia: str | None = Field(default=None, alias="demandaReferencia")
+    # Identificador EMITIDO da demanda (`#845`, `BOX-2026-00846`…), o que a operação reconhece — o mesmo de `rotuloDemanda` no resto do app.
+    demanda_identificador: str | None = Field(default=None, alias="demandaIdentificador")
     demanda_nome: str | None = Field(default=None, alias="demandaNome")
     autor_nome: str | None = Field(default=None, alias="autorNome")
 

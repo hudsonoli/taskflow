@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import exists, func, or_, select
@@ -60,6 +61,7 @@ class EventoRepository:
         limit: int = 50,
         offset: int = 0,
         ocultar_atores_de_sistema: bool = False,
+        excluir_tipos: Sequence[str] | None = None,
     ) -> list[Evento]:
         """`ocultar_atores_de_sistema`: superfícies de leitura do TENANT (Acessos, histórico de Demanda) passam
         True para quem não é a própria conta de sistema — eventos cujo ator é `is_system_account` não aparecem.
@@ -77,6 +79,8 @@ class EventoRepository:
             statement = statement.where(Evento.entidade_id == entidade_id)
         if tipo:
             statement = statement.where(Evento.tipo == tipo)
+        if excluir_tipos:
+            statement = statement.where(Evento.tipo.not_in(list(excluir_tipos)))
         if correlation_id:
             statement = statement.where(Evento.correlation_id == correlation_id)
         if data_inicio:

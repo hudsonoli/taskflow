@@ -20,9 +20,11 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.core.relogio import agora_utc
+from app.core.workflow_destinatarios import destinatarios_da_etapa
 from app.core.workflow_autoridade import departamentos_head_para_workflow, pode_avancar_etapa
 from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
+from app.models.demanda_workflow_etapa import DemandaWorkflowEtapa
 from app.models.usuario import Usuario
 from app.repositories.demanda_repository import DemandaRepository
 from app.services.demanda_service import DemandaService
@@ -171,6 +173,10 @@ class DemandaWorkflowService:
                 },
                 occurred_at=now,
             )
+            # 7) Fase 8C — notificação da PRÓXIMA etapa, na mesma transação (só o vencedor chega aqui: retry/concorrência → 409 antes).
+            # Um único evento com a lista de destinatários; sem destinatário (etapa sem responsável) não há evento e o avanço segue.
+            if proxima is not None:
+                self._notificar_proxima_etapa(db, demanda, proxima, actor, now)
             db.commit()
             db.refresh(demanda)
             return demanda
@@ -178,3 +184,30 @@ class DemandaWorkflowService:
             db.rollback()
             raise
 
+    def _notificar_proxima_etapa(
+        self, db: Session, demanda: Demanda, proxima: DemandaWorkflowEtapa, actor: Usuario, now
+    ) -> None:
+        usuarios = self.repository.listar_etapa_responsavel_ids_em_lote(db, [proxima.id]).get(proxima.id, [])
+        departamentos = self.repository.listar_etapa_departamento_ids_em_lote(db, [proxima.id]).get(proxima.id, [])
+        destinatarios = destinatarios_da_etapa(
+            db,
+            empresa_id=demanda.empresa_id,  # da Demanda (tenant do token), nunca de dado do cliente
+            usuario_responsavel_ids=usuarios,
+            departamento_responsavel_ids=departamentos,
+        )
+        if not destinatarios:
+            return
+        self.demanda_service.publicar_evento_demanda(
+            db,
+            demanda,
+            DomainEventType.DEMANDA_WORKFLOW_ETAPA_ATUALIZADA,
+            actor.id,
+            extra_payload={
+                "workflowEtapaId": proxima.id,
+                "etapaNome": proxima.nome,
+                "etapaOrdem": proxima.ordem,
+                "etapaTipo": proxima.tipo,
+                "destinatarioUsuarioIds": destinatarios,
+            },
+            occurred_at=now,
+        )

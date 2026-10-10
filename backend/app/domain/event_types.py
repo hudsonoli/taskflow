@@ -109,6 +109,9 @@ class DomainEventType(StrEnum):
     # Fase 8A — progressão do snapshot de Workflow: UM evento por ação (a "próxima etapa" vai no payload).
     DEMANDA_WORKFLOW_ETAPA_CONCLUIDA = "demanda.workflow_etapa_concluida"
     DEMANDA_WORKFLOW_ETAPA_APROVADA = "demanda.workflow_etapa_aprovada"
+    # Fase 8C — a próxima etapa passou a ser a atual: existe SÓ para a central de notificações (destinatários no payload) e NÃO aparece na
+    # timeline da Demanda (a transição já está em workflow_etapa_concluida/aprovada, com a próxima etapa no payload).
+    DEMANDA_WORKFLOW_ETAPA_ATUALIZADA = "demanda.workflow_etapa_atualizada"
     DEMANDA_AJUSTE_INTERNO_REGISTRADO = "demanda.ajuste_interno_registrado"
     DEMANDA_AJUSTE_CLIENTE_REGISTRADO = "demanda.ajuste_cliente_registrado"
     DEMANDA_REFACAO_REGISTRADA = "demanda.refacao_registrada"
