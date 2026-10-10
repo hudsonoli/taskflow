@@ -535,6 +535,15 @@ class DemandaArquivoService:
             previewDisponivel=preview_disponivel,
         )
 
+    def publicar_evento(
+        self, db: Session, demanda: Demanda, tipo: DomainEventType, actor_usuario_id: str | None,
+        *, extra_payload: dict | None = None, occurred_at=None,
+    ) -> None:
+        """Ponto público para as operações em lote publicarem os MESMOS eventos da exclusão individual (um por arquivo)."""
+        self._publish_event(
+            db, demanda, tipo, actor_usuario_id, extra_payload=extra_payload, occurred_at=occurred_at
+        )
+
     def _publish_event(
         self, db: Session, demanda: Demanda, tipo: DomainEventType, actor_usuario_id: str | None,
         *, extra_payload: dict | None = None, occurred_at=None,
