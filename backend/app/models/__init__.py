@@ -17,6 +17,7 @@ Ao criar um model novo, acrescentar aqui **e** em `migrations/env.py`.
 
 from app.models import (  # noqa: F401
     administrador_plataforma,
+    aprovacao_externa,
     cliente,
     cliente_grupo,
     configuracao_email,
