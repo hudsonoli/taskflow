@@ -133,7 +133,7 @@ def test_etapa_atual_todas_concluidas_e_null(
     criada = _criar_demanda(client_admin, workflowModeloId=modelo["id"]).json()
 
     db_session.execute(
-        text("UPDATE demanda_workflow_etapas SET status = 'concluida' WHERE demanda_id = :d"),
+        text("UPDATE demanda_workflow_etapas SET status = 'concluida', concluida_em = now() WHERE demanda_id = :d"),
         {"d": criada["id"]},
     )
     db_session.flush()
@@ -148,7 +148,7 @@ def test_etapa_atual_pula_concluidas(client_admin: TestClient, db_session: Sessi
     primeira_id = next(e["id"] for e in criada["workflowEtapas"] if e["nome"] == "A")
 
     db_session.execute(
-        text("UPDATE demanda_workflow_etapas SET status = 'concluida' WHERE id = :e"),
+        text("UPDATE demanda_workflow_etapas SET status = 'concluida', concluida_em = now() WHERE id = :e"),
         {"e": primeira_id},
     )
     db_session.flush()

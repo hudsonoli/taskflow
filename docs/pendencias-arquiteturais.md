@@ -228,6 +228,28 @@ Referências:
 
 ---
 
+## 11. Progressão de workflow — o que ficou fora da Fase 8A
+
+A Fase 8A (concluir/aprovar a etapa atual do snapshot e ativar a próxima — `DemandaWorkflowService`,
+`core/workflow_autoridade.py`, migration 0043) deliberadamente NÃO inclui:
+
+- **Notificação da próxima etapa (backlog)**: a central de notificações é uma visão tipada de `eventos` para os
+  responsáveis da DEMANDA (`DemandaResponsavel`), com catálogo fechado de tipos (`notificacao_service.TITULOS`). Avisar o
+  responsável da PRÓXIMA etapa exige estender o predicado para os responsáveis/departamentos da etapa e incluir
+  `demanda.workflow_etapa_concluida/aprovada` no catálogo — fase própria, sem segundo sistema de notificação.
+- **Rejeição/retorno de etapa** (8A.1): sem semântica existente; progressão é só "etapa atual → próxima ordem".
+- **Editor estrutural ad-hoc** da Demanda (adicionar/remover/reordenar etapas, trocar workflow após o início).
+- **Cálculo automático de prazo por etapa**: o snapshot só tem `quantidade_antes_deadline`/`unidade_prazo` e
+  `demandas.prazo_etapa_atual` é manual e independente; a ativação da próxima etapa NÃO o altera.
+- **Efeito do workflow concluído na Demanda**: nenhum (a Demanda não é concluída sozinha).
+- **Etapa `pausada`**: nenhum fluxo cria ou retoma pausa; uma etapa atual legada `pausada` não avança (409 `ETAPA_PAUSADA`).
+
+Referências:
+`backend/app/services/demanda_workflow_service.py`, `backend/app/core/workflow_autoridade.py`,
+`backend/migrations/versions/0043_workflow_etapa_progressao.py`
+
+---
+
 ## Referências
 
 - [padrao-arquivamento.md](padrao-arquivamento.md) — soft-delete, motivo obrigatório, conflito-arquivado

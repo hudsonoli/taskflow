@@ -106,6 +106,9 @@ class DomainEventType(StrEnum):
     # Completa a timeline com marcos que já existiam como campo/ação mas nunca viravam
     # evento (Fase 2E.4).
     DEMANDA_WORKFLOW_APLICADO = "demanda.workflow_aplicado"
+    # Fase 8A — progressão do snapshot de Workflow: UM evento por ação (a "próxima etapa" vai no payload).
+    DEMANDA_WORKFLOW_ETAPA_CONCLUIDA = "demanda.workflow_etapa_concluida"
+    DEMANDA_WORKFLOW_ETAPA_APROVADA = "demanda.workflow_etapa_aprovada"
     DEMANDA_AJUSTE_INTERNO_REGISTRADO = "demanda.ajuste_interno_registrado"
     DEMANDA_AJUSTE_CLIENTE_REGISTRADO = "demanda.ajuste_cliente_registrado"
     DEMANDA_REFACAO_REGISTRADA = "demanda.refacao_registrada"

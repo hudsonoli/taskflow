@@ -38,6 +38,13 @@ from app.schemas.demanda import (
 )
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
 from app.services.demanda_historico_service import DemandaHistoricoService
+from app.services.demanda_workflow_service import (
+    DemandaWorkflowAcaoInvalidaError,
+    DemandaWorkflowConflitoError,
+    DemandaWorkflowEtapaNaoEncontradaError,
+    DemandaWorkflowSemAutoridadeError,
+    DemandaWorkflowService,
+)
 from app.services.demanda_service import (
     DemandaClienteForaDoEscopoError,
     DemandaClienteInvalidoError,
@@ -61,6 +68,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user_password_ready)],
 )
 demanda_service = DemandaService()
+workflow_service = DemandaWorkflowService(demanda_service=demanda_service)
 historico_service = DemandaHistoricoService()
 
 # Demanda é o primeiro domínio OPERACIONAL: ao contrário de Cliente, Projeto e Fornecedor,
@@ -99,6 +107,17 @@ def handle_demanda_error(exc: Exception) -> None:
         ) from exc
     if isinstance(exc, DemandaInvalidTransitionError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    # Progressão de workflow (Fase 8A). 409 estruturado: a interface recarrega o estado e mostra a mensagem do servidor.
+    if isinstance(exc, DemandaWorkflowConflitoError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"code": exc.codigo, "message": str(exc)}
+        ) from exc
+    if isinstance(exc, DemandaWorkflowEtapaNaoEncontradaError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if isinstance(exc, DemandaWorkflowSemAutoridadeError):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if isinstance(exc, DemandaWorkflowAcaoInvalidaError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     if isinstance(
         exc,
         (
@@ -220,7 +239,7 @@ def create_demanda(
         criada = demanda_service.create_demanda(
             db, payload, empresa_id=current_user.empresa_id, actor=current_user
         )
-        return demanda_service.to_read(db, criada)
+        return demanda_service.to_read(db, criada, usuario=current_user)
     except Exception as exc:
         handle_demanda_error(exc)
 
@@ -300,7 +319,10 @@ def list_demandas(
         limit=limit,
         offset=offset,
     )
-    return demanda_service.to_read_lote(db, demandas)
+    # `podeAvancar` (Fase 8A) é por usuário; a Pauta global é leitura — ver a Demanda ali não concede ação.
+    return demanda_service.to_read_lote(
+        db, demandas, usuario=current_user, somente_leitura=escopo_solicitado is EscopoSolicitado.PAUTA
+    )
 
 
 @router.get("/diretorio", response_model=list[DemandaDiretorioRead])
@@ -475,7 +497,7 @@ def get_demanda(
     try:
         escopo = _escopo(db, current_user, EscopoSolicitado.PAUTA if escopo_leitura == "pauta" else None)
         demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
-        return demanda_service.to_read(db, demanda)
+        return demanda_service.to_read(db, demanda, usuario=current_user, somente_leitura=escopo_leitura == "pauta")
     except Exception as exc:
         handle_demanda_error(exc)
 
@@ -495,7 +517,7 @@ def update_demanda(
         atualizada = demanda_service.update_demanda(
             db, demanda, payload, actor=current_user
         )
-        return demanda_service.to_read(db, atualizada)
+        return demanda_service.to_read(db, atualizada, usuario=current_user)
     except Exception as exc:
         handle_demanda_error(exc)
 
@@ -520,7 +542,7 @@ def arquivar_demanda(
             motivo_arquivamento=payload.motivo_arquivamento,
             actor_usuario_id=current_user.id,
         )
-        return demanda_service.to_read(db, arquivada)
+        return demanda_service.to_read(db, arquivada, usuario=current_user)
     except Exception as exc:
         handle_demanda_error(exc)
 
@@ -537,7 +559,7 @@ def restaurar_demanda(
         restaurada = demanda_service.restaurar_demanda(
             db, demanda, actor_usuario_id=current_user.id
         )
-        return demanda_service.to_read(db, restaurada)
+        return demanda_service.to_read(db, restaurada, usuario=current_user)
     except Exception as exc:
         handle_demanda_error(exc)
 
@@ -583,6 +605,46 @@ def registrar_conclusao_email(
         atualizada = demanda_service.registrar_conclusao_email(
             db, demanda, enviado=payload.enviado, actor_usuario_id=current_user.id
         )
-        return demanda_service.to_read(db, atualizada)
+        return demanda_service.to_read(db, atualizada, usuario=current_user)
+    except Exception as exc:
+        handle_demanda_error(exc)
+
+
+# Progressão do snapshot de Workflow (Fase 8A). Escopo-BASE (nunca o da Pauta global: leitura não concede ação) + autoridade da etapa
+# (responsável, admin/gestor do tenant ou Head do departamento da etapa — `core/workflow_autoridade.py`). O cliente indica QUAL etapa
+# quer avançar; o servidor decide a próxima. Sem payload: não existe `nextStepId`.
+
+
+@router.post("/{demanda_id}/workflow/etapas/{etapa_id}/concluir", response_model=DemandaRead)
+def concluir_etapa_workflow(
+    demanda_id: UUID,
+    etapa_id: UUID,
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Conclui a etapa ATUAL de tipo `execucao` e ativa a próxima. Etapa de aprovação → 422; sem autoridade → 403; etapa que não é
+    (mais) a atual, workflow concluído/sem etapas → 409."""
+    try:
+        escopo = _escopo(db, current_user)
+        demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
+        atualizada = workflow_service.concluir_etapa(db, demanda, etapa_id=str(etapa_id), actor=current_user)
+        return demanda_service.to_read(db, atualizada, usuario=current_user)
+    except Exception as exc:
+        handle_demanda_error(exc)
+
+
+@router.post("/{demanda_id}/workflow/etapas/{etapa_id}/aprovar", response_model=DemandaRead)
+def aprovar_etapa_workflow(
+    demanda_id: UUID,
+    etapa_id: UUID,
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Aprova a etapa ATUAL de tipo `aprovacao` e ativa a próxima. Mesmas regras de `concluir` (etapa de execução → 422)."""
+    try:
+        escopo = _escopo(db, current_user)
+        demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
+        atualizada = workflow_service.aprovar_etapa(db, demanda, etapa_id=str(etapa_id), actor=current_user)
+        return demanda_service.to_read(db, atualizada, usuario=current_user)
     except Exception as exc:
         handle_demanda_error(exc)

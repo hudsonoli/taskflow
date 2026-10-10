@@ -21,6 +21,7 @@ from app.domain.event_types import DomainEventType
 from app.models.demanda import Demanda
 from app.models.demanda_departamento import DemandaDepartamento
 from app.models.demanda_responsavel import DemandaResponsavel
+from app.core.workflow_autoridade import departamentos_head_para_workflow, pode_avancar_etapa
 from app.models.demanda_workflow_etapa import DemandaWorkflowEtapa
 from app.models.demanda_workflow_etapa_departamento_responsavel import (
     DemandaWorkflowEtapaDepartamentoResponsavel,
@@ -961,8 +962,14 @@ class DemandaService:
     # Serialização
     # ----------------------------------------------------------------------------------
 
-    def to_read(self, db: Session, demanda: Demanda) -> DemandaRead:
-        etapas_por_demanda = self._etapas_workflow_por_demanda(db, [demanda.id])
+    def to_read(
+        self, db: Session, demanda: Demanda, *, usuario: Usuario | None = None, somente_leitura: bool = False
+    ) -> DemandaRead:
+        """`usuario` habilita o `podeAvancar` da etapa atual (calculado no servidor). `somente_leitura` (Pauta global) o zera:
+        ver a Demanda ali não concede ação."""
+        etapas_por_demanda = self._etapas_workflow_por_demanda(
+            db, [demanda.id], usuario=usuario, somente_leitura=somente_leitura, demandas=[demanda]
+        )
         etapas = etapas_por_demanda.get(demanda.id, [])
         return DemandaRead.model_validate(
             {
@@ -974,12 +981,21 @@ class DemandaService:
             }
         )
 
-    def to_read_lote(self, db: Session, demandas: list[Demanda]) -> list[DemandaRead]:
+    def to_read_lote(
+        self,
+        db: Session,
+        demandas: list[Demanda],
+        *,
+        usuario: Usuario | None = None,
+        somente_leitura: bool = False,
+    ) -> list[DemandaRead]:
         """Poucas queries para a página inteira, em vez de N por linha."""
         ids = [d.id for d in demandas]
         responsaveis = self.repository.listar_responsavel_ids_em_lote(db, ids)
         departamentos = self.repository.listar_departamento_ids_em_lote(db, ids)
-        etapas_por_demanda = self._etapas_workflow_por_demanda(db, ids)
+        etapas_por_demanda = self._etapas_workflow_por_demanda(
+            db, ids, usuario=usuario, somente_leitura=somente_leitura, demandas=demandas
+        )
         return [
             DemandaRead.model_validate(
                 {
@@ -994,32 +1010,68 @@ class DemandaService:
         ]
 
     def _etapas_workflow_por_demanda(
-        self, db: Session, demanda_ids: list[str]
+        self,
+        db: Session,
+        demanda_ids: list[str],
+        *,
+        usuario: Usuario | None = None,
+        somente_leitura: bool = False,
+        demandas: list[Demanda] | None = None,
     ) -> dict[str, list[DemandaWorkflowEtapaRead]]:
         """Materializa `DemandaWorkflowEtapaRead` em lote — etapas + responsáveis (usuário e
-        departamento) de todas as Demandas pedidas, em poucas queries."""
+        departamento) de todas as Demandas pedidas, em poucas queries. `podeAvancar` (Fase 8A) sai da MESMA
+        função de autoridade usada pelo endpoint, sobre dados que já foram carregados aqui (sem N+1)."""
         etapas_por_demanda = self.repository.listar_etapas_workflow_em_lote(db, demanda_ids)
         etapa_ids = [etapa.id for etapas in etapas_por_demanda.values() for etapa in etapas]
         usuarios_por_etapa = self.repository.listar_etapa_responsavel_ids_em_lote(db, etapa_ids)
         departamentos_por_etapa = self.repository.listar_etapa_departamento_ids_em_lote(db, etapa_ids)
 
-        return {
-            demanda_id: [
-                DemandaWorkflowEtapaRead(
-                    id=etapa.id,
-                    ordem=etapa.ordem,
-                    nome=etapa.nome,
-                    tipo=etapa.tipo,
-                    quantidadeAntesDeadline=etapa.quantidade_antes_deadline,
-                    unidadePrazo=etapa.unidade_prazo,
-                    status=etapa.status,
-                    usuarioResponsavelIds=usuarios_por_etapa.get(etapa.id, []),
-                    departamentoResponsavelIds=departamentos_por_etapa.get(etapa.id, []),
+        arquivadas = {d.id for d in (demandas or []) if d.status == STATUS_ARQUIVADA}
+        pode_calcular = usuario is not None and not somente_leitura and bool(etapa_ids)
+        departamentos_head: frozenset[str] = (
+            departamentos_head_para_workflow(db, usuario) if pode_calcular and usuario is not None else frozenset()
+        )
+
+        resultado: dict[str, list[DemandaWorkflowEtapaRead]] = {}
+        for demanda_id, etapas in etapas_por_demanda.items():
+            atual = next((e for e in etapas if e.status != STATUS_ETAPA_WORKFLOW_CONCLUIDA), None)
+            lista: list[DemandaWorkflowEtapaRead] = []
+            for etapa in etapas:
+                usuarios_ids = usuarios_por_etapa.get(etapa.id, [])
+                departamentos_ids = departamentos_por_etapa.get(etapa.id, [])
+                pode_avancar = bool(
+                    pode_calcular
+                    and usuario is not None
+                    and atual is not None
+                    and etapa.id == atual.id
+                    and etapa.status != "pausada"
+                    and demanda_id not in arquivadas
+                    and pode_avancar_etapa(
+                        usuario,
+                        usuario_responsavel_ids=usuarios_ids,
+                        departamento_responsavel_ids=departamentos_ids,
+                        departamentos_head=departamentos_head,
+                    )
                 )
-                for etapa in etapas
-            ]
-            for demanda_id, etapas in etapas_por_demanda.items()
-        }
+                lista.append(
+                    DemandaWorkflowEtapaRead(
+                        id=etapa.id,
+                        ordem=etapa.ordem,
+                        nome=etapa.nome,
+                        tipo=etapa.tipo,
+                        quantidadeAntesDeadline=etapa.quantidade_antes_deadline,
+                        unidadePrazo=etapa.unidade_prazo,
+                        status=etapa.status,
+                        usuarioResponsavelIds=usuarios_ids,
+                        departamentoResponsavelIds=departamentos_ids,
+                        iniciadaEm=etapa.iniciada_em,
+                        concluidaEm=etapa.concluida_em,
+                        concluidaPorUsuarioId=etapa.concluida_por_usuario_id,
+                        podeAvancar=pode_avancar,
+                    )
+                )
+            resultado[demanda_id] = lista
+        return resultado
 
     @staticmethod
     def _derivar_etapa_atual_id(etapas: list[DemandaWorkflowEtapaRead]) -> str | None:
@@ -1249,10 +1301,13 @@ class DemandaService:
                 quantidade_antes_deadline=etapa_modelo.quantidade_antes_deadline,
                 unidade_prazo=etapa_modelo.unidade_prazo,
                 status=STATUS_ETAPA_WORKFLOW_PENDENTE,
+                # Fase 8A: a primeira etapa é a atual desde a criação; as demais só iniciam quando a anterior for concluída.
+                # Status continua 'pendente' (a etapa atual é derivada pela ordem, nada depende de 'em_execucao').
+                iniciada_em=now if indice == 0 else None,
                 created_at=now,
                 updated_at=now,
             )
-            for etapa_modelo in etapas_modelo
+            for indice, etapa_modelo in enumerate(etapas_modelo)
         ]
         self.repository.criar_etapas_workflow(db, etapas_objetos)
 
@@ -1462,6 +1517,22 @@ class DemandaService:
             (DomainEventType.DEMANDA_DEPARTAMENTO_REMOVIDO, {"departamentoId": did})
             for did in remover
         ]
+
+    def publicar_evento_demanda(
+        self,
+        db: Session,
+        demanda: Demanda,
+        tipo: DomainEventType,
+        actor_usuario_id: str | None,
+        *,
+        extra_payload: dict | None = None,
+        occurred_at: datetime | None = None,
+    ) -> Evento:
+        """Ponto público para outros services do domínio Demanda (ex.: progressão de workflow) publicarem na MESMA timeline,
+        com o payload-base padrão (empresa, demanda, identificador, status)."""
+        return self._publish_event(
+            db, demanda, tipo, actor_usuario_id, extra_payload=extra_payload, occurred_at=occurred_at
+        )
 
     def _publish_event(
         self,

@@ -203,6 +203,15 @@ class DemandaWorkflowEtapaRead(BaseModel):
     status: DemandaWorkflowEtapaStatus
     usuario_responsavel_ids: list[UUID] = Field(alias="usuarioResponsavelIds")
     departamento_responsavel_ids: list[UUID] = Field(alias="departamentoResponsavelIds")
+    # Fase 8A — progressão. `iniciadaEm` NULL = início histórico desconhecido (snapshot anterior à 8A).
+    iniciada_em: datetime | None = Field(default=None, alias="iniciadaEm")
+    concluida_em: datetime | None = Field(default=None, alias="concluidaEm")
+    # Quem concluiu (tipo execucao) ou aprovou (tipo aprovacao) — um conceito só; NULL no histórico/usuário removido.
+    concluida_por_usuario_id: UUID | None = Field(default=None, alias="concluidaPorUsuarioId")
+    # Calculado pelo SERVIDOR para o usuário da requisição: verdadeiro só na etapa ATUAL, para quem tem autoridade real
+    # (responsável da etapa, admin/gestor do tenant ou Head de departamento da etapa), fora de leitura global (Pauta) e com a
+    # Demanda não arquivada. O frontend não reconstrói RBAC; o endpoint reavalia tudo.
+    pode_avancar: bool = Field(default=False, alias="podeAvancar")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

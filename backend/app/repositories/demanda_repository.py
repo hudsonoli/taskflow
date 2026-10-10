@@ -1166,6 +1166,21 @@ class DemandaRepository:
             agrupado[etapa.demanda_id].append(etapa)
         return agrupado
 
+    def bloquear_demanda_para_atualizacao(self, db: Session, demanda: Demanda) -> None:
+        """`SELECT … FOR UPDATE` na linha da Demanda e recarrega o estado COMMITADO mais recente. Serializa as progressões de
+        workflow da mesma Demanda (Fase 8A): quem espera o lock enxerga o resultado de quem venceu."""
+        db.refresh(demanda, with_for_update=True)
+
+    def listar_etapas_workflow_travadas(self, db: Session, demanda_id: str) -> list[DemandaWorkflowEtapa]:
+        """Etapas da Demanda por `ordem`, relidas do banco (ignora cópias antigas do identity map). Chamar DEPOIS do lock."""
+        statement = (
+            select(DemandaWorkflowEtapa)
+            .where(DemandaWorkflowEtapa.demanda_id == demanda_id)
+            .order_by(DemandaWorkflowEtapa.ordem.asc())
+            .execution_options(populate_existing=True)
+        )
+        return list(db.scalars(statement).all())
+
     def listar_etapa_responsavel_ids_em_lote(self, db: Session, etapa_ids: list[str]) -> dict[str, list[str]]:
         resultado: dict[str, list[str]] = {etapa_id: [] for etapa_id in etapa_ids}
         if not etapa_ids:
