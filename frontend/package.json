@@ -26,7 +26,8 @@
     "test:meu-dia": "node --test src/lib/meu-dia.test.ts",
     "test:fase-7c": "node --test src/lib/visoes-lideranca.test.ts",
     "test:numeracao-tarefas": "node --test src/lib/numeracao-tarefas.test.ts",
-    "test:acessos": "node --test src/lib/acessos.test.ts"
+    "test:acessos": "node --test src/lib/acessos.test.ts",
+    "test:workflow-demanda": "node --test src/lib/workflow-demanda.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -81,6 +81,8 @@ const DESCRITORES: Record<string, (dados: Record<string, unknown>, contexto: Con
   "demanda.comentario_editado": () => "Comentário editado",
   "demanda.comentario_removido": () => "Comentário removido",
   "demanda.workflow_aplicado": () => "Workflow aplicado à tarefa",
+  "demanda.workflow_etapa_concluida": (dados) => descreverAvancoDeEtapa("concluída", dados),
+  "demanda.workflow_etapa_aprovada": (dados) => descreverAvancoDeEtapa("aprovada", dados),
   "demanda.ajuste_interno_registrado": () => "Ajuste interno registrado",
   "demanda.ajuste_cliente_registrado": () => "Ajuste solicitado pelo cliente registrado",
   "demanda.refacao_registrada": () => "Refação registrada",
@@ -88,6 +90,13 @@ const DESCRITORES: Record<string, (dados: Record<string, unknown>, contexto: Con
   "demanda.email_conclusao_dispensado": () => "Aviso de conclusão dispensado — e-mail não enviado",
   "demanda.retorno_cliente_registrado": () => "Retorno do cliente registrado",
 };
+
+/** Um evento por ação (Fase 8A): a etapa que acabou e, no mesmo payload, a próxima — ou o fim do workflow (que não conclui a tarefa). */
+function descreverAvancoDeEtapa(acao: "concluída" | "aprovada", dados: Record<string, unknown>): string {
+  const nome = String(dados.etapaNome ?? "");
+  const proxima = dados.proximaEtapaNome ? ` — avançou para "${String(dados.proximaEtapaNome)}"` : " — workflow concluído";
+  return `Etapa "${nome}" ${acao}${proxima}`;
+}
 
 export function descreverEventoHistorico(evento: DemandaHistoricoEvento, contexto: Contexto): string {
   const descritor = DESCRITORES[evento.tipo];
@@ -100,7 +109,7 @@ export function descreverEventoHistorico(evento: DemandaHistoricoEvento, context
 export function corDoEventoHistorico(tipo: string): "blue" | "green" | "amber" | "red" | "neutral" {
   if (tipo.includes("removid") || tipo.includes("exclu") || tipo === "demanda.bloqueada") return "red";
   if (tipo.includes("refacao") || tipo.includes("ajuste_cliente")) return "amber";
-  if (tipo.includes("concluid") || tipo.includes("restaurada") || tipo === "demanda.criada") return "green";
+  if (tipo.includes("concluid") || tipo.includes("aprovad") || tipo.includes("restaurada") || tipo === "demanda.criada") return "green";
   if (tipo.includes("adicionado") || tipo.includes("criado") || tipo.includes("aplicado")) return "blue";
   return "neutral";
 }

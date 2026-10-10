@@ -4,6 +4,7 @@ import { PERFIL_PARA_PERFIL_BASE, type Usuario, type UsuarioFormDraft, type Usua
 export { PERFIL_PARA_PERFIL_BASE };
 export type { UsuarioPerfilBaseApi };
 import { inputLocalParaIso } from "@/lib/prazo-operacional";
+import { CODIGOS_CONFLITO_WORKFLOW, WorkflowEtapaConflitoError, type AcaoEtapa } from "@/lib/workflow-demanda";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type {
   FatiaPizza,
@@ -259,6 +260,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         message ?? "Tipo de tarefa arquivado já existe",
         detail.tipoTarefaArquivadoId,
       );
+    }
+    if (
+      response.status === 409 &&
+      detail &&
+      typeof detail === "object" &&
+      (CODIGOS_CONFLITO_WORKFLOW as readonly string[]).includes(detail.code)
+    ) {
+      throw new WorkflowEtapaConflitoError(message ?? "O workflow mudou", detail.code);
     }
     if (detail && typeof detail === "object" && detail.code === "FORA_DE_EXPEDIENTE") {
       throw new ForaDeExpedienteError(
@@ -1473,6 +1482,10 @@ type DemandaWorkflowEtapaReadApi = {
   status: DemandaWorkflowEtapaStatus;
   usuarioResponsavelIds: string[];
   departamentoResponsavelIds: string[];
+  iniciadaEm: string | null;
+  concluidaEm: string | null;
+  concluidaPorUsuarioId: string | null;
+  podeAvancar: boolean;
 };
 
 type DemandaReadApi = {
@@ -1569,6 +1582,10 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       status: etapa.status,
       usuarioResponsavelIds: etapa.usuarioResponsavelIds,
       departamentoResponsavelIds: etapa.departamentoResponsavelIds,
+      iniciadaEm: etapa.iniciadaEm ?? null,
+      concluidaEm: etapa.concluidaEm ?? null,
+      concluidaPorUsuarioId: etapa.concluidaPorUsuarioId ?? null,
+      podeAvancar: etapa.podeAvancar === true,
     })),
     etapaAtualId: data.etapaAtualId,
   };
@@ -1921,6 +1938,13 @@ export async function arquivarDemandaReal(demandaId: string, motivoArquivamento:
     body: JSON.stringify({ motivoArquivamento }),
   });
   return mapDemandaReadToDemanda(arquivada);
+}
+
+// Progressão do workflow (Fase 8A). O cliente indica QUAL etapa quer avançar; o servidor decide a próxima, a autoridade e o conflito
+// (409 → WorkflowEtapaConflitoError). Sem corpo: não existe `nextStepId`. Sempre no escopo-base (a Pauta global é só leitura).
+export async function avancarEtapaWorkflowReal(demandaId: string, etapaId: string, acao: AcaoEtapa): Promise<Demanda> {
+  const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/${acao}`, { method: "POST" });
+  return mapDemandaReadToDemanda(atualizada);
 }
 
 export async function restaurarDemandaReal(demandaId: string): Promise<Demanda> {

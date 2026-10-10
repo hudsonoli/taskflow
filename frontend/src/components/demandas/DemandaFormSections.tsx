@@ -3,13 +3,21 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ClipboardList, FileText, GitBranch, History, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Combobox } from "@/components/ui/Combobox";
 import { Input } from "@/components/ui/Input";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
-import { listHistoricoDemanda, patchDemandaReal, type DemandaPatchCampos } from "@/lib/api-backend";
 import {
+  avancarEtapaWorkflowReal,
+  getDemandaReal,
+  listHistoricoDemanda,
+  patchDemandaReal,
+  type DemandaPatchCampos,
+} from "@/lib/api-backend";
+import {
+  formatPrazo,
   prioridadeDemandaLabels,
   statusDemandaEditaveis,
   statusDemandaLabels,
@@ -19,8 +27,25 @@ import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useResponsaveisSelector, useUsuariosPorIds } from "@/lib/useResponsaveisSelector";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { corDoEventoHistorico, descreverEventoHistorico } from "@/lib/historicoDemandaLabels";
+import {
+  avancarEtapaDoWorkflow,
+  estadoDaEtapa,
+  etapasOrdenadas,
+  perguntaDeConfirmacao,
+  podeExibirAcao,
+  rotuloDaAcao,
+  rotuloEstadoConcluido,
+  rotuloQuemConcluiu,
+  workflowConcluido,
+} from "@/lib/workflow-demanda";
 import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
-import type { Demanda, DemandaHistoricoEvento, DemandaPrioridade, DemandaStatusEditavel } from "@/types/demanda";
+import type {
+  Demanda,
+  DemandaHistoricoEvento,
+  DemandaPrioridade,
+  DemandaStatusEditavel,
+  DemandaWorkflowEtapa,
+} from "@/types/demanda";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { DemandaArquivosCard } from "./DemandaArquivosCard";
 import { DemandaChecklistCard } from "./DemandaChecklistCard";
@@ -280,29 +305,34 @@ export function BriefingDemandaSection({ demanda, onChange }: DemandaSectionProp
   );
 }
 
-const workflowEtapaStatusTone = {
-  pendente: "neutral",
-  em_execucao: "green",
-  pausada: "amber",
+const workflowEstadoTone = {
   concluida: "green",
+  atual: "blue",
+  pendente: "neutral",
 } as const;
 
-const workflowEtapaStatusLabel = {
-  pendente: "Pendente",
-  em_execucao: "Em execução",
-  pausada: "Pausada",
-  concluida: "Concluída",
+const workflowEstadoClasses = {
+  concluida: "border-emerald-100 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/5",
+  atual: "border-indigo-200 bg-indigo-50/40 dark:border-indigo-500/30 dark:bg-indigo-500/5",
+  pendente: "border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-950/30",
 } as const;
 
 /**
- * Etapas materializadas na criação (Fase 2E.2) — leitura, não edição. Não há endpoint de
- * transição de etapa nesta fase (ver docstring de `DemandaWorkflowEtapa`), então esta seção
- * mostra o snapshot aplicado, sem controle de escrita — mesmo raciocínio de "affordance
- * ausente com explicação" que o contrato transitório já usava aqui.
+ * Workflow materializado da Demanda: sequência de etapas (concluídas → atual → pendentes) e a ação sobre a etapa ATUAL (Fase 8A).
+ *
+ * O servidor é a fonte da verdade: `etapaAtualId` e `podeAvancar` (autoridade já calculada para quem está logado) chegam prontos — a
+ * tela não reconstrói RBAC nem escolhe a próxima etapa. Na leitura pela Pauta global (drawer somente-leitura) não há ação.
+ * Etapa de execução → "Concluir etapa"; de aprovação → "Aprovar etapa". Concluir a última encerra o workflow, não a tarefa.
  */
-export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
-  const { usuarios, resolvendo } = useUsuariosComIds(demanda.workflowEtapas.flatMap((etapa) => etapa.usuarioResponsavelIds));
+export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProps) {
+  const somenteLeitura = useEscopoLeituraDemanda() !== undefined;
+  const { usuarios, resolvendo } = useUsuariosComIds(
+    demanda.workflowEtapas.flatMap((etapa) => [...etapa.usuarioResponsavelIds, etapa.concluidaPorUsuarioId]),
+  );
   const { departamentos } = useDiretorioDepartamentos();
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
+  const [avancando, setAvancando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
   if (demanda.workflowEtapas.length === 0) {
     return (
@@ -314,6 +344,28 @@ export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
     );
   }
 
+  const nomeDoUsuario = (id: string) =>
+    usuarios.find((usuario) => usuario.id === id)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido");
+
+  async function confirmarAvanco(etapa: DemandaWorkflowEtapa) {
+    if (avancando) return;
+    setAvancando(true);
+    setErro(null);
+    const resultado = await avancarEtapaDoWorkflow({
+      etapa,
+      avancar: (acao, etapaId) => avancarEtapaWorkflowReal(demanda.id, etapaId, acao),
+      recarregar: () => getDemandaReal(demanda.id),
+    });
+    setAvancando(false);
+    setConfirmandoId(null);
+    if (resultado.ok) {
+      onChange(resultado.demanda);
+      return;
+    }
+    setErro(resultado.mensagem);
+    if (resultado.demanda) onChange(resultado.demanda); // 409: mostra o estado real do servidor
+  }
+
   return (
     <SectionShell
       title="Workflow"
@@ -321,45 +373,73 @@ export function WorkflowDemandaSection({ demanda }: { demanda: Demanda }) {
       icon={<GitBranch className="h-5 w-5" />}
     >
       <div className="flex flex-col gap-3">
-        {[...demanda.workflowEtapas]
-          .sort((a, b) => a.ordem - b.ordem)
-          .map((etapa) => {
-            const atual = etapa.id === demanda.etapaAtualId;
-            const responsaveis = etapa.usuarioResponsavelIds
-              .map((id) => usuarios.find((usuario) => usuario.id === id)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido"))
-              .join(", ");
-            const departamentosNomes = etapa.departamentoResponsavelIds
-              .map((id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id)
-              .join(", ");
+        {erro && (
+          <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+            {erro}
+          </p>
+        )}
+        {workflowConcluido(demanda) && (
+          <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+            Workflow concluído. A tarefa mantém o status atual — concluí-la é uma decisão à parte.
+          </p>
+        )}
+        {etapasOrdenadas(demanda).map((etapa) => {
+          const estado = estadoDaEtapa(etapa, demanda.etapaAtualId);
+          const responsaveis = etapa.usuarioResponsavelIds.map(nomeDoUsuario).join(", ");
+          const departamentosNomes = etapa.departamentoResponsavelIds
+            .map((id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id)
+            .join(", ");
+          const exibirAcao = podeExibirAcao(etapa, demanda.etapaAtualId, somenteLeitura);
+          const confirmando = confirmandoId === etapa.id;
 
-            return (
-              <div
-                key={etapa.id}
-                className={`rounded-2xl border p-3.5 ${
-                  atual
-                    ? "border-indigo-200 bg-indigo-50/40 dark:border-indigo-500/30 dark:bg-indigo-500/5"
-                    : "border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-950/30"
-                }`}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={workflowEtapaStatusTone[etapa.status]}>Etapa {etapa.ordem}</Badge>
-                  {atual && <Badge tone="blue">Etapa atual</Badge>}
-                  <Badge tone={etapa.tipo === "aprovacao" ? "amber" : "blue"}>
-                    {workflowEtapaTipoLabels[etapa.tipo]}
-                  </Badge>
-                  <span className="text-xs text-fg-muted">
-                    {workflowEtapaStatusLabel[etapa.status]}
-                  </span>
-                </div>
-                <p className="mt-1.5 text-sm font-semibold text-fg">{etapa.nome}</p>
-                <p className="mt-1 text-xs text-fg-muted">
-                  {responsaveis || departamentosNomes
-                    ? [responsaveis, departamentosNomes].filter(Boolean).join(" · ")
-                    : "Sem responsável definido"}
-                </p>
+          return (
+            <div key={etapa.id} data-estado={estado} className={`rounded-2xl border p-3.5 ${workflowEstadoClasses[estado]}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={workflowEstadoTone[estado]}>Etapa {etapa.ordem}</Badge>
+                {estado === "concluida" && <Badge tone="green">{rotuloEstadoConcluido(etapa)}</Badge>}
+                {estado === "atual" && <Badge tone="blue">Etapa atual</Badge>}
+                {estado === "pendente" && <Badge tone="neutral">Pendente</Badge>}
+                <Badge tone={etapa.tipo === "aprovacao" ? "amber" : "blue"}>{workflowEtapaTipoLabels[etapa.tipo]}</Badge>
+                {estado === "atual" && etapa.status === "pausada" && <Badge tone="amber">Pausada</Badge>}
               </div>
-            );
-          })}
+              <p className="mt-1.5 text-sm font-semibold text-fg">{etapa.nome}</p>
+              <p className="mt-1 text-xs text-fg-muted">
+                {responsaveis || departamentosNomes
+                  ? [responsaveis, departamentosNomes].filter(Boolean).join(" · ")
+                  : "Sem responsável definido"}
+              </p>
+              {estado === "concluida" && etapa.concluidaEm && (
+                <p className="mt-1 text-xs text-fg-muted">
+                  {etapa.concluidaPorUsuarioId
+                    ? `${rotuloQuemConcluiu(etapa)} ${nomeDoUsuario(etapa.concluidaPorUsuarioId)} · ${formatPrazo(etapa.concluidaEm)}`
+                    : `${rotuloEstadoConcluido(etapa)} em ${formatPrazo(etapa.concluidaEm)}`}
+                </p>
+              )}
+              {estado === "atual" && etapa.iniciadaEm && (
+                <p className="mt-1 text-xs text-fg-muted">Iniciada em {formatPrazo(etapa.iniciadaEm)}</p>
+              )}
+
+              {exibirAcao && !confirmando && (
+                <div className="mt-3">
+                  <Button type="button" onClick={() => setConfirmandoId(etapa.id)} disabled={avancando}>
+                    {rotuloDaAcao(etapa)}
+                  </Button>
+                </div>
+              )}
+              {exibirAcao && confirmando && (
+                <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Confirmação">
+                  <span className="text-xs text-fg">{perguntaDeConfirmacao(demanda, etapa)}</span>
+                  <Button type="button" onClick={() => void confirmarAvanco(etapa)} disabled={avancando}>
+                    {avancando ? "Avançando…" : "Confirmar"}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => setConfirmandoId(null)} disabled={avancando}>
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </SectionShell>
   );

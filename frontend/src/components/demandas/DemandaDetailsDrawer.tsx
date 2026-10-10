@@ -159,7 +159,7 @@ export function DemandaDetailsDrawer({
           <fieldset disabled={somenteLeitura} className="m-0 min-w-0 border-0 p-0">
             {activeTab === "dados" && <DadosDemandaSection demanda={demanda} onChange={onChange} />}
             {activeTab === "briefing" && <BriefingDemandaSection key={demanda.id} demanda={demanda} onChange={onChange} />}
-            {activeTab === "workflow" && <WorkflowDemandaSection demanda={demanda} />}
+            {activeTab === "workflow" && <WorkflowDemandaSection demanda={demanda} onChange={onChange} />}
             {activeTab === "responsaveis" && <ResponsaveisDemandaSection demanda={demanda} onChange={onChange} />}
             {activeTab === "atividade" && <AtividadeDemandaSection demanda={demanda} />}
             {activeTab === "historico" && <HistoricoDemandaSection demanda={demanda} />}

@@ -22,8 +22,8 @@ export type DemandaWorkflowEtapaStatus = "pendente" | "em_execucao" | "pausada" 
  * `WorkflowModelo` no momento da criação, não uma referência viva a ele. Editar ou arquivar
  * o template depois não altera etapas já materializadas.
  *
- * Sem endpoint de transição nesta fase: `status` só é lido, nunca escrito diretamente pela
- * interface (ver `WorkflowDemandaSection`, só leitura).
+ * `status` nunca é escrito diretamente pela interface: a progressão (Fase 8A) passa pelas ações
+ * `concluir`/`aprovar` do servidor (ver `lib/workflow-demanda.ts` e `WorkflowDemandaSection`).
  */
 export type DemandaWorkflowEtapa = {
   id: string;
@@ -35,6 +35,13 @@ export type DemandaWorkflowEtapa = {
   usuarioResponsavelIds: string[];
   departamentoResponsavelIds: string[];
   status: DemandaWorkflowEtapaStatus;
+  /** Fase 8A — quando passou a ser a atual (`null` = início histórico desconhecido, nunca preenchido com valor fictício). */
+  iniciadaEm: string | null;
+  concluidaEm: string | null;
+  /** Quem concluiu (execução) ou aprovou (aprovação): um conceito só; o tipo decide o rótulo. `null` no histórico. */
+  concluidaPorUsuarioId: string | null;
+  /** Calculado pelo SERVIDOR para o usuário logado: só na etapa atual, com autoridade real, fora da leitura da Pauta. */
+  podeAvancar: boolean;
 };
 
 /**
