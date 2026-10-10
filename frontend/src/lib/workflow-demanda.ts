@@ -68,6 +68,11 @@ export function rotuloQuemConcluiu(etapa: Pick<DemandaWorkflowEtapa, "tipo">): s
   return etapa.tipo === "aprovacao" ? "Aprovada por" : "Concluída por";
 }
 
+/** Fase 9B — aprovada pelo CLIENTE no Portal de Aprovação: nome DECLARADO (não verificado), nunca confundido com um usuário do sistema. */
+export function rotuloAprovadaExternamente(nome: string): string {
+  return `Aprovada externamente por ${nome}`;
+}
+
 export function ehUltimaEtapa(demanda: Pick<DemandaComWorkflow, "workflowEtapas">, etapa: Pick<DemandaWorkflowEtapa, "id" | "ordem">): boolean {
   return demanda.workflowEtapas.every((outra) => outra.id === etapa.id || outra.ordem < etapa.ordem);
 }

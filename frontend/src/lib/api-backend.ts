@@ -8,6 +8,12 @@ import { CODIGOS_CONFLITO_WORKFLOW, WorkflowEtapaConflitoError, type AcaoEtapa }
 import { nomeDoDownload, type CorpoSelecaoLote } from "@/lib/selecao-arquivos";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
 import type {
+  AprovacaoExterna,
+  AprovacaoExternaCriada,
+  AprovacaoExternaNovaEntrada,
+  AprovacaoExternaPainel,
+} from "@/types/aprovacao-externa";
+import type {
   FatiaPizza,
   RelatorioAnaliseProjeto,
   RelatorioColaboradorOpcao,
@@ -1486,6 +1492,7 @@ type DemandaWorkflowEtapaReadApi = {
   iniciadaEm: string | null;
   concluidaEm: string | null;
   concluidaPorUsuarioId: string | null;
+  concluidaPorExternoNome?: string | null;
   podeAvancar: boolean;
   podeRejeitar?: boolean;
 };
@@ -1588,6 +1595,7 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       iniciadaEm: etapa.iniciadaEm ?? null,
       concluidaEm: etapa.concluidaEm ?? null,
       concluidaPorUsuarioId: etapa.concluidaPorUsuarioId ?? null,
+      concluidaPorExternoNome: etapa.concluidaPorExternoNome ?? null,
       podeAvancar: etapa.podeAvancar === true,
       podeRejeitar: etapa.podeRejeitar === true,
     })),
@@ -1959,6 +1967,30 @@ export async function rejeitarEtapaWorkflowReal(demandaId: string, etapaId: stri
     body: JSON.stringify({ motivo }),
   });
   return mapDemandaReadToDemanda(atualizada);
+}
+
+// Aprovação externa (Fase 9B) — lado INTERNO. O servidor decide a autoridade (`podeGerenciar`) e o estado derivado; o token só existe na resposta da
+// CRIAÇÃO (resposta única) e nunca é guardado aqui.
+export async function getAprovacaoExternaPainel(demandaId: string, etapaId: string): Promise<AprovacaoExternaPainel> {
+  const painel = await request<AprovacaoExternaPainel>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/aprovacao-externa`);
+  return { ...painel, atual: painel.atual ?? null, contatos: painel.contatos ?? [] };
+}
+
+export async function criarAprovacaoExternaReal(
+  demandaId: string,
+  etapaId: string,
+  corpo: AprovacaoExternaNovaEntrada,
+): Promise<AprovacaoExternaCriada> {
+  return request<AprovacaoExternaCriada>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/aprovacao-externa`, {
+    method: "POST",
+    body: JSON.stringify(corpo),
+  });
+}
+
+export async function revogarAprovacaoExternaReal(demandaId: string, etapaId: string, aprovacaoId: string): Promise<AprovacaoExterna> {
+  return request<AprovacaoExterna>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/aprovacao-externa/${aprovacaoId}/revogar`, {
+    method: "POST",
+  });
 }
 
 export async function restaurarDemandaReal(demandaId: string): Promise<Demanda> {

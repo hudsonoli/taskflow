@@ -29,7 +29,7 @@ import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useResponsaveisSelector, useUsuariosPorIds } from "@/lib/useResponsaveisSelector";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
-import { corDoEventoHistorico, descreverEventoHistorico } from "@/lib/historicoDemandaLabels";
+import { autorExternoDoEvento, corDoEventoHistorico, descreverEventoHistorico } from "@/lib/historicoDemandaLabels";
 import {
   avancarEtapaDoWorkflow,
   erroDoMotivo,
@@ -43,6 +43,7 @@ import {
   rejeitarEtapaDoWorkflow,
   textoDoRetorno,
   rotuloDaAcao,
+  rotuloAprovadaExternamente,
   rotuloEstadoConcluido,
   rotuloQuemConcluiu,
   workflowConcluido,
@@ -56,6 +57,8 @@ import type {
   DemandaWorkflowEtapa,
 } from "@/types/demanda";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { podeExibirBlocoAprovacao } from "@/lib/aprovacao-externa";
+import { AprovacaoExternaBloco } from "./AprovacaoExternaBloco";
 import { DemandaArquivosCard } from "./DemandaArquivosCard";
 import { DemandaChecklistCard } from "./DemandaChecklistCard";
 import { EnvioClienteCard } from "./EnvioClienteCard";
@@ -459,11 +462,16 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
                 <p className="mt-1 text-xs text-fg-muted">
                   {etapa.concluidaPorUsuarioId
                     ? `${rotuloQuemConcluiu(etapa)} ${nomeDoUsuario(etapa.concluidaPorUsuarioId)} · ${formatPrazo(etapa.concluidaEm)}`
-                    : `${rotuloEstadoConcluido(etapa)} em ${formatPrazo(etapa.concluidaEm)}`}
+                    : etapa.concluidaPorExternoNome
+                      ? `${rotuloAprovadaExternamente(etapa.concluidaPorExternoNome)} · ${formatPrazo(etapa.concluidaEm)}`
+                      : `${rotuloEstadoConcluido(etapa)} em ${formatPrazo(etapa.concluidaEm)}`}
                 </p>
               )}
               {estado === "atual" && etapa.iniciadaEm && (
                 <p className="mt-1 text-xs text-fg-muted">Iniciada em {formatPrazo(etapa.iniciadaEm)}</p>
+              )}
+              {podeExibirBlocoAprovacao(etapa, demanda.etapaAtualId, somenteLeitura) && (
+                <AprovacaoExternaBloco demanda={demanda} etapa={etapa} onChange={onChange} />
               )}
 
               {exibirAcao && !confirmando && (
@@ -623,6 +631,12 @@ export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
     return usuarios.find((usuario) => usuario.id === usuarioId)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido");
   }
 
+  // Decisão do cliente no Portal de Aprovação (Fase 9B): sem usuário do sistema — o autor é o NOME DECLARADO, nunca "Sistema".
+  function autorDoEvento(evento: DemandaHistoricoEvento): string {
+    const externo = autorExternoDoEvento(evento.dados);
+    return externo ? `${externo} (cliente · identidade declarada)` : nomeUsuario(evento.usuarioId);
+  }
+
   return (
     <SectionShell title="Histórico" description="Eventos registrados para auditoria." icon={<History className="h-5 w-5" />}>
       {erro && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{erro}</p>}
@@ -652,7 +666,7 @@ export function HistoricoDemandaSection({ demanda }: { demanda: Demanda }) {
                       {descreverEventoHistorico(evento, { usuarios, departamentos, resolvendoUsuarios: resolvendo })}
                     </p>
                     <p className="mt-1 text-sm text-fg-muted">
-                      {nomeUsuario(evento.usuarioId)} · {new Date(evento.occurredAt).toLocaleString("pt-BR")}
+                      {autorDoEvento(evento)} · {new Date(evento.occurredAt).toLocaleString("pt-BR")}
                     </p>
                   </div>
                 </div>

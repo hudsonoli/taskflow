@@ -84,6 +84,12 @@ const DESCRITORES: Record<string, (dados: Record<string, unknown>, contexto: Con
   "demanda.workflow_etapa_concluida": (dados) => descreverAvancoDeEtapa("concluída", dados),
   "demanda.workflow_etapa_aprovada": (dados) => descreverAvancoDeEtapa("aprovada", dados),
   "demanda.workflow_etapa_rejeitada": (dados) => descreverRejeicaoDeEtapa(dados),
+  // Fase 9B — Portal Externo de Aprovação. A decisão do cliente aparece pelos eventos de workflow acima (com o ator externo); estes são do ciclo do link.
+  "demanda.aprovacao_externa_criada": (dados) => `Link de aprovação do cliente gerado para "${String(dados.etapaNome ?? "")}"`,
+  "demanda.aprovacao_externa_revogada": (dados) =>
+    `Link de aprovação do cliente revogado${MOTIVOS_REVOGACAO[String(dados.motivo ?? "")] ? ` — ${MOTIVOS_REVOGACAO[String(dados.motivo)]}` : ""}`,
+  "demanda.aprovacao_externa_aprovada": (dados) => `Cliente aprovou a etapa "${String(dados.etapaNome ?? "")}"`,
+  "demanda.aprovacao_externa_ajustes": (dados) => `Cliente solicitou ajustes em "${String(dados.etapaNome ?? "")}"`,
   "demanda.ajuste_interno_registrado": () => "Ajuste interno registrado",
   "demanda.ajuste_cliente_registrado": () => "Ajuste solicitado pelo cliente registrado",
   "demanda.refacao_registrada": () => "Refação registrada",
@@ -92,11 +98,26 @@ const DESCRITORES: Record<string, (dados: Record<string, unknown>, contexto: Con
   "demanda.retorno_cliente_registrado": () => "Retorno do cliente registrado",
 };
 
+const MOTIVOS_REVOGACAO: Record<string, string> = {
+  manual: "revogado manualmente",
+  substituida: "substituído por um novo link",
+  etapa_decidida_internamente: "a etapa foi decidida internamente",
+};
+
+/** Fase 9B — nome DECLARADO (não verificado) do cliente que decidiu pelo Portal de Aprovação, ou `null` se o evento não é externo. */
+export function autorExternoDoEvento(dados: Record<string, unknown>): string | null {
+  const ator = dados.atorExterno;
+  if (!ator || typeof ator !== "object") return null;
+  const nome = (ator as Record<string, unknown>).nome;
+  return typeof nome === "string" && nome.trim() ? nome.trim() : null;
+}
+
 /** Um evento por ação (Fase 8A): a etapa que acabou e, no mesmo payload, a próxima — ou o fim do workflow (que não conclui a tarefa). */
 function descreverAvancoDeEtapa(acao: "concluída" | "aprovada", dados: Record<string, unknown>): string {
   const nome = String(dados.etapaNome ?? "");
   const proxima = dados.proximaEtapaNome ? ` — avançou para "${String(dados.proximaEtapaNome)}"` : " — workflow concluído";
-  return `Etapa "${nome}" ${acao}${proxima}`;
+  const externa = autorExternoDoEvento(dados) ? " externamente" : "";
+  return `Etapa "${nome}" ${acao}${externa}${proxima}`;
 }
 
 /** Fase 8D: um evento descreve a rejeição E o retorno (etapa reaberta), com o motivo. Os eventos anteriores continuam na timeline (append-only). */
@@ -104,6 +125,8 @@ function descreverRejeicaoDeEtapa(dados: Record<string, unknown>): string {
   const nome = String(dados.etapaNome ?? "");
   const retorno = dados.etapaRetornoNome ? ` — devolvida para "${String(dados.etapaRetornoNome)}"` : "";
   const motivo = dados.motivo ? `. Motivo: ${String(dados.motivo)}` : "";
+  // Decisão do cliente no portal: "ajustes solicitados" (a semântica é a mesma da rejeição interna — a etapa volta para a anterior)
+  if (autorExternoDoEvento(dados)) return `Etapa "${nome}" teve ajustes solicitados pelo cliente${retorno}${motivo}`;
   return `Etapa "${nome}" rejeitada${retorno}${motivo}`;
 }
 
