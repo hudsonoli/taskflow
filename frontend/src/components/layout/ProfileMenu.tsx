@@ -15,7 +15,9 @@ import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { formatarBadge } from "@/lib/notificacoes";
 import { useNotificacoes } from "@/lib/NotificacoesContext";
 import type { TemaPreferencia } from "@/lib/tema";
+import { ehRotaDeGestao } from "@/lib/tenant";
 import { usePlataformaAcesso } from "@/lib/usePlataformaAcesso";
+import { usePathname } from "next/navigation";
 import { perfilUsuarioLabels } from "@/types/usuario";
 
 const OPCOES_TEMA = [
@@ -50,10 +52,11 @@ export function ProfileMenu() {
   const [erroTema, setErroTema] = useState<string | null>(null);
   const router = useRouter();
   const tp = useTenantPath();
+  const emGestao = ehRotaDeGestao(usePathname());
   const [open, setOpen] = useState(false);
   const [saindo, setSaindo] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Entrada "Administração da Plataforma": só aparece se o backend confirmar a autoridade (nunca por e-mail/perfil).
+  // Entrada "Gestão da plataforma": só aparece se o backend confirmar a autoridade (nunca por e-mail/perfil).
   const administradorPlataforma = usePlataformaAcesso(usuarioAtual?.id);
 
   useEffect(() => {
@@ -147,28 +150,41 @@ export function ProfileMenu() {
                 </div>
 
                 <nav aria-label="Conta" className="border-b border-line p-1.5">
-                  <Link href={tp("minha-conta")} onClick={() => setOpen(false)} className={itemClassName}>
-                    <UserRound className="h-4 w-4 text-fg-subtle" />
-                    Perfil
-                  </Link>
-                  <Link href={tp("notificacoes")} onClick={() => setOpen(false)} className={itemClassName}>
-                    <Bell className="h-4 w-4 text-fg-subtle" />
-                    <span className="flex-1">Notificações</span>
-                    {badge && (
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-bold leading-none text-white">
-                        {badge}
-                        <span className="sr-only"> não lidas</span>
-                      </span>
-                    )}
-                  </Link>
-                  <Link href={`${tp("minha-conta")}#seguranca`} onClick={() => setOpen(false)} className={itemClassName}>
-                    <KeyRound className="h-4 w-4 text-fg-subtle" />
-                    Alterar senha
-                  </Link>
-                  {administradorPlataforma && (
-                    <Link href="/plataforma" onClick={() => setOpen(false)} className={itemClassName}>
+                  {emGestao ? (
+                    // Na Gestão não há empresa em contexto: os itens de perfil/notificações são do ambiente de uma empresa. Voltar é um link EXPLÍCITO
+                    // para `/e/<slug>/...` da empresa da própria sessão (nunca uma troca implícita de tenant).
+                    tp("meu-dia") !== "/" && (
+                      <Link href={tp("meu-dia")} onClick={() => setOpen(false)} className={itemClassName}>
+                        <UserRound className="h-4 w-4 text-fg-subtle" />
+                        Voltar à minha empresa
+                      </Link>
+                    )
+                  ) : (
+                    <>
+                      <Link href={tp("minha-conta")} onClick={() => setOpen(false)} className={itemClassName}>
+                        <UserRound className="h-4 w-4 text-fg-subtle" />
+                        Perfil
+                      </Link>
+                      <Link href={tp("notificacoes")} onClick={() => setOpen(false)} className={itemClassName}>
+                        <Bell className="h-4 w-4 text-fg-subtle" />
+                        <span className="flex-1">Notificações</span>
+                        {badge && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-bold leading-none text-white">
+                            {badge}
+                            <span className="sr-only"> não lidas</span>
+                          </span>
+                        )}
+                      </Link>
+                      <Link href={`${tp("minha-conta")}#seguranca`} onClick={() => setOpen(false)} className={itemClassName}>
+                        <KeyRound className="h-4 w-4 text-fg-subtle" />
+                        Alterar senha
+                      </Link>
+                    </>
+                  )}
+                  {administradorPlataforma && !emGestao && (
+                    <Link href="/gestao" onClick={() => setOpen(false)} className={itemClassName}>
                       <ShieldCheck className="h-4 w-4 text-fg-subtle" />
-                      Administração da Plataforma
+                      Gestão da plataforma
                     </Link>
                   )}
                 </nav>

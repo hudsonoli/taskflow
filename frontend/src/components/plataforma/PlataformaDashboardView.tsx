@@ -231,7 +231,7 @@ function ItemAtencao({ atencao }: { atencao: DashboardAtencao }) {
         </p>
       </div>
       <Link
-        href={`/plataforma/empresas/${encodeURIComponent(atencao.empresaId)}`}
+        href={`/gestao/empresas/${encodeURIComponent(atencao.empresaId)}`}
         className="shrink-0 rounded-full text-xs font-semibold text-indigo-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:text-indigo-400"
       >
         Abrir

@@ -3,7 +3,7 @@
 
 import type { PlataformaEmpresaStatus } from "../types/plataforma.ts";
 
-export const SLUG_RESERVADOS = ["plataforma", "api", "login", "logout", "admin", "suporte"] as const;
+export const SLUG_RESERVADOS = ["plataforma", "gestao", "api", "e", "aprovacao", "login", "logout", "admin", "suporte"] as const;
 export const SLUG_MIN = 3;
 export const SLUG_MAX = 40;
 const FORMATO_SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;

@@ -3,12 +3,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { SessaoOutraEmpresaView } from "@/components/layout/SessaoOutraEmpresaView";
+import { GestaoTopBar } from "@/components/layout/GestaoTopBar";
 import { TopNav } from "@/components/layout/TopNav";
 import { useAppData } from "@/lib/AppDataContext";
 import { useBranding } from "@/lib/BrandingContext";
 import {
   caminhoDoTenant,
-  ehRotaDaPlataforma,
+  ehRotaDeGestao,
   ehRotaDeAprovacaoExterna,
   ehRotaDeLogin,
   ehRotaDeRecuperacaoDeSenha,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/tenant";
 
 // Fase 9D — catálogo EXPLÍCITO de telas sem sessão (todas por slug): login, recuperação de senha e Portal Externo de Aprovação; a troca da senha
-// inicial é "nua" mas exige sessão. Nenhum outro `/e/<slug>/...` é público. Fora de `/e/<slug>` e de `/plataforma` (domínio nu, `/login`, `/tarefas`…)
+// inicial é "nua" mas exige sessão. Nenhum outro `/e/<slug>/...` é público. Fora de `/e/<slug>` e de `/gestao` (domínio nu, `/login`, `/plataforma`, `/tarefas`…)
 // não há empresa: a página (404 neutro) é renderizada como está, sem sessão, sem redirecionar e sem escolher empresa. A recuperação NÃO
 // redireciona quem já tem sessão — o link do e-mail (token no fragmento) tem de chegar até a tela.
 export function AppShell({ children }: { children: ReactNode }) {
@@ -29,13 +30,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [saindo, setSaindo] = useState(false);
 
   const slugUrl = slugDaRota(pathname);
-  const plataforma = ehRotaDaPlataforma(pathname);
+  const gestao = ehRotaDeGestao(pathname);
   const rotaLogin = ehRotaDeLogin(pathname);
   const rotaTrocaSenha = ehRotaDeTrocaDeSenhaInicial(pathname);
   const rotaRecuperacaoSenha = ehRotaDeRecuperacaoDeSenha(pathname);
   // Portal Externo (Fase 9B): sem TopNav, sem redirecionar e sem usar a sessão do tenant (mesmo que o navegador tenha `tf_session`).
   const rotaPortalExterno = ehRotaDeAprovacaoExterna(pathname);
-  const semEmpresa = slugUrl === null && !plataforma;
+  const semEmpresa = slugUrl === null && !gestao;
 
   // Sessão de OUTRA empresa que a da URL: nunca troca de empresa pela URL e nunca renderiza a área da empresa da URL.
   const sessaoDeOutraEmpresa = slugUrl !== null && autenticado && sessaoSlug !== null && sessaoSlug !== slugUrl;
@@ -45,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (semEmpresa || sessaoCarregando || rotaRecuperacaoSenha || rotaPortalExterno || sessaoDeOutraEmpresa) return;
 
     if (!autenticado && exigeSessao) {
-      // Sem slug (ex.: `/plataforma` aberto direto, sem sessão) não há login para onde mandar: a tela abaixo explica.
+      // Sem slug (ex.: `/gestao` aberto direto, sem sessão) não há login para onde mandar: a tela abaixo explica.
       if (slugUrl) router.replace(hrefLogin(slugUrl));
       return;
     }
@@ -81,7 +82,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   if (!sessaoCarregando && !autenticado && slugUrl === null) {
-    // `/plataforma` sem sessão: não há empresa para devolver ao login. Mensagem única, sem nomear nem listar empresas.
+    // `/gestao` sem sessão: não há empresa para devolver ao login. Mensagem única, sem nomear nem listar empresas.
     return (
       <div className="flex h-screen items-center justify-center bg-app px-4">
         <p className="max-w-sm text-center text-sm text-fg-muted">Acesso restrito. Entre pelo endereço de acesso da sua empresa.</p>
@@ -101,7 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen flex-col bg-app">
-      <TopNav />
+      {gestao ? <GestaoTopBar /> : <TopNav />}
       <main className="min-w-0 flex-1 overflow-y-auto px-4 py-8 sm:px-6">{children}</main>
     </div>
   );

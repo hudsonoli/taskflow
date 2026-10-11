@@ -60,7 +60,7 @@ export function EmpresaPlataformaView({ empresaId }: { empresaId: string }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          href="/plataforma/empresas"
+          href="/gestao/empresas"
           className="inline-flex items-center gap-1.5 rounded text-xs font-semibold text-fg-muted hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <ArrowLeft size={14} /> Empresas

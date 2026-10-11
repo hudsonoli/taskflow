@@ -15,7 +15,9 @@ from collections.abc import Callable
 
 from app.core.slugify import slugify
 
-SLUG_RESERVADOS: frozenset[str] = frozenset({"plataforma", "api", "login", "logout", "admin", "suporte"})
+# `gestao` (Fase 10A), `e` e `aprovacao` (rotas globais do host) juntam-se aos nomes técnicos. O CHECK do banco (migration 0041) ficou com a lista antiga — é só a
+# rede de segurança; esta validação é a que vale (alinhar o CHECK é um P3 para uma futura migration).
+SLUG_RESERVADOS: frozenset[str] = frozenset({"plataforma", "gestao", "api", "e", "aprovacao", "login", "logout", "admin", "suporte"})
 SLUG_MIN = 3
 SLUG_MAX = 40
 _FORMATO = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$")

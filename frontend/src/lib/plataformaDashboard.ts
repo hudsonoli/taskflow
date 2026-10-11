@@ -41,5 +41,5 @@ export function kpisDoResumo(resumo: DashboardResumo): KpiDashboard[] {
 
 /** Rótulo do botão de uma linha: abre a empresa no console (nunca vira sessão tenant). */
 export function hrefDaEmpresa(empresa: Pick<DashboardEmpresa, "id">): string {
-  return `/plataforma/empresas/${encodeURIComponent(empresa.id)}`;
+  return `/gestao/empresas/${encodeURIComponent(empresa.id)}`;
 }

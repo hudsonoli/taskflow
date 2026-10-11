@@ -21,8 +21,11 @@ test("slug válido: 3–40, minúsculas, números e hífen, sem hífen nas ponta
 });
 
 test("slug: a lista de reservados bate com a do backend", () => {
-  assert.deepEqual([...SLUG_RESERVADOS].sort(), ["admin", "api", "login", "logout", "plataforma", "suporte"]);
-  for (const reservado of SLUG_RESERVADOS) assert.match(erroDoSlug(reservado) ?? "", /reservado/);
+  assert.deepEqual([...SLUG_RESERVADOS].sort(), ["admin", "api", "aprovacao", "e", "gestao", "login", "logout", "plataforma", "suporte"]);
+  for (const reservado of SLUG_RESERVADOS) {
+    // "e" já cai antes, no tamanho mínimo; os demais são recusados como reservados
+    assert.match(erroDoSlug(reservado) ?? "", reservado.length < 3 ? /entre 3 e 40/ : /reservado/);
+  }
 });
 
 test("sugerirSlug tira acentos e símbolos e respeita o limite", () => {
@@ -53,7 +56,7 @@ test("entrada do menu vem de GET /plataforma/acesso e não de e-mail, perfil ou 
   const menu = ler("components/layout/ProfileMenu.tsx");
   assert.match(hook, /consultarAcessoPlataforma/);
   assert.match(menu, /usePlataformaAcesso\(usuarioAtual\?\.id\)/);
-  assert.match(menu, /administradorPlataforma && \(/);
+  assert.match(menu, /administradorPlataforma && !emGestao && \(/);
   const rota = ler("app/api/plataforma/acesso/route.ts");
   assert.match(rota, /\/plataforma\/acesso/);
   for (const arquivo of [hook, rota, ler("components/plataforma/PlataformaGuard.tsx")].map(semComentarios)) {
@@ -62,8 +65,8 @@ test("entrada do menu vem de GET /plataforma/acesso e não de e-mail, perfil ou 
   assert.doesNotMatch(ler("components/layout/TopNav.tsx"), /plataforma/i); // a entrada vive no menu do perfil, não na navegação operacional
 });
 
-test("o guard de /plataforma fica no layout e só abre a sessão depois de o backend confirmar a autoridade", () => {
-  assert.match(ler("app/plataforma/layout.tsx"), /<PlataformaGuard>/);
+test("o guard de /gestao fica no layout e só abre a sessão depois de o backend confirmar a autoridade", () => {
+  assert.match(ler("app/gestao/layout.tsx"), /<PlataformaGuard>/);
   const guard = ler("components/plataforma/PlataformaGuard.tsx");
   assert.ok(guard.indexOf("consultarAcessoPlataforma()") < guard.indexOf("abrirSessaoPlataforma()"));
   assert.match(guard, /negado/);
@@ -159,9 +162,9 @@ test("salvar a personalização de outra empresa não altera o branding de quem 
 
 test("rotas e componentes obrigatórios do módulo existem", () => {
   for (const caminho of [
-    "app/plataforma/page.tsx",
-    "app/plataforma/empresas/page.tsx",
-    "app/plataforma/empresas/[id]/page.tsx",
+    "app/gestao/page.tsx",
+    "app/gestao/empresas/page.tsx",
+    "app/gestao/empresas/[id]/page.tsx",
     "components/plataforma/PlataformaShell.tsx",
     "components/plataforma/EmpresasPlataformaView.tsx",
     "components/plataforma/EmpresaPlataformaView.tsx",
@@ -169,7 +172,7 @@ test("rotas e componentes obrigatórios do módulo existem", () => {
     assert.ok(ler(caminho).length > 0, caminho);
   }
   // page.tsx não carrega regra de negócio: só renderiza a View
-  assert.match(ler("app/plataforma/empresas/page.tsx"), /<EmpresasPlataformaView \/>/);
+  assert.match(ler("app/gestao/empresas/page.tsx"), /<EmpresasPlataformaView \/>/);
   assert.match(ler("components/plataforma/EmpresaPlataformaView.tsx"), /Dados[\s\S]*Personalização[\s\S]*Usuários/);
   assert.match(ler("components/plataforma/PlataformaShell.tsx"), /Empresa em foco/);
 });

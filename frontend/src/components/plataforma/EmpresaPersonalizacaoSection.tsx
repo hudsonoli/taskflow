@@ -136,7 +136,7 @@ export function EmpresaPersonalizacaoSection({ empresa }: { empresa: PlataformaE
       setRascunho(rascunhoDe(padrao));
       desfazerLogo();
       setConfirmarRestaurar(false);
-      setSucesso("Padrão restaurado: logo removido e cores/tema originais do TaskFloww.");
+      setSucesso("Padrão restaurado: logo removido e cores/tema originais do TaskFlow.");
     } catch (error) {
       setConfirmarRestaurar(false);
       setErroSalvar(error instanceof Error ? error.message : "Não foi possível restaurar o padrão.");
@@ -260,7 +260,7 @@ export function EmpresaPersonalizacaoSection({ empresa }: { empresa: PlataformaE
       </div>
 
       <Modal open={confirmarRestaurar} onClose={() => !salvando && setConfirmarRestaurar(false)} maxWidthClassName="max-w-md">
-        <h2 className="text-base font-semibold text-fg">Restaurar o padrão do TaskFloww?</h2>
+        <h2 className="text-base font-semibold text-fg">Restaurar o padrão do TaskFlow?</h2>
         <p className="mt-2 text-sm text-fg-muted">
           O logo de {empresa.nome} será removido e as cores e o tema voltam ao padrão. Nenhuma outra configuração é alterada.
         </p>

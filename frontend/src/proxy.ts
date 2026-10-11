@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { CONTEXTO_APROVACAO, HEADER_CONTEXTO, HEADER_TENANT_SLUG, ehRotaDaPlataforma, ehRotaDeAprovacaoExterna, slugDaRota } from "./lib/tenant";
+import { CONTEXTO_APROVACAO, CONTEXTO_GESTAO, HEADER_CONTEXTO, HEADER_TENANT_SLUG, ehRotaDeAprovacaoExterna, ehRotaDeGestao, slugDaRota } from "./lib/tenant";
 
 // Contexto de empresa das telas públicas. O layout raiz (que escreve tema/cores no <html>) não recebe o caminho, então
 // este proxy o traduz em headers INTERNOS de requisição:
 //   x-tf-tenant-slug  → só em `/e/<slug>/...`, já validado (3–40, [a-z0-9-], não reservado)
-//   x-tf-contexto     → `plataforma` em `/plataforma/**` (o console mantém a identidade da plataforma) e `aprovacao` em `/e/<slug>/aprovacao`
+//   x-tf-contexto     → `gestao` em `/gestao/**` (a Gestão mantém a identidade do PRODUTO TaskFlow) e `aprovacao` em `/e/<slug>/aprovacao`
 //                       (Portal Externo de Aprovação: marca neutra no HTML inicial, sem herdar sessão/cookie do tenant e SEM header de slug —
 //                       a empresa do portal vem do token; o slug da URL só é conferido contra ela)
 // Os dois são SEMPRE apagados do que chegou do navegador antes de decidir: ninguém forja contexto por header. E nenhum
@@ -18,7 +18,7 @@ export function proxy(request: NextRequest) {
   const portal = ehRotaDeAprovacaoExterna(pathname);
   const slug = portal ? null : slugDaRota(pathname);
   if (slug) headers.set(HEADER_TENANT_SLUG, slug);
-  if (ehRotaDaPlataforma(pathname)) headers.set(HEADER_CONTEXTO, "plataforma");
+  if (ehRotaDeGestao(pathname)) headers.set(HEADER_CONTEXTO, CONTEXTO_GESTAO);
   if (portal) headers.set(HEADER_CONTEXTO, CONTEXTO_APROVACAO);
 
   const resposta = NextResponse.next({ request: { headers } });

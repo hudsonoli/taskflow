@@ -11,7 +11,7 @@ import {
   HEADER_CONTEXTO,
   HEADER_TENANT_SLUG,
   caminhoDoTenant,
-  ehRotaDaPlataforma,
+  ehRotaDeGestao,
   ehRotaDeLogin,
   ehRotaDeRecuperacaoDeSenha,
   hrefDoTenant,
@@ -80,7 +80,7 @@ test("telas públicas: só por slug — as rotas nuas (/login, /esqueci-senha…
   }
   assert.ok(usaTemaDaEmpresa("/e/acme/trocar-senha-inicial") && usaTemaDaEmpresa("/e/acme/login"));
   assert.ok(!usaTemaDaEmpresa("/e/acme/meu-dia") && !ehRotaDeLogin("/e/acme/meu-dia"));
-  assert.ok(ehRotaDaPlataforma("/plataforma") && ehRotaDaPlataforma("/plataforma/empresas/x") && !ehRotaDaPlataforma("/plataformax"));
+  assert.ok(ehRotaDeGestao("/gestao") && ehRotaDeGestao("/gestao/empresas/x") && !ehRotaDeGestao("/gestaox") && !ehRotaDeGestao("/plataforma"));
 });
 
 test("slugVisual: só a rota manda — sem cookie, sem sessão e sem empresa padrão", () => {
@@ -296,7 +296,7 @@ test("layout: marca SÓ pelo slug da rota (sem cookie, sem legado) e identidade 
   assert.match(layout, /slugVisual\(\{ slugDaRota: slugRota \}\)/);
   assert.match(layout, /obterBrandingPublico\(\{ tipo: "slug", slug \}\)/);
   assert.doesNotMatch(layout, /legado|COOKIE_TENANT_SLUG|slugCookie|EMPRESA_CODIGO/);
-  assert.match(layout, /cabecalhos\.get\(HEADER_CONTEXTO\) === "plataforma"/);
+  assert.match(layout, /cabecalhos\.get\(HEADER_CONTEXTO\) === CONTEXTO_GESTAO/);
   assert.match(layout, /contextoPlataforma\s*\? \{ branding: BRANDING_PADRAO/);
   assert.match(layout, /tenantSlugInicial=\{contextoAprovacao \? null : slugRota\}/);
 });
@@ -314,7 +314,7 @@ test("AppShell e menu voltam ao login DA EMPRESA (slug da URL/sessão); sem slug
 
 test("branding da empresa: a marca salva não perde o slug; tema por rota pública usa o da empresa", () => {
   const contexto = ler("lib/BrandingContext.tsx");
-  assert.match(contexto, /slug: proximo\.slug \?\? branding\.slug/);
+  assert.match(contexto, /slug: proximo\.slug \?\? brandingTenant\.slug/);
   assert.match(contexto, /usaTemaDaEmpresa\(pathname\)/);
   assert.match(contexto, /slugDaRota\(pathname\) \?\? sessaoSlug/); // a URL manda; a sessão só preenche fora de /e/<slug>
 });

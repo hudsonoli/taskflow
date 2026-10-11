@@ -54,8 +54,8 @@ test("rotuloUltimoAcesso: Hoje/Ontem/dias/meses e 'Nunca' sem login; data invál
 });
 
 test("abrir empresa leva ao console da empresa (id codificado), sem sessão tenant", () => {
-  assert.equal(hrefDaEmpresa({ id: "abc-123" }), "/plataforma/empresas/abc-123");
-  assert.equal(hrefDaEmpresa({ id: "a/b" }), "/plataforma/empresas/a%2Fb");
+  assert.equal(hrefDaEmpresa({ id: "abc-123" }), "/gestao/empresas/abc-123");
+  assert.equal(hrefDaEmpresa({ id: "a/b" }), "/gestao/empresas/a%2Fb");
 });
 
 // ── view: estrutura ──────────────────────────────────────────────────────────────────────────────────
@@ -123,15 +123,15 @@ test("privacidade da tela: nenhum dado individual ou operacional é renderizado"
   assert.doesNotMatch(bloco, /email|senha|token|nomeUsuario|usuarioId|isSystemAccount/i);
 });
 
-test("/plataforma é a Dashboard; Empresas continua existindo; o console segue neutro", () => {
-  assert.match(ler("app/plataforma/page.tsx"), /<PlataformaDashboardView \/>/);
-  assert.match(ler("app/plataforma/empresas/page.tsx"), /<EmpresasPlataformaView \/>/);
+test("/gestao é a Dashboard; Empresas continua existindo; o console segue neutro", () => {
+  assert.match(ler("app/gestao/page.tsx"), /<PlataformaDashboardView \/>/);
+  assert.match(ler("app/gestao/empresas/page.tsx"), /<EmpresasPlataformaView \/>/);
   const shell = ler("components/plataforma/PlataformaShell.tsx");
   assert.match(shell, /rotulo: "Dashboard"/);
-  assert.match(shell, /href: "\/plataforma\/empresas", rotulo: "Empresas"/);
+  assert.match(shell, /href: "\/gestao\/empresas", rotulo: "Empresas"/);
   assert.match(shell, /Em breve/); // Suporte continua só um marcador
   assert.doesNotMatch(semComentarios(ler("components/plataforma/PlataformaDashboardView.tsx")), /useBranding|aplicarBranding/);
-  // a marca neutra do console vem do layout raiz (contexto "plataforma") — inalterado
+  // a marca neutra do console vem do layout raiz (contexto "gestao") — inalterado
   assert.match(ler("app/layout.tsx"), /contextoPlataforma\s*\? \{ branding: BRANDING_PADRAO/);
   // acesso decidido no backend, nunca por perfil
   assert.doesNotMatch(semComentarios(ler("components/plataforma/PlataformaGuard.tsx")), /perfilBase|"gestor"|isSystemAccount/);

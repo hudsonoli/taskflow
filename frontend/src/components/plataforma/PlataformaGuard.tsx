@@ -9,10 +9,10 @@ import { abrirSessaoPlataforma, consultarAcessoPlataforma } from "@/lib/platafor
 type Estado = "verificando" | "liberado" | "negado";
 
 /**
- * Proteção de URL direta de `/plataforma/**`. A decisão vem do BACKEND (`GET /plataforma/acesso`, com a sessão
+ * Proteção de URL direta de `/gestao/**`. A decisão vem do BACKEND (`GET /plataforma/acesso`, com a sessão
  * tenant) — nunca de e-mail, perfil ou conta de sistema — e só depois disso a sessão de plataforma (cookie
  * `tf_platform`) é aberta. Quem não é Administrador da Plataforma vê "Acesso negado" e nenhuma chamada a
- * `/plataforma/*` é feita. A barreira real continua sendo a API (`require_platform_admin` a cada requisição).
+ * `/plataforma/*` (API) é feita. A barreira real continua sendo a API (`require_platform_admin` a cada requisição).
  */
 export function PlataformaGuard({ children }: { children: ReactNode }) {
   const { usuarioAtual, sessaoCarregando } = useAppData();
@@ -48,8 +48,8 @@ export function PlataformaGuard({ children }: { children: ReactNode }) {
   if (estado === "negado") {
     return (
       <AcessoNegado
-        titulo="Área restrita à Administração da Plataforma"
-        descricao="Esta área é exclusiva de quem administra a plataforma. Se você precisa dela, fale com o responsável pelo TaskFloww."
+        titulo="Área restrita à Gestão da plataforma"
+        descricao="Esta área é exclusiva de quem administra a plataforma. Se você precisa dela, fale com o responsável pelo TaskFlow."
       />
     );
   }

@@ -10,12 +10,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { usePlataforma } from "@/components/plataforma/PlataformaContext";
 
 const ITENS = [
-  { href: "/plataforma", rotulo: "Dashboard", icone: LayoutDashboard, exato: true },
-  { href: "/plataforma/empresas", rotulo: "Empresas", icone: Building2, exato: false },
+  { href: "/gestao", rotulo: "Dashboard", icone: LayoutDashboard, exato: true },
+  { href: "/gestao/empresas", rotulo: "Empresas", icone: Building2, exato: false },
 ] as const;
 
 /**
- * Moldura da Administração da Plataforma: separada visualmente das Configurações do tenant (que administram UMA
+ * Moldura da Gestão da plataforma (`/gestao`): separada visualmente das Configurações do tenant (que administram UMA
  * empresa). Aqui se administra a plataforma e as empresas que existem nela. "Suporte" é só um marcador "Em breve" —
  * não há suporte nem impersonação nesta fase.
  */
@@ -27,13 +27,13 @@ export function PlataformaShell({ children }: { children: ReactNode }) {
     <div className="flex flex-col gap-6">
       <PageHeader
         icon={<ShieldCheck className="h-5 w-5" />}
-        title="Administração da Plataforma"
+        title="Gestão da plataforma"
         description="Cadastro e gestão das empresas, identidade visual de cada uma e provisionamento do primeiro Gestor. Autoridade própria, separada dos perfis das empresas."
         action={<Badge tone="amber">Área da plataforma</Badge>}
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <nav aria-label="Administração da Plataforma" className="flex flex-wrap gap-1 rounded-xl bg-surface-2 p-1">
+        <nav aria-label="Gestão da plataforma" className="flex flex-wrap gap-1 rounded-xl bg-surface-2 p-1">
           {ITENS.map(({ href, rotulo, icone: Icone, exato }) => {
             const ativo = exato ? pathname === href : pathname.startsWith(href);
             return (

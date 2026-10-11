@@ -108,7 +108,7 @@ export function EmpresasPlataformaView() {
                 <tr key={empresa.id} className="border-b border-line last:border-0 hover:bg-surface-hover">
                   <td className="px-4 py-3">
                     <Link
-                      href={`/plataforma/empresas/${empresa.id}`}
+                      href={`/gestao/empresas/${empresa.id}`}
                       className="font-semibold text-fg underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                       {empresa.nome}

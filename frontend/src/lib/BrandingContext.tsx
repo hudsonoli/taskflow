@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname } from "next/navigation";
 import { BRANDING_PADRAO, type Branding } from "@/lib/branding";
 import { variaveisDaMarca } from "@/lib/branding-tokens";
-import { hrefLogin, normalizarSlug, slugDaRota, usaTemaDaEmpresa } from "@/lib/tenant";
+import { ehRotaDeGestao, hrefLogin, normalizarSlug, slugDaRota, usaTemaDaEmpresa } from "@/lib/tenant";
 import {
   observarSistemaEscuro,
   resolveEffectiveTheme,
@@ -83,8 +83,12 @@ export function BrandingProvider({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const [branding, setBranding] = useState<Branding>(inicial);
-  const [nomesAplicados, setNomesAplicados] = useState<string[]>(() => Object.keys(variaveisDaMarca(inicial.corPrimaria, inicial.corSecundaria)));
+  const [brandingTenant, setBranding] = useState<Branding>(inicial);
+  // Gestão da plataforma (Fase 10A): identidade do PRODUTO, nunca a da empresa do último tenant visitado nem a da sessão.
+  const emGestao = ehRotaDeGestao(pathname);
+  const branding = emGestao ? BRANDING_PADRAO : brandingTenant;
+  // Variáveis CSS que a marca EFETIVA aplicou ao <html> (para removê-las ao trocar de marca: a marca padrão não define nenhuma).
+  const nomesAplicadosRef = useRef<string[]>(Object.keys(variaveisDaMarca(inicial.corPrimaria, inicial.corSecundaria)));
   const [preferencia, setPreferencia] = useState<TemaPreferencia>(preferenciaInicial);
   const [autenticado, setAutenticado] = useState(autenticadoInicial);
   const [sessaoSlug, setSessaoSlug] = useState<string | null>(null);
@@ -98,13 +102,18 @@ export function BrandingProvider({
 
   const aplicarBranding = useCallback(
     (proximo: Branding) => {
-      // A marca vinda da API administrativa não traz o slug: preserva o do contexto atual (vai na URL do logo).
-      const comSlug = { ...proximo, slug: proximo.slug ?? branding.slug };
+      // A marca vinda da API administrativa não traz o slug nem o nome: preserva os do contexto atual (slug vai na URL do logo).
+      const comSlug = { ...proximo, slug: proximo.slug ?? brandingTenant.slug, nome: proximo.nome ?? brandingTenant.nome };
       setBranding(comSlug);
-      setNomesAplicados(aplicarVariaveis(comSlug, nomesAplicados));
     },
-    [nomesAplicados, branding.slug],
+    [brandingTenant.slug, brandingTenant.nome],
   );
+
+  // A marca EFETIVA (tenant, ou a do produto na Gestão) é a única fonte das cores do <html>: ao entrar/sair da Gestão por navegação do cliente, ou ao salvar uma
+  // nova personalização, as variáveis anteriores são removidas e as novas aplicadas.
+  useEffect(() => {
+    nomesAplicadosRef.current = aplicarVariaveis(branding, nomesAplicadosRef.current);
+  }, [branding]);
 
   const usaPreferencia = autenticado && !usaTemaDaEmpresa(pathname);
 

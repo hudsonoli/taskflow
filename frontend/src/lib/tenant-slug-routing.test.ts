@@ -9,7 +9,7 @@ import { linkDeAprovacao } from "./aprovacao-externa.ts";
 import {
   caminhoDoTenant,
   caminhoSemTenant,
-  ehRotaDaPlataforma,
+  ehRotaDeGestao,
   ehRotaDeAprovacaoExterna,
   ehRotaDeLogin,
   ehRotaDeRecuperacaoDeSenha,
@@ -70,15 +70,15 @@ test("/tarefas e todas as rotas de tenant SEM /e/<slug> não existem (404 neutro
   assert.equal(existe("app/configuracoes/layout.tsx"), false);
 });
 
-test("só app/api, app/e e app/plataforma têm páginas/rotas: nenhuma outra pasta serve tenant", () => {
+test("só app/api, app/e e app/gestao têm páginas/rotas: nenhuma outra pasta serve tenant", () => {
   const raiz = new URL("app/", SRC);
   const pastas = readdirSync(raiz).filter((n) => statSync(new URL(n, raiz)).isDirectory()).sort();
-  assert.deepEqual(pastas, ["api", "e", "plataforma"]);
+  assert.deepEqual(pastas, ["api", "e", "gestao"]);
 });
 
 test("o AppShell NÃO escolhe empresa fora de /e/<slug>: renderiza a página (404) como está, sem redirecionar nem exigir sessão", () => {
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
-  assert.match(shell, /const semEmpresa = slugUrl === null && !plataforma;/);
+  assert.match(shell, /const semEmpresa = slugUrl === null && !gestao;/);
   assert.match(shell, /if \(semEmpresa\) return <>\{children\}<\/>;/);
   assert.match(shell, /if \(semEmpresa \|\| sessaoCarregando/); // o efeito de redirecionamento nem roda sem empresa
   assert.doesNotMatch(shell, /"\/login"|"\/meu-dia"|"\/trocar-senha-inicial"|loginHref/);
@@ -132,7 +132,7 @@ test("caminhoDoTenant/caminhoSemTenant: preservam o slug e nunca produzem caminh
 });
 
 test("nenhum componente navega para rota de tenant sem slug (router.push/replace, <Link>, redirect, window.location)", () => {
-  const permitidas = /^\/(plataforma|api)(\/|$|#)/;
+  const permitidas = /^\/(gestao|api)(\/|$|#)/;
   const achados: string[] = [];
   for (const arquivo of fontes) {
     if (arquivo.startsWith("app/api/")) continue;
@@ -252,10 +252,11 @@ test("nenhum fallback por EMPRESA_CODIGO/cookie/empresa padrão: layout, brandin
 
 // ── plataforma e portal ────────────────────────────────────────────────────────────────────────────────────────
 
-test("a plataforma continua em /plataforma, fora dos tenants; sem sessão não há empresa para devolver ao login", () => {
-  assert.equal(ehRotaDaPlataforma("/plataforma"), true);
-  assert.equal(ehRotaDaPlataforma("/plataforma/empresas/abc"), true);
-  assert.equal(rotaDoTenant("/plataforma/empresas"), null);
+test("a Gestão vive em /gestao (e /plataforma deixou de existir), fora dos tenants; sem sessão não há empresa para devolver ao login", () => {
+  assert.equal(ehRotaDeGestao("/gestao"), true);
+  assert.equal(ehRotaDeGestao("/gestao/empresas/abc"), true);
+  assert.equal(ehRotaDeGestao("/plataforma"), false);
+  assert.equal(rotaDoTenant("/gestao/empresas"), null);
   assert.equal(slugDaRota("/e/plataforma/login"), null); // 'plataforma' é slug reservado
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
   assert.match(shell, /Acesso restrito\. Entre pelo endereço de acesso da sua empresa\./);

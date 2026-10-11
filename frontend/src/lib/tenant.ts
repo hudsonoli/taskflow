@@ -7,14 +7,15 @@
 
 /** Header interno que o `proxy.ts` define a partir do caminho (e REMOVE do que vier do navegador). */
 export const HEADER_TENANT_SLUG = "x-tf-tenant-slug";
-/** Header interno: `plataforma` nas rotas `/plataforma/**` (o console mantém a identidade da plataforma). */
+/** Header interno: `gestao` nas rotas `/gestao/**` (a Gestão da plataforma mantém a identidade do PRODUTO, nunca a de uma empresa). */
 export const HEADER_CONTEXTO = "x-tf-contexto";
+export const CONTEXTO_GESTAO = "gestao";
 
 export const PAGINAS_PUBLICAS_DO_TENANT = ["login", "esqueci-senha", "redefinir-senha", "aprovacao"] as const;
 export type PaginaPublicaDoTenant = (typeof PAGINAS_PUBLICAS_DO_TENANT)[number];
 
 // Espelho de `app/core/empresa_slug.py` (3–40, [a-z0-9-], sem hífen nas pontas, fora dos reservados).
-const SLUGS_RESERVADOS = ["plataforma", "api", "login", "logout", "admin", "suporte"];
+const SLUGS_RESERVADOS = ["plataforma", "gestao", "api", "e", "aprovacao", "login", "logout", "admin", "suporte"];
 const FORMATO_SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
 /** Slug normalizado (minúsculas, sem espaços) ou `null` se malformado/reservado. Nunca lança. */
@@ -44,8 +45,9 @@ export function slugDaRota(pathname: string): string | null {
   return rotaDoTenant(pathname)?.slug ?? null;
 }
 
-export function ehRotaDaPlataforma(pathname: string): boolean {
-  return pathname === "/plataforma" || pathname.startsWith("/plataforma/");
+/** Gestão da plataforma (Fase 10A): `/gestao/**`. Fora de qualquer empresa — não tem slug nem sessão tenant implícita. `/plataforma` deixou de existir. */
+export function ehRotaDeGestao(pathname: string): boolean {
+  return pathname === "/gestao" || pathname.startsWith("/gestao/");
 }
 
 /**

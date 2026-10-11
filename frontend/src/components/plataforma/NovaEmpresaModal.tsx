@@ -70,7 +70,7 @@ export function NovaEmpresaModal({
       setSlugEditado(false);
       setTentou(false);
       onClose();
-      router.push(`/plataforma/empresas/${criada.id}`);
+      router.push(`/gestao/empresas/${criada.id}`);
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível criar a empresa.");
     } finally {

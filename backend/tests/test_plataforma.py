@@ -281,7 +281,7 @@ def test_slug_explicito_unico_e_validado(client_plataforma: TestClient) -> None:
             assert resposta.status_code == 422, (invalido, resposta.text)
 
 
-@pytest.mark.parametrize("reservado", ["plataforma", "api", "login", "logout", "admin", "suporte"])
+@pytest.mark.parametrize("reservado", ["plataforma", "gestao", "aprovacao", "api", "login", "logout", "admin", "suporte"])
 def test_slug_reservado_e_recusado(client_plataforma: TestClient, reservado: str) -> None:
     resposta = client_plataforma.post(f"{PLAT}/empresas", json=_payload_empresa(slug=reservado))
     assert resposta.status_code == 422 and "reservado" in resposta.text
