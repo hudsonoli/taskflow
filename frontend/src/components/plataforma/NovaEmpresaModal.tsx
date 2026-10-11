@@ -3,9 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { ConviteGestorAviso } from "@/components/plataforma/ConviteGestorAviso";
-import { EmpresaAcessoCard } from "@/components/plataforma/EmpresaAcessoCard";
 import { SecaoAcessoInicial, SecaoDadosEmpresa, SecaoIdentidadeVisual } from "@/components/plataforma/NovaEmpresaSecoes";
+import { SenhaTemporariaAviso } from "@/components/plataforma/SenhaTemporariaAviso";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { validarLogoNoNavegador } from "@/lib/personalizacao-logo";
@@ -23,8 +22,8 @@ import type { PlataformaOnboarding } from "@/types/plataforma";
 type Resultado = { dados: PlataformaOnboarding; avisos: string[] };
 
 /**
- * Nova empresa (Fase 10B): Empresa (ATIVA) + identidade visual + primeiro Gestor num único formulário em seções. A criação da Empresa e do Gestor é ATÔMICA no
- * servidor (`POST /plataforma/empresas/onboarding`); a identidade visual (cores/tema e logo) é aplicada logo depois pelo mecanismo existente e, se falhar, NÃO desfaz a
+ * Nova empresa (Fase 10B/10B.1): Empresa (ATIVA) + identidade visual + primeiro Gestor num único formulário em seções. A criação da Empresa e do Gestor é ATÔMICA no
+ * servidor (`POST /plataforma/empresas/onboarding`), sem SMTP: o servidor gera uma senha TEMPORÁRIA (só o hash persiste) que a tela de sucesso mostra UMA vez; a identidade visual (cores/tema e logo) é aplicada logo depois pelo mecanismo existente e, se falhar, NÃO desfaz a
  * empresa — vira um aviso. Ao concluir, o Administrador da Plataforma continua na Gestão (nenhuma sessão tenant, nenhuma impersonação): a tela de sucesso mostra o endereço
  * `/e/<slug>/login` para copiar e o estado do convite do Gestor.
  */
@@ -129,15 +128,12 @@ export function NovaEmpresaModal({ open, onClose, onCriada }: { open: boolean; o
             </div>
           </div>
 
-          <EmpresaAcessoCard slug={dados.empresa.slug} urlAcesso={dados.urlAcesso} />
+          <SenhaTemporariaAviso slug={dados.empresa.slug} urlAcesso={dados.urlAcesso} email={dados.gestor.email} senha={dados.senhaTemporaria} />
 
-          <div className="rounded-xl border border-line p-3 text-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Primeiro Gestor</p>
-            <p className="mt-1 font-semibold text-fg">{dados.gestor.nome}</p>
-            <p className="text-xs text-fg-muted">{dados.gestor.email}</p>
-          </div>
-
-          <ConviteGestorAviso convite={dados.convite} />
+          <p className="text-xs text-fg-muted">
+            Gestor: <span className="font-semibold text-fg">{dados.gestor.nome}</span>. No primeiro acesso o servidor o obriga a criar a senha pessoal em{" "}
+            <span className="font-mono">/e/{dados.empresa.slug}/trocar-senha-inicial</span>.
+          </p>
 
           {avisos.length > 0 && (
             <ul role="alert" className="flex list-disc flex-col gap-1 rounded-xl border border-amber-300/60 bg-amber-50 py-2.5 pl-7 pr-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
@@ -148,7 +144,7 @@ export function NovaEmpresaModal({ open, onClose, onCriada }: { open: boolean; o
           )}
 
           <p className="text-xs text-fg-muted">
-            Você continua na Gestão: nenhuma sessão da empresa foi aberta e ninguém foi impersonado. O acesso da empresa é pelo endereço acima, com o login do Gestor.
+            Você continua na Gestão: nenhuma sessão da empresa foi aberta e ninguém foi impersonado. O acesso da empresa é pelo endereço acima, com o usuário e a senha temporária do Gestor.
           </p>
 
           <div className="flex justify-end gap-2">

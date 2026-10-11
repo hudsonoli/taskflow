@@ -1,3 +1,4 @@
+import { corpoDaTrocaInicial } from "@/lib/senha-inicial";
 import type { Usuario } from "@/types/usuario";
 import { mapUsuarioReadToUsuario, type UsuarioReadApi } from "@/lib/api-backend";
 
@@ -95,15 +96,17 @@ export async function fetchSessao(): Promise<SessaoAtual | null> {
   return response.json();
 }
 
-export async function alterarSenhaInicial(senhaAtual: string, novaSenha: string, confirmacaoSenha: string): Promise<void> {
-  const response = await fetch("/api/auth/change-password", {
+/** Troca obrigatória do primeiro acesso: SÓ nova senha + confirmação (a pessoa já entrou com a temporária). O servidor impõe a obrigação. */
+export async function definirSenhaInicial(novaSenha: string, confirmacaoSenha: string): Promise<void> {
+  const response = await fetch("/api/auth/definir-senha-inicial", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ senhaAtual, novaSenha, confirmacaoSenha }),
+    body: JSON.stringify(corpoDaTrocaInicial(novaSenha, confirmacaoSenha)),
+    cache: "no-store",
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new Error(data?.message ?? data?.detail ?? "Não foi possível trocar a senha");
+    throw new Error(data?.message ?? (typeof data?.detail === "string" ? data.detail : null) ?? "Não foi possível criar a senha");
   }
 }
 

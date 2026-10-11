@@ -43,31 +43,23 @@ export type PlataformaUsuario = {
   status: "ativo" | "inativo" | "bloqueado" | "arquivado";
   acessoSistema: boolean;
   createdAt: string;
-  /** convite de primeiro acesso ainda não concluído — só um sinal (nunca dado de acesso) */
+  /** primeiro acesso pendente — só um sinal (nunca dado de acesso) */
   primeiroAcessoPendente?: boolean;
 };
 
 export type PlataformaGestorCreate = { nome: string; email: string };
 
-export type MotivoConviteNaoEnviado = "email_nao_configurado" | "url_publica_ausente" | "falha_envio";
-
 /**
- * Desfecho do convite de primeiro acesso do Gestor. NENHUMA senha existe (o Gestor define a própria). `enviado=false` não desfaz a criação: `linkAcesso` é o link
- * de primeiro acesso para entrega MANUAL e só existe nesta resposta (o servidor guarda apenas o hash) — quem chama não deve guardá-lo além da tela de entrega.
+ * Resposta ÚNICA da criação/regeneração: a `senhaTemporaria` existe SÓ aqui (o servidor guarda apenas o hash e nenhum endpoint posterior a devolve). O Gestor é
+ * OBRIGADO a trocá-la no primeiro acesso. Quem chama não deve guardá-la além da tela de entrega.
  */
-export type PlataformaConvite = {
-  enviado: boolean;
-  motivo: MotivoConviteNaoEnviado | null;
-  expiraEm: string;
-  linkAcesso: string | null;
-};
-
 export type PlataformaGestorCriado = {
   usuario: PlataformaUsuario;
-  convite: PlataformaConvite;
+  senhaTemporaria: string;
+  deveAlterarSenha: boolean;
 };
 
-/** Empresa (ativa) + primeiro Gestor numa operação atômica (`POST /plataforma/empresas/onboarding`). */
+/** Empresa (ativa) + primeiro Gestor com senha temporária numa operação atômica (`POST /plataforma/empresas/onboarding`). */
 export type PlataformaOnboardingCreate = {
   empresa: PlataformaEmpresaCreate;
   gestor: PlataformaGestorCreate;
@@ -76,7 +68,9 @@ export type PlataformaOnboardingCreate = {
 export type PlataformaOnboarding = {
   empresa: PlataformaEmpresa;
   gestor: PlataformaUsuario;
-  convite: PlataformaConvite;
+  /** senha TEMPORÁRIA do Gestor inicial: só nesta resposta (só o hash persiste); troca obrigatória no primeiro acesso */
+  senhaTemporaria: string;
+  deveAlterarSenha: boolean;
   /** `/e/<slug>/login` (absoluta quando o servidor conhece a URL pública). Sem token. */
   urlAcesso: string;
 };

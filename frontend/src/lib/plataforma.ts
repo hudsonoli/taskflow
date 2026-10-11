@@ -2,7 +2,7 @@
 // banco continuam sendo a barreira), rótulos e leitura de mensagens de erro da API. Testável com `node --test`.
 
 import { hexValido } from "./branding-tokens.ts";
-import type { MotivoConviteNaoEnviado, PlataformaConvite, PlataformaEmpresaStatus, PlataformaOnboardingCreate } from "../types/plataforma.ts";
+import type { PlataformaEmpresaStatus, PlataformaOnboardingCreate } from "../types/plataforma.ts";
 
 export const SLUG_RESERVADOS = ["plataforma", "gestao", "api", "e", "aprovacao", "login", "logout", "admin", "suporte"] as const;
 export const SLUG_MIN = 3;
@@ -179,25 +179,10 @@ export function urlDeAcessoDaEmpresa(origem: string, slug: string): string {
   return `${origem.replace(/\/+$/, "")}/e/${slug}/login`;
 }
 
-/** O servidor devolve link relativo quando não conhece a URL pública: a Gestão completa com a própria origem (a mesma do produto). */
-export function absolutizarLink(origem: string, link: string): string {
-  return /^https?:\/\//i.test(link) ? link : `${origem.replace(/\/+$/, "")}${link.startsWith("/") ? "" : "/"}${link}`;
-}
+/** Textos da tela de entrega da senha temporária (a senha em si vem do servidor e só vive no estado da tela). */
+export const AVISO_SENHA_UNICA =
+  "Esta senha será exibida somente agora. No primeiro acesso, o usuário deverá criar sua senha pessoal.";
 
-const DETALHE_MOTIVO: Record<MotivoConviteNaoEnviado, string> = {
-  email_nao_configurado: "A empresa ainda não tem e-mail (SMTP) configurado, então o convite não pôde ser enviado.",
-  url_publica_ausente: "O endereço público do TaskFlow não está configurado no servidor, então o convite não pôde ser enviado.",
-  falha_envio: "O servidor de e-mail não aceitou o envio do convite agora.",
-};
-
-/** Texto do estado do convite: enviado, ou "não enviado" com o motivo (nunca esconde a falha). */
-export function descreverConvite(convite: Pick<PlataformaConvite, "enviado" | "motivo">): { titulo: string; detalhe: string; tom: "green" | "amber" } {
-  if (convite.enviado) {
-    return { titulo: "Convite enviado", detalhe: "O Gestor recebeu um e-mail com o link para definir a própria senha.", tom: "green" };
-  }
-  return {
-    titulo: "Convite não enviado",
-    detalhe: `${convite.motivo ? DETALHE_MOTIVO[convite.motivo] : "O convite não pôde ser enviado."} A empresa e o Gestor foram criados normalmente.`,
-    tom: "amber",
-  };
-}
+/** Confirmação antes de gerar outra senha temporária (a anterior deixa de funcionar na hora). */
+export const CONFIRMACAO_NOVA_SENHA_TEMPORARIA =
+  "Gerar uma nova senha temporária? A senha anterior deixa de funcionar imediatamente e o usuário continua obrigado a criar a senha pessoal no primeiro acesso.";

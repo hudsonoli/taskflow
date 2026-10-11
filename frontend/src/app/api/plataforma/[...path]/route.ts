@@ -52,7 +52,8 @@ async function proxy(request: NextRequest, path: string[]) {
   }
 
   const dados = await resposta.json().catch(() => null);
-  return NextResponse.json(dados, { status: resposta.status });
+  // A resposta pode carregar a senha TEMPORÁRIA de um Gestor recém-criado (única vez): nunca cacheada por navegador, proxy ou CDN.
+  return NextResponse.json(dados, { status: resposta.status, headers: { "Cache-Control": "no-store" } });
 }
 
 type RouteContext = { params: Promise<{ path: string[] }> };

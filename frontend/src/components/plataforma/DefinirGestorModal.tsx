@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Loader2, MailPlus, UserCheck } from "lucide-react";
+import { KeyRound, Loader2, UserCheck } from "lucide-react";
 import clsx from "clsx";
-import { ConviteGestorAviso } from "@/components/plataforma/ConviteGestorAviso";
+import { SenhaTemporariaAviso } from "@/components/plataforma/SenhaTemporariaAviso";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -17,9 +17,9 @@ type Modo = "existente" | "novo";
  * Define um Gestor da empresa em foco, de duas formas num único fluxo:
  *  • "Escolher usuário existente": promove um Usuário JÁ cadastrado NESTA empresa (a lista traz só candidatos elegíveis:
  *    ativos, com acesso, sem conta de sistema e que ainda não são Gestor). Mesmo cadastro, mesma senha — nada é gerado.
- *  • "Criar novo Gestor": nome + e-mail; o servidor força o perfil Gestor e envia um CONVITE de primeiro acesso (o Gestor define a própria senha — nenhuma senha é
- *    gerada ou exibida; sem SMTP, o link de primeiro acesso aparece UMA vez para entrega manual).
- * A autoridade é da PLATAFORMA; a empresa pode ter vários Gestores. Fechar o modal descarta o link de convite da memória.
+ *  • "Criar novo Gestor": nome + e-mail; o servidor força o perfil Gestor e gera uma senha TEMPORÁRIA (só o hash persiste), exibida UMA vez; no primeiro acesso o Gestor é
+ *    obrigado a criar a senha pessoal. Sem SMTP, sem convite.
+ * A autoridade é da PLATAFORMA; a empresa pode ter vários Gestores. Fechar o modal descarta a senha da memória.
  */
 export function DefinirGestorModal({
   open,
@@ -76,7 +76,7 @@ export function DefinirGestorModal({
 
   function fechar() {
     if (salvando) return;
-    // Descarta o link de convite e o formulário: a próxima abertura começa do zero.
+    // Descarta a senha temporária e o formulário: a próxima abertura começa do zero.
     setCriado(null);
     setPromovido(null);
     setNome("");
@@ -155,7 +155,7 @@ export function DefinirGestorModal({
         <div className="flex flex-col gap-4">
           <div className="flex items-start gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
-              <MailPlus className="h-5 w-5" />
+              <KeyRound className="h-5 w-5" />
             </span>
             <div>
               <h2 className="text-base font-semibold text-fg">Gestor criado</h2>
@@ -165,7 +165,7 @@ export function DefinirGestorModal({
             </div>
           </div>
 
-          <ConviteGestorAviso convite={criado.convite} />
+          <SenhaTemporariaAviso slug={empresa.slug} email={criado.usuario.email} senha={criado.senhaTemporaria} />
 
           <div className="flex justify-end">
             <Button type="button" onClick={fechar}>
@@ -191,7 +191,7 @@ export function DefinirGestorModal({
           {(
             [
               { valor: "existente", rotulo: "Escolher usuário existente", ajuda: "Promove um Usuário já cadastrado nesta empresa." },
-              { valor: "novo", rotulo: "Criar novo Gestor", ajuda: "Cria um usuário já como Gestor e envia um convite para ele definir a própria senha." },
+              { valor: "novo", rotulo: "Criar novo Gestor", ajuda: "Cria um usuário já como Gestor, com senha temporária (exibida uma única vez)." },
             ] as const
           ).map(({ valor, rotulo, ajuda }) => {
             const ativo = modo === valor;
@@ -286,7 +286,7 @@ export function DefinirGestorModal({
               <Input label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={255} autoComplete="off" />
               {tentou && erroEmail && <p className="mt-1 text-xs font-medium text-danger">{erroEmail}</p>}
             </div>
-            <p className="text-xs text-fg-muted">O perfil é sempre Gestor. Ele recebe um convite para definir a própria senha — nenhuma senha é gerada ou exibida.</p>
+            <p className="text-xs text-fg-muted">O perfil é sempre Gestor. Uma senha temporária será gerada e exibida uma única vez; no primeiro acesso ele cria a senha pessoal.</p>
             {erro && (
               <p role="alert" className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2.5 text-xs font-medium text-danger">
                 {erro}

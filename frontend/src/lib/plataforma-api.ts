@@ -149,7 +149,7 @@ export function urlLogoEmpresa(id: string, versao: string | null): string {
 export const listarUsuariosEmpresa = (id: string) =>
   pedir<PlataformaUsuario[]>(`/empresas/${encodeURIComponent(id)}/usuarios?limit=200`);
 
-/** Convite de primeiro acesso (nenhuma senha). `convite.linkAcesso`, quando presente, existe SÓ nesta resposta: não o guarde além da tela de entrega. */
+/** A `senhaTemporaria` existe SÓ nesta resposta: quem chama não deve guardá-la além da tela de entrega. */
 export const criarGestorEmpresa = (id: string, dados: PlataformaGestorCreate) =>
   pedir<PlataformaGestorCriado>(`/empresas/${encodeURIComponent(id)}/gestores`, {
     method: "POST",
@@ -165,10 +165,10 @@ export const promoverGestorEmpresa = (id: string, usuarioId: string) =>
     method: "POST",
   });
 
-/** Novo convite de primeiro acesso (invalida o anterior) para um usuário que ainda não definiu a própria senha. */
-export const reenviarConviteGestor = (id: string, usuarioId: string) =>
-  pedir<PlataformaGestorCriado>(`/empresas/${encodeURIComponent(id)}/usuarios/${encodeURIComponent(usuarioId)}/convite`, { method: "POST" });
+/** Nova senha TEMPORÁRIA para quem ainda não concluiu o primeiro acesso (a anterior morre; a troca obrigatória continua). Exibida UMA vez; sem e-mail. */
+export const gerarNovaSenhaTemporaria = (id: string, usuarioId: string) =>
+  pedir<PlataformaGestorCriado>(`/empresas/${encodeURIComponent(id)}/usuarios/${encodeURIComponent(usuarioId)}/senha-temporaria`, { method: "POST" });
 
-/** Onboarding: Empresa (ativa) + primeiro Gestor + convite numa operação ATÔMICA. Não cria sessão tenant nem impersona. */
+/** Onboarding: Empresa (ativa) + primeiro Gestor com senha temporária numa operação ATÔMICA, sem SMTP. Não cria sessão tenant nem impersona. */
 export const onboardingEmpresaPlataforma = (dados: PlataformaOnboardingCreate) =>
   pedir<PlataformaOnboarding>("/empresas/onboarding", { method: "POST", body: JSON.stringify(dados) });

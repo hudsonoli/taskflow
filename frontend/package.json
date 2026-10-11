@@ -17,6 +17,7 @@
     "test:tenant-slug-routing": "node --test src/lib/tenant-slug-routing.test.ts",
     "test:gestao-routing": "node --test src/lib/gestao-routing.test.ts",
     "test:gestao-onboarding": "node --test src/lib/gestao-onboarding.test.ts",
+    "test:primeiro-acesso": "node --test src/lib/primeiro-acesso.test.ts",
     "test:tenant-branding": "node --test src/lib/tenant-branding.test.ts",
     "test:nome-produto": "node --test src/lib/nome-produto.test.ts",
     "test:onboarding": "node --test src/lib/onboarding.test.ts",
