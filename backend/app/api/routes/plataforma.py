@@ -28,6 +28,8 @@ from app.schemas.empresa import EmpresaCreate, EmpresaInativar, EmpresaUpdate
 from app.schemas.plataforma_dashboard import PlataformaDashboardRead
 from app.schemas.plataforma import (
     PlataformaAcessoRead,
+    PlataformaEmpresaOnboardingCreate,
+    PlataformaEmpresaOnboardingRead,
     PlataformaEmpresaRead,
     PlataformaGestorCreate,
     PlataformaGestorCriadoRead,
@@ -45,8 +47,8 @@ from app.services.empresa_service import (
 from app.services.plataforma_dashboard_service import PlataformaDashboardService
 from app.services.plataforma_service import (
     PlataformaAcessoNegadoError,
-    PlataformaGestorSenhaError,
     PlataformaService,
+    PlataformaSlugImutavelError,
     PlataformaUsuarioNaoElegivelError,
     PlataformaUsuarioNaoEncontradoError,
 )
@@ -62,14 +64,12 @@ def _tratar_erro(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     if isinstance(exc, PlataformaUsuarioNaoElegivelError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    if isinstance(exc, (EmpresaConflictError, EmpresaInvalidTransitionError, EmpresaHospedaPlataformaError)):
+    if isinstance(exc, (EmpresaConflictError, EmpresaInvalidTransitionError, EmpresaHospedaPlataformaError, PlataformaSlugImutavelError)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, (UsuarioConflictError, UsuarioArquivadoConflictError)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Já existe um usuário com este e-mail nesta empresa.") from exc
     if isinstance(exc, UsuarioInvalidEmpresaError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    if isinstance(exc, PlataformaGestorSenhaError):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     raise exc
 
 
@@ -135,6 +135,19 @@ def criar_empresa(
 ):
     try:
         return plataforma_service.criar_empresa(db, dados, ator=ctx.usuario)
+    except Exception as exc:
+        _tratar_erro(exc)
+
+
+@router.post("/empresas/onboarding", response_model=PlataformaEmpresaOnboardingRead, status_code=status.HTTP_201_CREATED)
+def onboarding_empresa(
+    dados: PlataformaEmpresaOnboardingCreate,
+    ctx: ContextoPlataforma = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+):
+    """Empresa (ativa) + primeiro Gestor numa transação atômica, com convite de primeiro acesso (sem senha). Não cria sessão tenant nem impersona."""
+    try:
+        return plataforma_service.criar_empresa_com_gestor(db, dados, ator=ctx.usuario)
     except Exception as exc:
         _tratar_erro(exc)
 
@@ -349,10 +362,24 @@ def criar_gestor(
     ctx: ContextoPlataforma = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
-    """Cria um Gestor da empresa (perfil forçado `gestor`, troca de senha obrigatória). A `senhaTemporaria` só existe
-    NESTA resposta."""
+    """Cria um Gestor da empresa (perfil forçado `gestor`) com convite de primeiro acesso: ele define a própria senha. Nenhuma senha é gerada ou exibida;
+    se o e-mail não puder ser enviado, `convite.linkAcesso` (exibido só aqui) permite a entrega manual."""
     try:
         resposta = plataforma_service.criar_gestor(db, str(empresa_id), dados, ator=ctx.usuario)
     except Exception as exc:
         _tratar_erro(exc)
     return resposta
+
+
+@router.post("/empresas/{empresa_id}/usuarios/{usuario_id}/convite", response_model=PlataformaGestorCriadoRead)
+def reenviar_convite(
+    empresa_id: UUID,
+    usuario_id: UUID,
+    ctx: ContextoPlataforma = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+):
+    """Novo convite de primeiro acesso (invalida o anterior) para quem ainda não definiu a própria senha."""
+    try:
+        return plataforma_service.reenviar_convite(db, str(empresa_id), str(usuario_id), ator=ctx.usuario)
+    except Exception as exc:
+        _tratar_erro(exc)

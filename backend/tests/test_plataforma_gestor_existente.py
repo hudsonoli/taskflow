@@ -88,7 +88,7 @@ def test_candidatos_sao_so_usuarios_ativos_com_acesso_da_propria_empresa(
     assert resposta.status_code == 200
     candidatos = resposta.json()
     assert [c["id"] for c in candidatos] == [ok.id]
-    assert set(candidatos[0]) == {"id", "nome", "email", "perfilBase", "status", "acessoSistema", "createdAt"}
+    assert set(candidatos[0]) == {"id", "nome", "email", "perfilBase", "status", "acessoSistema", "createdAt", "primeiroAcessoPendente"}
     assert candidatos[0]["perfilBase"] == "operador"  # a UI traduz para "Usuário"; a API segue o nome técnico
 
 
@@ -178,7 +178,7 @@ def test_multiplos_gestores_e_novo_gestor_continuam_possiveis(client_plataforma:
     assert _promover(client_plataforma, alvo["id"], b.id).status_code == 200
     novo = client_plataforma.post(f"{PLAT}/empresas/{alvo['id']}/gestores", json={"nome": "Terceiro Novo", "email": "terceiro@alvo.test"})
     assert novo.status_code == 201 and novo.json()["usuario"]["perfilBase"] == "gestor"
-    assert novo.json()["deveAlterarSenha"] is True and len(novo.json()["senhaTemporaria"]) >= 12
+    assert novo.json()["usuario"]["primeiroAcessoPendente"] is True and "senhaTemporaria" not in novo.json()  # convite, nunca senha
     assert client_plataforma.get(f"{PLAT}/empresas/{alvo['id']}").json()["gestoresAtivos"] == 3
 
 
@@ -258,7 +258,7 @@ def test_gestor_tenant_nao_promove_nem_cria_gestor_e_o_token_tenant_nao_entra_na
     assert alvo_tenant.perfil_base == "operador"
 
 
-def test_novo_gestor_nunca_vira_admin_e_nao_vaza_senha_para_evento(
+def test_novo_gestor_nunca_vira_admin_e_nao_vaza_token_para_evento(
     client_plataforma: TestClient, db_session: Session, alvo: dict
 ) -> None:
     for extra in ({"perfilBase": "admin"}, {"perfilBase": "gestor"}):
@@ -266,9 +266,9 @@ def test_novo_gestor_nunca_vira_admin_e_nao_vaza_senha_para_evento(
             f"{PLAT}/empresas/{alvo['id']}/gestores", json={"nome": "X", "email": "x@alvo.test", **extra}
         ).status_code == 422
     corpo = client_plataforma.post(f"{PLAT}/empresas/{alvo['id']}/gestores", json={"nome": "Sigiloso", "email": "sig@alvo.test"}).json()
-    senha = corpo["senhaTemporaria"]
+    token = corpo["convite"]["linkAcesso"].split("#token=", 1)[1]  # sem SMTP: link manual, só nesta resposta
     eventos = db_session.scalars(select(Evento).where(Evento.empresa_id == alvo["id"])).all()
-    assert senha not in str([e.payload for e in eventos])
+    assert token not in str([e.payload for e in eventos])
 
 
 # --------------------------------------------------------------------------------------

@@ -120,7 +120,9 @@ class UsuarioService:
         *,
         actor_usuario_id: str | None = None,
         actor: Usuario | None = None,
+        commit: bool = True,
     ) -> Usuario:
+        # `commit=False` (onboarding da Gestão): só `flush` — a transação é de quem chama (Empresa + Gestor inicial atômicos).
         # `actor` (as rotas sempre passam) liga a regra de autoridade: perfil atribuível por quem cria.
         # Ausente = chamada interna (CLI/seed), sem checagem de hierarquia.
         if actor is not None:
@@ -168,8 +170,11 @@ class UsuarioService:
             self._ensure_email_available(db, empresa_id, usuario.email)
             self.repository.create(db, usuario)
             self._publish_event(db, usuario, DomainEventType.USUARIO_CRIADO, actor_usuario_id, occurred_at=now)
-            db.commit()
-            db.refresh(usuario)
+            if commit:
+                db.commit()
+                db.refresh(usuario)
+            else:
+                db.flush()
             return usuario
         except IntegrityError:
             # Corrida entre duas criações concorrentes com o mesmo e-mail/código: os checks

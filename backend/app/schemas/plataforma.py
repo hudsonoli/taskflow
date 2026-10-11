@@ -6,13 +6,14 @@ um Gestor recém-criado existe APENAS em `PlataformaGestorCriadoRead` (resposta 
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.empresa import EmpresaRead
+from app.schemas.empresa import EmpresaCreate, EmpresaRead
 
 
 class PlataformaSessaoRead(BaseModel):
@@ -58,8 +59,13 @@ class PlataformaUsuarioRead(BaseModel):
     status: Literal["ativo", "inativo", "bloqueado", "arquivado"]
     acesso_sistema: bool = Field(alias="acessoSistema")
     created_at: datetime = Field(alias="createdAt")
+    # Convite de primeiro acesso ainda não concluído (a pessoa não definiu a própria senha). Só um sinal — nunca token nem hash.
+    primeiro_acesso_pendente: bool = Field(default=False, alias="primeiroAcessoPendente")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+_EMAIL_REGEX = re.compile(r"^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$")
 
 
 class PlataformaGestorCreate(BaseModel):
@@ -68,12 +74,56 @@ class PlataformaGestorCreate(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
+    @field_validator("nome")
+    @classmethod
+    def _nome(cls, value: str) -> str:
+        texto = re.sub(r"\s+", " ", value).strip()
+        if not texto:
+            raise ValueError("Informe o nome do Gestor.")
+        if "<" in texto or ">" in texto:
+            raise ValueError("O nome não pode conter marcação HTML.")
+        return texto
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        texto = value.strip().lower()
+        if not _EMAIL_REGEX.match(texto):
+            raise ValueError("Informe um e-mail válido.")
+        return texto
+
+
+class PlataformaConviteRead(BaseModel):
+    """Desfecho do convite de primeiro acesso do Gestor. NENHUMA senha existe aqui. `enviado=false` (ex.: a empresa nova ainda não tem SMTP) não desfaz a
+    criação: o convite segue válido e `linkAcesso` é o link de primeiro acesso para entrega manual — presente SÓ nessa resposta (o banco guarda o hash)."""
+
+    enviado: bool
+    motivo: Literal["email_nao_configurado", "url_publica_ausente", "falha_envio"] | None = None
+    expira_em: datetime = Field(alias="expiraEm")
+    link_acesso: str | None = Field(default=None, alias="linkAcesso")
+
+    model_config = ConfigDict(populate_by_name=True)
+
 
 class PlataformaGestorCriadoRead(BaseModel):
-    """Resposta ÚNICA da criação: `senhaTemporaria` aparece aqui e em nenhum outro lugar (nem log, nem evento)."""
-
     usuario: PlataformaUsuarioRead
-    senha_temporaria: str = Field(alias="senhaTemporaria")
-    deve_alterar_senha: bool = Field(default=True, alias="deveAlterarSenha")
+    convite: PlataformaConviteRead
+
+
+class PlataformaEmpresaOnboardingCreate(BaseModel):
+    """Empresa + primeiro Gestor numa única operação ATÔMICA. Só campos reais do modelo; o Gestor é sempre `gestor` (nunca admin) e só desta empresa."""
+
+    empresa: EmpresaCreate
+    gestor: PlataformaGestorCreate
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class PlataformaEmpresaOnboardingRead(BaseModel):
+    empresa: PlataformaEmpresaRead
+    gestor: PlataformaUsuarioRead
+    convite: PlataformaConviteRead
+    # `/e/<slug>/login` (absoluta quando APP_PUBLIC_URL está configurada). Sem token: é só o endereço da empresa.
+    url_acesso: str = Field(alias="urlAcesso")
 
     model_config = ConfigDict(populate_by_name=True)

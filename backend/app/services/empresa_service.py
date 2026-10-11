@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from sqlalchemy import select
@@ -52,7 +53,9 @@ class EmpresaService:
         data: EmpresaCreate,
         *,
         actor_usuario_id: str | None = None,
+        commit: bool = True,
     ) -> Empresa:
+        """`commit=False` (onboarding da Gestão): só `flush` — a transação é de quem chama (Empresa + Gestor inicial atômicos)."""
         now = datetime.now(timezone.utc)
         empresa = Empresa(
             id=str(uuid4()),
@@ -75,9 +78,17 @@ class EmpresaService:
             self._ensure_documento_available(db, empresa.documento)
             self.repository.create(db, empresa)
             self._publish_event(db, empresa, DomainEventType.EMPRESA_CRIADA, actor_usuario_id)
-            db.commit()
-            db.refresh(empresa)
+            if commit:
+                db.commit()
+                db.refresh(empresa)
+            else:
+                db.flush()
             return empresa
+        except IntegrityError:
+            # Corrida entre duas criações com o mesmo slug/código/documento: os checks acima passaram para as duas antes de qualquer commit; o
+            # UNIQUE do banco decide o vencedor e a outra recebe um conflito CONTROLADO (nunca um 500 com detalhe de SQL).
+            db.rollback()
+            raise EmpresaConflictError("slug, código interno ou documento já cadastrado") from None
         except Exception:
             db.rollback()
             raise
@@ -152,6 +163,9 @@ class EmpresaService:
             db.commit()
             db.refresh(empresa)
             return empresa
+        except IntegrityError:
+            db.rollback()
+            raise EmpresaConflictError("slug, código interno ou documento já cadastrado") from None
         except Exception:
             db.rollback()
             raise

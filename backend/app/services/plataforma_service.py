@@ -2,7 +2,7 @@
 
 Nada aqui duplica regra de negócio: empresa → `EmpresaService`; branding → `ConfiguracaoPersonalizacaoService` (a mesma
 validação de cores/tema/logo do tenant, só que com `empresa_id` explícito); usuário → `UsuarioService`; senha →
-`AuthService.definir_senha_usuario`. A autoridade vem de `administradores_plataforma` (nunca de e-mail ou de
+o convite de primeiro acesso do Gestor (`AuthService.preparar_convite`/`enviar_convite`, Fase 10B: NENHUMA senha é gerada nem exibida). A autoridade vem de `administradores_plataforma` (nunca de e-mail ou de
 `perfil_base`) e é reconferida a cada requisição por `require_platform_admin`.
 
 SEGUNDO_TENANT_GO_LIVE_BLOQUEADO: criar uma empresa e o Gestor dela já funciona por esta API, mas o login do produto
@@ -12,7 +12,6 @@ conseguem entrar. A resolução multiempresa (slug/branding no login, reset, Goo
 
 from __future__ import annotations
 
-import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -30,6 +29,9 @@ from app.repositories.usuario_repository import UsuarioRepository
 from app.schemas.configuracao_personalizacao import PersonalizacaoRead, PersonalizacaoUpdate
 from app.schemas.empresa import EmpresaCreate, EmpresaUpdate
 from app.schemas.plataforma import (
+    PlataformaConviteRead,
+    PlataformaEmpresaOnboardingCreate,
+    PlataformaEmpresaOnboardingRead,
     PlataformaEmpresaRead,
     PlataformaGestorCreate,
     PlataformaGestorCriadoRead,
@@ -38,15 +40,12 @@ from app.schemas.plataforma import (
     PlataformaUsuarioRead,
 )
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
-from app.services.auth_service import AuthService
+from app.models.usuario_credencial import UsuarioCredencial
+from app.services.auth_service import AuthService, ConviteResultado
 from app.services.configuracao_personalizacao_service import ConfiguracaoPersonalizacaoService
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.empresa_service import EmpresaService
 from app.services.usuario_service import UsuarioService
-
-# Sem caracteres ambíguos (0/O, 1/l/I): a senha temporária é lida e digitada por uma pessoa.
-_ALFABETO_SENHA = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
-_TAMANHO_SENHA = 14
 
 
 class PlataformaAcessoNegadoError(PermissionError):
@@ -62,13 +61,9 @@ class PlataformaUsuarioNaoElegivelError(ValueError):
     inativo/bloqueado ou sem acesso ao sistema)."""
 
 
-class PlataformaGestorSenhaError(RuntimeError):
-    """O Gestor foi criado, mas a senha temporária não pôde ser definida (a transação de usuário já tinha commitado)."""
-
-
-def gerar_senha_temporaria() -> str:
-    """CSPRNG (`secrets`), 14 caracteres de um alfabeto legível. Nunca é registrada em log nem em evento."""
-    return "".join(secrets.choice(_ALFABETO_SENHA) for _ in range(_TAMANHO_SENHA))
+class PlataformaSlugImutavelError(ValueError):
+    """O slug participa de login, navegação, reset de senha, portal de aprovação e links salvos: depois da criação ele é somente leitura na Gestão. Mudar um slug
+    exige um fluxo administrativo próprio e controlado (fora desta fase)."""
 
 
 class PlataformaService:
@@ -165,6 +160,11 @@ class PlataformaService:
         return self._read(db, [empresa])[0]
 
     def atualizar_empresa(self, db: Session, empresa_id: str, data: EmpresaUpdate, *, ator: Usuario) -> PlataformaEmpresaRead:
+        atual = self.empresa_service.get_empresa(db, empresa_id)
+        if data.slug is not None and data.slug != atual.slug:
+            raise PlataformaSlugImutavelError(
+                "O slug não pode ser alterado depois da criação: ele faz parte da URL da empresa (login, links e portal de aprovação)."
+            )
         empresa = self.empresa_service.update_empresa(db, empresa_id, data, actor_usuario_id=ator.id)
         return self._read(db, [empresa])[0]
 
@@ -253,7 +253,13 @@ class PlataformaService:
         empresa = self.empresa_service.get_empresa(db, empresa_id)
         # `UsuarioRepository.list` já exclui a conta de sistema (incondicional) e arquivados.
         usuarios = self.usuario_repository.list(db, empresa_id=empresa.id, search=search, limit=limit, offset=offset)
-        return [self._usuario_read(usuario) for usuario in usuarios]
+        pendentes = self._pendentes_de_primeiro_acesso(db, [u.id for u in usuarios])
+        resultado = []
+        for usuario in usuarios:
+            leitura = self._usuario_read(usuario)
+            leitura.primeiro_acesso_pendente = usuario.id in pendentes
+            resultado.append(leitura)
+        return resultado
 
     # ------------------------------------------------------------------------------------
     # Gestor a partir de um Usuário EXISTENTE da própria empresa
@@ -308,38 +314,30 @@ class PlataformaService:
         db.commit()
         return self._usuario_read(atualizado)
 
-    def criar_gestor(
-        self, db: Session, empresa_id: str, data: PlataformaGestorCreate, *, ator: Usuario
-    ) -> PlataformaGestorCriadoRead:
-        """Cria um Gestor para a empresa — SEMPRE `gestor` (nunca `admin`), só nesta empresa, com troca de senha
-        obrigatória. A senha temporária sai só na resposta."""
-        empresa = self.empresa_service.get_empresa(db, empresa_id)
-        gestores_antes = self.administrador_repository.gestores_ativos_por_empresa(db, [empresa.id]).get(empresa.id, 0)
+    @staticmethod
+    def _convite_read(resultado: ConviteResultado) -> PlataformaConviteRead:
+        return PlataformaConviteRead(enviado=resultado.enviado, motivo=resultado.motivo, expiraEm=resultado.expira_em, linkAcesso=resultado.link)
 
+    def _pendentes_de_primeiro_acesso(self, db: Session, usuario_ids: list[str]) -> set[str]:
+        """Usuários que ainda não definiram a PRÓPRIA senha (convite pendente). Só o sinal — nunca token nem hash."""
+        if not usuario_ids:
+            return set()
+        linhas = db.scalars(
+            select(UsuarioCredencial.usuario_id).where(
+                UsuarioCredencial.usuario_id.in_(usuario_ids), UsuarioCredencial.senha_deve_ser_alterada.is_(True)
+            )
+        ).all()
+        return set(linhas)
+
+    def _provisionar_gestor(self, db: Session, empresa: Empresa, data: PlataformaGestorCreate, *, ator: Usuario, primeiro: bool) -> tuple[Usuario, str, datetime]:
+        """Cria o usuário `gestor` (NUNCA admin) NESTA empresa + a credencial do convite + o evento, SEM commit — a transação é de quem chama."""
         usuario = self.usuario_service.create_usuario(
             db,
-            UsuarioCreate(
-                empresaId=empresa.id, nome=data.nome, email=data.email, perfilBase="gestor", acessoSistema=True
-            ),
+            UsuarioCreate(empresaId=empresa.id, nome=data.nome, email=data.email, perfilBase="gestor", acessoSistema=True),
             actor_usuario_id=ator.id,
+            commit=False,
         )
-
-        senha = gerar_senha_temporaria()
-        try:
-            self.auth_service.definir_senha_usuario(
-                db,
-                empresa_codigo=empresa.codigo_interno,
-                email=usuario.email,
-                senha=senha,
-                actor_usuario_id=ator.id,
-                deve_alterar_senha=True,
-            )
-        except Exception as exc:  # o Gestor existe; a senha não — nunca devolve uma senha que não foi gravada
-            raise PlataformaGestorSenhaError(
-                "O Gestor foi criado, mas não foi possível definir a senha temporária. "
-                "Defina a senha pelo CLI de administração (definir_senha_usuario)."
-            ) from exc
-
+        token, expira_em = self.auth_service.preparar_convite(db, usuario)
         self.event_publisher.publish(
             db,
             tipo=DomainEventType.EMPRESA_GESTOR_CRIADO,
@@ -347,10 +345,81 @@ class PlataformaService:
             entidade_tipo="empresa",
             entidade_id=empresa.id,
             usuario_id=ator.id,
-            payload={"usuarioId": usuario.id, "primeiroGestor": gestores_antes == 0, "nome": empresa.nome},
+            payload={"usuarioId": usuario.id, "primeiroGestor": primeiro, "nome": empresa.nome},
         )
-        db.commit()
-        return PlataformaGestorCriadoRead(usuario=self._usuario_read(usuario), senhaTemporaria=senha)
+        return usuario, token, expira_em
+
+    def criar_empresa_com_gestor(self, db: Session, data: PlataformaEmpresaOnboardingCreate, *, ator: Usuario) -> PlataformaEmpresaOnboardingRead:
+        """Onboarding (Fase 10B): Empresa (ATIVA) + primeiro Gestor + credencial do convite + eventos numa ÚNICA transação — ou tudo, ou nada (slug/código/
+        documento duplicado, e-mail inválido…: nenhuma empresa fica pela metade). O e-mail do convite é efeito externo e só sai DEPOIS do commit, sem segurar a
+        transação; falha de envio não desfaz nada. O Administrador da Plataforma continua na Gestão: nenhuma sessão tenant, nenhuma impersonação."""
+        try:
+            empresa = self.empresa_service.create_empresa(db, data.empresa, actor_usuario_id=ator.id, commit=False)
+            usuario, token, expira_em = self._provisionar_gestor(db, empresa, data.gestor, ator=ator, primeiro=True)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        db.refresh(empresa)
+        db.refresh(usuario)
+        convite = self.auth_service.enviar_convite(db, usuario=usuario, empresa=empresa, token=token, expira_em=expira_em)
+        leitura = self._usuario_read(usuario)
+        leitura.primeiro_acesso_pendente = True
+        return PlataformaEmpresaOnboardingRead(
+            empresa=self._read(db, [empresa])[0],
+            gestor=leitura,
+            convite=self._convite_read(convite),
+            urlAcesso=convite.url_acesso or f"/e/{empresa.slug}/login",
+        )
+
+    def criar_gestor(self, db: Session, empresa_id: str, data: PlataformaGestorCreate, *, ator: Usuario) -> PlataformaGestorCriadoRead:
+        """Cria um Gestor para a empresa — SEMPRE `gestor` (nunca `admin`), só nesta empresa, pelo MESMO convite de primeiro acesso do onboarding (ele define a
+        própria senha; nenhuma senha é gerada, exibida ou guardada)."""
+        empresa = self.empresa_service.get_empresa(db, empresa_id)
+        gestores_antes = self.administrador_repository.gestores_ativos_por_empresa(db, [empresa.id]).get(empresa.id, 0)
+        try:
+            usuario, token, expira_em = self._provisionar_gestor(db, empresa, data, ator=ator, primeiro=gestores_antes == 0)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        db.refresh(usuario)
+        convite = self.auth_service.enviar_convite(db, usuario=usuario, empresa=empresa, token=token, expira_em=expira_em)
+        leitura = self._usuario_read(usuario)
+        leitura.primeiro_acesso_pendente = True
+        return PlataformaGestorCriadoRead(usuario=leitura, convite=self._convite_read(convite))
+
+    def reenviar_convite(self, db: Session, empresa_id: str, usuario_id: str, *, ator: Usuario) -> PlataformaGestorCriadoRead:
+        """Novo convite (invalida o anterior) para quem ainda não definiu a própria senha. Mesma resposta cross-tenant de sempre para usuário de outra empresa."""
+        empresa = self.empresa_service.get_empresa(db, empresa_id)
+        usuario = self.usuario_repository.get_by_id(db, usuario_id)
+        if usuario is None or usuario.empresa_id != empresa.id or usuario.is_system_account or usuario.status == "arquivado":
+            raise PlataformaUsuarioNaoEncontradoError("Usuário não encontrado nesta empresa")
+        if usuario.status != "ativo" or not usuario.acesso_sistema:
+            raise PlataformaUsuarioNaoElegivelError("Só um usuário ativo, com acesso ao sistema, pode receber um convite.")
+        if empresa.status != "ativa":
+            raise PlataformaUsuarioNaoElegivelError("A empresa precisa estar ativa para receber um convite de primeiro acesso.")
+        if usuario.id not in self._pendentes_de_primeiro_acesso(db, [usuario.id]):
+            raise PlataformaUsuarioNaoElegivelError("Este usuário já definiu a própria senha: não há convite pendente.")
+        try:
+            token, expira_em = self.auth_service.preparar_convite(db, usuario)
+            self.event_publisher.publish(
+                db,
+                tipo=DomainEventType.EMPRESA_CONVITE_REENVIADO,
+                empresa_id=empresa.id,
+                entidade_tipo="empresa",
+                entidade_id=empresa.id,
+                usuario_id=ator.id,
+                payload={"usuarioId": usuario.id, "nome": empresa.nome},
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        convite = self.auth_service.enviar_convite(db, usuario=usuario, empresa=empresa, token=token, expira_em=expira_em)
+        leitura = self._usuario_read(usuario)
+        leitura.primeiro_acesso_pendente = True
+        return PlataformaGestorCriadoRead(usuario=leitura, convite=self._convite_read(convite))
 
     # ------------------------------------------------------------------------------------
     # Bootstrap (CLI) — o ÚNICO lugar onde um e-mail localiza a autoridade
