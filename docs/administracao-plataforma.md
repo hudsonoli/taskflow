@@ -99,3 +99,23 @@ rótulo de contexto: não troca sessão nem empresa.
 
 Testes: backend `tests/test_plataforma.py`, `tests/test_migration_0041_plataforma.py`,
 `tests/test_privacidade_arquivos_comentarios.py`; frontend `npm run test:plataforma`.
+
+## Onboarding de nova empresa (Fase 10B)
+
+Gestão → Empresas → **Nova empresa**: um formulário em seções (Dados da empresa · Identidade visual · Acesso inicial) deixa o tenant pronto em `/e/<slug>/login`.
+
+- **Criação atômica:** `POST /plataforma/empresas/onboarding` cria Empresa (**ativa**) + primeiro Gestor (`perfil_base=gestor`, só desta empresa; nunca admin tenant nem
+  Administrador da Plataforma) + credencial do convite + eventos numa **única transação** — slug/código/documento duplicado ou e-mail inválido não deixam estado parcial.
+  A corrida de slug é decidida pelo UNIQUE do banco (o perdedor recebe 409 controlado). Só o Administrador da Plataforma chama (mesma autoridade de sempre).
+- **Slug:** sugerido a partir do nome e editável **antes** de salvar; formato e reservados (`gestao, plataforma, api, e, login, aprovacao, logout, admin, suporte`) são
+  validados no backend. **Imutável depois de criado** (`PATCH` com outro slug → 409; na edição o campo é somente leitura): ele participa de login, links, reset e portal.
+- **Identidade visual:** pelo mecanismo existente (cores/tema via personalização; logo PNG/GIF 320×132 pelo upload da Gestão), aplicada logo depois de criar — uma falha vira
+  aviso e **não** desfaz a empresa. O cache de branding é invalidado a cada escrita da Gestão, então `/e/<slug>/login` já mostra a marca nova, sem restart.
+- **Gestor inicial — sem senha:** nenhuma senha é gerada, exibida ou guardada. O Gestor recebe um **convite de primeiro acesso** (token CSPRNG, só o SHA-256 no banco,
+  validade de 72 h) e define a própria senha em `/e/<slug>/redefinir-senha#token=…` (o mesmo fluxo/confirmação do "esqueci minha senha"). Link e e-mail são tenant-aware.
+- **SMTP é por empresa:** uma empresa nova ainda não tem SMTP, então o e-mail do convite normalmente **não sai**. A Gestão mostra "Convite não enviado" com o motivo e o **link
+  de primeiro acesso para entrega manual** (exibido uma única vez; some ao fechar). Falha de envio nunca desfaz a empresa. Na página da empresa, o Gestor com convite pendente
+  tem **Reenviar convite** (invalida o anterior). Backlog P2: SMTP de plataforma para convites.
+- **Depois de criar:** a tela mostra o endereço `/e/<slug>/login` com **Copiar endereço**. O Administrador continua na Gestão: nenhuma sessão tenant, nenhuma impersonação.
+- **Auditoria:** `empresa.criada`, `usuario.criado`, `empresa.gestor_criado` (`primeiroGestor`), `empresa.convite_reenviado` — ator = o Administrador da Plataforma real; tokens nunca em evento/log.
+- **Sem migration.** Não há campos de endereço/CEP no modelo `Empresa`: nada foi inventado (backlog).

@@ -104,17 +104,18 @@ test("sair do sistema também encerra a sessão de plataforma", () => {
 });
 
 // ── senha temporária: exibida uma vez, nunca persistida ──────────────────────────────────────────────
-test("a senha temporária não é gravada em storage, URL, console ou rota", () => {
+test("o link de convite não é gravado em storage, URL, console ou rota; fechar descarta o resultado", () => {
   const modal = ler("components/plataforma/DefinirGestorModal.tsx");
   const api = ler("lib/plataforma-api.ts");
-  for (const arquivo of [modal, api, ler("components/plataforma/EmpresaUsuariosSection.tsx")]) {
+  const aviso = ler("components/plataforma/ConviteGestorAviso.tsx");
+  for (const arquivo of [modal, api, aviso, ler("components/plataforma/EmpresaUsuariosSection.tsx"), ler("components/plataforma/NovaEmpresaModal.tsx")]) {
     assert.doesNotMatch(arquivo, /localStorage|sessionStorage|indexedDB|document\.cookie|console\.(log|info|debug|warn|error)/);
   }
   assert.doesNotMatch(modal, /router\.(push|replace)|location\./);
-  // fechar descarta o resultado (a senha) e o formulário
-  const fechar = modal.slice(modal.indexOf("function fechar()"), modal.indexOf("async function enviar"));
+  // fechar descarta o resultado (o link) e o formulário
+  const fechar = modal.slice(modal.indexOf("function fechar()"), modal.indexOf("async function promover"));
   assert.match(fechar, /setCriado\(null\)/);
-  assert.match(modal, /uma única vez/);
+  assert.match(aviso, /uma única vez/);
 });
 
 test("criar Gestor não oferece escolha de perfil nem de senha", () => {
