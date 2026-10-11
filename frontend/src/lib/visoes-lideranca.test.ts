@@ -107,7 +107,7 @@ test("operador comum NÃO tem Pauta: some do menu e a rota nega a URL direta (nu
   assert.match(view, /if \(carregandoDepartamentos\) return/); // espera os departamentos antes de negar (Head/Atendimento dependem deles)
   assert.match(view, /if \(!podeAcessar\) \{[\s\S]*?<AcessoNegado/);
   assert.match(view, /const pronto = Boolean\(usuarioAtual\) && !carregandoDepartamentos && podeAcessar;/); // negado nunca consulta
-  const rota = semComentarios(ler("app/pauta/page.tsx"));
+  const rota = semComentarios(ler("app/e/[slug]/pauta/page.tsx"));
   assert.match(rota, /<PautaView \/>/); // a rota só delega: a regra está na view
 });
 

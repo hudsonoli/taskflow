@@ -4,7 +4,6 @@ import "server-only";
 // O token JWT nunca sai daqui: fica só no cookie HttpOnly, o browser não tem acesso via JS.
 
 export const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8010";
-export const EMPRESA_CODIGO = process.env.EMPRESA_CODIGO ?? "DEMO";
 // Público (vai para o navegador) — client_id não é segredo. Lido no servidor (não
 // NEXT_PUBLIC_*) pra não ficar fixado em build time: um valor novo em produção só exige
 // trocar a variável de ambiente do container, sem rebuild — ver app/login/page.tsx.
@@ -22,21 +21,6 @@ export function sessionCookieOptions() {
     sameSite: "lax" as const,
     path: "/",
     maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
-  };
-}
-
-// Cookie VISUAL do tenant (slug público da empresa da sessão). Não sensível e SEM poder algum: serve só para o SSR
-// escolher a marca certa de quem está logado e para voltar ao login da empresa certa. A empresa de verdade vem da
-// sessão no backend. Reconciliado com `/auth/me` a cada login e a cada carregamento de sessão; apagado no logout.
-export const TENANT_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
-
-export function tenantSlugCookieOptions() {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: TENANT_COOKIE_MAX_AGE_SECONDS,
   };
 }
 

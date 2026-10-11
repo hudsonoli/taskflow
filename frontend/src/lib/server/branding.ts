@@ -1,21 +1,21 @@
 import "server-only";
-import { BACKEND_URL, EMPRESA_CODIGO } from "@/lib/server/backend";
+import { BACKEND_URL } from "@/lib/server/backend";
 import { BRANDING_PADRAO, type Branding, normalizarBranding } from "@/lib/branding";
 import { type CachePorChave, criarCachePorChave, resolverComCache } from "@/lib/branding-cache";
 
-// Branding PÚBLICO de uma empresa para o layout raiz (SSR) e para o logo, antes e depois do login. Resolvido por
-// ALVO: o slug da URL (`/e/<slug>/...`) ou, no acesso legado (`/login`), a empresa padrão do servidor (EMPRESA_CODIGO).
+// Branding PÚBLICO de uma empresa para o layout raiz (SSR) e para o logo, antes e depois do login. Resolvido SÓ pelo slug da URL
+// (`/e/<slug>/...`) — Fase 9D: não existe empresa padrão nem EMPRESA_CODIGO; sem slug a identidade é a neutra do TaskFloww.
 //
-// CACHE POR TENANT. A chave é o alvo (`slug:<slug>` ou `legado:<codigo>`) — nunca um valor global compartilhado: a
+// CACHE POR TENANT. A chave é o alvo (`slug:<slug>`) — nunca um valor global compartilhado: a
 // sequência A → B → A não pode contaminar logo, cores ou tema. Em memória, curto e limitado (TTL + teto de entradas,
 // despejando a mais antiga): slugs arbitrários da URL não fazem o cache crescer sem limite. Qualquer falha (backend
 // fora, timeout, resposta inválida) devolve os padrões — o branding NUNCA pode impedir o login nem derrubar a página.
 
-export type AlvoBranding = { tipo: "slug"; slug: string } | { tipo: "legado" };
+export type AlvoBranding = { tipo: "slug"; slug: string };
 
 export type BrandingPublico = {
   branding: Branding;
-  /** empresa existe e está ativa (para slug). No legado é sempre `true`: a empresa padrão é a do servidor. */
+  /** empresa existe e está ativa */
   disponivel: boolean;
   /** nome de exibição público (fantasia ou razão), só quando disponível */
   nome: string | null;
@@ -43,7 +43,7 @@ function cache(): CachePorChave<BrandingPublico> {
 
 /** Chave de cache do alvo: sempre distinta por empresa. Exportada só para os testes provarem que não há chave global. */
 export function chaveDoAlvo(alvo: AlvoBranding): string {
-  return alvo.tipo === "slug" ? `slug:${alvo.slug}` : `legado:${EMPRESA_CODIGO}`;
+  return `slug:${alvo.slug}`;
 }
 
 /** O proxy autenticado (tenant e plataforma) chama isto depois de mudar a personalização, para que o próximo
@@ -55,14 +55,6 @@ export function invalidarBranding() {
 const NEUTRO: BrandingPublico = { branding: BRANDING_PADRAO, disponivel: false, nome: null };
 
 async function buscar(alvo: AlvoBranding): Promise<BrandingPublico | null> {
-  if (alvo.tipo === "legado") {
-    const resposta = await fetch(`${BACKEND_URL}/personalizacao/publica?empresaCodigo=${encodeURIComponent(EMPRESA_CODIGO)}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!resposta.ok) return null;
-    return { branding: normalizarBranding(await resposta.json().catch(() => null)), disponivel: true, nome: null };
-  }
   const resposta = await fetch(`${BACKEND_URL}/publico/empresas/${encodeURIComponent(alvo.slug)}/branding`, {
     cache: "no-store",
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -82,15 +74,12 @@ export async function obterBrandingPublico(alvo: AlvoBranding): Promise<Branding
     } catch {
       // backend indisponível / timeout → padrões; falha curta é cacheada para não martelar o backend.
     }
-    const resultado = valor ?? (alvo.tipo === "legado" ? { branding: BRANDING_PADRAO, disponivel: true, nome: null } : NEUTRO);
+    const resultado = valor ?? NEUTRO;
     return { valor: resultado, ttlMs: valor === null || !resultado.disponivel ? TTL_FALHA_MS : TTL_MS };
   });
 }
 
 export function urlLogoBackend(alvo: AlvoBranding, versao: string | null): string {
   const v = versao ? `v=${encodeURIComponent(versao)}` : "";
-  if (alvo.tipo === "slug") {
-    return `${BACKEND_URL}/publico/empresas/${encodeURIComponent(alvo.slug)}/branding/logo${v ? `?${v}` : ""}`;
-  }
-  return `${BACKEND_URL}/personalizacao/publica/logo?empresaCodigo=${encodeURIComponent(EMPRESA_CODIGO)}${v ? `&${v}` : ""}`;
+  return `${BACKEND_URL}/publico/empresas/${encodeURIComponent(alvo.slug)}/branding/logo${v ? `?${v}` : ""}`;
 }

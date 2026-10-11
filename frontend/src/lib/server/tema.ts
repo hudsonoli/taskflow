@@ -1,7 +1,6 @@
 import "server-only";
-import { tenantSlugCookieOptions } from "@/lib/server/backend";
 import { COOKIE_TEMA, normalizarPreferencia, type TemaPreferencia } from "@/lib/tema";
-import { COOKIE_TENANT_SLUG, normalizarSlug } from "@/lib/tenant";
+import { normalizarSlug } from "@/lib/tenant";
 
 // Cookie-espelho da preferência pessoal de tema (primeiro paint no servidor). A VERDADE é o banco
 // (usuarios.tema_preferencia); este cookie só evita o flash e é reconciliado a cada login, a cada
@@ -67,10 +66,4 @@ export async function dadosVisuaisDaSessao(
   } catch {
     return { preferencia: null, empresaSlug: null };
   }
-}
-
-/** Reconcilia o cookie visual do tenant com a empresa da SESSÃO (nunca o contrário). */
-export function sincronizarCookieTenant(jar: Jar, empresaSlug: string | null): void {
-  if (empresaSlug) jar.set(COOKIE_TENANT_SLUG, empresaSlug, tenantSlugCookieOptions());
-  else jar.delete(COOKIE_TENANT_SLUG);
 }

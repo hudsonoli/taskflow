@@ -5,8 +5,8 @@ A **Administração da Plataforma** é a camada que cria e mantém as empresas q
 (`admin`, `gestor`, `operador`) dá acesso a ela.
 
 > **SEGUNDO_TENANT_GO_LIVE_BLOQUEADO** — criar uma empresa e o primeiro Gestor dela já funciona por esta API/UI, mas o
-> **login do produto ainda resolve a empresa por `EMPRESA_CODIGO`** (uma única empresa por instalação). Login, reset de
-> senha e branding das telas públicas por slug (`/e/<slug>/login`) são da **Fase 2**. Enquanto isso, **não** operar um
+> **login do produto resolvia a empresa por `EMPRESA_CODIGO`** (histórico). Desde a Fase 2/9D o navegador resolve a empresa só pelo slug da URL
+> (`/e/<slug>/login`); o segundo cliente real segue sujeito aos demais bloqueios desta página. Enquanto isso, **não** operar um
 > segundo cliente real: os testes e a validação em DEV usam empresas sintéticas e **não** fazem login web nelas.
 
 ## Modelo

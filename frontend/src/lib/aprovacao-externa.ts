@@ -12,15 +12,17 @@ import type {
   EstadoAprovacaoExterna,
 } from "../types/aprovacao-externa.ts";
 import type { DemandaWorkflowEtapa } from "../types/demanda.ts";
+import { PAGINA_APROVACAO_EXTERNA, caminhoDoTenant } from "./tenant.ts";
 
 export const ARQUIVOS_MAX = 10;
 export const INSTRUCAO_MAX = 1000;
 export const VALIDADES_DIAS = [1, 3, 7, 14, 30] as const;
 export const AVISO_LINK_UNICO = "O link é exibido somente agora. Para gerar outro, revogue e crie um novo.";
 
-/** Link público do portal. O token vai no FRAGMENTO: o navegador não o envia ao servidor na requisição da página. */
-export function linkDeAprovacao(origem: string, token: string): string {
-  return `${origem.replace(/\/+$/, "")}/aprovacao#token=${token}`;
+/** Link público do portal (Fase 9D): `<origem>/e/<slug>/aprovacao#token=<token>`. O slug é o da empresa que o SERVIDOR devolveu na criação (nunca um valor fixo);
+ * o token vai no FRAGMENTO — o navegador não o envia ao servidor na requisição da página — e jamais em query string. */
+export function linkDeAprovacao(origem: string, slug: string, token: string): string {
+  return `${origem.replace(/\/+$/, "")}${caminhoDoTenant(slug, PAGINA_APROVACAO_EXTERNA)}#token=${token}`;
 }
 
 export const rotuloEstadoAprovacao: Record<EstadoAprovacaoExterna, string> = {

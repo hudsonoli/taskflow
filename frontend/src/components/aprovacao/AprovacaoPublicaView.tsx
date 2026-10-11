@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { CheckCircle2, Download, FileText, MessageSquareWarning, ShieldAlert } from "lucide-react";
 import { BrandLogo } from "@/components/branding/BrandLogo";
 import { Badge } from "@/components/ui/Badge";
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { normalizarBranding } from "@/lib/branding";
 import { useBranding } from "@/lib/BrandingContext";
+import { slugDaRota } from "@/lib/tenant";
 import {
   baixarArtefato,
   baixarLogo,
@@ -40,7 +42,7 @@ function formatarDataHora(iso: string): string {
 }
 
 /**
- * Portal Externo de Aprovação (Fase 9B) — a tela do CLIENTE. Sem conta, sem sessão do tenant, sem menu: o link (`/aprovacao#token=…`) é a única credencial.
+ * Portal Externo de Aprovação (Fase 9B) — a tela do CLIENTE. Sem conta, sem sessão do tenant, sem menu: o link (`/e/<slug>/aprovacao#token=…`) é a única credencial (o slug só é conferido contra a empresa do token).
  *
  * O token é lido do FRAGMENTO (nunca vai ao servidor web), fica só em memória e viaja só no corpo dos POSTs do BFF dedicado. O fragmento permanece na barra
  * de endereço para o cliente poder recarregar/reabrir o link. Todo texto vindo do servidor/cliente é renderizado como TEXTO (nenhum HTML injetado). Nada
@@ -48,6 +50,7 @@ function formatarDataHora(iso: string): string {
  */
 export function AprovacaoPublicaView() {
   const { aplicarBranding } = useBranding();
+  const slug = slugDaRota(usePathname());
   const aplicarBrandingRef = useRef(aplicarBranding);
   useEffect(() => {
     aplicarBrandingRef.current = aplicarBranding;
@@ -60,7 +63,7 @@ export function AprovacaoPublicaView() {
 
   async function carregar(token: string) {
     try {
-      const dados = await consultarAprovacao(token);
+      const dados = await consultarAprovacao(slug ?? "", token);
       aplicarBrandingRef.current(normalizarBranding(dados.empresa));
       setFase({ tipo: "pronto", dados });
       return dados;
@@ -75,13 +78,13 @@ export function AprovacaoPublicaView() {
     const timeout = setTimeout(() => {
       const doFragmento = extrairTokenDoFragmento(window.location.hash);
       setToken(doFragmento);
-      if (!doFragmento) {
+      if (!doFragmento || !slug) {
         setFase({ tipo: "indisponivel" });
         return;
       }
       void carregar(doFragmento).then(async (dados) => {
         if (cancelado || !dados || !normalizarBranding(dados.empresa).logoDisponivel) return;
-        const blob = await baixarLogo(doFragmento);
+        const blob = await baixarLogo(slug, doFragmento);
         if (!cancelado && blob) setLogo(URL.createObjectURL(blob));
       });
     }, 0);
@@ -89,6 +92,7 @@ export function AprovacaoPublicaView() {
       cancelado = true;
       clearTimeout(timeout);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -116,7 +120,7 @@ export function AprovacaoPublicaView() {
           </Cartao>
         )}
         {fase.tipo === "pronto" && token && (
-          <Aprovacao token={token} dados={fase.dados} onAtualizar={() => carregar(token)} />
+          <Aprovacao slug={slug ?? ""} token={token} dados={fase.dados} onAtualizar={() => carregar(token)} />
         )}
         <p className="text-center text-[11px] text-fg-subtle">Link de acesso individual. Não o compartilhe com quem não deva avaliar este material.</p>
       </div>
@@ -143,10 +147,12 @@ function Indisponivel() {
 }
 
 function Aprovacao({
+  slug,
   token,
   dados,
   onAtualizar,
 }: {
+  slug: string;
   token: string;
   dados: AprovacaoPublica;
   onAtualizar: () => Promise<AprovacaoPublica | null>;
@@ -170,7 +176,7 @@ function Aprovacao({
     setEnviando(true);
     setErro(null);
     try {
-      await decidirAprovacao(token, montarDecisao(entrada));
+      await decidirAprovacao(slug, token, montarDecisao(entrada));
       await onAtualizar();
     } catch (falha) {
       if (falha instanceof DecisaoJaRegistradaError || falha instanceof LinkIndisponivelError) {
@@ -198,7 +204,7 @@ function Aprovacao({
       <ul className="mt-4 flex flex-col gap-4">
         {dados.artefatos.map((artefato) => (
           <li key={artefato.ordem}>
-            <Artefato token={token} artefato={artefato} />
+            <Artefato slug={slug} token={token} artefato={artefato} />
           </li>
         ))}
       </ul>
@@ -280,7 +286,7 @@ function Aprovacao({
   );
 }
 
-function Artefato({ token, artefato }: { token: string; artefato: ArtefatoPublicoAprovacao }) {
+function Artefato({ slug, token, artefato }: { slug: string; token: string; artefato: ArtefatoPublicoAprovacao }) {
   const [url, setUrl] = useState<string | null>(null);
   const [falhou, setFalhou] = useState(false);
   const [baixando, setBaixando] = useState(false);
@@ -289,7 +295,7 @@ function Artefato({ token, artefato }: { token: string; artefato: ArtefatoPublic
     if (artefato.tipo !== "imagem") return;
     let cancelado = false;
     let criada: string | null = null;
-    baixarArtefato(token, artefato.ordem)
+    baixarArtefato(slug, token, artefato.ordem)
       .then((blob) => {
         if (cancelado) return;
         criada = URL.createObjectURL(blob);
@@ -302,14 +308,14 @@ function Artefato({ token, artefato }: { token: string; artefato: ArtefatoPublic
       cancelado = true;
       if (criada) URL.revokeObjectURL(criada);
     };
-  }, [token, artefato.ordem, artefato.tipo]);
+  }, [slug, token, artefato.ordem, artefato.tipo]);
 
   async function baixarPdf() {
     if (baixando) return;
     setBaixando(true);
     setFalhou(false);
     try {
-      const blob = await baixarArtefato(token, artefato.ordem);
+      const blob = await baixarArtefato(slug, token, artefato.ordem);
       const temporaria = URL.createObjectURL(blob);
       const ancora = document.createElement("a");
       ancora.href = temporaria;

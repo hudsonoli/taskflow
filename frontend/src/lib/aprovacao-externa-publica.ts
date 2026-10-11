@@ -1,8 +1,9 @@
 // Portal Externo de Aprovação — lado PÚBLICO (Fase 9B). Lógica PURA + cliente do BFF dedicado (`/api/aprovacao/*`), testável com `node --test`.
 //
 // Superfície do cliente: SEM sessão, SEM cookies (`credentials: "omit"`), SEM headers próprios, SEM `Referer`. O token vem do FRAGMENTO da URL
-// (`/aprovacao#token=…`: o navegador não o envia ao servidor web), vive só em memória e viaja SÓ no corpo JSON dos POSTs — nunca em path/query, log,
-// analytics, mensagem de erro ou console. Artefatos são pedidos pela ORDEM (1..N), nunca por id de arquivo.
+// (`/e/<slug>/aprovacao#token=…`: o navegador não o envia ao servidor web), vive só em memória e viaja SÓ no corpo JSON dos POSTs — nunca em
+// path/query, log, analytics, mensagem de erro ou console. O SLUG da URL também vai no corpo, mas só como CONFERÊNCIA: o backend o compara com a
+// empresa do token e, se diferir, responde o mesmo 404 neutro (o slug nunca concede acesso). Artefatos são pedidos pela ORDEM (1..N), nunca por id.
 import type {
   AprovacaoPublica,
   DecisaoPublica,
@@ -142,19 +143,20 @@ function mensagemDeErro(dados: unknown, padrao: string): string {
   return padrao;
 }
 
-export async function consultarAprovacao(token: string, fetcher: Fetcher = fetch): Promise<AprovacaoPublica> {
-  const resposta = await chamar("consultar", { token }, fetcher);
+export async function consultarAprovacao(slug: string, token: string, fetcher: Fetcher = fetch): Promise<AprovacaoPublica> {
+  const resposta = await chamar("consultar", { slug, token }, fetcher);
   if (resposta.status === 404) throw new LinkIndisponivelError();
   if (!resposta.ok) throw new Error("Não foi possível carregar a aprovação agora. Tente novamente em instantes.");
   return (await resposta.json()) as AprovacaoPublica;
 }
 
 export async function decidirAprovacao(
+  slug: string,
   token: string,
   entrada: DecisaoPublicaEntrada,
   fetcher: Fetcher = fetch,
 ): Promise<{ estado: "aprovada" | "ajustes_solicitados"; decididaEm: string }> {
-  const resposta = await chamar("decisao", { token, ...entrada }, fetcher);
+  const resposta = await chamar("decisao", { slug, token, ...entrada }, fetcher);
   const dados = await resposta.json().catch(() => null);
   if (resposta.ok) return dados as { estado: "aprovada" | "ajustes_solicitados"; decididaEm: string };
   if (resposta.status === 404) throw new LinkIndisponivelError();
@@ -165,17 +167,17 @@ export async function decidirAprovacao(
 }
 
 /** Bytes do artefato `ordem` (imagem ou PDF) para exibir/baixar via `Blob` — nunca por URL com token. */
-export async function baixarArtefato(token: string, ordem: number, fetcher: Fetcher = fetch): Promise<Blob> {
-  const resposta = await chamar("artefato", { token, ordem }, fetcher);
+export async function baixarArtefato(slug: string, token: string, ordem: number, fetcher: Fetcher = fetch): Promise<Blob> {
+  const resposta = await chamar("artefato", { slug, token, ordem }, fetcher);
   if (resposta.status === 404) throw new LinkIndisponivelError();
   if (!resposta.ok) throw new Error("Não foi possível carregar o arquivo agora.");
   return resposta.blob();
 }
 
 /** Logo da empresa DONA do link; `null` se não houver logo (o portal usa a marca padrão). */
-export async function baixarLogo(token: string, fetcher: Fetcher = fetch): Promise<Blob | null> {
+export async function baixarLogo(slug: string, token: string, fetcher: Fetcher = fetch): Promise<Blob | null> {
   try {
-    const resposta = await chamar("logo", { token }, fetcher);
+    const resposta = await chamar("logo", { slug, token }, fetcher);
     return resposta.ok ? await resposta.blob() : null;
   } catch {
     return null;

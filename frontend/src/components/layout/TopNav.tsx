@@ -18,6 +18,7 @@ import {
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTenantPath } from "@/lib/useTenantPath";
 import clsx from "clsx";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
@@ -88,11 +89,12 @@ function buildNavItems(usuarioAtual: Usuario | undefined, departamentos: Departa
 }
 
 function isItemActive(pathname: string, href: string): boolean {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function TopNav() {
   const pathname = usePathname();
+  const tp = useTenantPath();
   const { usuarioAtual } = useAppData();
   const { departamentos } = useDiretorioDepartamentos();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -101,17 +103,17 @@ export function TopNav() {
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-white/70 backdrop-blur-xl dark:bg-zinc-950/70">
       <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center" aria-label="Início">
+        <Link href={tp("meu-dia")} className="flex shrink-0 items-center" aria-label="Início">
           <BrandLogo variant="header" />
         </Link>
 
         <nav className="hidden flex-1 items-center justify-center gap-1.5 overflow-x-auto md:flex">
           {navItems.map((item) => {
-            const isActive = isItemActive(pathname, item.href);
+            const isActive = isItemActive(pathname, tp(item.href));
             return (
               <Link
                 key={item.label}
-                href={item.href}
+                href={tp(item.href)}
                 className={clsx(
                   "relative flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2.5 text-sm font-medium transition-colors",
                   isActive
@@ -160,11 +162,11 @@ export function TopNav() {
       {mobileOpen && (
         <nav className="flex flex-col gap-1 border-t border-zinc-100 px-3 py-3 md:hidden dark:border-zinc-800">
           {navItems.map((item) => {
-            const isActive = isItemActive(pathname, item.href);
+            const isActive = isItemActive(pathname, tp(item.href));
             return (
               <Link
                 key={item.label}
-                href={item.href}
+                href={tp(item.href)}
                 onClick={() => setMobileOpen(false)}
                 className={clsx(
                   "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",

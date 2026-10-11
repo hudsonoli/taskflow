@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { BACKEND_URL, EMPRESA_CODIGO } from "@/lib/server/backend";
+import { BACKEND_URL } from "@/lib/server/backend";
 import { normalizarSlug } from "@/lib/tenant";
 
 const MENSAGEM_LINK_INVALIDO = "Este link é inválido ou expirou. Solicite uma nova redefinição de senha.";
@@ -20,14 +20,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Informe e confirme a nova senha." }, { status: 422 });
   }
 
-  // O link do e-mail aponta para `/e/<slug>/redefinir-senha`: o slug da URL escolhe a empresa e o backend confere que o
-  // token pertence a ela (token de outra empresa = mesmo "link inválido"). Sem slug, o legado usa a empresa padrão.
-  const slugInformado = body?.empresaSlug;
-  const slug = normalizarSlug(slugInformado);
-  if (slugInformado !== undefined && slugInformado !== null && !slug) {
+  // O link do e-mail aponta para `/e/<slug>/redefinir-senha`: o slug da URL escolhe a empresa e o backend confere que o token pertence a ela
+  // (token de outra empresa = mesmo "link inválido"). Fase 9D: sem slug válido não há empresa padrão — mesmo "link inválido".
+  const slug = normalizarSlug(body?.empresaSlug);
+  if (!slug) {
     return NextResponse.json({ message: MENSAGEM_LINK_INVALIDO }, { status: 400 });
   }
-  const empresa = slug ? { empresaSlug: slug } : { empresaCodigo: EMPRESA_CODIGO };
+  const empresa = { empresaSlug: slug };
 
   let backendResponse: Response;
   try {

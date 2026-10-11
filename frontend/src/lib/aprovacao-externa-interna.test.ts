@@ -37,10 +37,15 @@ function aprovacao(extra: Partial<AprovacaoExterna> = {}): AprovacaoExterna {
 
 // ── link e aviso de exibição única ────────────────────────────────────────────────────────────────────────────
 
-test("o link usa o FRAGMENTO (#token=) — o token não vai ao servidor web nem a path/query", () => {
-  const link = linkDeAprovacao("https://app.exemplo.com/", TOKEN);
-  assert.equal(link, `https://app.exemplo.com/aprovacao#token=${TOKEN}`);
+test("o link usa o FRAGMENTO (#token=) e o slug da empresa — nunca ?token=, nunca /aprovacao sem slug", () => {
+  const link = linkDeAprovacao("https://app.exemplo.com/", "boxcom", TOKEN);
+  assert.equal(link, `https://app.exemplo.com/e/boxcom/aprovacao#token=${TOKEN}`);
   assert.doesNotMatch(link, /\?token=|\/aprovacao\/[A-Za-z0-9_-]{43}/);
+  assert.ok(!link.replace("/e/boxcom/aprovacao", "").includes("/aprovacao"));
+  // o slug é sempre o da empresa dona do link (nunca fixo): outro slug gera outro link
+  assert.equal(linkDeAprovacao("https://app.exemplo.com", "outra-empresa", TOKEN), `https://app.exemplo.com/e/outra-empresa/aprovacao#token=${TOKEN}`);
+  // slug inválido nunca vira um link "sem empresa" que o portal serviria
+  assert.doesNotMatch(linkDeAprovacao("https://app.exemplo.com", "", TOKEN), /\/e\//);
 });
 
 test("aviso de link exibido uma única vez", () => {
@@ -187,7 +192,7 @@ test("tela: o link aparece uma vez, com copiar e o aviso; fechar descarta o toke
   assert.match(bloco, /AVISO_LINK_UNICO/);
   assert.match(bloco, /Copiar link/);
   assert.match(bloco, /navigator\.clipboard\.writeText/);
-  assert.match(bloco, /linkDeAprovacao\(window\.location\.origin, resultado\.criada\.token\)/);
+  assert.match(bloco, /linkDeAprovacao\(window\.location\.origin, resultado\.criada\.empresaSlug, resultado\.criada\.token\)/);
   assert.match(bloco, /Revogar link/);
   assert.match(bloco, /Confirmar revogação/);
   assert.match(bloco, /Gerar novo link/);

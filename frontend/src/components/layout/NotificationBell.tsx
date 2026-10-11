@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Bell, ClipboardList } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTenantPath } from "@/lib/useTenantPath";
 import { listarNotificacoes, listDemandasReais, marcarNotificacaoLida } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { abaDaNotificacao, contextoDaNotificacao, formatarBadge } from "@/lib/notificacoes";
@@ -27,6 +28,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const tp = useTenantPath();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -66,7 +68,7 @@ export function NotificationBell() {
   function abrirDemanda(demandaId: string, aba: string) {
     setDemandaParaAbrir({ demandaId, aba });
     setOpen(false);
-    router.push("/tarefas");
+    router.push(tp("tarefas"));
   }
 
   async function abrirNotificacao(notificacao: Notificacao) {
@@ -113,7 +115,7 @@ export function NotificationBell() {
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
               <p className="text-sm font-semibold text-fg">Notificações</p>
               <Link
-                href="/notificacoes"
+                href={tp("notificacoes")}
                 onClick={() => setOpen(false)}
                 className="text-xs font-medium text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400"
               >

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname } from "next/navigation";
 import { BRANDING_PADRAO, type Branding } from "@/lib/branding";
 import { variaveisDaMarca } from "@/lib/branding-tokens";
-import { hrefLogin, normalizarSlug, usaTemaDaEmpresa } from "@/lib/tenant";
+import { hrefLogin, normalizarSlug, slugDaRota, usaTemaDaEmpresa } from "@/lib/tenant";
 import {
   observarSistemaEscuro,
   resolveEffectiveTheme,
@@ -31,9 +31,11 @@ type BrandingContextValue = {
   definirPreferenciaTema: (preferencia: TemaPreferencia) => Promise<void>;
   /** chamado pelo AppDataProvider: sessão carregada (preferência real do banco) ou encerrada (null) */
   sincronizarSessao: (sessao: { temaPreferencia: TemaPreferencia; empresaSlug?: string | null } | null) => void;
-  /** slug PÚBLICO do contexto visual (URL ou sessão). Só decide marca e para onde voltar no login — nunca autoriza. */
+  /** slug PÚBLICO do contexto da página: o da URL `/e/<slug>/...`; fora de uma rota tenant (ex.: `/plataforma`), o da SESSÃO. Nunca autoriza. */
   tenantSlug: string | null;
-  /** tela de login da empresa certa (`/e/<slug>/login`) ou, sem contexto de empresa, o legado `/login` */
+  /** slug da empresa da SESSÃO (null sem sessão). Usado para detectar sessão × URL divergentes — nunca troca de empresa pela URL. */
+  sessaoSlug: string | null;
+  /** tela de login da empresa certa (`/e/<slug>/login`); sem slug conhecido não há destino de login ("/", 404 neutro). */
   loginHref: string;
 };
 
@@ -45,7 +47,8 @@ const BrandingContext = createContext<BrandingContextValue>({
   definirPreferenciaTema: async () => {},
   sincronizarSessao: () => {},
   tenantSlug: null,
-  loginHref: "/login",
+  sessaoSlug: null,
+  loginHref: "/",
 });
 
 function aplicarVariaveis(branding: Branding, anteriores: string[]): string[] {
@@ -84,7 +87,9 @@ export function BrandingProvider({
   const [nomesAplicados, setNomesAplicados] = useState<string[]>(() => Object.keys(variaveisDaMarca(inicial.corPrimaria, inicial.corSecundaria)));
   const [preferencia, setPreferencia] = useState<TemaPreferencia>(preferenciaInicial);
   const [autenticado, setAutenticado] = useState(autenticadoInicial);
-  const [tenantSlug, setTenantSlug] = useState<string | null>(tenantSlugInicial);
+  const [sessaoSlug, setSessaoSlug] = useState<string | null>(null);
+  // Fase 9D: o slug do contexto é o da URL; a sessão só preenche rotas fora de `/e/<slug>` (console da plataforma). Sem cookie, sem empresa padrão.
+  const tenantSlug = slugDaRota(pathname) ?? sessaoSlug ?? tenantSlugInicial;
   const [sistemaEscuro, setSistemaEscuro] = useState(false);
   const preferenciaRef = useRef(preferencia);
   useEffect(() => {
@@ -135,18 +140,18 @@ export function BrandingProvider({
 
   const sincronizarSessao = useCallback((sessao: { temaPreferencia: TemaPreferencia; empresaSlug?: string | null } | null) => {
     setAutenticado(sessao !== null);
-    // O slug da empresa da SESSÃO passa a ser o contexto de retorno ao login. No logout (null) ele é MANTIDO de
-    // propósito: é ele que leva a pessoa de volta à tela de login da empresa dela.
+    // O slug da empresa da SESSÃO serve ao retorno ao login fora de rotas tenant e à detecção de divergência com a URL. No logout (null) ele é
+    // MANTIDO de propósito: é ele que leva a pessoa de volta à tela de login da empresa dela.
     const slugDaSessao = normalizarSlug(sessao?.empresaSlug);
-    if (slugDaSessao) setTenantSlug(slugDaSessao);
+    if (slugDaSessao) setSessaoSlug(slugDaSessao);
     // logout: o override do usuário anterior nunca fica na tela nem vale para o próximo login
     setPreferencia(sessao?.temaPreferencia ?? null);
   }, []);
 
   const loginHref = hrefLogin(tenantSlug);
   const valor = useMemo(
-    () => ({ branding, aplicarBranding, preferenciaTema: preferencia, temaEfetivo, definirPreferenciaTema, sincronizarSessao, tenantSlug, loginHref }),
-    [branding, aplicarBranding, preferencia, temaEfetivo, definirPreferenciaTema, sincronizarSessao, tenantSlug, loginHref],
+    () => ({ branding, aplicarBranding, preferenciaTema: preferencia, temaEfetivo, definirPreferenciaTema, sincronizarSessao, tenantSlug, sessaoSlug, loginHref }),
+    [branding, aplicarBranding, preferencia, temaEfetivo, definirPreferenciaTema, sincronizarSessao, tenantSlug, sessaoSlug, loginHref],
   );
   return <BrandingContext.Provider value={valor}>{children}</BrandingContext.Provider>;
 }

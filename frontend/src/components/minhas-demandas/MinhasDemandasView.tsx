@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useTenantPath } from "@/lib/useTenantPath";
 import { AlertTriangle, CalendarClock, ClipboardCheck, Gauge, Headset, PauseCircle, PlayCircle, Send } from "lucide-react";
 import { AvatarStack } from "@/components/ui/AvatarStack";
 import { Badge } from "@/components/ui/Badge";
@@ -51,6 +52,7 @@ export function MinhasDemandasView() {
   const { clientes } = useDiretorioClientes();
   const { departamentos } = useDiretorioDepartamentos();
   const router = useRouter();
+  const tp = useTenantPath();
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("todos");
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
 
@@ -182,7 +184,7 @@ export function MinhasDemandasView() {
   function handleEdit(demandaId: string) {
     setSelecionadaId(null);
     setDemandaParaAbrir({ demandaId, aba: "dados" });
-    router.push("/tarefas");
+    router.push(tp("tarefas"));
   }
 
   if (!usuarioAtual) return null;

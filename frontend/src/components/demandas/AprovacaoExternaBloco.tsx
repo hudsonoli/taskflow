@@ -255,7 +255,7 @@ function NovoLinkModal({
     });
     setEnviando(false);
     if (resultado.ok) {
-      setLink(linkDeAprovacao(window.location.origin, resultado.criada.token));
+      setLink(linkDeAprovacao(window.location.origin, resultado.criada.empresaSlug, resultado.criada.token));
       return;
     }
     if (resultado.conflito) {

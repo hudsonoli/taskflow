@@ -41,7 +41,7 @@ export type AprovacaoExterna = {
 };
 
 /** Resposta ÚNICA da criação: carrega o token em claro (nunca mais recuperável — o servidor guarda só o hash). */
-export type AprovacaoExternaCriada = AprovacaoExterna & { token: string };
+export type AprovacaoExternaCriada = AprovacaoExterna & { token: string; empresaSlug: string };
 
 export type ContatoClienteAprovacao = {
   nome: string;

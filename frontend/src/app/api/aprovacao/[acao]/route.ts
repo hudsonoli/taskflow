@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { BACKEND_URL } from "@/lib/server/backend";
+import { normalizarSlug } from "@/lib/tenant";
 
 // BFF DEDICADO do Portal Externo de Aprovação (Fase 9B). NÃO é o `/api/backend`:
 //   - não exige nem lê `tf_session` (nenhum cookie é repassado ao backend e nenhum `Authorization` é enviado: o cliente do portal não tem sessão);
 //   - não repassa headers arbitrários do navegador (só o `Content-Type` fixo);
 //   - só existem 4 ações fechadas, cada uma com um corpo JSON ESTRITO — campos desconhecidos são descartados aqui e recusados no backend;
 //   - o token vai SÓ no corpo (nunca em path/query, que acabariam em log de acesso/proxy) e nunca é registrado.
-// A empresa, a Demanda e os arquivos são resolvidos no backend a partir do token; este arquivo não conhece nenhum deles.
+// A empresa, a Demanda e os arquivos são resolvidos no backend a partir do token; este arquivo não conhece nenhum deles. O `slug` só é conferido lá.
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +27,16 @@ function json(corpo: unknown, status: number) {
 function corpoDaAcao(acao: Acao, bruto: Record<string, unknown>): Record<string, unknown> | null {
   const token = bruto.token;
   if (typeof token !== "string" || !TOKEN.test(token)) return null;
-  if (acao === "consultar" || acao === "logo") return { token };
+  // Fase 9D: o slug da URL `/e/<slug>/aprovacao` vai junto como CONFERÊNCIA (o backend compara com a empresa do token). Sem slug válido = link inexistente.
+  const slug = normalizarSlug(bruto.slug);
+  if (!slug) return null;
+  if (acao === "consultar" || acao === "logo") return { slug, token };
   if (acao === "artefato") {
     const ordem = bruto.ordem;
-    return typeof ordem === "number" && Number.isInteger(ordem) ? { token, ordem } : { token, ordem: 0 };
+    return typeof ordem === "number" && Number.isInteger(ordem) ? { slug, token, ordem } : { slug, token, ordem: 0 };
   }
   return {
+    slug,
     token,
     decisao: bruto.decisao,
     nome: bruto.nome,

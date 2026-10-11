@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAppData } from "@/lib/AppDataContext";
 import { login, loginGoogle } from "@/lib/auth";
-import { hrefDoTenant } from "@/lib/tenant";
+import { caminhoDoTenant, hrefDoTenant } from "@/lib/tenant";
 
 // Tipagem mínima do Google Identity Services (carregado via <Script>, não um pacote npm —
 // evita dependência nova só pra isso). Só os dois métodos realmente usados aqui.
@@ -35,15 +35,14 @@ declare global {
 
 const EMAIL_VALIDO_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// `slug` presente = login da empresa da URL `/e/<slug>/login` (a empresa vem DELE, nunca de EMPRESA_CODIGO); ausente =
-// acesso legado `/login`, que continua entrando na empresa padrão do servidor.
+// Login da empresa da URL `/e/<slug>/login` (Fase 9D): a empresa vem SEMPRE do slug — não existe login "padrão" nem EMPRESA_CODIGO.
 export function LoginView({
   googleClientId,
   slug,
   nomeEmpresa,
 }: {
   googleClientId: string | null;
-  slug?: string;
+  slug: string;
   nomeEmpresa?: string | null;
 }) {
   const router = useRouter();
@@ -64,7 +63,7 @@ export function LoginView({
     try {
       const { mustChangePassword } = await login(email, senha, slug);
       await recarregarSessao();
-      router.replace(mustChangePassword ? "/trocar-senha-inicial" : "/meu-dia");
+      router.replace(caminhoDoTenant(slug, mustChangePassword ? "trocar-senha-inicial" : "meu-dia"));
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível entrar");
       setEnviando(false);
@@ -78,7 +77,7 @@ export function LoginView({
     try {
       const { mustChangePassword } = await loginGoogle(email, idToken, slug);
       await recarregarSessao();
-      router.replace(mustChangePassword ? "/trocar-senha-inicial" : "/meu-dia");
+      router.replace(caminhoDoTenant(slug, mustChangePassword ? "trocar-senha-inicial" : "meu-dia"));
     } catch (error) {
       // Falha no Google nunca apaga email/senha já digitados — login local continua intacto.
       setErro(error instanceof Error ? error.message : "Não foi possível entrar com Google");

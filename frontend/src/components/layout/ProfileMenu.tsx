@@ -6,6 +6,7 @@ import { Bell, KeyRound, LogOut, Monitor, Moon, ShieldCheck, Sun, UserRound } fr
 import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTenantPath } from "@/lib/useTenantPath";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { useAppData } from "@/lib/AppDataContext";
@@ -48,6 +49,7 @@ export function ProfileMenu() {
   const { departamentos } = useDiretorioDepartamentos();
   const [erroTema, setErroTema] = useState<string | null>(null);
   const router = useRouter();
+  const tp = useTenantPath();
   const [open, setOpen] = useState(false);
   const [saindo, setSaindo] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -145,11 +147,11 @@ export function ProfileMenu() {
                 </div>
 
                 <nav aria-label="Conta" className="border-b border-line p-1.5">
-                  <Link href="/minha-conta" onClick={() => setOpen(false)} className={itemClassName}>
+                  <Link href={tp("minha-conta")} onClick={() => setOpen(false)} className={itemClassName}>
                     <UserRound className="h-4 w-4 text-fg-subtle" />
                     Perfil
                   </Link>
-                  <Link href="/notificacoes" onClick={() => setOpen(false)} className={itemClassName}>
+                  <Link href={tp("notificacoes")} onClick={() => setOpen(false)} className={itemClassName}>
                     <Bell className="h-4 w-4 text-fg-subtle" />
                     <span className="flex-1">Notificações</span>
                     {badge && (
@@ -159,7 +161,7 @@ export function ProfileMenu() {
                       </span>
                     )}
                   </Link>
-                  <Link href="/minha-conta#seguranca" onClick={() => setOpen(false)} className={itemClassName}>
+                  <Link href={`${tp("minha-conta")}#seguranca`} onClick={() => setOpen(false)} className={itemClassName}>
                     <KeyRound className="h-4 w-4 text-fg-subtle" />
                     Alterar senha
                   </Link>

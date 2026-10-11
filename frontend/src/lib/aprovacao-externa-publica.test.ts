@@ -25,6 +25,7 @@ const ler = (caminho: string) => readFileSync(new URL(`../${caminho}`, import.me
 const semComentarios = (texto: string) => texto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/ \/\/ .*$/gm, "");
 
 const TOKEN = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE".slice(0, 43);
+const SLUG = "boxcom";
 
 type Chamada = { url: string; init: RequestInit };
 function fetchFalso(resposta: Response, chamadas: Chamada[] = []): typeof fetch {
@@ -92,7 +93,7 @@ test("corpo da decisão: nome normalizado, e-mail opcional, motivo SÓ nos ajust
 test("consultar: POST no BFF dedicado, token só no CORPO, sem cookies nem Referer", async () => {
   const chamadas: Chamada[] = [];
   const dados = { demandaNome: "Campanha", estado: "pendente" };
-  const resultado = await consultarAprovacao(TOKEN, fetchFalso(json(dados), chamadas));
+  const resultado = await consultarAprovacao(SLUG, TOKEN, fetchFalso(json(dados), chamadas));
   assert.deepEqual(resultado, dados);
   const [{ url, init }] = chamadas;
   assert.equal(url, "/api/aprovacao/consultar");
@@ -101,15 +102,15 @@ test("consultar: POST no BFF dedicado, token só no CORPO, sem cookies nem Refer
   assert.equal(init.credentials, "omit");
   assert.equal(init.referrerPolicy, "no-referrer");
   assert.equal(init.cache, "no-store");
-  assert.deepEqual(JSON.parse(String(init.body)), { token: TOKEN });
+  assert.deepEqual(JSON.parse(String(init.body)), { slug: SLUG, token: TOKEN }); // slug só para conferência no servidor
   assert.deepEqual(init.headers, { "Content-Type": "application/json" }); // nenhum header arbitrário nem Authorization
 });
 
 test("consultar: 404 vira LinkIndisponivelError neutro; falha de servidor é erro comum", async () => {
-  await assert.rejects(() => consultarAprovacao(TOKEN, fetchFalso(json({ detail: MENSAGEM_LINK_INDISPONIVEL }, 404))), LinkIndisponivelError);
-  await assert.rejects(() => consultarAprovacao(TOKEN, fetchFalso(json({}, 502))), (erro: Error) => !(erro instanceof LinkIndisponivelError));
+  await assert.rejects(() => consultarAprovacao(SLUG, TOKEN, fetchFalso(json({ detail: MENSAGEM_LINK_INDISPONIVEL }, 404))), LinkIndisponivelError);
+  await assert.rejects(() => consultarAprovacao(SLUG, TOKEN, fetchFalso(json({}, 502))), (erro: Error) => !(erro instanceof LinkIndisponivelError));
   try {
-    await consultarAprovacao(TOKEN, fetchFalso(json({}, 404)));
+    await consultarAprovacao(SLUG, TOKEN, fetchFalso(json({}, 404)));
   } catch (erro) {
     assert.equal((erro as Error).message, MENSAGEM_LINK_INDISPONIVEL);
     assert.doesNotMatch((erro as Error).message, new RegExp(TOKEN));
@@ -119,29 +120,29 @@ test("consultar: 404 vira LinkIndisponivelError neutro; falha de servidor é err
 test("decidir: sucesso, já decidida (409), sem etapa anterior (409), indisponível (404), validação (422)", async () => {
   const entrada = montarDecisao({ decisao: "aprovar", nome: "Maria", email: "", motivo: "" });
   const chamadas: Chamada[] = [];
-  const ok = await decidirAprovacao(TOKEN, entrada, fetchFalso(json({ estado: "aprovada", decididaEm: "2026-10-11T10:00:00Z" }), chamadas));
+  const ok = await decidirAprovacao(SLUG, TOKEN, entrada, fetchFalso(json({ estado: "aprovada", decididaEm: "2026-10-11T10:00:00Z" }), chamadas));
   assert.equal(ok.estado, "aprovada");
-  assert.deepEqual(JSON.parse(String(chamadas[0].init.body)), { token: TOKEN, ...entrada });
+  assert.deepEqual(JSON.parse(String(chamadas[0].init.body)), { slug: SLUG, token: TOKEN, ...entrada });
   assert.equal(chamadas[0].url, "/api/aprovacao/decisao");
 
-  await assert.rejects(() => decidirAprovacao(TOKEN, entrada, fetchFalso(json({ detail: { code: "APROVACAO_JA_DECIDIDA", message: "x" } }, 409))), DecisaoJaRegistradaError);
-  await assert.rejects(() => decidirAprovacao(TOKEN, entrada, fetchFalso(json({ detail: { code: "SEM_ETAPA_ANTERIOR", message: "Sem etapa anterior" } }, 409))), SemEtapaAnteriorError);
-  await assert.rejects(() => decidirAprovacao(TOKEN, entrada, fetchFalso(json({ detail: MENSAGEM_LINK_INDISPONIVEL }, 404))), LinkIndisponivelError);
+  await assert.rejects(() => decidirAprovacao(SLUG, TOKEN, entrada, fetchFalso(json({ detail: { code: "APROVACAO_JA_DECIDIDA", message: "x" } }, 409))), DecisaoJaRegistradaError);
+  await assert.rejects(() => decidirAprovacao(SLUG, TOKEN, entrada, fetchFalso(json({ detail: { code: "SEM_ETAPA_ANTERIOR", message: "Sem etapa anterior" } }, 409))), SemEtapaAnteriorError);
+  await assert.rejects(() => decidirAprovacao(SLUG, TOKEN, entrada, fetchFalso(json({ detail: MENSAGEM_LINK_INDISPONIVEL }, 404))), LinkIndisponivelError);
   await assert.rejects(
-    () => decidirAprovacao(TOKEN, entrada, fetchFalso(json({ detail: [{ campo: "nome", mensagem: "nome deve ter pelo menos 3 caracteres" }] }, 422))),
+    () => decidirAprovacao(SLUG, TOKEN, entrada, fetchFalso(json({ detail: [{ campo: "nome", mensagem: "nome deve ter pelo menos 3 caracteres" }] }, 422))),
     /nome deve ter pelo menos 3/,
   );
 });
 
 test("artefato e logo: bytes por ORDEM (nunca id de arquivo), token no corpo", async () => {
   const chamadas: Chamada[] = [];
-  const blob = await baixarArtefato(TOKEN, 2, fetchFalso(new Response("bytes", { status: 200 }), chamadas));
+  const blob = await baixarArtefato(SLUG, TOKEN, 2, fetchFalso(new Response("bytes", { status: 200 }), chamadas));
   assert.equal(await blob.text(), "bytes");
   assert.equal(chamadas[0].url, "/api/aprovacao/artefato");
-  assert.deepEqual(JSON.parse(String(chamadas[0].init.body)), { token: TOKEN, ordem: 2 });
-  await assert.rejects(() => baixarArtefato(TOKEN, 1, fetchFalso(new Response("", { status: 404 }))), LinkIndisponivelError);
-  assert.equal(await baixarLogo(TOKEN, fetchFalso(new Response("", { status: 404 }))), null); // sem logo: marca padrão, sem erro
-  assert.equal(await baixarLogo(TOKEN, (async () => { throw new Error("rede"); }) as typeof fetch), null);
+  assert.deepEqual(JSON.parse(String(chamadas[0].init.body)), { slug: SLUG, token: TOKEN, ordem: 2 });
+  await assert.rejects(() => baixarArtefato(SLUG, TOKEN, 1, fetchFalso(new Response("", { status: 404 }))), LinkIndisponivelError);
+  assert.equal(await baixarLogo(SLUG, TOKEN, fetchFalso(new Response("", { status: 404 }))), null); // sem logo: marca padrão, sem erro
+  assert.equal(await baixarLogo(SLUG, TOKEN, (async () => { throw new Error("rede"); }) as typeof fetch), null);
 });
 
 test("a lib pública não registra nada (console/analytics/storage) e não tem credenciais", () => {
@@ -151,19 +152,28 @@ test("a lib pública não registra nada (console/analytics/storage) e não tem c
 
 // ── rota pública, shell, proxy, layout ───────────────────────────────────────────────────────────────────────
 
-test("rota /aprovacao é pública nua e usa o tema da empresa", () => {
-  assert.equal(ehRotaDeAprovacaoExterna("/aprovacao"), true);
-  assert.equal(ehRotaDeAprovacaoExterna("/aprovacao/"), true);
-  assert.equal(ehRotaDeAprovacaoExterna("/aprovacoes"), false);
-  assert.equal(ehRotaDeAprovacaoExterna("/tarefas"), false);
-  assert.equal(usaTemaDaEmpresa("/aprovacao"), true);
+test("rota /e/<slug>/aprovacao é a ÚNICA pública nua do portal; /aprovacao sem slug deixou de existir", () => {
+  assert.equal(ehRotaDeAprovacaoExterna("/e/boxcom/aprovacao"), true);
+  assert.equal(ehRotaDeAprovacaoExterna("/e/boxcom/aprovacao/"), true);
+  assert.equal(ehRotaDeAprovacaoExterna("/aprovacao"), false);
+  assert.equal(ehRotaDeAprovacaoExterna("/aprovacao/"), false);
+  assert.equal(ehRotaDeAprovacaoExterna("/e/boxcom/aprovacao/extra"), false);
+  assert.equal(ehRotaDeAprovacaoExterna("/e/boxcom/aprovacoes"), false);
+  assert.equal(ehRotaDeAprovacaoExterna("/e/boxcom/tarefas"), false);
+  assert.equal(ehRotaDeAprovacaoExterna("/e/ab/aprovacao"), false); // slug malformado
+  assert.equal(usaTemaDaEmpresa("/e/boxcom/aprovacao"), true);
+  assert.equal(usaTemaDaEmpresa("/aprovacao"), false);
+  assert.equal(existsSync(new URL("../app/aprovacao/page.tsx", import.meta.url)), false); // nenhuma página serve o portal sem slug
+  assert.equal(existsSync(new URL("../app/e/[slug]/aprovacao/page.tsx", import.meta.url)), true);
 });
 
-test("AppShell: o portal é tela nua — sem TopNav, sem redirecionar para login nem para /meu-dia", () => {
+test("AppShell: o portal é tela nua — sem TopNav, sem redirecionar para login nem para a home do tenant", () => {
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
   assert.match(shell, /const rotaPortalExterno = ehRotaDeAprovacaoExterna\(pathname\)/);
-  assert.match(shell, /if \(sessaoCarregando \|\| rotaRecuperacaoSenha \|\| rotaPortalExterno\) return;/);
-  assert.match(shell, /if \(rotaPublica \|\| rotaTrocaSenha \|\| rotaRecuperacaoSenha \|\| rotaPortalExterno\) \{\s*return <>\{children\}<\/>;/);
+  assert.match(shell, /rotaRecuperacaoSenha \|\| rotaPortalExterno \|\| sessaoDeOutraEmpresa\) return;/);
+  assert.match(shell, /if \(rotaLogin \|\| rotaTrocaSenha \|\| rotaRecuperacaoSenha \|\| rotaPortalExterno\) \{\s*return <>\{children\}<\/>;/);
+  // a sessão de OUTRA empresa nunca derruba o portal em "sessão de outra empresa": o catálogo público é checado antes (exigeSessao)
+  assert.match(shell, /const exigeSessao = !rotaLogin && !rotaRecuperacaoSenha && !rotaPortalExterno;/);
 });
 
 test("sessão do tenant é ignorada: o provider nem consulta /auth/session no portal", () => {
@@ -176,6 +186,7 @@ test("proxy: contexto 'aprovacao' (apagado do navegador), no-store, no-referrer 
   const proxy = semComentarios(ler("proxy.ts"));
   assert.match(proxy, /headers\.delete\(HEADER_CONTEXTO\)/);
   assert.match(proxy, /if \(portal\) headers\.set\(HEADER_CONTEXTO, CONTEXTO_APROVACAO\)/);
+  assert.match(proxy, /const slug = portal \? null : slugDaRota\(pathname\)/); // o portal não recebe header de slug: a empresa é a do token
   assert.match(proxy, /"Cache-Control", "no-store"/);
   assert.match(proxy, /"Referrer-Policy", "no-referrer"/);
   assert.match(proxy, /noindex/);
@@ -188,8 +199,8 @@ test("layout: no portal o HTML inicial sai com marca neutra e SEM sessão/cookie
   assert.match(layout, /: contextoAprovacao\s*\? \{ branding: BRANDING_PADRAO/); // marca neutra, como o console da plataforma
 });
 
-test("página: noindex + no-referrer, sem regra de negócio", () => {
-  const pagina = semComentarios(ler("app/aprovacao/page.tsx"));
+test("página /e/[slug]/aprovacao: noindex + no-referrer, sem regra de negócio", () => {
+  const pagina = semComentarios(ler("app/e/[slug]/aprovacao/page.tsx"));
   assert.match(pagina, /robots: \{ index: false, follow: false \}/);
   assert.match(pagina, /referrer: "no-referrer"/);
   assert.match(pagina, /<AprovacaoPublicaView \/>/);
@@ -211,6 +222,9 @@ test("BFF /api/aprovacao: namespace próprio, só POST, 4 ações, sem sessão, 
   assert.match(bff, /"Cache-Control": "no-store"/);
   assert.match(bff, /redirect: "error"/);
   assert.match(bff, /TOKEN = \/\^\[A-Za-z0-9_-\]\{43\}\$\//);
+  // Fase 9D: o slug da URL segue junto (conferido no backend contra a empresa do token); sem slug válido = link inexistente
+  assert.match(bff, /const slug = normalizarSlug\(bruto\.slug\);\s*if \(!slug\) return null;/);
+  assert.match(bff, /return \{ slug, token \}/);
 });
 
 test("o BFF genérico /api/backend continua exigindo sessão e NÃO serve o portal", () => {
@@ -264,11 +278,13 @@ test("tela: texto sempre como TEXTO (sem dangerouslySetInnerHTML), sem log/stora
   assert.match(tela, /extrairTokenDoFragmento\(window\.location\.hash\)/);
 });
 
-test("tela: logo e marca vêm do TOKEN (blob do BFF), nunca de slug/cookie do navegador", () => {
-  assert.match(tela, /baixarLogo\(doFragmento\)/);
+test("tela: logo e marca vêm do TOKEN (blob do BFF), nunca de cookie/sessão; o slug da URL só segue como CONFERÊNCIA", () => {
+  assert.match(tela, /baixarLogo\(slug, doFragmento\)/);
   assert.match(tela, /<BrandLogo variant="auth" srcOverride=\{logo\} \/>/);
   assert.match(tela, /aplicarBrandingRef\.current\(normalizarBranding\(dados\.empresa\)\)/);
-  assert.doesNotMatch(tela, /tenantSlug|loginHref|\/e\//);
+  assert.match(tela, /const slug = slugDaRota\(usePathname\(\)\)/);
+  assert.match(tela, /consultarAprovacao\(slug \?\? "", token\)/);
+  assert.doesNotMatch(tela, /tenantSlug|loginHref|useTenantPath|sessaoSlug|useAppData/);
 });
 
 test("tela: mobile-first (coluna única, alvos de toque altos)", () => {

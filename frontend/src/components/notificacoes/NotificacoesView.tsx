@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell, CheckCheck, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import { useRouter } from "next/navigation";
+import { useTenantPath } from "@/lib/useTenantPath";
 import { PrazosEquipeLista } from "@/components/notificacoes/PrazosEquipeLista";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { Button } from "@/components/ui/Button";
@@ -72,6 +73,7 @@ function Paginacao({ total, offset, onMudar }: { total: number; offset: number; 
 
 export function NotificacoesView() {
   const router = useRouter();
+  const tp = useTenantPath();
   const { setDemandaParaAbrir } = useAppData();
   const { resumo, aplicarResumo, recarregar } = useNotificacoes();
 
@@ -125,9 +127,9 @@ export function NotificacoesView() {
   const abrirDemanda = useCallback(
     (demandaId: string, aba: string = "dados") => {
       setDemandaParaAbrir({ demandaId, aba });
-      router.push("/tarefas");
+      router.push(tp("tarefas"));
     },
-    [router, setDemandaParaAbrir],
+    [router, setDemandaParaAbrir, tp],
   );
 
   async function marcarLida(notificacao: Notificacao) {

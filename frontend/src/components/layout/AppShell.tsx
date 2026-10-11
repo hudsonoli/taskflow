@@ -1,49 +1,92 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { SessaoOutraEmpresaView } from "@/components/layout/SessaoOutraEmpresaView";
 import { TopNav } from "@/components/layout/TopNav";
 import { useAppData } from "@/lib/AppDataContext";
 import { useBranding } from "@/lib/BrandingContext";
-import { ehRotaDeAprovacaoExterna, ehRotaDeLogin, ehRotaDeRecuperacaoDeSenha } from "@/lib/tenant";
+import {
+  caminhoDoTenant,
+  ehRotaDaPlataforma,
+  ehRotaDeAprovacaoExterna,
+  ehRotaDeLogin,
+  ehRotaDeRecuperacaoDeSenha,
+  ehRotaDeTrocaDeSenhaInicial,
+  hrefLogin,
+  slugDaRota,
+} from "@/lib/tenant";
 
-// Login (legado `/login` ou `/e/<slug>/login`) e recuperação de senha (idem) são telas públicas "nuas". A recuperação
-// NÃO redireciona quem já tem sessão nem quem precisa trocar a senha — o link do e-mail (com o token no fragmento) tem
-// de chegar até a tela. Quem não tem sessão volta ao login DA EMPRESA (`loginHref`), não ao da empresa padrão.
-const ROTA_TROCA_SENHA = "/trocar-senha-inicial";
-
+// Fase 9D — catálogo EXPLÍCITO de telas sem sessão (todas por slug): login, recuperação de senha e Portal Externo de Aprovação; a troca da senha
+// inicial é "nua" mas exige sessão. Nenhum outro `/e/<slug>/...` é público. Fora de `/e/<slug>` e de `/plataforma` (domínio nu, `/login`, `/tarefas`…)
+// não há empresa: a página (404 neutro) é renderizada como está, sem sessão, sem redirecionar e sem escolher empresa. A recuperação NÃO
+// redireciona quem já tem sessão — o link do e-mail (token no fragmento) tem de chegar até a tela.
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { sessaoCarregando, autenticado, mustChangePassword } = useAppData();
-  const { loginHref } = useBranding();
+  const { sessaoCarregando, autenticado, mustChangePassword, logout } = useAppData();
+  const { sessaoSlug } = useBranding();
+  const [saindo, setSaindo] = useState(false);
 
-  const rotaPublica = ehRotaDeLogin(pathname);
-  const rotaTrocaSenha = pathname === ROTA_TROCA_SENHA;
+  const slugUrl = slugDaRota(pathname);
+  const plataforma = ehRotaDaPlataforma(pathname);
+  const rotaLogin = ehRotaDeLogin(pathname);
+  const rotaTrocaSenha = ehRotaDeTrocaDeSenhaInicial(pathname);
   const rotaRecuperacaoSenha = ehRotaDeRecuperacaoDeSenha(pathname);
-  // Portal Externo de Aprovação (Fase 9B): tela pública nua para o CLIENTE. Sem TopNav/sidebar, sem redirecionar (nem para o login, nem para
-  // /meu-dia quando o navegador por acaso tem sessão): a sessão do tenant é simplesmente ignorada aqui.
+  // Portal Externo (Fase 9B): sem TopNav, sem redirecionar e sem usar a sessão do tenant (mesmo que o navegador tenha `tf_session`).
   const rotaPortalExterno = ehRotaDeAprovacaoExterna(pathname);
+  const semEmpresa = slugUrl === null && !plataforma;
+
+  // Sessão de OUTRA empresa que a da URL: nunca troca de empresa pela URL e nunca renderiza a área da empresa da URL.
+  const sessaoDeOutraEmpresa = slugUrl !== null && autenticado && sessaoSlug !== null && sessaoSlug !== slugUrl;
+  const exigeSessao = !rotaLogin && !rotaRecuperacaoSenha && !rotaPortalExterno;
 
   useEffect(() => {
-    if (sessaoCarregando || rotaRecuperacaoSenha || rotaPortalExterno) return;
+    if (semEmpresa || sessaoCarregando || rotaRecuperacaoSenha || rotaPortalExterno || sessaoDeOutraEmpresa) return;
 
-    if (!autenticado && !rotaPublica) {
-      router.replace(loginHref);
+    if (!autenticado && exigeSessao) {
+      // Sem slug (ex.: `/plataforma` aberto direto, sem sessão) não há login para onde mandar: a tela abaixo explica.
+      if (slugUrl) router.replace(hrefLogin(slugUrl));
       return;
     }
+    if (slugUrl === null) return;
     if (autenticado && mustChangePassword && !rotaTrocaSenha) {
-      router.replace(ROTA_TROCA_SENHA);
+      router.replace(caminhoDoTenant(slugUrl, "trocar-senha-inicial"));
       return;
     }
-    if (autenticado && !mustChangePassword && (rotaPublica || rotaTrocaSenha)) {
-      router.replace("/meu-dia");
+    if (autenticado && !mustChangePassword && (rotaLogin || rotaTrocaSenha)) {
+      router.replace(caminhoDoTenant(slugUrl, "meu-dia"));
     }
-  }, [sessaoCarregando, autenticado, mustChangePassword, rotaPublica, rotaTrocaSenha, rotaRecuperacaoSenha, rotaPortalExterno, router, loginHref]);
+  }, [semEmpresa, sessaoCarregando, autenticado, mustChangePassword, rotaLogin, rotaTrocaSenha, rotaRecuperacaoSenha, rotaPortalExterno, exigeSessao, sessaoDeOutraEmpresa, slugUrl, router]);
 
-  // Login, recuperação, troca de senha inicial e Portal de Aprovação são telas "nuas" — sem TopNav, sem exigir sessão.
-  if (rotaPublica || rotaTrocaSenha || rotaRecuperacaoSenha || rotaPortalExterno) {
+  if (semEmpresa) return <>{children}</>;
+
+  async function sair() {
+    setSaindo(true);
+    try {
+      await logout();
+    } finally {
+      setSaindo(false);
+    }
+    router.replace(slugUrl ? hrefLogin(slugUrl) : "/");
+  }
+
+  if (sessaoDeOutraEmpresa && sessaoSlug && exigeSessao) {
+    return <SessaoOutraEmpresaView slugDaSessao={sessaoSlug} onSair={() => void sair()} saindo={saindo} />;
+  }
+
+  // Login, recuperação, troca de senha inicial e Portal de Aprovação são telas "nuas" — sem TopNav.
+  if (rotaLogin || rotaTrocaSenha || rotaRecuperacaoSenha || rotaPortalExterno) {
     return <>{children}</>;
+  }
+
+  if (!sessaoCarregando && !autenticado && slugUrl === null) {
+    // `/plataforma` sem sessão: não há empresa para devolver ao login. Mensagem única, sem nomear nem listar empresas.
+    return (
+      <div className="flex h-screen items-center justify-center bg-app px-4">
+        <p className="max-w-sm text-center text-sm text-fg-muted">Acesso restrito. Entre pelo endereço de acesso da sua empresa.</p>
+      </div>
+    );
   }
 
   if (sessaoCarregando || !autenticado || mustChangePassword) {

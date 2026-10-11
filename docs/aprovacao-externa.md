@@ -24,7 +24,7 @@ MVP do portal em que o **cliente** aprova ou pede ajustes de artefatos de uma ta
 - `secrets.token_urlsafe(32)` (256 bits, 43 caracteres). Só existe em claro na **resposta da criação** (`Cache-Control: no-store`). O banco guarda o SHA-256.
 - Nunca vai para log, evento, mensagem de erro, path ou query. Nos endpoints públicos viaja **no corpo JSON** (`POST`), e os erros 422 são montados à mão
   para não ecoar o `input` (o FastAPI devolveria o token).
-- URL pública: `https://<app>/aprovacao#token=<TOKEN>` — o **fragmento** não é enviado ao servidor web. O fragmento permanece na barra de endereço
+- URL pública (Fase 9D): `https://<app>/e/<slug>/aprovacao#token=<TOKEN>` — o slug é o da empresa dona do link (devolvido pelo servidor na criação como `empresaSlug`, nunca fixo) e o **fragmento** não é enviado ao servidor web. O fragmento permanece na barra de endereço
   (o link é reutilizável e legível depois da decisão); `Referrer-Policy: no-referrer`, `no-store` e `noindex` em toda a rota.
 - O link é exibido **uma única vez**: *"O link é exibido somente agora. Para gerar outro, revogue e crie um novo."*
 
@@ -49,8 +49,15 @@ Só na etapa de aprovação **atual**, com a Demanda não arquivada e a etapa n�
 ## Portal público
 
 `POST /publico/aprovacoes/{consultar,decisao,artefato,logo}` (backend) atrás do BFF dedicado `/api/aprovacao/[acao]` (frontend): sem `tf_session`, sem JWT, sem
-headers arbitrários, corpo estrito, 4 ações fechadas. A página `/aprovacao` ignora qualquer sessão do tenant (o `AppDataProvider` nem consulta a sessão ali) e o
-HTML inicial sai com marca neutra — a marca real vem do token.
+headers arbitrários, corpo estrito, 4 ações fechadas. A página `/e/<slug>/aprovacao` ignora qualquer sessão do tenant (o `AppDataProvider` nem consulta a sessão ali) e o
+HTML inicial sai com marca neutra — a marca real vem do token. O antigo `/aprovacao` (sem slug) **não serve mais o portal** (404 neutro, sem redirect).
+
+### Token × slug (Fase 9D)
+
+O **token continua sendo a autoridade**: ele resolve empresa, Demanda e etapa. O slug da URL só é **conferido** — o cliente envia `slug` junto do token
+nos 4 `POST`s públicos e o backend o compara com `empresas.slug` da empresa dona do token. Slug diferente, inexistente, malformado ou ausente devolve o mesmo
+404 neutro *"Este link de aprovação não está mais disponível."*, sem efeito (nenhuma decisão é registrada). O slug nunca concede nem amplia acesso, e a sessão
+do tenant continua irrelevante no portal.
 
 - **Consulta** devolve só: branding da empresa dona do link, identificador emitido e nome da tarefa, instrução, estado, validade, destinatário pretendido,
   artefatos (`ordem`, nome, tipo, MIME, tamanho) e, depois de decidido, o resultado. **Nunca** ids internos, e-mails internos, comentários, histórico, financeiro, responsáveis ou outros arquivos.
@@ -83,8 +90,8 @@ Ordem de locks fixa: **Demanda → solicitação → linhas de arquivo**. Duplo 
 
 ## Requisitos de Go-Live
 
-1. **Hardening da origem (P1):** restringir 80/443 do VPS aos IPs da Cloudflare. Enquanto a origem for acessível diretamente, o portal público **não** deve ser exposto. *(Não alterado nesta fase.)*
-2. **Rate limit / WAF na Cloudflare** para `/aprovacao` e `/api/aprovacao/*` (consulta, decisão e artefato são públicas): limite por IP e por janela, desafio para excesso de 404. *(Não configurado nesta fase; a aplicação não guarda IP nem faz throttling próprio.)*
+1. **Hardening da origem (P1):** restringir 80/443 do VPS aos IPs da Cloudflare. Enquanto a origem for acessível diretamente, o portal público **não** deve ser exposto. *(Feito na 9C/9C.1.)*
+2. **Rate limit / WAF na Cloudflare** para `/e/<slug>/aprovacao` e `/api/aprovacao/*` (a regra que bloqueia `token` na query deve cobrir o novo caminho — veja o relatório da Fase 9D) (consulta, decisão e artefato são públicas): limite por IP e por janela, desafio para excesso de 404. *(Não configurado nesta fase; a aplicação não guarda IP nem faz throttling próprio.)*
 3. Validade padrão de 7 dias (1–30) e política de retenção de 5 anos aprovada.
 4. Teste humano autenticado do fluxo em produção após o deploy.
 

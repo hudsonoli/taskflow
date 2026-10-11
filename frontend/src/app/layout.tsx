@@ -11,7 +11,7 @@ import { variaveisDaMarca } from "@/lib/branding-tokens";
 import { SESSION_COOKIE_NAME } from "@/lib/server/backend";
 import { obterBrandingPublico } from "@/lib/server/branding";
 import { COOKIE_TEMA, SCRIPT_TEMA_SISTEMA, normalizarPreferencia, resolveEffectiveTheme } from "@/lib/tema";
-import { CONTEXTO_APROVACAO, COOKIE_TENANT_SLUG, HEADER_CONTEXTO, HEADER_TENANT_SLUG, normalizarSlug, slugVisual } from "@/lib/tenant";
+import { CONTEXTO_APROVACAO, HEADER_CONTEXTO, HEADER_TENANT_SLUG, normalizarSlug, slugVisual } from "@/lib/tenant";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -39,18 +39,17 @@ export default async function RootLayout({
   // branding muda em runtime, não pode ser congelado no build.
   await connection();
 
-  // Contexto de EMPRESA da página (só visual): o slug da rota (`/e/<slug>/...`, definido pelo proxy.ts) ou, com sessão,
-  // o cookie visual reconciliado com a empresa da sessão; sem nenhum dos dois, o acesso legado (empresa padrão do
-  // servidor). Nunca decide autorização: a empresa dos dados vem sempre do token no backend.
+  // Contexto de EMPRESA da página (só visual): o slug da rota `/e/<slug>/...` (definido pelo proxy.ts). Fase 9D: sem fallback — nem cookie, nem sessão,
+  // nem empresa padrão (EMPRESA_CODIGO); fora de `/e/<slug>` a identidade é a neutra do TaskFloww. Nunca decide autorização: a empresa dos dados
+  // vem sempre do token no backend.
   const cabecalhos = await headers();
   const cookieStore = await cookies();
   // Portal Externo de Aprovação (Fase 9B): a página ignora qualquer sessão/cookie do tenant. O HTML inicial sai com a marca NEUTRA e sem
   // contexto de empresa — a marca real chega depois da consulta do token (a empresa vem do link, nunca do navegador).
   const contextoAprovacao = cabecalhos.get(HEADER_CONTEXTO) === CONTEXTO_APROVACAO;
   const autenticado = !contextoAprovacao && Boolean(cookieStore.get(SESSION_COOKIE_NAME)?.value);
-  const slugCookie = contextoAprovacao ? null : normalizarSlug(cookieStore.get(COOKIE_TENANT_SLUG)?.value);
   const slugRota = normalizarSlug(cabecalhos.get(HEADER_TENANT_SLUG));
-  const slug = slugVisual({ slugDaRota: slugRota, slugDoCookie: slugCookie, autenticado });
+  const slug = contextoAprovacao ? null : slugVisual({ slugDaRota: slugRota });
 
   // O console `/plataforma` mantém a identidade da PLATAFORMA (padrão do TaskFloww): escolher uma empresa em foco não
   // muda a marca nem vira sessão tenant.
@@ -59,7 +58,9 @@ export default async function RootLayout({
     ? { branding: BRANDING_PADRAO, disponivel: true, nome: null }
     : contextoAprovacao
       ? { branding: BRANDING_PADRAO, disponivel: true, nome: null }
-      : await obterBrandingPublico(slug ? { tipo: "slug", slug } : { tipo: "legado" });
+      : slug
+        ? await obterBrandingPublico({ tipo: "slug", slug })
+        : { branding: BRANDING_PADRAO, disponivel: false, nome: null };
   const branding = publico.branding;
   const variaveis = variaveisDaMarca(branding.corPrimaria, branding.corSecundaria);
 
@@ -88,7 +89,7 @@ export default async function RootLayout({
           inicial={branding}
           preferenciaInicial={preferencia}
           autenticadoInicial={autenticado}
-          tenantSlugInicial={slugRota ?? slugCookie}
+          tenantSlugInicial={contextoAprovacao ? null : slugRota}
         >
           <AppDataProvider>
             <NotificacoesProvider>

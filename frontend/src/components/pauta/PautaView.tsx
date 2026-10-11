@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTenantPath } from "@/lib/useTenantPath";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FiltrosAvancados } from "@/components/filtros/FiltrosAvancados";
@@ -56,6 +57,7 @@ function periodoParaIntervalo(periodo: PautaPeriodoFiltro): { inicio: Date; fim:
 
 export function PautaView() {
   const router = useRouter();
+  const tp = useTenantPath();
   const { demandas, setDemandas, usuarioAtual, setDemandaParaAbrir } = useAppData();
   const { departamentos, carregando: carregandoDepartamentos } = useDiretorioDepartamentos();
   const { equipes, carregando: carregandoEquipes } = useDiretorioEquipes();
@@ -261,7 +263,7 @@ export function PautaView() {
   function handleEdit(demandaId: string) {
     setSelectedDemandId(null);
     setDemandaParaAbrir({ demandaId });
-    router.push("/tarefas");
+    router.push(tp("tarefas"));
   }
 
   if (!usuarioAtual) return null;

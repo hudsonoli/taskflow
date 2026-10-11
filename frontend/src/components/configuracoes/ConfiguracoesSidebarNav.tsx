@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { gruposConfiguracao } from "@/lib/configuracoes-menu";
 import { useAppData } from "@/lib/AppDataContext";
+import { useTenantPath } from "@/lib/useTenantPath";
 import { podeAcessarAcessos, podeGerenciarPermissoes } from "@/lib/escopo-operacional";
 
 export function ConfiguracoesSidebarNav() {
   const pathname = usePathname();
+  const tp = useTenantPath();
   const { usuarioAtual } = useAppData();
   const acessoAdministrativoLiberado = usuarioAtual ? podeAcessarAcessos(usuarioAtual) : false;
   const acessoPermissoesLiberado = usuarioAtual ? podeGerenciarPermissoes(usuarioAtual) : false;
@@ -34,7 +36,7 @@ export function ConfiguracoesSidebarNav() {
             <div className="flex flex-col gap-0.5">
               {grupo.itens.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const isActive = pathname === tp(item.href);
 
                 const content = (
                   <span
@@ -54,7 +56,7 @@ export function ConfiguracoesSidebarNav() {
                 );
 
                 return item.available ? (
-                  <Link key={item.label} href={item.href}>
+                  <Link key={item.label} href={tp(item.href)}>
                     {content}
                   </Link>
                 ) : (

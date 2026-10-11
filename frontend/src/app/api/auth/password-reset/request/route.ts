@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { BACKEND_URL, EMPRESA_CODIGO } from "@/lib/server/backend";
+import { BACKEND_URL } from "@/lib/server/backend";
 import { normalizarSlug } from "@/lib/tenant";
 
 // Mesma mensagem que o backend devolve — o BFF nunca a varia por conta/e-mail (anti-enumeration).
@@ -16,14 +16,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Informe um e-mail válido." }, { status: 400 });
   }
 
-  // Empresa: o slug da URL (`/e/<slug>/esqueci-senha`) ou, SEM slug, a empresa padrão do servidor (legado).
-  // `empresaCodigo` nunca vem do navegador. Slug presente mas inválido → a MESMA resposta pública (anti-enumeração).
-  const slugInformado = body?.empresaSlug;
-  const slug = normalizarSlug(slugInformado);
-  if (slugInformado !== undefined && slugInformado !== null && !slug) {
+  // Empresa (Fase 9D): só o slug da URL (`/e/<slug>/esqueci-senha`). Sem slug ou inválido → a MESMA resposta pública (anti-enumeração), sem
+  // empresa padrão e sem chamar o backend. `empresaCodigo` nunca vem do navegador.
+  const slug = normalizarSlug(body?.empresaSlug);
+  if (!slug) {
     return NextResponse.json({ message: MENSAGEM_PUBLICA });
   }
-  const empresa = slug ? { empresaSlug: slug } : { empresaCodigo: EMPRESA_CODIGO };
+  const empresa = { empresaSlug: slug };
 
   let backendResponse: Response;
   try {

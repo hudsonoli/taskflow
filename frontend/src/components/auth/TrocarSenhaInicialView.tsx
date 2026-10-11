@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTenantPath } from "@/lib/useTenantPath";
 import { KeyRound } from "lucide-react";
 import { BrandLogo } from "@/components/branding/BrandLogo";
 import { Button } from "@/components/ui/Button";
@@ -11,6 +12,7 @@ import { alterarSenhaInicial, fetchSessao } from "@/lib/auth";
 
 export function TrocarSenhaInicialView() {
   const router = useRouter();
+  const tp = useTenantPath();
   const { recarregarSessao } = useAppData();
   const [nome, setNome] = useState<string | undefined>(undefined);
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -30,7 +32,7 @@ export function TrocarSenhaInicialView() {
     try {
       await alterarSenhaInicial(senhaAtual, novaSenha, confirmacaoSenha);
       await recarregarSessao();
-      router.replace("/meu-dia");
+      router.replace(tp("meu-dia"));
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível trocar a senha");
       setEnviando(false);

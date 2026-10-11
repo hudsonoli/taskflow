@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { BrandLogo } from "@/components/branding/BrandLogo";
 
 /**
@@ -17,9 +16,6 @@ export function EmpresaIndisponivelView() {
           Confira o endereço de acesso que a sua empresa informou. Se o problema continuar, fale com quem administra o
           TaskFloww na sua empresa.
         </p>
-        <Link href="/login" className="mt-4 inline-block text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
-          Ir para o acesso padrão
-        </Link>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { rotuloDemanda } from "@/lib/referencias";
 import { useState } from "react";
 import { Download, ExternalLink, FileText, Link2, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTenantPath } from "@/lib/useTenantPath";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -54,6 +55,7 @@ export function ArquivoPreviewModal({
   const [erroStatus, setErroStatus] = useState<{ arquivoId: string; mensagem: string } | null>(null);
   const { setDemandaParaAbrir } = useAppData();
   const router = useRouter();
+  const tp = useTenantPath();
   const arquivo = indiceAtual !== null ? itens[indiceAtual] : null;
 
   if (!arquivo || indiceAtual === null) return null;
@@ -65,7 +67,7 @@ export function ArquivoPreviewModal({
     // Mesmo padrão de NotificationBell: Tarefas lê `demandaParaAbrir` do contexto e abre a
     // Demanda na aba "briefing" (onde DemandaArquivosCard vive) ao montar.
     setDemandaParaAbrir({ demandaId: arquivo.demandaId, aba: "briefing" });
-    router.push("/tarefas");
+    router.push(tp("tarefas"));
   }
 
   async function handleAlterarStatus(status: DemandaArquivoStatusLayout) {

@@ -2,7 +2,6 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { PLATFORM_COOKIE_NAME, PLATFORM_COOKIE_PATH, SESSION_COOKIE_NAME } from "@/lib/server/backend";
 import { COOKIE_TEMA } from "@/lib/tema";
-import { COOKIE_TENANT_SLUG } from "@/lib/tenant";
 
 export async function POST() {
   const cookieStore = await cookies();
@@ -11,7 +10,7 @@ export async function POST() {
   cookieStore.delete({ name: PLATFORM_COOKIE_NAME, path: PLATFORM_COOKIE_PATH });
   // A preferência pessoal NUNCA sobrevive ao logout (nem aparece na tela pública, nem no próximo login).
   cookieStore.delete(COOKIE_TEMA);
-  // O contexto visual de empresa também não sobrevive ao logout (o cliente já guardou para onde voltar).
-  cookieStore.delete(COOKIE_TENANT_SLUG);
+  // Limpa o cookie visual `tf_tenant_slug` das versões anteriores (a Fase 9D não o usa mais: a empresa é só a da URL).
+  cookieStore.delete("tf_tenant_slug");
   return NextResponse.json({ ok: true });
 }

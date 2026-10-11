@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { BACKEND_URL, EMPRESA_CODIGO, SESSION_COOKIE_NAME, sessionCookieOptions } from "@/lib/server/backend";
+import { BACKEND_URL, SESSION_COOKIE_NAME, sessionCookieOptions } from "@/lib/server/backend";
 import { cabecalhosDoCliente } from "@/lib/server/cliente-http";
-import { dadosVisuaisDaSessao, sincronizarCookieTema, sincronizarCookieTenant } from "@/lib/server/tema";
+import { dadosVisuaisDaSessao, sincronizarCookieTema } from "@/lib/server/tema";
 import { normalizarSlug } from "@/lib/tenant";
 
 export async function POST(request: Request) {
@@ -14,13 +14,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "E-mail e identidade Google são obrigatórios" }, { status: 400 });
   }
 
-  // Mesma regra do login local: slug da URL (`/e/<slug>/login`) ou, sem slug, a empresa padrão do servidor (legado).
-  const slugInformado = body?.empresaSlug;
-  const slug = normalizarSlug(slugInformado);
-  if (slugInformado !== undefined && slugInformado !== null && !slug) {
+  // Mesma regra do login local (Fase 9D): só o slug da URL `/e/<slug>/login` escolhe a empresa; sem slug válido, recusa genérica.
+  const slug = normalizarSlug(body?.empresaSlug);
+  if (!slug) {
     return NextResponse.json({ message: "Não foi possível entrar com Google" }, { status: 403 });
   }
-  const empresa = slug ? { empresaSlug: slug } : { empresaCodigo: EMPRESA_CODIGO };
+  const empresa = { empresaSlug: slug };
 
   const backendResponse = await fetch(`${BACKEND_URL}/auth/google`, {
     method: "POST",
@@ -44,7 +43,6 @@ export async function POST(request: Request) {
   // usuário anterior neste navegador): sem override → cookie removido → vale o tema da empresa.
   const visual = await dadosVisuaisDaSessao(BACKEND_URL, data.accessToken);
   sincronizarCookieTema(cookieStore, visual.preferencia);
-  sincronizarCookieTenant(cookieStore, visual.empresaSlug);
 
   return NextResponse.json({ mustChangePassword: Boolean(data.mustChangePassword) });
 }
