@@ -5,6 +5,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import ensure_same_empresa, require_admin, require_admin_or_gestor
 from app.models.usuario import Usuario
 from app.schemas.empresa import EmpresaCreate, EmpresaInativar, EmpresaRead, EmpresaUpdate
@@ -15,7 +16,11 @@ from app.services.empresa_service import (
     EmpresaService,
 )
 
-router = APIRouter(prefix="/empresas", tags=["empresas"])
+router = APIRouter(
+    prefix="/empresas",
+    tags=["empresas"],
+    dependencies=[Depends(get_current_user_password_ready)],
+)
 empresa_service = EmpresaService()
 
 def handle_empresa_error(exc: Exception) -> None:

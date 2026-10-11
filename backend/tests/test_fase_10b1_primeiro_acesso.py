@@ -144,6 +144,15 @@ def test_falha_no_meio_do_onboarding_desfaz_empresa_gestor_e_credencial(client_p
 # ======================================================================================
 
 
+def _rotas_efetivas(app):
+    """Rotas reais do app (path com prefixo, métodos, dependant já com as dependências dos routers). FastAPI 0.139: `app.routes` guarda `_IncludedRouter`, não `APIRoute`."""
+    for rota in app.routes:
+        if hasattr(rota, "effective_route_contexts"):
+            yield from rota.effective_route_contexts()
+        elif isinstance(rota, APIRoute):
+            yield rota
+
+
 def test_toda_rota_tenant_autenticada_passa_pelo_gate_da_troca_obrigatoria(app) -> None:
     """Prova ESTRUTURAL: qualquer rota que dependa do usuário tenant também depende de `get_current_user_password_ready` — exceto /auth/me, /auth/alterar-senha e a troca
     inicial. Uma rota nova sem o gate quebra aqui (o redirect do React nunca é a barreira)."""
@@ -154,12 +163,14 @@ def test_toda_rota_tenant_autenticada_passa_pelo_gate_da_troca_obrigatoria(app) 
             yield from chamadas(sub)
 
     sem_gate: list[str] = []
-    for rota in app.routes:
-        if not isinstance(rota, APIRoute):
-            continue
-        usadas = set(chamadas(rota.dependant))
-        if get_current_user in usadas and get_current_user_password_ready not in usadas and rota.path not in ROTAS_LIVRES_DO_GATE:
-            sem_gate.append(f"{sorted(rota.methods)[0]} {rota.path}")
+    total = 0
+    for contexto in _rotas_efetivas(app):
+        total += 1
+        usadas = set(chamadas(contexto.dependant))
+        if get_current_user in usadas and get_current_user_password_ready not in usadas and contexto.path not in ROTAS_LIVRES_DO_GATE:
+            sem_gate.append(f"{sorted(contexto.methods)[0]} {contexto.path}")
+    # Guarda contra teste vazio: no FastAPI >= 0.139 os routers incluídos aparecem como `_IncludedRouter` em `app.routes` (nenhum APIRoute direto).
+    assert total > 100, f"apenas {total} rotas verificadas — a varredura das rotas efetivas quebrou"
     assert sem_gate == [], f"rotas autenticadas fora do gate da troca obrigatória: {sem_gate}"
 
 
@@ -170,6 +181,23 @@ def test_rotas_normais_ficam_bloqueadas_ate_a_troca(pendente, caminho: str) -> N
     assert resposta.status_code in (403, 404, 405) and not (resposta.status_code == 200), (caminho, resposta.status_code)
     if resposta.status_code == 403:
         assert resposta.json()["detail"]["code"] == "SENHA_TROCA_OBRIGATORIA"
+
+
+def test_empresas_legado_tambem_exige_a_troca_obrigatoria(pendente) -> None:
+    """/empresas usa `require_admin`/`require_admin_or_gestor` (que dependem do `get_current_user` cru): o gate vem do router. Leitura e escrita legadas bloqueiam com o código."""
+    corpo, tenant = pendente
+    empresa_id = corpo["empresa"]["id"]
+    chamadas = [
+        tenant.get("/empresas"),
+        tenant.get(f"/empresas/{empresa_id}"),
+        tenant.patch(f"/empresas/{empresa_id}", json={}),
+        tenant.post("/empresas", json={}),
+        tenant.post(f"/empresas/{empresa_id}/inativar"),
+        tenant.post(f"/empresas/{empresa_id}/reativar"),
+    ]
+    for resposta in chamadas:
+        assert resposta.status_code == 403, (resposta.request.method, resposta.request.url.path, resposta.status_code)
+        assert resposta.json()["detail"]["code"] == "SENHA_TROCA_OBRIGATORIA", resposta.request.url.path
 
 
 def test_usuarios_e_demandas_devolvem_o_codigo_de_troca_obrigatoria(pendente) -> None:
