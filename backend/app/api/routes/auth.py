@@ -9,6 +9,7 @@ from app.models.usuario import Usuario
 from app.schemas.auth import (
     AccessTokenResponse,
     AuthAlterarSenhaRequest,
+    AuthDefinirSenhaInicialRequest,
     AuthGoogleLoginRequest,
     AuthLoginRequest,
     AuthMeResponse,
@@ -22,6 +23,7 @@ from app.services.auth_service import (
     AuthPasswordResetTokenInvalidError,
     AuthPasswordValidationError,
     AuthService,
+    AuthTrocaInicialNaoPendenteError,
     AuthUnauthorizedError,
     GOOGLE_ACCESS_DENIED_MESSAGE,
     INVALID_CREDENTIALS_MESSAGE,
@@ -115,6 +117,25 @@ def password_reset_confirm(payload: AuthPasswordResetConfirm, db: Session = Depe
 @router.get("/me", response_model=AuthMeResponse)
 def me(current_user: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
     return auth_service.me(db, current_user)
+
+
+@router.post("/definir-senha-inicial", status_code=status.HTTP_204_NO_CONTENT)
+def definir_senha_inicial(
+    payload: AuthDefinirSenhaInicialRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Troca obrigatória do primeiro acesso (senha temporária da Gestão). Fica FORA do gate `password_ready` de propósito — é a única saída do bloqueio. Só nova senha +
+    confirmação; 409 se não houver troca inicial pendente."""
+    try:
+        auth_service.definir_senha_inicial(
+            db, usuario=current_user, nova_senha=payload.nova_senha, confirmacao_senha=payload.confirmacao_senha
+        )
+    except AuthTrocaInicialNaoPendenteError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except AuthPasswordValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return None
 
 
 @router.post("/alterar-senha", status_code=status.HTTP_204_NO_CONTENT)

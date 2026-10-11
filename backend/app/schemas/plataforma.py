@@ -59,7 +59,7 @@ class PlataformaUsuarioRead(BaseModel):
     status: Literal["ativo", "inativo", "bloqueado", "arquivado"]
     acesso_sistema: bool = Field(alias="acessoSistema")
     created_at: datetime = Field(alias="createdAt")
-    # Convite de primeiro acesso ainda não concluído (a pessoa não definiu a própria senha). Só um sinal — nunca token nem hash.
+    # Primeiro acesso pendente: ainda vale a senha TEMPORÁRIA e a troca obrigatória não foi feita. Só um sinal — nunca a senha nem o hash.
     primeiro_acesso_pendente: bool = Field(default=False, alias="primeiroAcessoPendente")
 
     model_config = ConfigDict(populate_by_name=True)
@@ -93,21 +93,15 @@ class PlataformaGestorCreate(BaseModel):
         return texto
 
 
-class PlataformaConviteRead(BaseModel):
-    """Desfecho do convite de primeiro acesso do Gestor. NENHUMA senha existe aqui. `enviado=false` (ex.: a empresa nova ainda não tem SMTP) não desfaz a
-    criação: o convite segue válido e `linkAcesso` é o link de primeiro acesso para entrega manual — presente SÓ nessa resposta (o banco guarda o hash)."""
+class PlataformaGestorCriadoRead(BaseModel):
+    """Resposta ÚNICA da criação/regeneração: `senhaTemporaria` aparece aqui e em nenhum outro lugar (nem log, nem evento, nem GET posterior). A senha é uma credencial
+    real (só o hash fica no banco) e o Gestor é OBRIGADO a trocá-la no primeiro acesso."""
 
-    enviado: bool
-    motivo: Literal["email_nao_configurado", "url_publica_ausente", "falha_envio"] | None = None
-    expira_em: datetime = Field(alias="expiraEm")
-    link_acesso: str | None = Field(default=None, alias="linkAcesso")
+    usuario: PlataformaUsuarioRead
+    senha_temporaria: str = Field(alias="senhaTemporaria")
+    deve_alterar_senha: bool = Field(default=True, alias="deveAlterarSenha")
 
     model_config = ConfigDict(populate_by_name=True)
-
-
-class PlataformaGestorCriadoRead(BaseModel):
-    usuario: PlataformaUsuarioRead
-    convite: PlataformaConviteRead
 
 
 class PlataformaEmpresaOnboardingCreate(BaseModel):
@@ -122,7 +116,9 @@ class PlataformaEmpresaOnboardingCreate(BaseModel):
 class PlataformaEmpresaOnboardingRead(BaseModel):
     empresa: PlataformaEmpresaRead
     gestor: PlataformaUsuarioRead
-    convite: PlataformaConviteRead
+    # Senha TEMPORÁRIA do Gestor inicial: devolvida UMA vez, nesta resposta (só o hash é persistido). Nenhum endpoint posterior a devolve.
+    senha_temporaria: str = Field(alias="senhaTemporaria")
+    deve_alterar_senha: bool = Field(default=True, alias="deveAlterarSenha")
     # `/e/<slug>/login` (absoluta quando APP_PUBLIC_URL está configurada). Sem token: é só o endereço da empresa.
     url_acesso: str = Field(alias="urlAcesso")
 

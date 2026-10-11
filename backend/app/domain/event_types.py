@@ -9,7 +9,7 @@ class DomainEventType(StrEnum):
     # Administração da Plataforma (Fase 1B). Nenhum payload carrega senha: a temporária só existe na resposta.
     EMPRESA_PERSONALIZACAO_ALTERADA = "empresa.personalizacao_alterada"
     EMPRESA_GESTOR_CRIADO = "empresa.gestor_criado"
-    EMPRESA_CONVITE_REENVIADO = "empresa.convite_reenviado"
+    EMPRESA_SENHA_TEMPORARIA_GERADA = "empresa.senha_temporaria_gerada"
     EMPRESA_GESTOR_PROMOVIDO = "empresa.gestor_promovido"
 
     USUARIO_CRIADO = "usuario.criado"

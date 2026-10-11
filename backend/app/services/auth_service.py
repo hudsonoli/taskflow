@@ -1,6 +1,4 @@
 import logging
-import secrets
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -27,7 +25,7 @@ from app.repositories.empresa_repository import EmpresaRepository
 from app.repositories.usuario_credencial_repository import UsuarioCredencialRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.schemas.auth import AccessTokenResponse, AuthMeResponse
-from app.services.configuracao_email_service import ConfiguracaoEmailService, EmailNaoConfiguradoError
+from app.services.configuracao_email_service import ConfiguracaoEmailService
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.empresa_service import STATUS_ATIVA as EMPRESA_STATUS_ATIVA
 from app.services.usuario_permissao_service import UsuarioPermissaoService
@@ -54,22 +52,10 @@ PASSWORD_RESET_INVALID_TOKEN_MESSAGE = "Este link é inválido ou expirou. Solic
 PASSWORD_RESET_TOKEN_TTL = timedelta(minutes=30)
 PASSWORD_RESET_COOLDOWN = timedelta(seconds=60)
 PASSWORD_RESET_EMAIL_SUBJECT = "Redefinição de senha — TaskFlow"
-# Convite de primeiro acesso (Fase 10B): o Gestor inicial define a PRÓPRIA senha pelo mesmo fluxo de redefinição (`/e/<slug>/redefinir-senha#token=…`), com uma
-# validade maior que a do "esqueci minha senha" (a pessoa pode demorar a abrir o convite). Nenhuma senha é gerada, exibida ou enviada.
-CONVITE_TOKEN_TTL = timedelta(hours=72)
-CONVITE_EMAIL_SUBJECT = "Convite de acesso — TaskFlow"
 
 
-@dataclass(frozen=True)
-class ConviteResultado:
-    """Desfecho do convite. `enviado=False` NÃO desfaz nada: o Gestor existe e o convite segue válido. Nesse caso `link` é o link de primeiro acesso para entrega
-    MANUAL pela Gestão (exibido uma vez; só o hash fica no banco). Com `enviado=True` o link nunca sai daqui."""
-
-    enviado: bool
-    motivo: str | None
-    expira_em: datetime
-    link: str | None = None
-    url_acesso: str | None = None
+class AuthTrocaInicialNaoPendenteError(ValueError):
+    """`definir_senha_inicial` só vale enquanto a troca obrigatória do primeiro acesso estiver pendente."""
 
 
 class AuthInvalidCredentialsError(ValueError):
@@ -561,24 +547,24 @@ class AuthService:
         return bruto.rstrip("/")
 
     # ----------------------------------------------------------------------------------
-    # Convite de primeiro acesso (Fase 10B) — reaproveita o token/confirmação do reset de senha
+    # Primeiro acesso por SENHA TEMPORÁRIA (Fase 10B.1) — sem SMTP, sem convite, sem token
     # ----------------------------------------------------------------------------------
 
-    def preparar_convite(self, db: Session, usuario: Usuario, *, agora: datetime | None = None) -> tuple[str, datetime]:
-        """Garante a credencial do usuário e emite o token do convite. SEM commit (a transação é de quem chama).
+    def aplicar_senha_temporaria(self, db: Session, usuario: Usuario, senha: str, *, agora: datetime | None = None) -> None:
+        """Grava a senha TEMPORÁRIA do usuário e liga a troca obrigatória. SEM commit (a transação é de quem chama).
 
-        Sem credencial: cria uma com senha ALEATÓRIA descartada (ninguém a conhece — o login só passa depois de o Gestor definir a própria senha pelo link) e
-        `senha_deve_ser_alterada=True`. Com credencial: só substitui o token (invalida o convite anterior). Devolve (token em claro, expiração); só o SHA-256 é
-        persistido e o token nunca vai para log ou evento."""
+        É uma credencial real: persiste SÓ o hash (mesmo `hash_password` de qualquer senha) e `senha_deve_ser_alterada=True`. Sem credencial, cria; com credencial,
+        substitui o hash (a senha anterior deixa de valer na hora), zera tentativas/bloqueio e qualquer token de recuperação pendente. A senha em claro nunca é
+        registrada em log, evento ou campo do banco — só existe na memória de quem a gerou e na resposta inicial da Gestão."""
+        if not senha or len(senha) < 8:
+            raise AuthPasswordValidationError("Senha deve ter pelo menos 8 caracteres")
         now = agora or datetime.now(timezone.utc)
-        token = generate_password_reset_token()
-        expira_em = now + CONVITE_TOKEN_TTL
         credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)
         if credencial is None:
             credencial = UsuarioCredencial(
                 id=str(uuid4()),
                 usuario_id=usuario.id,
-                senha_hash=hash_password(secrets.token_urlsafe(32)),
+                senha_hash=hash_password(senha),
                 senha_definida_em=now,
                 senha_alterada_em=None,
                 tentativas_falhas=0,
@@ -588,50 +574,49 @@ class AuthService:
                 updated_at=now,
             )
             self.credencial_repository.create(db, credencial)
-        credencial.reset_senha_token_hash = hash_password_reset_token(token)
-        credencial.reset_senha_expira_em = expira_em
-        credencial.reset_senha_solicitado_em = now
+            return
+        credencial.senha_hash = hash_password(senha)
+        credencial.senha_alterada_em = now
+        credencial.tentativas_falhas = 0
+        credencial.bloqueado_ate = None
+        credencial.senha_deve_ser_alterada = True
+        self._limpar_reset_senha(credencial)
         credencial.updated_at = now
         self.credencial_repository.update(db, credencial)
-        return token, expira_em
 
-    def enviar_convite(self, db: Session, *, usuario: Usuario, empresa: Empresa, token: str, expira_em: datetime) -> ConviteResultado:
-        """Envia o convite pelo SMTP da PRÓPRIA empresa (efeito externo, fora da transação do banco). Falha de qualquer tipo (SMTP não configurado — o caso
-        normal de uma empresa nova —, indisponível, `APP_PUBLIC_URL` ausente) NÃO levanta nem apaga o convite: devolve `enviado=False` com o motivo e o link
-        para entrega manual. Nada do token, do link ou do corpo é registrado."""
-        base_url = self._url_publica_base()
-        caminho_login = f"/e/{empresa.slug}/login"
-        link_relativo = f"/e/{empresa.slug}/redefinir-senha#token={token}"
-        url_acesso = f"{base_url}{caminho_login}" if base_url else caminho_login
-        link = f"{base_url}{link_relativo}" if base_url else link_relativo
-        if base_url is None:
-            logger.warning("Convite sem APP_PUBLIC_URL válida; e-mail não enviado (empresa_id=%s)", empresa.id)
-            return ConviteResultado(False, "url_publica_ausente", expira_em, link=link, url_acesso=url_acesso)
+    def url_login_da_empresa(self, empresa: Empresa) -> str:
+        """`<APP_PUBLIC_URL>/e/<slug>/login` (só o endereço público; sem token). Sem `APP_PUBLIC_URL` válida, o caminho relativo."""
+        base = self._url_publica_base()
+        caminho = f"/e/{empresa.slug}/login"
+        return f"{base}{caminho}" if base else caminho
+
+    def definir_senha_inicial(self, db: Session, *, usuario: Usuario, nova_senha: str, confirmacao_senha: str) -> None:
+        """Troca OBRIGATÓRIA do primeiro acesso: o usuário já se autenticou com a senha temporária, então só informa a nova senha e a confirmação.
+
+        Só vale enquanto `senha_deve_ser_alterada` estiver ligada (senão `AuthTrocaInicialNaoPendenteError`). Política de senha = a de sempre; e a nova senha NÃO pode ser
+        a temporária (comparada contra o HASH atual, sem guardar a temporária em claro). Numa transação só: substitui o hash, desliga a obrigação, limpa recuperação
+        pendente e registra o evento. A senha temporária deixa de funcionar no mesmo instante."""
+        now = datetime.now(timezone.utc)
         try:
-            self.configuracao_email_service.enviar_email_transacional(
-                db,
-                empresa_id=empresa.id,
-                destinatario=usuario.email,
-                assunto=CONVITE_EMAIL_SUBJECT,
-                texto=self._texto_email_convite(link, empresa.nome_fantasia or empresa.nome, url_acesso),
-            )
-        except Exception as exc:  # EmailNaoConfiguradoError, EmailEnvioFalhouError, EmailConteudoInvalidoError ou bug
-            motivo = "email_nao_configurado" if isinstance(exc, EmailNaoConfiguradoError) else "falha_envio"
-            logger.warning("Falha ao enviar convite de primeiro acesso (empresa_id=%s, motivo=%s)", empresa.id, getattr(exc, "motivo", type(exc).__name__))
-            return ConviteResultado(False, motivo, expira_em, link=link, url_acesso=url_acesso)
-        return ConviteResultado(True, None, expira_em, link=None, url_acesso=url_acesso)
-
-    @staticmethod
-    def _texto_email_convite(link: str, empresa_nome: str, url_acesso: str) -> str:
-        horas = int(CONVITE_TOKEN_TTL.total_seconds() // 3600)
-        return (
-            "Olá,\n\n"
-            f"Você foi convidado(a) para administrar {empresa_nome} no TaskFlow.\n\n"
-            f"Para definir a sua senha e concluir o primeiro acesso, use o link abaixo (válido por {horas} horas):\n\n"
-            f"{link}\n\n"
-            f"Depois de definir a senha, entre em: {url_acesso}\n\n"
-            "Se você não esperava este convite, ignore este e-mail.\n"
-        )
+            credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)
+            if credencial is None or not credencial.senha_deve_ser_alterada:
+                raise AuthTrocaInicialNaoPendenteError("Não há troca de senha inicial pendente para esta conta.")
+            self._validate_new_password("", nova_senha, confirmacao_senha)
+            if verify_password(nova_senha, credencial.senha_hash):
+                raise AuthPasswordValidationError("Nova senha deve ser diferente da senha temporária")
+            credencial.senha_hash = hash_password(nova_senha)
+            credencial.senha_alterada_em = now
+            credencial.tentativas_falhas = 0
+            credencial.bloqueado_ate = None
+            credencial.senha_deve_ser_alterada = False
+            self._limpar_reset_senha(credencial)
+            credencial.updated_at = now
+            self.credencial_repository.update(db, credencial)
+            self._publish_senha_alterada(db, usuario=usuario, occurred_at=now)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
     @staticmethod
     def _texto_email_redefinicao(link: str, empresa_nome: str) -> str:

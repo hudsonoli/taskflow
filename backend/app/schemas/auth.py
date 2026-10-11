@@ -113,6 +113,15 @@ class AuthAlterarSenhaRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class AuthDefinirSenhaInicialRequest(BaseModel):
+    """Troca obrigatória do primeiro acesso: SÓ a nova senha e a confirmação (a pessoa já se autenticou com a temporária). Campos extras são rejeitados."""
+
+    nova_senha: str = Field(alias="novaSenha", min_length=8)
+    confirmacao_senha: str = Field(alias="confirmacaoSenha", min_length=8)
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
 class AuthMeResponse(BaseModel):
     usuario_id: UUID = Field(alias="usuarioId")
     empresa_id: UUID = Field(alias="empresaId")

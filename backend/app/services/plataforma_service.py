@@ -2,7 +2,7 @@
 
 Nada aqui duplica regra de negócio: empresa → `EmpresaService`; branding → `ConfiguracaoPersonalizacaoService` (a mesma
 validação de cores/tema/logo do tenant, só que com `empresa_id` explícito); usuário → `UsuarioService`; senha →
-o convite de primeiro acesso do Gestor (`AuthService.preparar_convite`/`enviar_convite`, Fase 10B: NENHUMA senha é gerada nem exibida). A autoridade vem de `administradores_plataforma` (nunca de e-mail ou de
+a senha TEMPORÁRIA do Gestor inicial (`AuthService.aplicar_senha_temporaria`, Fase 10B.1: gerada aqui, só o hash persiste, troca obrigatória no primeiro acesso). A autoridade vem de `administradores_plataforma` (nunca de e-mail ou de
 `perfil_base`) e é reconferida a cada requisição por `require_platform_admin`.
 
 SEGUNDO_TENANT_GO_LIVE_BLOQUEADO: criar uma empresa e o Gestor dela já funciona por esta API, mas o login do produto
@@ -12,6 +12,7 @@ conseguem entrar. A resolução multiempresa (slug/branding no login, reset, Goo
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -29,7 +30,6 @@ from app.repositories.usuario_repository import UsuarioRepository
 from app.schemas.configuracao_personalizacao import PersonalizacaoRead, PersonalizacaoUpdate
 from app.schemas.empresa import EmpresaCreate, EmpresaUpdate
 from app.schemas.plataforma import (
-    PlataformaConviteRead,
     PlataformaEmpresaOnboardingCreate,
     PlataformaEmpresaOnboardingRead,
     PlataformaEmpresaRead,
@@ -41,7 +41,7 @@ from app.schemas.plataforma import (
 )
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
 from app.models.usuario_credencial import UsuarioCredencial
-from app.services.auth_service import AuthService, ConviteResultado
+from app.services.auth_service import AuthService
 from app.services.configuracao_personalizacao_service import ConfiguracaoPersonalizacaoService
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.empresa_service import EmpresaService
@@ -59,6 +59,23 @@ class PlataformaUsuarioNaoEncontradoError(LookupError):
 class PlataformaUsuarioNaoElegivelError(ValueError):
     """O usuário existe nesta empresa, mas não pode ser promovido a Gestor (já é Gestor, é admin legado, está
     inativo/bloqueado ou sem acesso ao sistema)."""
+
+
+# Sem caracteres ambíguos (0/O, 1/l/I): a senha temporária é lida e digitada por uma pessoa. 55 símbolos × 14 posições ≈ 80 bits de entropia.
+_MAIUSCULAS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+_MINUSCULAS = "abcdefghijkmnopqrstuvwxyz"
+_DIGITOS = "23456789"
+_ALFABETO_SENHA = _MAIUSCULAS + _MINUSCULAS + _DIGITOS
+_TAMANHO_SENHA = 14
+
+
+def gerar_senha_temporaria() -> str:
+    """CSPRNG (`secrets`), 14 caracteres de um alfabeto legível, SEMPRE com ao menos uma maiúscula, uma minúscula e um dígito (embaralhado com `SystemRandom`). Nada
+    derivado de nome, slug, documento ou e-mail; nenhuma senha padrão. Nunca é registrada em log nem em evento."""
+    caracteres = [secrets.choice(_MAIUSCULAS), secrets.choice(_MINUSCULAS), secrets.choice(_DIGITOS)]
+    caracteres += [secrets.choice(_ALFABETO_SENHA) for _ in range(_TAMANHO_SENHA - len(caracteres))]
+    secrets.SystemRandom().shuffle(caracteres)
+    return "".join(caracteres)
 
 
 class PlataformaSlugImutavelError(ValueError):
@@ -314,12 +331,8 @@ class PlataformaService:
         db.commit()
         return self._usuario_read(atualizado)
 
-    @staticmethod
-    def _convite_read(resultado: ConviteResultado) -> PlataformaConviteRead:
-        return PlataformaConviteRead(enviado=resultado.enviado, motivo=resultado.motivo, expiraEm=resultado.expira_em, linkAcesso=resultado.link)
-
     def _pendentes_de_primeiro_acesso(self, db: Session, usuario_ids: list[str]) -> set[str]:
-        """Usuários que ainda não definiram a PRÓPRIA senha (convite pendente). Só o sinal — nunca token nem hash."""
+        """Usuários que ainda não definiram a PRÓPRIA senha (primeiro acesso pendente). Só o sinal — nunca senha nem hash."""
         if not usuario_ids:
             return set()
         linhas = db.scalars(
@@ -329,15 +342,17 @@ class PlataformaService:
         ).all()
         return set(linhas)
 
-    def _provisionar_gestor(self, db: Session, empresa: Empresa, data: PlataformaGestorCreate, *, ator: Usuario, primeiro: bool) -> tuple[Usuario, str, datetime]:
-        """Cria o usuário `gestor` (NUNCA admin) NESTA empresa + a credencial do convite + o evento, SEM commit — a transação é de quem chama."""
+    def _provisionar_gestor(self, db: Session, empresa: Empresa, data: PlataformaGestorCreate, *, ator: Usuario, primeiro: bool) -> tuple[Usuario, str]:
+        """Cria o usuário `gestor` (NUNCA admin) NESTA empresa + a credencial com a senha TEMPORÁRIA (só o hash) + a troca obrigatória + o evento, SEM commit — a
+        transação é de quem chama. Devolve a senha em claro SÓ para a resposta inicial."""
         usuario = self.usuario_service.create_usuario(
             db,
             UsuarioCreate(empresaId=empresa.id, nome=data.nome, email=data.email, perfilBase="gestor", acessoSistema=True),
             actor_usuario_id=ator.id,
             commit=False,
         )
-        token, expira_em = self.auth_service.preparar_convite(db, usuario)
+        senha = gerar_senha_temporaria()
+        self.auth_service.aplicar_senha_temporaria(db, usuario, senha)
         self.event_publisher.publish(
             db,
             tipo=DomainEventType.EMPRESA_GESTOR_CRIADO,
@@ -347,65 +362,68 @@ class PlataformaService:
             usuario_id=ator.id,
             payload={"usuarioId": usuario.id, "primeiroGestor": primeiro, "nome": empresa.nome},
         )
-        return usuario, token, expira_em
+        return usuario, senha
 
     def criar_empresa_com_gestor(self, db: Session, data: PlataformaEmpresaOnboardingCreate, *, ator: Usuario) -> PlataformaEmpresaOnboardingRead:
-        """Onboarding (Fase 10B): Empresa (ATIVA) + primeiro Gestor + credencial do convite + eventos numa ÚNICA transação — ou tudo, ou nada (slug/código/
-        documento duplicado, e-mail inválido…: nenhuma empresa fica pela metade). O e-mail do convite é efeito externo e só sai DEPOIS do commit, sem segurar a
-        transação; falha de envio não desfaz nada. O Administrador da Plataforma continua na Gestão: nenhuma sessão tenant, nenhuma impersonação."""
+        """Onboarding: Empresa (ATIVA) + primeiro Gestor + credencial (hash da senha temporária, troca obrigatória) + eventos numa ÚNICA transação — ou tudo, ou nada
+        (slug/código/documento duplicado, e-mail inválido…: nenhuma empresa fica pela metade). Independente de SMTP. A senha temporária sai UMA vez, nesta resposta. O
+        Administrador da Plataforma continua na Gestão: nenhuma sessão tenant, nenhuma impersonação."""
         try:
             empresa = self.empresa_service.create_empresa(db, data.empresa, actor_usuario_id=ator.id, commit=False)
-            usuario, token, expira_em = self._provisionar_gestor(db, empresa, data.gestor, ator=ator, primeiro=True)
+            usuario, senha = self._provisionar_gestor(db, empresa, data.gestor, ator=ator, primeiro=True)
             db.commit()
         except Exception:
             db.rollback()
             raise
         db.refresh(empresa)
         db.refresh(usuario)
-        convite = self.auth_service.enviar_convite(db, usuario=usuario, empresa=empresa, token=token, expira_em=expira_em)
         leitura = self._usuario_read(usuario)
         leitura.primeiro_acesso_pendente = True
         return PlataformaEmpresaOnboardingRead(
             empresa=self._read(db, [empresa])[0],
             gestor=leitura,
-            convite=self._convite_read(convite),
-            urlAcesso=convite.url_acesso or f"/e/{empresa.slug}/login",
+            senhaTemporaria=senha,
+            deveAlterarSenha=True,
+            urlAcesso=self.auth_service.url_login_da_empresa(empresa),
         )
 
     def criar_gestor(self, db: Session, empresa_id: str, data: PlataformaGestorCreate, *, ator: Usuario) -> PlataformaGestorCriadoRead:
-        """Cria um Gestor para a empresa — SEMPRE `gestor` (nunca `admin`), só nesta empresa, pelo MESMO convite de primeiro acesso do onboarding (ele define a
-        própria senha; nenhuma senha é gerada, exibida ou guardada)."""
+        """Cria um Gestor para a empresa — SEMPRE `gestor` (nunca `admin`), só nesta empresa, com a MESMA senha temporária + troca obrigatória do onboarding."""
         empresa = self.empresa_service.get_empresa(db, empresa_id)
         gestores_antes = self.administrador_repository.gestores_ativos_por_empresa(db, [empresa.id]).get(empresa.id, 0)
         try:
-            usuario, token, expira_em = self._provisionar_gestor(db, empresa, data, ator=ator, primeiro=gestores_antes == 0)
+            usuario, senha = self._provisionar_gestor(db, empresa, data, ator=ator, primeiro=gestores_antes == 0)
             db.commit()
         except Exception:
             db.rollback()
             raise
         db.refresh(usuario)
-        convite = self.auth_service.enviar_convite(db, usuario=usuario, empresa=empresa, token=token, expira_em=expira_em)
         leitura = self._usuario_read(usuario)
         leitura.primeiro_acesso_pendente = True
-        return PlataformaGestorCriadoRead(usuario=leitura, convite=self._convite_read(convite))
+        return PlataformaGestorCriadoRead(usuario=leitura, senhaTemporaria=senha, deveAlterarSenha=True)
 
-    def reenviar_convite(self, db: Session, empresa_id: str, usuario_id: str, *, ator: Usuario) -> PlataformaGestorCriadoRead:
-        """Novo convite (invalida o anterior) para quem ainda não definiu a própria senha. Mesma resposta cross-tenant de sempre para usuário de outra empresa."""
+    def gerar_nova_senha_temporaria(self, db: Session, empresa_id: str, usuario_id: str, *, ator: Usuario) -> PlataformaGestorCriadoRead:
+        """Saída operacional quando a tela da senha foi fechada sem copiar: só enquanto o PRIMEIRO ACESSO está pendente (troca obrigatória ainda ligada). Substitui o hash
+        (a senha anterior morre na hora), mantém a troca obrigatória e devolve a nova senha UMA vez. Não envia e-mail. Usuário que já concluiu o primeiro acesso é recusado
+        (para ele vale "esqueci minha senha"); outra empresa/inexistente = a mesma resposta de "não existe"."""
         empresa = self.empresa_service.get_empresa(db, empresa_id)
         usuario = self.usuario_repository.get_by_id(db, usuario_id)
         if usuario is None or usuario.empresa_id != empresa.id or usuario.is_system_account or usuario.status == "arquivado":
             raise PlataformaUsuarioNaoEncontradoError("Usuário não encontrado nesta empresa")
         if usuario.status != "ativo" or not usuario.acesso_sistema:
-            raise PlataformaUsuarioNaoElegivelError("Só um usuário ativo, com acesso ao sistema, pode receber um convite.")
+            raise PlataformaUsuarioNaoElegivelError("Só um usuário ativo, com acesso ao sistema, pode receber uma senha temporária.")
         if empresa.status != "ativa":
-            raise PlataformaUsuarioNaoElegivelError("A empresa precisa estar ativa para receber um convite de primeiro acesso.")
+            raise PlataformaUsuarioNaoElegivelError("A empresa precisa estar ativa para gerar uma senha temporária.")
         if usuario.id not in self._pendentes_de_primeiro_acesso(db, [usuario.id]):
-            raise PlataformaUsuarioNaoElegivelError("Este usuário já definiu a própria senha: não há convite pendente.")
+            raise PlataformaUsuarioNaoElegivelError(
+                "Este usuário já concluiu o primeiro acesso: use \"Esqueci minha senha\" para recuperar a conta."
+            )
+        senha = gerar_senha_temporaria()
         try:
-            token, expira_em = self.auth_service.preparar_convite(db, usuario)
+            self.auth_service.aplicar_senha_temporaria(db, usuario, senha)
             self.event_publisher.publish(
                 db,
-                tipo=DomainEventType.EMPRESA_CONVITE_REENVIADO,
+                tipo=DomainEventType.EMPRESA_SENHA_TEMPORARIA_GERADA,
                 empresa_id=empresa.id,
                 entidade_tipo="empresa",
                 entidade_id=empresa.id,
@@ -416,10 +434,10 @@ class PlataformaService:
         except Exception:
             db.rollback()
             raise
-        convite = self.auth_service.enviar_convite(db, usuario=usuario, empresa=empresa, token=token, expira_em=expira_em)
+        db.refresh(usuario)
         leitura = self._usuario_read(usuario)
         leitura.primeiro_acesso_pendente = True
-        return PlataformaGestorCriadoRead(usuario=leitura, convite=self._convite_read(convite))
+        return PlataformaGestorCriadoRead(usuario=leitura, senhaTemporaria=senha, deveAlterarSenha=True)
 
     # ------------------------------------------------------------------------------------
     # Bootstrap (CLI) — o ÚNICO lugar onde um e-mail localiza a autoridade

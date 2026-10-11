@@ -145,7 +145,7 @@ def onboarding_empresa(
     ctx: ContextoPlataforma = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
-    """Empresa (ativa) + primeiro Gestor numa transação atômica, com convite de primeiro acesso (sem senha). Não cria sessão tenant nem impersona."""
+    """Empresa (ativa) + primeiro Gestor numa transação atômica, com senha temporária (exibida uma vez) e troca obrigatória. Sem SMTP, sem convite. Não cria sessão tenant nem impersona."""
     try:
         return plataforma_service.criar_empresa_com_gestor(db, dados, ator=ctx.usuario)
     except Exception as exc:
@@ -362,8 +362,7 @@ def criar_gestor(
     ctx: ContextoPlataforma = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
-    """Cria um Gestor da empresa (perfil forçado `gestor`) com convite de primeiro acesso: ele define a própria senha. Nenhuma senha é gerada ou exibida;
-    se o e-mail não puder ser enviado, `convite.linkAcesso` (exibido só aqui) permite a entrega manual."""
+    """Cria um Gestor da empresa (perfil forçado `gestor`) com senha TEMPORÁRIA e troca obrigatória no primeiro acesso. A `senhaTemporaria` só existe NESTA resposta."""
     try:
         resposta = plataforma_service.criar_gestor(db, str(empresa_id), dados, ator=ctx.usuario)
     except Exception as exc:
@@ -371,15 +370,15 @@ def criar_gestor(
     return resposta
 
 
-@router.post("/empresas/{empresa_id}/usuarios/{usuario_id}/convite", response_model=PlataformaGestorCriadoRead)
-def reenviar_convite(
+@router.post("/empresas/{empresa_id}/usuarios/{usuario_id}/senha-temporaria", response_model=PlataformaGestorCriadoRead)
+def gerar_senha_temporaria(
     empresa_id: UUID,
     usuario_id: UUID,
     ctx: ContextoPlataforma = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ):
-    """Novo convite de primeiro acesso (invalida o anterior) para quem ainda não definiu a própria senha."""
+    """Nova senha temporária para quem ainda NÃO concluiu o primeiro acesso (a anterior deixa de valer; a troca obrigatória continua). Exibida só nesta resposta."""
     try:
-        return plataforma_service.reenviar_convite(db, str(empresa_id), str(usuario_id), ator=ctx.usuario)
+        return plataforma_service.gerar_nova_senha_temporaria(db, str(empresa_id), str(usuario_id), ator=ctx.usuario)
     except Exception as exc:
         _tratar_erro(exc)
