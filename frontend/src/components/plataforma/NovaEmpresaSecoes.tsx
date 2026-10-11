@@ -155,10 +155,10 @@ export function SecaoIdentidadeVisual({
   );
 }
 
-/** Acesso inicial: o primeiro Gestor (sempre perfil Gestor, só desta empresa). Ele define a PRÓPRIA senha por um convite — nenhuma senha é criada ou exibida. */
+/** Acesso inicial: o primeiro Gestor (sempre perfil Gestor, só desta empresa). O servidor gera uma senha TEMPORÁRIA (exibida uma única vez) e o Gestor cria a PRÓPRIA senha no primeiro acesso. */
 export function SecaoAcessoInicial({ rascunho, erros, mostrarErros, atualizar, desabilitado }: SecaoProps) {
   return (
-    <Secao titulo="Acesso inicial — primeiro Gestor" descricao="O Gestor administra a empresa por dentro. Ele recebe um convite para definir a própria senha; nenhuma senha é gerada ou exibida.">
+    <Secao titulo="Acesso inicial — primeiro Gestor" descricao="O Gestor administra a empresa por dentro. Uma senha temporária será gerada e exibida uma única vez. No primeiro acesso, o Gestor deverá criar sua senha pessoal.">
       <div>
         <Input label="Nome do Gestor" value={rascunho.gestorNome} onChange={(e) => atualizar({ gestorNome: e.target.value })} maxLength={255} autoComplete="off" disabled={desabilitado} />
         {mostrarErros && <Erro texto={erros.gestorNome} />}

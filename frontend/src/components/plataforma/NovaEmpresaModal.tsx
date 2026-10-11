@@ -25,7 +25,7 @@ type Resultado = { dados: PlataformaOnboarding; avisos: string[] };
  * Nova empresa (Fase 10B/10B.1): Empresa (ATIVA) + identidade visual + primeiro Gestor num único formulário em seções. A criação da Empresa e do Gestor é ATÔMICA no
  * servidor (`POST /plataforma/empresas/onboarding`), sem SMTP: o servidor gera uma senha TEMPORÁRIA (só o hash persiste) que a tela de sucesso mostra UMA vez; a identidade visual (cores/tema e logo) é aplicada logo depois pelo mecanismo existente e, se falhar, NÃO desfaz a
  * empresa — vira um aviso. Ao concluir, o Administrador da Plataforma continua na Gestão (nenhuma sessão tenant, nenhuma impersonação): a tela de sucesso mostra o endereço
- * `/e/<slug>/login` para copiar e o estado do convite do Gestor.
+ * `/e/<slug>/login` para copiar, o usuário e a senha temporária do Gestor (exibida uma única vez).
  */
 export function NovaEmpresaModal({ open, onClose, onCriada }: { open: boolean; onClose: () => void; onCriada: () => void }) {
   const router = useRouter();
@@ -66,7 +66,7 @@ export function NovaEmpresaModal({ open, onClose, onCriada }: { open: boolean; o
 
   function fechar() {
     if (salvando) return;
-    reiniciar(); // descarta também o link de convite (memória)
+    reiniciar(); // descarta também a senha temporária (memória)
     onClose();
   }
 

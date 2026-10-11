@@ -138,6 +138,31 @@ test("o onboarding NÃO usa convite nem SMTP: nenhum token, link manual, reenvio
   assert.throws(() => ler("components/plataforma/ConviteGestorAviso.tsx"), /ENOENT/);
 });
 
+test("texto do onboarding descreve o fluxo final: sem 'convite' e sem 'nenhuma senha é gerada'; com senha temporária, exibida uma única vez e senha pessoal no primeiro acesso", () => {
+  // telas do onboarding (criar empresa + entregar a senha + regenerar): texto E comentários não podem voltar a descrever convite como mecanismo do primeiro acesso
+  const telas = [
+    "components/plataforma/NovaEmpresaModal.tsx",
+    "components/plataforma/NovaEmpresaSecoes.tsx",
+    "components/plataforma/SenhaTemporariaAviso.tsx",
+    "components/plataforma/EmpresaUsuariosSection.tsx",
+    "lib/useOrigem.ts",
+  ];
+  for (const caminho of telas) {
+    const bruto = ler(caminho);
+    assert.doesNotMatch(bruto, /convit|convida/i, `${caminho}: referência a convite`);
+    assert.doesNotMatch(semComentarios(bruto), /nenhuma senha (é|foi|será) (criada|gerada|exibida)|sem senha/i, `${caminho}: afirma que não há senha`);
+  }
+  // o modal de "Definir Gestor" também não pode prometer convite (a frase 'nenhuma senha foi gerada' de lá trata de usuário EXISTENTE e é legítima)
+  assert.doesNotMatch(semComentarios(ler("components/plataforma/DefinirGestorModal.tsx")), /convit|convida/i);
+  // a seção "Acesso inicial" explica o fluxo real
+  const secao = semComentarios(ler("components/plataforma/NovaEmpresaSecoes.tsx"));
+  const acesso = secao.slice(secao.indexOf("export function SecaoAcessoInicial"));
+  assert.match(acesso, /senha temporária/i);
+  assert.match(acesso, /única vez/i);
+  assert.match(acesso, /primeiro acesso/i);
+  assert.match(acesso, /senha pessoal/i);
+});
+
 test("a senha temporária vem do SERVIDOR: a tela só a mostra; nada de gerar/derivar no navegador", () => {
   const modal = semComentarios(ler("components/plataforma/NovaEmpresaModal.tsx"));
   assert.match(modal, /senha=\{dados\.senhaTemporaria\}/);
