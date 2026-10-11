@@ -180,7 +180,7 @@ export function ConfiguracaoNumeracaoTarefaView() {
             <p className="mt-1 text-lg font-semibold text-fg">{dados.proximoNumero}</p>
           </div>
           <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30 sm:col-span-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Maior número emitido no TaskFloww</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Maior número emitido no TaskFlow</p>
             <p className="mt-1 text-lg font-semibold text-fg">{dados.maiorNumeroEmitido != null ? dados.maiorNumeroEmitido : "—"}</p>
           </div>
         </div>

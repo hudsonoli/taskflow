@@ -20,7 +20,7 @@ AMBIENTES_PRODUCAO = frozenset({"production", "prod", "producao", "produção"})
 
 @dataclass(frozen=True)
 class Settings:
-    app_name: str = field(default_factory=lambda: os.getenv("APP_NAME", "Taskfloww API"))
+    app_name: str = field(default_factory=lambda: os.getenv("APP_NAME", "TaskFlow API"))
     app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "development"))
     # Fuso oficial da aplicação — fonte única do "agora" de negócio (ver app/core/relogio.py).
     # Define, entre outras coisas, o ano gravado em codigo_referencia: um registro criado às

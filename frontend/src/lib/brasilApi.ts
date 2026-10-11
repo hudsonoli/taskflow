@@ -39,7 +39,7 @@ export const MENSAGENS_CONSULTA: Record<FalhaConsulta, string> = {
 export const URL_BRASILAPI_CNPJ = "https://brasilapi.com.br/api/cnpj/v1";
 export const URL_BRASILAPI_CEP = "https://brasilapi.com.br/api/cep/v2";
 // A BrasilAPI recusa (403) clientes sem User-Agent identificável (o padrão do Node/Python cai nesse filtro).
-export const USER_AGENT_CONSULTA = "TaskFloww/1.0";
+export const USER_AGENT_CONSULTA = "TaskFlow/1.0";
 export const TIMEOUT_SERVIDOR_MS = 8_000;
 export const TIMEOUT_CLIENTE_MS = 12_000;
 

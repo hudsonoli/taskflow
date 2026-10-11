@@ -152,7 +152,7 @@ export function PersonalizacaoView() {
       setRascunho(rascunhoDe(padrao));
       desfazerLogo();
       setConfirmarRestaurar(false);
-      setSucesso("Padrão restaurado: logo removido e cores/tema originais do TaskFloww.");
+      setSucesso("Padrão restaurado: logo removido e cores/tema originais do TaskFlow.");
     } catch (error) {
       setConfirmarRestaurar(false);
       setErroSalvar(error instanceof Error ? error.message : "Não foi possível restaurar o padrão.");
@@ -190,7 +190,7 @@ export function PersonalizacaoView() {
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight text-fg">Personalizar</h1>
             <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
-              Logo, cores da marca e tema do TaskFloww. Vale para toda a empresa: todos os usuários veem a mesma identidade
+              Logo, cores da marca e tema do TaskFlow. Vale para toda a empresa: todos os usuários veem a mesma identidade
               visual, inclusive nas telas de login e recuperação de senha.
             </p>
           </div>
@@ -302,7 +302,7 @@ export function PersonalizacaoView() {
       </div>
 
       <Modal open={confirmarRestaurar} onClose={() => !salvando && setConfirmarRestaurar(false)} maxWidthClassName="max-w-md">
-        <h2 className="text-base font-semibold text-fg">Restaurar o padrão do TaskFloww?</h2>
+        <h2 className="text-base font-semibold text-fg">Restaurar o padrão do TaskFlow?</h2>
         <p className="mt-2 text-sm text-fg-muted">
           O logo será removido e as cores e o tema voltam ao padrão para todos os usuários da empresa. Nenhuma outra
           configuração é alterada.

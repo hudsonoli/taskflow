@@ -15,7 +15,7 @@ export function ColorField({
 }: {
   label: string;
   descricao: string;
-  /** cor padrão do TaskFloww (usada como exemplo no campo vazio) */
+  /** cor padrão do TaskFlow (usada como exemplo no campo vazio) */
   padrao: string;
   valor: string;
   onChange: (valor: string) => void;

@@ -156,7 +156,7 @@ class ConfiguracaoPersonalizacaoService:
         )
 
     def get_ou_default(self, db: Session, *, empresa_id: str) -> PersonalizacaoRead:
-        """Nunca cria a linha: sem registro, devolve os padrões atuais do TaskFloww."""
+        """Nunca cria a linha: sem registro, devolve os padrões atuais do TaskFlow."""
         return self._para_read(self.repository.get_by_empresa(db, empresa_id))
 
     def get_publico(self, db: Session, *, empresa_codigo: str) -> PersonalizacaoRead:

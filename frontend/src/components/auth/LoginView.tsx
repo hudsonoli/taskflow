@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAppData } from "@/lib/AppDataContext";
 import { login, loginGoogle } from "@/lib/auth";
+import { NOME_PRODUTO } from "@/lib/produto";
 import { caminhoDoTenant, hrefDoTenant } from "@/lib/tenant";
 
 // Tipagem mínima do Google Identity Services (carregado via <Script>, não um pacote npm —
@@ -111,8 +112,9 @@ export function LoginView({
       <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <BrandLogo variant="auth" className="mb-3" />
-          <h1 className="text-lg font-semibold tracking-tight text-fg">Entrar no Taskfloww</h1>
-          {nomeEmpresa && <p className="mt-0.5 text-sm font-medium text-fg">{nomeEmpresa}</p>}
+          {/* A empresa é a identidade PRINCIPAL do acesso; o produto (TaskFlow) é secundário. */}
+          <h1 className="text-lg font-semibold tracking-tight text-fg">{nomeEmpresa ?? `Entrar no ${NOME_PRODUTO}`}</h1>
+          {nomeEmpresa && <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-fg-subtle">Entrar no {NOME_PRODUTO}</p>}
           <p className="mt-1 text-sm text-fg-muted">Use o e-mail e a senha do seu cadastro.</p>
         </div>
 

@@ -199,7 +199,7 @@ def verify_google_id_token(id_token_value: str, *, settings: Settings | None = N
     `GOOGLE_OAUTH_CLIENT_ID`) e expiração — nunca reimplementar essa checagem manualmente.
 
     NÃO valida aqui: `email_verified`, `hd` (domínio Workspace) nem correspondência com o
-    e-mail digitado pelo usuário — essas são regras de negócio do TaskFloww, verificadas em
+    e-mail digitado pelo usuário — essas são regras de negócio do TaskFlow, verificadas em
     `AuthService.login_google` (não desta função, que só decide "o token é autêntico?").
 
     Qualquer falha vira `AuthTokenError` — nunca deixa escapar o motivo exato (biblioteca

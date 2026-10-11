@@ -2,7 +2,7 @@ import { BrandLogo } from "@/components/branding/BrandLogo";
 
 /**
  * Slug inexistente, reservado, malformado ou de empresa inativa: UMA mensagem só, sem dizer qual dos casos (não
- * enumera empresas nem revela situação interna). A identidade é a neutra do TaskFloww (o layout já usa os padrões).
+ * enumera empresas nem revela situação interna). A identidade é a neutra do TaskFlow (o layout já usa os padrões).
  */
 export function EmpresaIndisponivelView() {
   return (
@@ -14,7 +14,7 @@ export function EmpresaIndisponivelView() {
         <h1 className="text-lg font-semibold tracking-tight text-fg">Empresa não encontrada ou indisponível</h1>
         <p className="mt-2 text-sm text-fg-muted">
           Confira o endereço de acesso que a sua empresa informou. Se o problema continuar, fale com quem administra o
-          TaskFloww na sua empresa.
+          TaskFlow na sua empresa.
         </p>
       </div>
     </div>

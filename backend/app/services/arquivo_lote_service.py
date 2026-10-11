@@ -123,7 +123,7 @@ def nomes_unicos_para_zip(nomes: Sequence[str]) -> list[str]:
 
 def nome_do_zip(agora=None) -> str:
     momento = agora or agora_utc()
-    return f"taskfloww-arquivos-{momento.strftime('%Y%m%d-%H%M')}.zip"
+    return f"taskflow-arquivos-{momento.strftime('%Y%m%d-%H%M')}.zip"
 
 
 class ArquivoLoteService:

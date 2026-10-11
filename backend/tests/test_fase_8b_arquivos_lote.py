@@ -118,7 +118,7 @@ def test_download_ids_gera_zip_valido_com_cabecalhos_seguros(client_admin: TestC
 
     assert resposta.headers["content-type"] == "application/zip"
     disposicao = resposta.headers["content-disposition"]
-    assert re.fullmatch(r'attachment; filename="taskfloww-arquivos-\d{8}-\d{4}\.zip"', disposicao), disposicao
+    assert re.fullmatch(r'attachment; filename="taskflow-arquivos-\d{8}-\d{4}\.zip"', disposicao), disposicao
     assert resposta.headers["x-content-type-options"] == "nosniff"
     assert resposta.headers["x-lote-arquivos"] == "2" and resposta.headers["x-lote-links-ignorados"] == "0"
 

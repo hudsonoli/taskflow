@@ -4,7 +4,7 @@ import { BRANDING_PADRAO, type Branding, normalizarBranding } from "@/lib/brandi
 import { type CachePorChave, criarCachePorChave, resolverComCache } from "@/lib/branding-cache";
 
 // Branding PÚBLICO de uma empresa para o layout raiz (SSR) e para o logo, antes e depois do login. Resolvido SÓ pelo slug da URL
-// (`/e/<slug>/...`) — Fase 9D: não existe empresa padrão nem EMPRESA_CODIGO; sem slug a identidade é a neutra do TaskFloww.
+// (`/e/<slug>/...`) — Fase 9D: não existe empresa padrão nem EMPRESA_CODIGO; sem slug a identidade é a neutra do TaskFlow.
 //
 // CACHE POR TENANT. A chave é o alvo (`slug:<slug>`) — nunca um valor global compartilhado: a
 // sequência A → B → A não pode contaminar logo, cores ou tema. Em memória, curto e limitado (TTL + teto de entradas,

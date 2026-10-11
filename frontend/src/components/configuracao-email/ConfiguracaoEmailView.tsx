@@ -268,7 +268,7 @@ export function ConfiguracaoEmailView() {
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <Input
             label="Nome do remetente"
-            placeholder="Ex: Taskfloww Agência"
+            placeholder="Ex: TaskFlow Agência"
             value={draft.remetenteNome}
             onChange={(event) => updateDraft({ remetenteNome: event.target.value })}
           />

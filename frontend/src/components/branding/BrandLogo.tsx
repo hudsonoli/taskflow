@@ -5,12 +5,13 @@ import { Sparkles } from "lucide-react";
 import clsx from "clsx";
 import { useBranding } from "@/lib/BrandingContext";
 import { srcDoLogo } from "@/lib/branding";
+import { NOME_PRODUTO } from "@/lib/produto";
 import { LOGO_ALTURA, LOGO_LARGURA } from "@/lib/personalizacao-logo";
 
 // ÚNICO ponto de renderização do logo da Empresa (menu, login, recuperação de senha, prévia em Personalizar).
 // O logo é sempre 320×132: o espaço é reservado com a mesma proporção, então nada "pula" quando a imagem
 // carrega. <img> (não next/image) de propósito — preserva GIF animado byte a byte, sem otimização/recodificação.
-// Sem logo (ou se a imagem falhar) volta à marca padrão do TaskFloww.
+// Sem logo (ou se a imagem falhar) volta à marca padrão do TaskFlow.
 
 
 
@@ -18,7 +19,7 @@ import { LOGO_ALTURA, LOGO_LARGURA } from "@/lib/personalizacao-logo";
 type Props = {
   /** header: altura fixa de 36px (menu superior) · auth: 160px de largura (telas de acesso) */
   variant: "header" | "auth";
-  /** só no `header` sem logo: mostrar o nome "Taskfloww" ao lado da marca padrão */
+  /** sem logo, o `header` mostra o NOME da empresa (ou "TaskFlow" fora de um ambiente de empresa) ao lado da marca padrão */
   className?: string;
   /** força um src (prévia em Personalizar, antes de salvar) */
   srcOverride?: string | null;
@@ -38,7 +39,7 @@ export function BrandLogo({ variant, className, srcOverride }: Props) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
-          alt="Logo da empresa"
+          alt={branding.nome ? `Logo de ${branding.nome}` : "Logo da empresa"}
           width={LOGO_LARGURA}
           height={LOGO_ALTURA}
           className="h-full w-full object-contain"
@@ -54,7 +55,7 @@ export function BrandLogo({ variant, className, srcOverride }: Props) {
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient shadow-lg shadow-indigo-500/30">
           <Sparkles size={18} />
         </span>
-        <span className="hidden text-lg font-semibold tracking-tight text-fg sm:inline">Taskfloww</span>
+        <span className="hidden max-w-[14rem] truncate text-lg font-semibold tracking-tight text-fg sm:inline">{branding.nome ?? NOME_PRODUTO}</span>
       </span>
     );
   }

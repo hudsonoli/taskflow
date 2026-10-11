@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-# Padrões que reproduzem a aparência atual do TaskFloww (escala `indigo` e `violet` do Tailwind):
+# Padrões que reproduzem a aparência atual do TaskFlow (escala `indigo` e `violet` do Tailwind):
 # primária = indigo-500, secundária = violet-600 — as duas pontas do gradiente da marca.
 COR_PRIMARIA_PADRAO = "#6366f1"
 COR_SECUNDARIA_PADRAO = "#7c3aed"

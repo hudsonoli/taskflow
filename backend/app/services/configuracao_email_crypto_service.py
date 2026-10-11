@@ -7,7 +7,7 @@ importar `cryptography` — se precisar, é sinal de que o segredo está vazando
 ## Por que a chave não é obrigatória no boot
 
 `Settings.email_config_encryption_key` (app/core/config.py) não tem guarda de produção, ao
-contrário de `AUTH_SECRET_KEY` — a ausência da chave não pode derrubar o TaskFloww inteiro por
+contrário de `AUTH_SECRET_KEY` — a ausência da chave não pode derrubar o TaskFlow inteiro por
 uma feature que uma Empresa pode nunca configurar. Em vez disso, a validação acontece aqui, na
 hora exata em que a chave é necessária: salvar uma senha nova, descriptografar uma existente,
 ou testar conexão. Ler a configuração (GET) ou fazer PATCH em campos que não tocam a senha

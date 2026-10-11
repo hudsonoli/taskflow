@@ -1,7 +1,7 @@
-import { COR_PRIMARIA_PADRAO, COR_SECUNDARIA_PADRAO, hexValido } from "@/lib/branding-tokens";
-import type { Branding } from "@/types/personalizacao";
+import { COR_PRIMARIA_PADRAO, COR_SECUNDARIA_PADRAO, hexValido } from "./branding-tokens.ts";
+import type { Branding } from "../types/personalizacao.ts";
 
-export type { Branding, TemaVisual } from "@/types/personalizacao";
+export type { Branding, TemaVisual } from "../types/personalizacao.ts";
 
 // Branding da Empresa no frontend: tipo, padrões e normalização (defensiva — a resposta do backend nunca é
 // confiada às cegas, porque as cores viram CSS inline no <html>).
@@ -25,6 +25,7 @@ export function normalizarBranding(bruto: unknown): Branding {
   if (!primaria || !secundaria) return BRANDING_PADRAO;
   const versao = typeof b.logoVersao === "string" && /^[0-9a-f]{8,32}$/.test(b.logoVersao) ? b.logoVersao : null;
   const logoDisponivel = b.logoDisponivel === true && versao !== null;
+  const nome = typeof b.nomeExibicao === "string" && b.nomeExibicao.trim() ? b.nomeExibicao.trim().slice(0, 120) : null;
   return {
     corPrimaria: primaria,
     corSecundaria: secundaria,
@@ -32,6 +33,7 @@ export function normalizarBranding(bruto: unknown): Branding {
     logoDisponivel,
     logoVersao: logoDisponivel ? versao : null,
     padrao: b.padrao === true,
+    ...(nome ? { nome } : {}),
   };
 }
 

@@ -87,7 +87,7 @@ test("número 'SN' vira S/N e o User-Agent identificável é enviado pelo BFF", 
   assert.equal(d?.enderecoCompleto, "SAUN QUADRA 5, S/N");
   const bff = ler("lib/server/brasilApiBff.ts"); // infraestrutura de servidor compartilhada (CNPJ e CEP)
   assert.match(bff, /"User-Agent": USER_AGENT_CONSULTA/);
-  assert.match(ler("lib/brasilApi.ts"), /USER_AGENT_CONSULTA = "TaskFloww\/1\.0"/);
+  assert.match(ler("lib/brasilApi.ts"), /USER_AGENT_CONSULTA = "TaskFlow\/1\.0"/);
 });
 
 test("camposParaFormulario devolve SÓ o que veio preenchido e só UF existente no formulário", () => {

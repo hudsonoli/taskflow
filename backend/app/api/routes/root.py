@@ -5,4 +5,4 @@ router = APIRouter()
 
 @router.get("/")
 def root():
-    return {"app": "Taskfloww API", "status": "ok"}
+    return {"app": "TaskFlow API", "status": "ok"}

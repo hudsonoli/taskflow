@@ -51,7 +51,7 @@ PASSWORD_RESET_REQUEST_MESSAGE = (
 PASSWORD_RESET_INVALID_TOKEN_MESSAGE = "Este link é inválido ou expirou. Solicite uma nova redefinição de senha."
 PASSWORD_RESET_TOKEN_TTL = timedelta(minutes=30)
 PASSWORD_RESET_COOLDOWN = timedelta(seconds=60)
-PASSWORD_RESET_EMAIL_SUBJECT = "Redefinição de senha — TaskFloww"
+PASSWORD_RESET_EMAIL_SUBJECT = "Redefinição de senha — TaskFlow"
 
 
 class AuthInvalidCredentialsError(ValueError):
@@ -72,7 +72,7 @@ class AuthPasswordResetTokenInvalidError(ValueError):
 
 
 class AuthGoogleAccessDeniedError(ValueError):
-    """Identidade Google autêntica (token válido), mas sem autorização no TaskFloww — sempre
+    """Identidade Google autêntica (token válido), mas sem autorização no TaskFlow — sempre
     403 genérico no router, nunca diferenciado (ver GOOGLE_ACCESS_DENIED_MESSAGE)."""
 
     pass
@@ -206,14 +206,14 @@ class AuthService:
            — falha aqui é `AuthUnauthorizedError` (401): o token em si não é confiável o
            bastante pra decidir qualquer coisa sobre autorização. Aplicada SEMPRE, independente
            de já existir vínculo ou não.
-        2. Autorização TaskFloww (empresa ativa, usuário existe/ativo/`acesso_sistema`, sem
+        2. Autorização TaskFlow (empresa ativa, usuário existe/ativo/`acesso_sistema`, sem
            conflito de vínculo, sem cross-tenant) — falha aqui é `AuthGoogleAccessDeniedError`
            (403 genérico): a identidade É confiável, só não está autorizada.
 
         `google_sub` é a chave preferencial: login com sub já vinculado NUNCA recompara
         e-mail digitado com o claim (ver bloco abaixo) — só o primeiro vínculo depende disso,
         porque é o único momento em que o e-mail decide a quem vincular o sub. Depois do
-        vínculo, o e-mail salvo no TaskFloww (ou mesmo o e-mail real da conta Google) pode
+        vínculo, o e-mail salvo no TaskFlow (ou mesmo o e-mail real da conta Google) pode
         divergir do que foi digitado sem quebrar o login.
         """
         email_digitado = self._normalize_email(email)
@@ -450,7 +450,7 @@ class AuthService:
                 empresa_id=usuario.empresa_id,
                 destinatario=usuario.email,
                 assunto=PASSWORD_RESET_EMAIL_SUBJECT,
-                texto=self._texto_email_redefinicao(link),
+                texto=self._texto_email_redefinicao(link, empresa.nome_fantasia or empresa.nome),
             )
         except Exception as exc:  # EmailTransacionalError, EmailConteudoInvalidoError ou bug
             logger.warning(
@@ -543,11 +543,11 @@ class AuthService:
         return bruto.rstrip("/")
 
     @staticmethod
-    def _texto_email_redefinicao(link: str) -> str:
+    def _texto_email_redefinicao(link: str, empresa_nome: str) -> str:
         minutos = int(PASSWORD_RESET_TOKEN_TTL.total_seconds() // 60)
         return (
             "Olá,\n\n"
-            "Recebemos uma solicitação para redefinir a senha da sua conta no TaskFloww.\n\n"
+            f"Recebemos uma solicitação para redefinir a senha da sua conta em {empresa_nome} (via TaskFlow).\n\n"
             f"Para criar uma nova senha, acesse o link abaixo (válido por {minutos} minutos):\n\n"
             f"{link}\n\n"
             "Se você não fez essa solicitação, ignore este e-mail: sua senha atual continua a mesma.\n"

@@ -140,7 +140,7 @@ def test_conta_elegivel_recebe_o_e_mail_com_link_em_fragmento_e_resposta_generic
 
     (enviado,) = email.enviados
     assert enviado["destinatario"] == usuario_operador.email and enviado["empresa_id"] == empresa.id
-    assert enviado["assunto"] == "Redefinição de senha — TaskFloww"
+    assert enviado["assunto"] == "Redefinição de senha — TaskFlow"
     texto = enviado["texto"]
     token = _token_do_email(email)
     assert f"{URL_PUBLICA}/e/{empresa.slug}/redefinir-senha#token={token}" in texto  # fragmento, não query string

@@ -182,10 +182,10 @@ test("remover da seleção (ids): tira os excluídos; em 'todos': encolhe total 
 // ── nome do download ──────────────────────────────────────────────────────────────────────────────────────────
 
 test("nome do download vem do Content-Disposition, validado; fallback seguro", () => {
-  assert.equal(nomeDoDownload('attachment; filename="taskfloww-arquivos-20261010-1530.zip"'), "taskfloww-arquivos-20261010-1530.zip");
-  assert.equal(nomeDoDownload(null), "taskfloww-arquivos.zip");
-  assert.equal(nomeDoDownload('attachment; filename="../../x.zip"'), "taskfloww-arquivos.zip");
-  assert.equal(nomeDoDownload('attachment; filename="virus.exe"'), "taskfloww-arquivos.zip");
+  assert.equal(nomeDoDownload('attachment; filename="taskflow-arquivos-20261010-1530.zip"'), "taskflow-arquivos-20261010-1530.zip");
+  assert.equal(nomeDoDownload(null), "taskflow-arquivos.zip");
+  assert.equal(nomeDoDownload('attachment; filename="../../x.zip"'), "taskflow-arquivos.zip");
+  assert.equal(nomeDoDownload('attachment; filename="virus.exe"'), "taskflow-arquivos.zip");
 });
 
 // ── tela: filtros, contexto, permissões, paginação, stale ────────────────────────────────────────────────────

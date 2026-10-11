@@ -61,7 +61,7 @@ def login_google(payload: AuthGoogleLoginRequest, request: Request, db: Session 
     """Login Google Workspace para usuário PRÉ-CADASTRADO — ver docstring de
     `AuthService.login_google`. Duas camadas de erro, nunca confundidas: token/identidade
     Google não confiável → 401 (`AuthUnauthorizedError`); identidade confiável mas sem
-    autorização no TaskFloww (inexistente, inativo, conflito de vínculo, cross-tenant,
+    autorização no TaskFlow (inexistente, inativo, conflito de vínculo, cross-tenant,
     domínio fora da allowlist) → 403 genérico, sempre a mesma mensagem."""
     ip = extract_client_ip(request)
     try:

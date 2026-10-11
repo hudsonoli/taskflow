@@ -27,7 +27,7 @@ class PersonalizacaoRead(BaseModel):
     # Muda a cada troca de logo (derivada do nome físico gerado pelo sistema) — quebra o cache do
     # navegador sem expor o caminho. `None` sem logo personalizado.
     logo_versao: str | None = Field(default=None, alias="logoVersao")
-    # `True` quando nada foi personalizado (aparência original do TaskFloww).
+    # `True` quando nada foi personalizado (aparência original do TaskFlow).
     padrao: bool
 
     model_config = ConfigDict(populate_by_name=True)
@@ -36,7 +36,7 @@ class PersonalizacaoRead(BaseModel):
 class PublicoEmpresaBrandingRead(PersonalizacaoRead):
     """Branding público de uma empresa pelo SLUG (antes do login). SÓ dados públicos de apresentação: nada de id,
     documento, usuários, configurações ou e-mail. Empresa inexistente, inativa ou slug inválido recebem a MESMA
-    resposta: `disponivel=false` com a identidade neutra (padrão do TaskFloww) e sem nome."""
+    resposta: `disponivel=false` com a identidade neutra (padrão do TaskFlow) e sem nome."""
 
     disponivel: bool
     nome_exibicao: str | None = Field(default=None, alias="nomeExibicao")

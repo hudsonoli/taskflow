@@ -1,4 +1,4 @@
-"""Emissão dos códigos oficiais de referência do TaskFlowW.
+"""Emissão dos códigos oficiais de referência do TaskFlow.
 
 Formato: [LETRA MAIÚSCULA][ANO 2 DÍGITOS][SEQUENCIAL 6 DÍGITOS] — ex.: D26000001.
 

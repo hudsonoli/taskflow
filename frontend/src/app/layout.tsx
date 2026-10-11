@@ -11,7 +11,8 @@ import { variaveisDaMarca } from "@/lib/branding-tokens";
 import { SESSION_COOKIE_NAME } from "@/lib/server/backend";
 import { obterBrandingPublico } from "@/lib/server/branding";
 import { COOKIE_TEMA, SCRIPT_TEMA_SISTEMA, normalizarPreferencia, resolveEffectiveTheme } from "@/lib/tema";
-import { CONTEXTO_APROVACAO, HEADER_CONTEXTO, HEADER_TENANT_SLUG, normalizarSlug, slugVisual } from "@/lib/tenant";
+import { NOME_PRODUTO, tituloDaPagina } from "@/lib/produto";
+import { CONTEXTO_APROVACAO, CONTEXTO_GESTAO, HEADER_CONTEXTO, HEADER_TENANT_SLUG, normalizarSlug, slugVisual } from "@/lib/tenant";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,10 +25,18 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Taskfloww",
-  description: "Gestão operacional para agências",
-};
+// Título da aba (Fase 10A): no tenant, `<Empresa> | TaskFlow` (nome vindo do servidor pelo slug da rota, nunca fixo); na Gestão e nas telas neutras, só o
+// produto. Páginas que definem o próprio título ("Gestão", "Aprovação") recebem o sufixo ` | TaskFlow` pelo template.
+export async function generateMetadata(): Promise<Metadata> {
+  const cabecalhos = await headers();
+  const contexto = cabecalhos.get(HEADER_CONTEXTO);
+  const slug = contexto === CONTEXTO_APROVACAO || contexto === CONTEXTO_GESTAO ? null : normalizarSlug(cabecalhos.get(HEADER_TENANT_SLUG));
+  const publico = slug ? await obterBrandingPublico({ tipo: "slug", slug }) : null;
+  return {
+    title: { default: tituloDaPagina(publico?.disponivel ? publico.nome : null), template: `%s | ${NOME_PRODUTO}` },
+    description: "Gestão operacional para agências",
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -40,7 +49,7 @@ export default async function RootLayout({
   await connection();
 
   // Contexto de EMPRESA da página (só visual): o slug da rota `/e/<slug>/...` (definido pelo proxy.ts). Fase 9D: sem fallback — nem cookie, nem sessão,
-  // nem empresa padrão (EMPRESA_CODIGO); fora de `/e/<slug>` a identidade é a neutra do TaskFloww. Nunca decide autorização: a empresa dos dados
+  // nem empresa padrão (EMPRESA_CODIGO); fora de `/e/<slug>` a identidade é a neutra do TaskFlow. Nunca decide autorização: a empresa dos dados
   // vem sempre do token no backend.
   const cabecalhos = await headers();
   const cookieStore = await cookies();
@@ -51,9 +60,8 @@ export default async function RootLayout({
   const slugRota = normalizarSlug(cabecalhos.get(HEADER_TENANT_SLUG));
   const slug = contextoAprovacao ? null : slugVisual({ slugDaRota: slugRota });
 
-  // O console `/plataforma` mantém a identidade da PLATAFORMA (padrão do TaskFloww): escolher uma empresa em foco não
-  // muda a marca nem vira sessão tenant.
-  const contextoPlataforma = cabecalhos.get(HEADER_CONTEXTO) === "plataforma";
+  // A Gestão (`/gestao`) mantém a identidade do PRODUTO (TaskFlow): escolher uma empresa em foco não muda a marca nem vira sessão tenant.
+  const contextoPlataforma = cabecalhos.get(HEADER_CONTEXTO) === CONTEXTO_GESTAO;
   const publico = contextoPlataforma
     ? { branding: BRANDING_PADRAO, disponivel: true, nome: null }
     : contextoAprovacao
@@ -61,7 +69,8 @@ export default async function RootLayout({
       : slug
         ? await obterBrandingPublico({ tipo: "slug", slug })
         : { branding: BRANDING_PADRAO, disponivel: false, nome: null };
-  const branding = publico.branding;
+  // O NOME da empresa (público) viaja junto da marca: é a identidade principal do ambiente tenant (cabeçalho sem logo, login).
+  const branding = slug && publico.disponivel ? { ...publico.branding, nome: publico.nome } : publico.branding;
   const variaveis = variaveisDaMarca(branding.corPrimaria, branding.corSecundaria);
 
   // Preferência PESSOAL de tema (cookie-espelho; a verdade é o banco): só vale com sessão — sem tf_session o

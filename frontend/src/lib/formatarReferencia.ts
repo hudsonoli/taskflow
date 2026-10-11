@@ -1,5 +1,5 @@
 /**
- * Regra única de apresentação das entidades numeradas do TaskFlowW.
+ * Regra única de apresentação das entidades numeradas do TaskFlow.
  *
  * Nenhum componente deve montar o rótulo à mão, fazer substring de `codigoReferencia`,
  * usar o `id` técnico como label ou exibir `#sequencial` onde a entidade não usa.

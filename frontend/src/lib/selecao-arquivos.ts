@@ -188,7 +188,7 @@ function temCaractereProibido(nome: string): boolean {
 }
 
 /** `filename="..."` do Content-Disposition; o servidor só envia ASCII seguro, mas valida mesmo assim antes de usar como nome de download. */
-export function nomeDoDownload(contentDisposition: string | null, padrao = "taskfloww-arquivos.zip"): string {
+export function nomeDoDownload(contentDisposition: string | null, padrao = "taskflow-arquivos.zip"): string {
   const encontrado = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1]?.trim();
   if (!encontrado || temCaractereProibido(encontrado) || !encontrado.toLowerCase().endsWith(".zip")) return padrao;
   return encontrado;

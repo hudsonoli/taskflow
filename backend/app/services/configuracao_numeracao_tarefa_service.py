@@ -98,7 +98,7 @@ class ConfiguracaoNumeracaoTarefaService:
         contador_atual: int, formato: FormatoNumeracao, maior_numero_emitido: int | None, sem_identificador: int
     ) -> ConfiguracaoNumeracaoTarefaRead:
         proximo = contador_atual + 1
-        # `>=`, não `==`: o contador pode ter sido inicializado acima do que o TaskFloww emitiu (continuidade com um sistema
+        # `>=`, não `==`: o contador pode ter sido inicializado acima do que o TaskFlow emitiu (continuidade com um sistema
         # anterior) — esperado. Inconsistência real: sequência ATRÁS do maior emitido (reemitiria um número) ou tarefa sem
         # identificador. Nunca corrigido automaticamente aqui — só informado.
         motivo = None

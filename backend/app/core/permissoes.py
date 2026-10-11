@@ -82,7 +82,7 @@ EFEITOS_VALIDOS: frozenset[str] = frozenset({EFEITO_CONCEDER, EFEITO_NEGAR})
 # aberta a qualquer autenticado, sem exceção, então não é uma permissão administrável.
 #
 # `dashboard.*` fica de fora de propósito: não existe rota nem página de dashboard no
-# TaskFloww hoje (a raiz "/" só redireciona para "/meu-dia") — ver item 20 da Fase 2G.10A.
+# TaskFlow hoje (a raiz "/" só redireciona para "/meu-dia") — ver item 20 da Fase 2G.10A.
 #
 # `permissoes.gerenciar` nasceu na Fase 2G.10C-C1, junto do endpoint que ela protege
 # (POST/PUT/DELETE /usuarios/{id}/permissoes — ver app/api/routes/usuario_permissao.py).

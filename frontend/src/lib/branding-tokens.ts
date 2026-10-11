@@ -99,7 +99,7 @@ function oklchParaHex(cor: Oklch): string {
 
 // ── escala ────────────────────────────────────────────────────────────────────────────────────
 // Luminosidade e fração de croma de cada passo — extraídas da escala `indigo` do Tailwind (a atual do
-// TaskFloww), de modo que uma cor parecida com o indigo reproduz a aparência atual.
+// TaskFlow), de modo que uma cor parecida com o indigo reproduz a aparência atual.
 const LADDER_L: Record<Passo, number> = { 50: 0.962, 100: 0.93, 200: 0.87, 300: 0.785, 400: 0.673, 500: 0.585, 600: 0.511, 700: 0.457, 800: 0.398, 900: 0.359, 950: 0.257 };
 const LADDER_C: Record<Passo, number> = { 50: 0.077, 100: 0.146, 200: 0.279, 300: 0.494, 400: 0.78, 500: 1, 600: 1.12, 700: 1.03, 800: 0.837, 900: 0.618, 950: 0.386 };
 

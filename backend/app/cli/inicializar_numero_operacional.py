@@ -2,7 +2,7 @@
 
     python -m app.cli.inicializar_numero_operacional --tipo-entidade demanda --ultimo-numero 2062
 
-Existe por um requisito operacional único: a primeira Demanda criada no TaskFloww continua a
+Existe por um requisito operacional único: a primeira Demanda criada no TaskFlow continua a
 sequência que a equipe já usa no iClips. Informado `2062`, a próxima demanda nasce `#2063`.
 
 ## Por que NÃO existe `--forcar`
