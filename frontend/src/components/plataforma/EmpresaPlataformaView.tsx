@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
+import { EmpresaAcessoCard } from "@/components/plataforma/EmpresaAcessoCard";
 import { EmpresaDadosSection } from "@/components/plataforma/EmpresaDadosSection";
 import { EmpresaPersonalizacaoSection } from "@/components/plataforma/EmpresaPersonalizacaoSection";
 import { EmpresaUsuariosSection } from "@/components/plataforma/EmpresaUsuariosSection";
@@ -68,6 +69,9 @@ export function EmpresaPlataformaView({ empresaId }: { empresaId: string }) {
         <h2 className="text-base font-semibold text-fg">{empresa.nome}</h2>
         <Badge tone={TOM_STATUS[empresa.status]}>{STATUS_EMPRESA_ROTULO[empresa.status]}</Badge>
       </div>
+
+      {/* A empresa é um RECURSO da Gestão: o endereço é só um link público — copiar/abrir não cria sessão tenant nem impersona ninguém. */}
+      <EmpresaAcessoCard slug={empresa.slug} />
 
       <Tabs tabs={ABAS} activeTab={aba} onChange={setAba} />
 

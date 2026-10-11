@@ -2,128 +2,209 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
+import { ConviteGestorAviso } from "@/components/plataforma/ConviteGestorAviso";
+import { EmpresaAcessoCard } from "@/components/plataforma/EmpresaAcessoCard";
+import { SecaoAcessoInicial, SecaoDadosEmpresa, SecaoIdentidadeVisual } from "@/components/plataforma/NovaEmpresaSecoes";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import { erroDoCodigoInterno, erroDoSlug, sugerirSlug } from "@/lib/plataforma";
-import { criarEmpresaPlataforma } from "@/lib/plataforma-api";
+import { validarLogoNoNavegador } from "@/lib/personalizacao-logo";
+import {
+  ONBOARDING_VAZIO,
+  brandingDoRascunho,
+  payloadDoOnboarding,
+  sugerirSlug,
+  validarOnboarding,
+  type RascunhoOnboarding,
+} from "@/lib/plataforma";
+import { atualizarBrandingEmpresa, enviarLogoEmpresa, onboardingEmpresaPlataforma } from "@/lib/plataforma-api";
+import type { PlataformaOnboarding } from "@/types/plataforma";
 
-type Rascunho = { nome: string; nomeFantasia: string; documento: string; codigoInterno: string; slug: string };
-const VAZIO: Rascunho = { nome: "", nomeFantasia: "", documento: "", codigoInterno: "", slug: "" };
+type Resultado = { dados: PlataformaOnboarding; avisos: string[] };
 
-export function NovaEmpresaModal({
-  open,
-  onClose,
-  onCriada,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCriada: () => void;
-}) {
+/**
+ * Nova empresa (Fase 10B): Empresa (ATIVA) + identidade visual + primeiro Gestor num único formulário em seções. A criação da Empresa e do Gestor é ATÔMICA no
+ * servidor (`POST /plataforma/empresas/onboarding`); a identidade visual (cores/tema e logo) é aplicada logo depois pelo mecanismo existente e, se falhar, NÃO desfaz a
+ * empresa — vira um aviso. Ao concluir, o Administrador da Plataforma continua na Gestão (nenhuma sessão tenant, nenhuma impersonação): a tela de sucesso mostra o endereço
+ * `/e/<slug>/login` para copiar e o estado do convite do Gestor.
+ */
+export function NovaEmpresaModal({ open, onClose, onCriada }: { open: boolean; onClose: () => void; onCriada: () => void }) {
   const router = useRouter();
-  const [rascunho, setRascunho] = useState<Rascunho>(VAZIO);
+  const [rascunho, setRascunho] = useState<RascunhoOnboarding>(ONBOARDING_VAZIO);
   const [slugEditado, setSlugEditado] = useState(false);
+  const [codigoEditado, setCodigoEditado] = useState(false);
+  const [logo, setLogo] = useState<File | null>(null);
+  const [erroLogo, setErroLogo] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [tentou, setTentou] = useState(false);
+  const [resultado, setResultado] = useState<Resultado | null>(null);
 
-  function atualizar(parcial: Partial<Rascunho>) {
+  function atualizar(parcial: Partial<RascunhoOnboarding>) {
+    if (parcial.codigoInterno !== undefined) setCodigoEditado(true); // fora do updater: efeito colateral não pertence a ele
     setRascunho((atual) => {
       const novo = { ...atual, ...parcial };
-      // Enquanto a pessoa não mexeu no slug, ele acompanha o código interno (é só uma sugestão).
-      if (parcial.codigoInterno !== undefined && !slugEditado) novo.slug = sugerirSlug(parcial.codigoInterno);
+      // Enquanto a pessoa não mexeu, o slug e o código interno acompanham o nome (são só SUGESTÕES; o servidor valida e decide).
+      if (parcial.nome !== undefined) {
+        const base = sugerirSlug(parcial.nome);
+        if (!slugEditado) novo.slug = base;
+        if (!codigoEditado) novo.codigoInterno = base.toUpperCase();
+      }
       return novo;
     });
   }
 
-  function fechar() {
-    if (salvando) return;
-    setRascunho(VAZIO);
+  function reiniciar() {
+    setRascunho(ONBOARDING_VAZIO);
     setSlugEditado(false);
+    setCodigoEditado(false);
+    setLogo(null);
+    setErroLogo(null);
     setErro(null);
     setTentou(false);
+    setResultado(null);
+  }
+
+  function fechar() {
+    if (salvando) return;
+    reiniciar(); // descarta também o link de convite (memória)
     onClose();
   }
 
-  const erroNome = rascunho.nome.trim() ? null : "Informe o nome da empresa.";
-  const erroCodigo = erroDoCodigoInterno(rascunho.codigoInterno);
-  const erroSlug = rascunho.slug.trim() ? erroDoSlug(rascunho.slug) : null; // vazio → o servidor deriva do código
-  const invalido = Boolean(erroNome || erroCodigo || erroSlug);
+  async function escolherLogo(arquivo: File | null) {
+    setLogo(arquivo);
+    setErroLogo(arquivo ? await validarLogoNoNavegador(arquivo) : null);
+  }
+
+  const erros = validarOnboarding(rascunho);
+  const invalido = Object.keys(erros).length > 0 || Boolean(erroLogo);
 
   async function enviar(event: FormEvent) {
     event.preventDefault();
     setTentou(true);
-    if (invalido) return;
+    if (invalido || salvando) return;
     setSalvando(true);
     setErro(null);
     try {
-      const criada = await criarEmpresaPlataforma({
-        nome: rascunho.nome.trim(),
-        nomeFantasia: rascunho.nomeFantasia.trim() || null,
-        documento: rascunho.documento.trim() || null,
-        codigoInterno: rascunho.codigoInterno.trim(),
-        slug: rascunho.slug.trim() || null,
-      });
+      const dados = await onboardingEmpresaPlataforma(payloadDoOnboarding(rascunho));
+      const avisos: string[] = [];
+      const marca = brandingDoRascunho(rascunho);
+      if (marca) {
+        try {
+          await atualizarBrandingEmpresa(dados.empresa.id, marca);
+        } catch (falha) {
+          avisos.push(`As cores/tema não foram aplicados (${falha instanceof Error ? falha.message : "erro"}). Ajuste na aba Personalização.`);
+        }
+      }
+      if (logo) {
+        try {
+          await enviarLogoEmpresa(dados.empresa.id, logo);
+        } catch (falha) {
+          avisos.push(`O logo não foi enviado (${falha instanceof Error ? falha.message : "erro"}). Envie na aba Personalização.`);
+        }
+      }
+      setResultado({ dados, avisos });
       onCriada();
-      setRascunho(VAZIO);
-      setSlugEditado(false);
-      setTentou(false);
-      onClose();
-      router.push(`/gestao/empresas/${criada.id}`);
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível criar a empresa.");
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Não foi possível criar a empresa.");
     } finally {
       setSalvando(false);
     }
   }
 
+  if (resultado) {
+    const { dados, avisos } = resultado;
+    return (
+      <Modal open={open} onClose={fechar} maxWidthClassName="max-w-xl">
+        <div className="flex max-h-[85vh] flex-col gap-4 overflow-y-auto">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+              <CheckCircle2 className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-fg">Empresa criada</h2>
+              <p className="mt-0.5 text-xs text-fg-muted">
+                {dados.empresa.nome} · slug <span className="font-mono">{dados.empresa.slug}</span> · Ativa
+              </p>
+            </div>
+          </div>
+
+          <EmpresaAcessoCard slug={dados.empresa.slug} urlAcesso={dados.urlAcesso} />
+
+          <div className="rounded-xl border border-line p-3 text-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Primeiro Gestor</p>
+            <p className="mt-1 font-semibold text-fg">{dados.gestor.nome}</p>
+            <p className="text-xs text-fg-muted">{dados.gestor.email}</p>
+          </div>
+
+          <ConviteGestorAviso convite={dados.convite} />
+
+          {avisos.length > 0 && (
+            <ul role="alert" className="flex list-disc flex-col gap-1 rounded-xl border border-amber-300/60 bg-amber-50 py-2.5 pl-7 pr-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              {avisos.map((aviso) => (
+                <li key={aviso}>{aviso}</li>
+              ))}
+            </ul>
+          )}
+
+          <p className="text-xs text-fg-muted">
+            Você continua na Gestão: nenhuma sessão da empresa foi aberta e ninguém foi impersonado. O acesso da empresa é pelo endereço acima, com o login do Gestor.
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                const id = dados.empresa.id;
+                reiniciar();
+                onClose();
+                router.push(`/gestao/empresas/${id}`);
+              }}
+            >
+              Abrir empresa na Gestão
+            </Button>
+            <Button type="button" onClick={fechar}>
+              Concluir
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal open={open} onClose={fechar} maxWidthClassName="max-w-lg">
-      <form onSubmit={enviar} noValidate className="flex flex-col gap-4">
+    <Modal open={open} onClose={fechar} maxWidthClassName="max-w-2xl">
+      <form onSubmit={enviar} noValidate className="flex max-h-[85vh] flex-col gap-4 overflow-y-auto">
         <div>
           <h2 className="text-base font-semibold text-fg">Nova empresa</h2>
           <p className="mt-1 text-xs text-fg-muted">
-            Depois de criada, personalize a identidade visual e crie o primeiro Gestor na página da empresa.
+            Cria a empresa (ativa), a identidade visual e o primeiro Gestor. Ao salvar, o ambiente fica pronto em <span className="font-mono">/e/{rascunho.slug.trim() || "slug"}/login</span>.
           </p>
         </div>
 
-        <div>
-          <Input label="Nome da empresa" value={rascunho.nome} onChange={(e) => atualizar({ nome: e.target.value })} maxLength={255} required />
-          {tentou && erroNome && <p className="mt-1 text-xs font-medium text-danger">{erroNome}</p>}
-        </div>
-        <Input label="Nome fantasia (opcional)" value={rascunho.nomeFantasia} onChange={(e) => atualizar({ nomeFantasia: e.target.value })} maxLength={255} />
-        <Input label="Documento (opcional)" value={rascunho.documento} onChange={(e) => atualizar({ documento: e.target.value })} maxLength={32} />
-
-        <div>
-          <Input
-            label="Código interno"
-            value={rascunho.codigoInterno}
-            onChange={(e) => atualizar({ codigoInterno: e.target.value })}
-            maxLength={64}
-            className="font-mono uppercase"
-            required
-          />
-          <p className="mt-1 text-xs text-fg-muted">Identificador de login de hoje. Fica em maiúsculas; só letras, números, hífen e sublinhado.</p>
-          {(tentou || rascunho.codigoInterno) && erroCodigo && <p className="mt-1 text-xs font-medium text-danger">{erroCodigo}</p>}
-        </div>
-
-        <div>
-          <Input
-            label="Slug"
-            value={rascunho.slug}
-            onChange={(e) => {
-              setSlugEditado(true);
-              setRascunho((atual) => ({ ...atual, slug: e.target.value.toLowerCase() }));
-            }}
-            maxLength={40}
-            className="font-mono"
-          />
-          <p className="mt-1 text-xs text-fg-muted">
-            Identificador público de URL (3–40, minúsculas, números e hífen). Em branco, é gerado a partir do código.
-          </p>
-          {erroSlug && <p className="mt-1 text-xs font-medium text-danger">{erroSlug}</p>}
-        </div>
+        <SecaoDadosEmpresa
+          rascunho={rascunho}
+          erros={erros}
+          mostrarErros={tentou}
+          atualizar={atualizar}
+          desabilitado={salvando}
+          aoEditarSlug={(valor) => {
+            setSlugEditado(true);
+            setRascunho((atual) => ({ ...atual, slug: valor }));
+          }}
+        />
+        <SecaoIdentidadeVisual
+          rascunho={rascunho}
+          erros={erros}
+          mostrarErros={tentou}
+          atualizar={atualizar}
+          desabilitado={salvando}
+          logo={logo}
+          erroLogo={erroLogo}
+          aoEscolherLogo={(arquivo) => void escolherLogo(arquivo)}
+        />
+        <SecaoAcessoInicial rascunho={rascunho} erros={erros} mostrarErros={tentou} atualizar={atualizar} desabilitado={salvando} />
 
         {erro && (
           <p role="alert" className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2.5 text-xs font-medium text-danger">
@@ -136,7 +217,7 @@ export function NovaEmpresaModal({
             Cancelar
           </Button>
           <Button type="submit" disabled={salvando}>
-            {salvando && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Criar empresa
+            {salvando && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {salvando ? "Criando…" : "Criar empresa"}
           </Button>
         </div>
       </form>

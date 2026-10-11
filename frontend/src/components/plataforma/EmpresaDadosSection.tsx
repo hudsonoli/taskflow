@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
-import { erroDoCodigoInterno, erroDoSlug } from "@/lib/plataforma";
+import { erroDoCodigoInterno } from "@/lib/plataforma";
 import {
   atualizarEmpresaPlataforma,
   inativarEmpresaPlataforma,
@@ -40,11 +40,10 @@ export function EmpresaDadosSection({
 
   const original = rascunhoDe(empresa);
   const alterado = (Object.keys(original) as (keyof Rascunho)[]).some((campo) => rascunho[campo].trim() !== original[campo]);
-  const mudouIdentificador = rascunho.codigoInterno.trim().toUpperCase() !== original.codigoInterno || rascunho.slug.trim() !== original.slug;
+  const mudouIdentificador = rascunho.codigoInterno.trim().toUpperCase() !== original.codigoInterno;
   const erroNome = rascunho.nome.trim() ? null : "Informe o nome da empresa.";
   const erroCodigo = erroDoCodigoInterno(rascunho.codigoInterno);
-  const erroSlug = erroDoSlug(rascunho.slug);
-  const invalido = Boolean(erroNome || erroCodigo || erroSlug);
+  const invalido = Boolean(erroNome || erroCodigo);
   const inativa = empresa.status !== "ativa";
 
   function atualizar(parcial: Partial<Rascunho>) {
@@ -60,7 +59,6 @@ export function EmpresaDadosSection({
     if (rascunho.nomeFantasia.trim() !== original.nomeFantasia) mudancas.nomeFantasia = rascunho.nomeFantasia.trim();
     if (rascunho.documento.trim() !== original.documento) mudancas.documento = rascunho.documento.trim();
     if (rascunho.codigoInterno.trim().toUpperCase() !== original.codigoInterno) mudancas.codigoInterno = rascunho.codigoInterno.trim();
-    if (rascunho.slug.trim() !== original.slug) mudancas.slug = rascunho.slug.trim();
     setSalvando(true);
     setErro(null);
     setSucesso(null);
@@ -118,21 +116,17 @@ export function EmpresaDadosSection({
             {erroCodigo && <p className="mt-1 text-xs font-medium text-danger">{erroCodigo}</p>}
           </div>
           <div>
-            <Input
-              label="Slug"
-              value={rascunho.slug}
-              onChange={(e) => atualizar({ slug: e.target.value.toLowerCase() })}
-              maxLength={40}
-              className="font-mono"
-            />
-            {erroSlug && <p className="mt-1 text-xs font-medium text-danger">{erroSlug}</p>}
+            <Input label="Slug (endereço da empresa)" value={empresa.slug} readOnly disabled className="font-mono" aria-describedby="slug-permanente" />
+            <p id="slug-permanente" className="mt-1 text-xs text-fg-muted">
+              Somente leitura: o slug faz parte da URL da empresa (login, links e portal de aprovação) e não muda depois da criação.
+            </p>
           </div>
         </div>
 
         {mudouIdentificador && !invalido && (
           <p role="note" className="rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-            Atenção: o código interno é o identificador de login atual e o slug será o identificador público de URL. Alterar um deles
-            muda como esta empresa é localizada — só altere se for realmente necessário.
+            Atenção: o código interno é o identificador de login atual (legado). Alterá-lo muda como esta empresa é localizada pelo login por código —
+            só altere se for realmente necessário. O slug (URL pública) não muda.
           </p>
         )}
 

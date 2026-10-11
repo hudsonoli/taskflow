@@ -43,15 +43,42 @@ export type PlataformaUsuario = {
   status: "ativo" | "inativo" | "bloqueado" | "arquivado";
   acessoSistema: boolean;
   createdAt: string;
+  /** convite de primeiro acesso ainda não concluído — só um sinal (nunca dado de acesso) */
+  primeiroAcessoPendente?: boolean;
 };
 
 export type PlataformaGestorCreate = { nome: string; email: string };
 
-/** Resposta ÚNICA da criação de Gestor: a senha temporária só existe aqui. */
+export type MotivoConviteNaoEnviado = "email_nao_configurado" | "url_publica_ausente" | "falha_envio";
+
+/**
+ * Desfecho do convite de primeiro acesso do Gestor. NENHUMA senha existe (o Gestor define a própria). `enviado=false` não desfaz a criação: `linkAcesso` é o link
+ * de primeiro acesso para entrega MANUAL e só existe nesta resposta (o servidor guarda apenas o hash) — quem chama não deve guardá-lo além da tela de entrega.
+ */
+export type PlataformaConvite = {
+  enviado: boolean;
+  motivo: MotivoConviteNaoEnviado | null;
+  expiraEm: string;
+  linkAcesso: string | null;
+};
+
 export type PlataformaGestorCriado = {
   usuario: PlataformaUsuario;
-  senhaTemporaria: string;
-  deveAlterarSenha: boolean;
+  convite: PlataformaConvite;
+};
+
+/** Empresa (ativa) + primeiro Gestor numa operação atômica (`POST /plataforma/empresas/onboarding`). */
+export type PlataformaOnboardingCreate = {
+  empresa: PlataformaEmpresaCreate;
+  gestor: PlataformaGestorCreate;
+};
+
+export type PlataformaOnboarding = {
+  empresa: PlataformaEmpresa;
+  gestor: PlataformaUsuario;
+  convite: PlataformaConvite;
+  /** `/e/<slug>/login` (absoluta quando o servidor conhece a URL pública). Sem token. */
+  urlAcesso: string;
 };
 
 export type PlataformaMe = {

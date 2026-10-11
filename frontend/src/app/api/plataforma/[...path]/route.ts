@@ -33,8 +33,9 @@ async function proxy(request: NextRequest, path: string[]) {
     cookieStore.delete({ name: PLATFORM_COOKIE_NAME, path: PLATFORM_COOKIE_PATH });
   }
 
-  // Branding de alguma empresa mudou: o cache por tenant do SSR deixa de valer (o próximo carregamento já vê a nova marca).
-  if (hasBody && resposta.ok && path.includes("personalizacao")) invalidarBranding();
+  // Branding de alguma empresa mudou (marca, logo, nome de exibição, status, empresa NOVA): o cache por tenant do SSR deixa de valer — o próximo carregamento de
+  // `/e/<slug>/login` já vê a nova marca, sem restart. Vale para qualquer escrita bem-sucedida (o cache é pequeno e barato de refazer).
+  if (hasBody && resposta.ok) invalidarBranding();
 
   if (resposta.status === 204) return new NextResponse(null, { status: 204 });
 

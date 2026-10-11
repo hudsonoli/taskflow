@@ -1,16 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, UserPlus, Users } from "lucide-react";
+import { Loader2, MailPlus, UserPlus, Users } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
+import { ConviteGestorAviso } from "@/components/plataforma/ConviteGestorAviso";
 import { DefinirGestorModal } from "@/components/plataforma/DefinirGestorModal";
 import { separarGestores } from "@/lib/plataforma";
-import { listarUsuariosEmpresa } from "@/lib/plataforma-api";
+import { listarUsuariosEmpresa, reenviarConviteGestor } from "@/lib/plataforma-api";
 import { perfilUsuarioLabels } from "@/types/usuario";
-import type { PlataformaEmpresa, PlataformaUsuario } from "@/types/plataforma";
+import type { PlataformaConvite, PlataformaEmpresa, PlataformaUsuario } from "@/types/plataforma";
 
 // Rótulo visível do perfil técnico (o operador aparece como "Usuário", como em todo o app).
 const ROTULO_PERFIL: Record<PlataformaUsuario["perfilBase"], string> = {
@@ -30,6 +31,24 @@ export function EmpresaUsuariosSection({ empresa, onMudou }: { empresa: Platafor
   const [usuarios, setUsuarios] = useState<PlataformaUsuario[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [novoAberto, setNovoAberto] = useState(false);
+  const [reenviando, setReenviando] = useState<string | null>(null);
+  const [erroConvite, setErroConvite] = useState<string | null>(null);
+  // Resultado do último reenvio. O link manual (se houver) vive só aqui, em memória, até a pessoa dispensar.
+  const [convite, setConvite] = useState<{ usuario: PlataformaUsuario; convite: PlataformaConvite } | null>(null);
+
+  async function reenviar(usuario: PlataformaUsuario) {
+    setReenviando(usuario.id);
+    setErroConvite(null);
+    setConvite(null);
+    try {
+      const resposta = await reenviarConviteGestor(empresa.id, usuario.id);
+      setConvite({ usuario: resposta.usuario, convite: resposta.convite });
+    } catch (error) {
+      setErroConvite(error instanceof Error ? error.message : "Não foi possível reenviar o convite.");
+    } finally {
+      setReenviando(null);
+    }
+  }
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -79,6 +98,7 @@ export function EmpresaUsuariosSection({ empresa, onMudou }: { empresa: Platafor
                   <th className="px-4 py-3">Nome</th>
                   <th className="px-4 py-3">E-mail</th>
                   <th className="px-4 py-3">Situação</th>
+                  <th className="px-4 py-3">Primeiro acesso</th>
                 </tr>
               </thead>
               <tbody>
@@ -89,10 +109,54 @@ export function EmpresaUsuariosSection({ empresa, onMudou }: { empresa: Platafor
                     <td className="px-4 py-3">
                       <Badge tone={TOM_STATUS[usuario.status]}>{ROTULO_STATUS[usuario.status]}</Badge>
                     </td>
+                    <td className="px-4 py-3">
+                      {usuario.primeiroAcessoPendente ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone="amber">Convite pendente</Badge>
+                          {podeCriar && usuario.status === "ativo" && (
+                            <Button type="button" variant="secondary" disabled={reenviando !== null} onClick={() => void reenviar(usuario)}>
+                              {reenviando === usuario.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailPlus size={14} />} Reenviar convite
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <Badge tone="green">Concluído</Badge>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {(convite || erroConvite) && (
+          <div className="flex flex-col gap-2 border-t border-line p-4">
+            {convite && (
+              <>
+                <p className="text-xs font-semibold text-fg">
+                  Convite para {convite.usuario.nome} · {convite.usuario.email}
+                </p>
+                <ConviteGestorAviso convite={convite.convite} />
+              </>
+            )}
+            {erroConvite && (
+              <p role="alert" className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2.5 text-xs font-medium text-danger">
+                {erroConvite}
+              </p>
+            )}
+            <div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setConvite(null);
+                  setErroConvite(null);
+                }}
+              >
+                Dispensar
+              </Button>
+            </div>
           </div>
         )}
       </section>

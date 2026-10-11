@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Check, Copy, KeyRound, Loader2, UserCheck } from "lucide-react";
+import { Loader2, MailPlus, UserCheck } from "lucide-react";
 import clsx from "clsx";
+import { ConviteGestorAviso } from "@/components/plataforma/ConviteGestorAviso";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { EMAIL_SIMPLES } from "@/lib/plataforma";
 import { criarGestorEmpresa, listarCandidatosGestor, promoverGestorEmpresa } from "@/lib/plataforma-api";
 import type { PlataformaEmpresa, PlataformaGestorCriado, PlataformaUsuario } from "@/types/plataforma";
-
-const EMAIL_SIMPLES = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Modo = "existente" | "novo";
 
@@ -17,8 +17,9 @@ type Modo = "existente" | "novo";
  * Define um Gestor da empresa em foco, de duas formas num único fluxo:
  *  • "Escolher usuário existente": promove um Usuário JÁ cadastrado NESTA empresa (a lista traz só candidatos elegíveis:
  *    ativos, com acesso, sem conta de sistema e que ainda não são Gestor). Mesmo cadastro, mesma senha — nada é gerado.
- *  • "Criar novo Gestor": nome + e-mail; o servidor força o perfil Gestor e gera a senha temporária, exibida UMA vez.
- * A autoridade é da PLATAFORMA; a empresa pode ter vários Gestores. Fechar o modal descarta a senha da memória.
+ *  • "Criar novo Gestor": nome + e-mail; o servidor força o perfil Gestor e envia um CONVITE de primeiro acesso (o Gestor define a própria senha — nenhuma senha é
+ *    gerada ou exibida; sem SMTP, o link de primeiro acesso aparece UMA vez para entrega manual).
+ * A autoridade é da PLATAFORMA; a empresa pode ter vários Gestores. Fechar o modal descarta o link de convite da memória.
  */
 export function DefinirGestorModal({
   open,
@@ -43,7 +44,6 @@ export function DefinirGestorModal({
   const [tentou, setTentou] = useState(false);
   const [criado, setCriado] = useState<PlataformaGestorCriado | null>(null);
   const [promovido, setPromovido] = useState<PlataformaUsuario | null>(null);
-  const [copiado, setCopiado] = useState(false);
 
   // Carrega os candidatos sempre que o modal abre (a lista muda a cada promoção/criação).
   useEffect(() => {
@@ -76,10 +76,9 @@ export function DefinirGestorModal({
 
   function fechar() {
     if (salvando) return;
-    // Descarta a senha temporária e o formulário: a próxima abertura começa do zero.
+    // Descarta o link de convite e o formulário: a próxima abertura começa do zero.
     setCriado(null);
     setPromovido(null);
-    setCopiado(false);
     setNome("");
     setEmail("");
     setEscolhido("");
@@ -122,16 +121,6 @@ export function DefinirGestorModal({
     }
   }
 
-  async function copiar() {
-    if (!criado) return;
-    try {
-      await navigator.clipboard.writeText(criado.senhaTemporaria);
-      setCopiado(true);
-    } catch {
-      setCopiado(false); // sem permissão de área de transferência: a senha continua visível para cópia manual
-    }
-  }
-
   if (promovido) {
     return (
       <Modal open={open} onClose={fechar} maxWidthClassName="max-w-md">
@@ -166,7 +155,7 @@ export function DefinirGestorModal({
         <div className="flex flex-col gap-4">
           <div className="flex items-start gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
-              <KeyRound className="h-5 w-5" />
+              <MailPlus className="h-5 w-5" />
             </span>
             <div>
               <h2 className="text-base font-semibold text-fg">Gestor criado</h2>
@@ -176,25 +165,7 @@ export function DefinirGestorModal({
             </div>
           </div>
 
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Senha temporária</p>
-            <div className="mt-1.5 flex items-center gap-2">
-              <code
-                data-testid="senha-temporaria"
-                className="flex-1 select-all rounded-xl border border-field-line bg-field px-3 py-2.5 font-mono text-sm tracking-wide text-fg"
-              >
-                {criado.senhaTemporaria}
-              </code>
-              <Button type="button" variant="secondary" onClick={() => void copiar()} aria-label="Copiar senha temporária">
-                {copiado ? <Check size={14} /> : <Copy size={14} />} {copiado ? "Copiada" : "Copiar"}
-              </Button>
-            </div>
-          </div>
-
-          <p role="note" className="rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-            Esta senha é exibida <strong>uma única vez</strong> e não pode ser consultada depois. Entregue-a por um canal seguro. No
-            primeiro acesso o Gestor será obrigado a trocá-la.
-          </p>
+          <ConviteGestorAviso convite={criado.convite} />
 
           <div className="flex justify-end">
             <Button type="button" onClick={fechar}>
@@ -220,7 +191,7 @@ export function DefinirGestorModal({
           {(
             [
               { valor: "existente", rotulo: "Escolher usuário existente", ajuda: "Promove um Usuário já cadastrado nesta empresa." },
-              { valor: "novo", rotulo: "Criar novo Gestor", ajuda: "Cria um usuário já como Gestor, com senha temporária." },
+              { valor: "novo", rotulo: "Criar novo Gestor", ajuda: "Cria um usuário já como Gestor e envia um convite para ele definir a própria senha." },
             ] as const
           ).map(({ valor, rotulo, ajuda }) => {
             const ativo = modo === valor;
@@ -315,7 +286,7 @@ export function DefinirGestorModal({
               <Input label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={255} autoComplete="off" />
               {tentou && erroEmail && <p className="mt-1 text-xs font-medium text-danger">{erroEmail}</p>}
             </div>
-            <p className="text-xs text-fg-muted">O perfil é sempre Gestor. Uma senha temporária será gerada e exibida uma única vez.</p>
+            <p className="text-xs text-fg-muted">O perfil é sempre Gestor. Ele recebe um convite para definir a própria senha — nenhuma senha é gerada ou exibida.</p>
             {erro && (
               <p role="alert" className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2.5 text-xs font-medium text-danger">
                 {erro}
