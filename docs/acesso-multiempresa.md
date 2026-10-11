@@ -1,4 +1,14 @@
-# Acesso multiempresa por slug (Fase 2 + URL canônica da Fase 9D)
+# Acesso multiempresa por slug (Fase 2 + URL canônica da Fase 9D + Gestão/TaskFlow da Fase 10A)
+
+## Nome do produto e identidade (Fase 10A)
+
+- O produto se chama **TaskFlow** (nunca "TaskFloww"). Dentro de `/e/<slug>/...` a identidade PRINCIPAL é a da empresa contratante (nome + logo vindos do servidor
+  pelo slug); o produto é secundário. **Título da aba:** tenant `<Empresa> | TaskFlow`; Gestão `Gestão | TaskFlow`; telas neutras `TaskFlow`. Sem logo, o cabeçalho
+  mostra o nome da empresa (nunca inventa logo). Na Gestão a marca efetiva é sempre a do produto (não herda o último tenant).
+- A renomeação é **só de nome visível**: contêineres, volumes, network, diretórios (`/docker/taskflow`), pacote técnico, tabelas, event types e ids de migration
+  seguem como estão (P3 de nomenclatura técnica).
+- Slugs reservados (validação da aplicação): `plataforma, gestao, api, e, aprovacao, login, logout, admin, suporte`. O CHECK do banco (migration 0041) ficou com a
+  lista antiga — é só a rede de segurança; alinhá-lo é um P3 para uma futura migration.
 
 ## URL canônica (Fase 9D)
 
@@ -12,7 +22,8 @@ navegador: não há empresa padrão, `EMPRESA_CODIGO` nem cookie decidindo a emp
 | `/e/<slug>/login` | login da empresa; depois do login a navegação segue em `/e/<slug>/...` |
 | `/e/<slug>/<modulo>` | módulo da empresa (`meu-dia`, `tarefas`, `projetos`, `pauta`, `arquivos`, `relatorios`, `trafego`, `meu-departamento`, `minhas-demandas`, `notificacoes`, `minha-conta`, `configuracoes/**`) |
 | `/e/<slug>` | entra na home da empresa (o `AppShell` leva ao login se não houver sessão da própria empresa); slug inválido = 404 |
-| `/plataforma/**` | Administração da Plataforma, **fora** dos tenants (não tem empresa implícita) |
+| `/gestao/**` | Gestão da plataforma (Fase 10A), **fora** dos tenants: sem slug, sem empresa implícita, identidade do produto TaskFlow |
+| `/plataforma/**` | **404** — a interface antiga deixou de existir (sem redirect; URL canônica única) |
 | `/api/**` | BFF e APIs: a empresa vem da sessão/token, não da URL |
 
 Catálogo público mínimo (sem sessão) no `AppShell`: `/e/<slug>/login`, `/e/<slug>/esqueci-senha`, `/e/<slug>/redefinir-senha` e
@@ -58,7 +69,7 @@ indisponível"), com identidade neutra; login, reset e Google são recusados com
   quando a personalização muda). Sem Redis.
 - `proxy.ts` traduz o caminho em headers internos (`x-tf-tenant-slug`, `x-tf-contexto`) e **apaga** os que vierem do navegador.
 - Não há cookie visual de tenant: a marca vem do slug da rota; fora de `/e/<slug>` a identidade é a neutra do TaskFloww.
-- O console `/plataforma` mantém a identidade da plataforma (marca neutra); "Empresa em foco" é só um rótulo.
+- A Gestão (`/gestao`) mantém a identidade do produto TaskFlow (marca neutra, nunca a de uma empresa); "Empresa em foco" é só um rótulo e não cria sessão tenant.
 - Logout tenant remove `tf_session`, `tf_platform` (a sessão de plataforma deriva da tenant) e o cookie de
   tema; "encerrar só plataforma" remove apenas `tf_platform`.
 

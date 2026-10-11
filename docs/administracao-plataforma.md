@@ -1,4 +1,8 @@
-# Administração da Plataforma (Fase 1B)
+# Administração da Plataforma (Fase 1B) — interface em `/gestao` desde a Fase 10A
+
+> **Fase 10A:** a INTERFACE migrou de `/plataforma/**` para `/gestao/**` (`/plataforma` agora dá 404, sem redirect). A API segue em `/plataforma/*` e o BFF em
+> `/api/plataforma/*`, com a mesma autoridade (Administrador da Plataforma; nenhum perfil tenant — gestor, admin, Head, operador — ganha acesso). A Gestão não tem slug
+> nem sessão tenant implícita; a empresa administrada é um recurso. Marca: TaskFlow (produto), nunca a de uma empresa.
 
 A **Administração da Plataforma** é a camada que cria e mantém as empresas que existem no TaskFloww. É uma autoridade
 **separada do RBAC tenant**: quem a exerce não ganha perfil novo dentro de nenhuma empresa, e nenhum perfil tenant
@@ -46,7 +50,7 @@ a linha dele e não imprime segredo.
 
 Isolamento nos dois sentidos: `get_current_user`/`decode_access_token` continuam exigindo `tipo="access"` (token de
 plataforma não entra em rota tenant) e `decode_platform_token` exige `tipo="plataforma"` (token tenant não entra em
-`/plataforma`). Sair do sistema apaga os dois cookies.
+`/plataforma`, a API). Sair do sistema apaga os dois cookies.
 
 ## API (`/plataforma/*`)
 
@@ -88,7 +92,7 @@ remoção de `admin` do CHECK de perfis, renomear `operador`.
 
 ## Frontend
 
-`/plataforma` (início), `/plataforma/empresas` (lista + "Nova empresa") e `/plataforma/empresas/[id]` (abas Dados,
+`/gestao` (início), `/gestao/empresas` (lista + "Nova empresa") e `/gestao/empresas/[id]` (abas Dados,
 Personalização, Usuários; "Criar primeiro Gestor" com modal de senha única). A entrada fica no **menu do perfil** e só
 aparece se `GET /plataforma/acesso` confirmar. "Suporte" é apenas um marcador "Em breve". O chip "🏢 Empresa em foco" é um
 rótulo de contexto: não troca sessão nem empresa.
