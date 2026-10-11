@@ -122,14 +122,14 @@ class Cenario:
         return corpo["token"], corpo
 
     def consultar(self, token: str, client: TestClient | None = None):
-        return (client or self.pub).post(f"{PUBLICO}/consultar", json={"token": token})
+        return (client or self.pub).post(f"{PUBLICO}/consultar", json={"slug": self.empresa.slug, "token": token})
 
     def decidir(self, token: str, decisao: str = "aprovar", *, nome: str = NOME, email: str | None = EMAIL, motivo: str | None = None, **extra):
-        corpo = {"token": token, "decisao": decisao, "nome": nome, "email": email, "motivo": motivo, **extra}
+        corpo = {"slug": self.empresa.slug, "token": token, "decisao": decisao, "nome": nome, "email": email, "motivo": motivo, **extra}
         return self.pub.post(f"{PUBLICO}/decisao", json=corpo)
 
     def artefato(self, token: str, ordem: int):
-        return self.pub.post(f"{PUBLICO}/artefato", json={"token": token, "ordem": ordem})
+        return self.pub.post(f"{PUBLICO}/artefato", json={"slug": self.empresa.slug, "token": token, "ordem": ordem})
 
     def aprovacao(self, token: str | None = None) -> AprovacaoExterna:
         self.db.expire_all()
@@ -425,7 +425,7 @@ def test_empresa_inativa_torna_o_link_indisponivel(cen: Cenario, db_session: Ses
     db_session.commit()
     assert cen.consultar(token).status_code == 404
     assert cen.decidir(token).status_code == 404
-    assert cen.pub.post(f"{PUBLICO}/logo", json={"token": token}).status_code == 404
+    assert cen.pub.post(f"{PUBLICO}/logo", json={"slug": cen.empresa.slug, "token": token}).status_code == 404
 
 
 def test_sessao_do_tenant_nao_amplia_o_portal(cen: Cenario) -> None:
@@ -433,15 +433,17 @@ def test_sessao_do_tenant_nao_amplia_o_portal(cen: Cenario) -> None:
     anonima, autenticada = cen.consultar(token), cen.consultar(token, client=cen.admin)
     assert anonima.status_code == autenticada.status_code == 200 and anonima.json() == autenticada.json()
     # com sessão de OUTRO tenant ou de admin, nenhum dado extra e nenhuma rota de tarefas se abre
-    assert cen.admin.post(f"{PUBLICO}/artefato", json={"token": token, "ordem": 99}).status_code == 422
+    assert cen.admin.post(f"{PUBLICO}/artefato", json={"slug": cen.empresa.slug, "token": token, "ordem": 99}).status_code == 422
 
 
 def test_logo_so_com_link_legivel_e_da_empresa_do_token(cen: Cenario) -> None:
     token, _ = cen.link()
-    assert cen.pub.post(f"{PUBLICO}/logo", json={"token": "x"}).status_code == 404
-    assert cen.pub.post(f"{PUBLICO}/logo", json={"token": token}).status_code == 404  # empresa sem logo personalizado: 404 neutro, sem vazamento
-    outra = cen.pub.post(f"{PUBLICO}/logo", json={"token": token, "slug": "outra"})
-    assert outra.status_code == 422 and token not in outra.text  # campos extras proibidos → nunca resolvem outra empresa
+    assert cen.pub.post(f"{PUBLICO}/logo", json={"slug": cen.empresa.slug, "token": "x"}).status_code == 404
+    # empresa sem logo personalizado: 404 neutro, sem vazamento
+    assert cen.pub.post(f"{PUBLICO}/logo", json={"slug": cen.empresa.slug, "token": token}).status_code == 404
+    # slug de OUTRA empresa com o mesmo token: o mesmo 404 neutro (o slug só é conferido, nunca resolve outra empresa)
+    outra = cen.pub.post(f"{PUBLICO}/logo", json={"slug": "outra-empresa", "token": token})
+    assert outra.status_code == 404 and token not in outra.text
 
 
 # ======================================================================================
@@ -529,7 +531,7 @@ def test_artefato_de_outra_aprovacao_ou_do_mesmo_arquivo_fora_da_lista_nao_e_ace
 )
 def test_decisao_invalida_422_sem_ecoar_o_token(cen: Cenario, extra: dict) -> None:
     token, _ = cen.link()
-    corpo = {"token": token, "decisao": "aprovar", "nome": NOME, "email": None, "motivo": None, **extra}
+    corpo = {"slug": cen.empresa.slug, "token": token, "decisao": "aprovar", "nome": NOME, "email": None, "motivo": None, **extra}
     resposta = cen.pub.post(f"{PUBLICO}/decisao", json=corpo)
     assert resposta.status_code == 422, resposta.text
     assert token not in resposta.text  # o 422 padrão do FastAPI devolveria o input
@@ -540,7 +542,7 @@ def test_decisao_com_corpo_invalido_ou_gigante(cen: Cenario) -> None:
     token, _ = cen.link()
     assert cen.pub.post(f"{PUBLICO}/decisao", content=b"nao-e-json", headers={"content-type": "application/json"}).status_code == 422
     assert cen.pub.post(f"{PUBLICO}/decisao", json=[1, 2]).status_code == 422
-    assert cen.pub.post(f"{PUBLICO}/decisao", json={"token": token, "decisao": "aprovar", "nome": NOME, "motivo": None, "x": "y" * 20000}).status_code == 413
+    assert cen.pub.post(f"{PUBLICO}/decisao", json={"slug": cen.empresa.slug, "token": token, "decisao": "aprovar", "nome": NOME, "motivo": None, "x": "y" * 20000}).status_code == 413
 
 
 # ======================================================================================
@@ -656,12 +658,12 @@ def test_ajustes_na_primeira_etapa_nao_tem_para_onde_devolver(app, db_session: S
     assert criada.status_code == 201
     db_session.commit()
     token, pub = criada.json()["token"], TestClient(app)
-    assert pub.post(f"{PUBLICO}/consultar", json={"token": token}).json()["podeSolicitarAjustes"] is False
-    corpo = {"token": token, "decisao": "solicitar_ajustes", "nome": NOME, "email": None, "motivo": "Corrigir"}
+    assert pub.post(f"{PUBLICO}/consultar", json={"slug": empresa.slug, "token": token}).json()["podeSolicitarAjustes"] is False
+    corpo = {"slug": empresa.slug, "token": token, "decisao": "solicitar_ajustes", "nome": NOME, "email": None, "motivo": "Corrigir"}
     resposta = pub.post(f"{PUBLICO}/decisao", json=corpo)
     assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "SEM_ETAPA_ANTERIOR"
     # nada foi gravado: o link continua pendente e a aprovação ainda é possível
-    assert pub.post(f"{PUBLICO}/consultar", json={"token": token}).json()["estado"] == "pendente"
+    assert pub.post(f"{PUBLICO}/consultar", json={"slug": empresa.slug, "token": token}).json()["estado"] == "pendente"
     assert pub.post(f"{PUBLICO}/decisao", json={**corpo, "decisao": "aprovar", "motivo": None}).status_code == 200
 
 
@@ -921,7 +923,7 @@ def commitado(test_engine):
             )
         db.add_all(arquivos)
         db.commit()
-        ids = {"empresa": empresa.id, "usuario": usuario.id, "demanda": demanda.id, "etapas": [e.id for e in etapas], "arquivos": [a.id for a in arquivos]}
+        ids = {"empresa": empresa.id, "slug": empresa.slug, "usuario": usuario.id, "demanda": demanda.id, "etapas": [e.id for e in etapas], "arquivos": [a.id for a in arquivos]}
     try:
         yield Fabrica, ids
     finally:
@@ -970,11 +972,11 @@ def _disputar(Fabrica, tarefas: list) -> list[str]:
     return resultados
 
 
-def _externa(token: str, decisao: str):
+def _externa(slug: str, token: str, decisao: str):
     from app.schemas.aprovacao_externa import AprovacaoPublicaDecisao
     from app.services.aprovacao_externa_service import AprovacaoExternaService
 
-    corpo = AprovacaoPublicaDecisao(token=token, decisao=decisao, nome="Cliente Concorrente", motivo="Ajustar a arte" if decisao == "solicitar_ajustes" else None)
+    corpo = AprovacaoPublicaDecisao(slug=slug, token=token, decisao=decisao, nome="Cliente Concorrente", motivo="Ajustar a arte" if decisao == "solicitar_ajustes" else None)
 
     def tarefa(db) -> str:
         AprovacaoExternaService().decidir(db, corpo)
@@ -1011,7 +1013,7 @@ def _status_etapas(Fabrica, ids) -> list[str]:
 def test_seis_aprovacoes_externas_simultaneas_uma_vence(commitado) -> None:
     Fabrica, ids = commitado
     token, _ = _criar_link_commitado(Fabrica, ids)
-    resultados = _disputar(Fabrica, [_externa(token, "aprovar") for _ in range(6)])
+    resultados = _disputar(Fabrica, [_externa(ids["slug"], token, "aprovar") for _ in range(6)])
     assert sorted(resultados) == ["AprovacaoExternaJaDecididaError"] * 5 + ["ok:aprovar"], resultados
     assert _status_etapas(Fabrica, ids) == ["concluida", "concluida", "pendente", "pendente"]
     assert _contagem(Fabrica, ids, APROVADA) == 1 and _contagem(Fabrica, ids, EXT_APROVADA) == 1
@@ -1020,7 +1022,7 @@ def test_seis_aprovacoes_externas_simultaneas_uma_vence(commitado) -> None:
 def test_aprovar_e_pedir_ajustes_ao_mesmo_tempo_um_unico_vencedor(commitado) -> None:
     Fabrica, ids = commitado
     token, _ = _criar_link_commitado(Fabrica, ids)
-    resultados = _disputar(Fabrica, [_externa(token, "aprovar"), _externa(token, "solicitar_ajustes")] * 3)
+    resultados = _disputar(Fabrica, [_externa(ids["slug"], token, "aprovar"), _externa(ids["slug"], token, "solicitar_ajustes")] * 3)
     vencedores = [r for r in resultados if r.startswith("ok:")]
     assert len(vencedores) == 1 and resultados.count("AprovacaoExternaJaDecididaError") == 5, resultados
     aprovada = vencedores[0] == "ok:aprovar"
@@ -1033,7 +1035,7 @@ def test_aprovar_e_pedir_ajustes_ao_mesmo_tempo_um_unico_vencedor(commitado) -> 
 def test_decisao_interna_e_externa_simultaneas_um_vencedor(commitado, acao_interna: str) -> None:
     Fabrica, ids = commitado
     token, aprovacao_id = _criar_link_commitado(Fabrica, ids)
-    resultados = _disputar(Fabrica, [_interna(ids, acao_interna), _externa(token, "aprovar")])
+    resultados = _disputar(Fabrica, [_interna(ids, acao_interna), _externa(ids["slug"], token, "aprovar")])
     assert sum(r.startswith("ok:") for r in resultados) == 1, resultados
     perdedor = next(r for r in resultados if not r.startswith("ok:"))
     interna_ganhou = f"ok:interna-{acao_interna}" in resultados

@@ -440,9 +440,9 @@ class AuthService:
         self.credencial_repository.update(db, credencial)
         db.commit()
 
-        # Pedido feito pelo slug (`/e/<slug>/esqueci-senha`) volta ao MESMO tenant: o link carrega o slug. O fluxo
-        # legado (código de empresa do servidor) mantém o link antigo. APP_PUBLIC_URL segue sendo uma só.
-        caminho = f"/e/{empresa.slug}/redefinir-senha" if empresa_slug is not None else "/redefinir-senha"
+        # Fase 9D: o link SEMPRE carrega o slug da empresa do usuário (`/e/<slug>/redefinir-senha`) — a rota sem slug não existe mais. O slug não
+        # substitui a validação do token (o backend ainda confere token × empresa). APP_PUBLIC_URL segue sendo uma só.
+        caminho = f"/e/{empresa.slug}/redefinir-senha"
         link = f"{base_url}{caminho}#token={token}"
         try:
             self.configuracao_email_service.enviar_email_transacional(

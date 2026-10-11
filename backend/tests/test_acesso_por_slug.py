@@ -249,10 +249,12 @@ def test_link_de_reset_por_slug_volta_ao_mesmo_tenant(client: TestClient, email:
     assert "?token=" not in link  # token no fragmento, nunca na query
 
 
-def test_link_de_reset_legado_continua_sem_slug(client: TestClient, email: EmailFalso, empresa_a: Empresa, usuario_a: Usuario) -> None:
+def test_link_de_reset_sempre_carrega_o_slug_mesmo_no_pedido_por_codigo(client: TestClient, email: EmailFalso, empresa_a: Empresa, usuario_a: Usuario) -> None:
+    # Fase 9D: a rota `/redefinir-senha` sem slug não existe mais — mesmo o pedido legado por código gera o link canônico `/e/<slug>/...`.
     client.post("/auth/password-reset/request", json={"empresaCodigo": empresa_a.codigo_interno, "email": usuario_a.email})
     link, _ = _token_do_email(email)
-    assert link.startswith(f"{URL_PUBLICA}/redefinir-senha#token=")
+    assert link.startswith(f"{URL_PUBLICA}/e/{empresa_a.slug}/redefinir-senha#token=")
+    assert "?token=" not in link
 
 
 def test_token_de_a_nao_redefine_senha_em_b(

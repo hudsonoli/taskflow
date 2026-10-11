@@ -143,7 +143,7 @@ def test_conta_elegivel_recebe_o_e_mail_com_link_em_fragmento_e_resposta_generic
     assert enviado["assunto"] == "Redefinição de senha — TaskFloww"
     texto = enviado["texto"]
     token = _token_do_email(email)
-    assert f"{URL_PUBLICA}/redefinir-senha#token={token}" in texto  # fragmento, não query string
+    assert f"{URL_PUBLICA}/e/{empresa.slug}/redefinir-senha#token={token}" in texto  # fragmento, não query string
     assert "?token" not in texto and "&token" not in texto
     assert "30 minutos" in texto and "ignore este e-mail" in texto.lower()
     assert SENHA_CONHECIDA not in texto
@@ -193,7 +193,7 @@ def test_url_publica_com_barra_final_nao_duplica_barras(
 ) -> None:
     monkeypatch.setattr(auth_routes.auth_service, "settings", replace(auth_routes.auth_service.settings, app_public_url="https://app.exemplo.com//"))
     _pedir(client, empresa, usuario_operador.email)
-    assert "https://app.exemplo.com/redefinir-senha#token=" in email.enviados[0]["texto"]
+    assert f"https://app.exemplo.com/e/{empresa.slug}/redefinir-senha#token=" in email.enviados[0]["texto"]
 
 
 @pytest.mark.parametrize("url", [None, "", "   ", "ftp://app.exemplo.com", "app.exemplo.com", "https://app.exemplo.com\nBcc: x@y.com", "https://a b.com"])

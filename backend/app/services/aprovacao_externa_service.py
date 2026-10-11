@@ -439,7 +439,8 @@ class AprovacaoExternaService:
             raise
         db.refresh(aprovacao)
         leitura = self._para_read(db, aprovacao, estado="pendente")
-        return AprovacaoExternaCriadaRead(**leitura.model_dump(by_alias=True), token=token)
+        empresa = db.get(Empresa, demanda.empresa_id)
+        return AprovacaoExternaCriadaRead(**leitura.model_dump(by_alias=True), token=token, empresaSlug=empresa.slug if empresa else "")
 
     # ----------------------------------------------------------------------------------
     # Revogar
@@ -502,8 +503,9 @@ class AprovacaoExternaService:
     # PÚBLICO — portador do token
     # ======================================================================================
 
-    def _resolver(self, db: Session, token: str) -> tuple[AprovacaoExterna, Demanda, Empresa]:
-        """token → solicitação + Demanda + Empresa ATIVA, ou `Indisponivel` (inexistente, empresa inativa, inconsistência). Sem lock, sem estado."""
+    def _resolver(self, db: Session, token: str, slug: str) -> tuple[AprovacaoExterna, Demanda, Empresa]:
+        """token → solicitação + Demanda + Empresa ATIVA, ou `Indisponivel` (inexistente, empresa inativa, inconsistência, ou `slug` da URL diferente do
+        slug da empresa dona do token — Fase 9D). O token manda; o slug só é conferido (nunca escolhe nem concede). Sem lock, sem estado."""
         if not token_com_formato_valido(token):
             raise AprovacaoExternaIndisponivelError("Este link de aprovação não está mais disponível.")
         aprovacao = self.repository.por_token_hash(db, hash_token_aprovacao(token))
@@ -513,17 +515,19 @@ class AprovacaoExternaService:
         empresa = db.get(Empresa, aprovacao.empresa_id)
         if demanda is None or empresa is None or demanda.empresa_id != empresa.id or empresa.status != "ativa":
             raise AprovacaoExternaIndisponivelError("Este link de aprovação não está mais disponível.")
+        if empresa.slug != slug:
+            raise AprovacaoExternaIndisponivelError("Este link de aprovação não está mais disponível.")
         return aprovacao, demanda, empresa
 
-    def _resolver_legivel(self, db: Session, token: str) -> tuple[AprovacaoExterna, Demanda, Empresa, str]:
-        aprovacao, demanda, empresa = self._resolver(db, token)
+    def _resolver_legivel(self, db: Session, token: str, slug: str) -> tuple[AprovacaoExterna, Demanda, Empresa, str]:
+        aprovacao, demanda, empresa = self._resolver(db, token, slug)
         estado = self._estado(db, aprovacao, demanda, agora_utc())
         if estado not in ESTADOS_LEGIVEIS_PELO_CLIENTE:  # revogada / expirada / obsoleta: nada de dado interno, nem o motivo
             raise AprovacaoExternaIndisponivelError("Este link de aprovação não está mais disponível.")
         return aprovacao, demanda, empresa, estado
 
-    def consultar_publico(self, db: Session, token: str) -> AprovacaoPublicaRead:
-        aprovacao, demanda, empresa, estado = self._resolver_legivel(db, token)
+    def consultar_publico(self, db: Session, token: str, slug: str) -> AprovacaoPublicaRead:
+        aprovacao, demanda, empresa, estado = self._resolver_legivel(db, token, slug)
         artefatos = self.repository.artefatos(db, aprovacao.id)
         decisao = (
             AprovacaoPublicaDecisaoRead(decisao=aprovacao.decisao, decididaEm=aprovacao.decidida_em)
@@ -554,19 +558,19 @@ class AprovacaoExternaService:
             decisao=decisao,
         )
 
-    def logo_publico(self, db: Session, token: str) -> tuple[Path, str, str]:
+    def logo_publico(self, db: Session, token: str, slug: str) -> tuple[Path, str, str]:
         """Logo da empresa DO TOKEN (nunca de slug/cookie do cliente). Só para quem tem um link legível."""
-        _aprovacao, _demanda, empresa, _estado = self._resolver_legivel(db, token)
+        _aprovacao, _demanda, empresa, _estado = self._resolver_legivel(db, token, slug)
         try:
             return self.personalizacao_service.ler_logo_da_empresa(db, empresa)
         except PersonalizacaoLogoNaoEncontradoError as exc:
             raise AprovacaoExternaIndisponivelError("Este link de aprovação não está mais disponível.") from exc
 
-    def obter_artefato(self, db: Session, token: str, ordem: int) -> ArtefatoServido:
+    def obter_artefato(self, db: Session, token: str, slug: str, ordem: int) -> ArtefatoServido:
         """Bytes do artefato `ordem` da solicitação. Só sai do disco se: ainda é desta Demanda, é arquivo físico elegível, o caminho fica confinado em
         `uploads`, o SHA-256 AGORA é o do snapshot e a assinatura bate com a extensão. Imagem → inline; PDF → sempre `attachment`. Qualquer falha →
         indisponível (sem detalhe)."""
-        aprovacao, demanda, _empresa, _estado = self._resolver_legivel(db, token)
+        aprovacao, demanda, _empresa, _estado = self._resolver_legivel(db, token, slug)
         artefato = self.repository.artefato_por_ordem(db, aprovacao.id, ordem)
         if artefato is None or artefato.arquivo_id is None:
             raise AprovacaoExternaIndisponivelError("Este link de aprovação não está mais disponível.")
@@ -607,7 +611,7 @@ class AprovacaoExternaService:
         """Uma decisão do cliente: aprovar (avança a etapa) ou solicitar ajustes (devolve, semântica 8D). UMA transação: decisão + workflow + eventos +
         notificações. Locks: Demanda → solicitação. Vencedor único: duplo envio / aprovar × ajustes / interno × externo → o perdedor vê 409 (já decidida)
         ou o link indisponível."""
-        existente, demanda, empresa = self._resolver(db, payload.token)
+        existente, demanda, empresa = self._resolver(db, payload.token, payload.slug)
         aprovar = payload.decisao == "aprovar"
         try:
             self.demanda_repository.bloquear_demanda_para_atualizacao(db, demanda)

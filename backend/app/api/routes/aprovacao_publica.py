@@ -3,7 +3,8 @@
 Regras de superfície:
 - TUDO é POST com o token no CORPO JSON — nunca em path/query (não vai para log de acesso, proxy, histórico nem `Referer`). O corpo é lido à mão e validado
   aqui: o tratamento padrão de erro de validação do FastAPI devolveria o `input` (o token) na resposta de 422;
-- link inexistente, malformado, revogado, expirado ou obsoleto → o MESMO 404 neutro (nada de dado interno, nem o motivo);
+- link inexistente, malformado, revogado, expirado ou obsoleto — ou com o `slug` da URL (`/e/<slug>/aprovacao`) diferente da empresa dona do token — → o
+  MESMO 404 neutro (nada de dado interno, nem o motivo). O slug é só CONFERIDO contra a empresa do token: quem manda é o token;
 - resposta sempre `no-store`, `no-referrer`, `nosniff`; artefato com `sandbox` e PDF NUNCA inline;
 - throttling é do edge (Cloudflare — requisito de Go-Live, ver docs/aprovacao-externa.md): a aplicação não persiste IP nem faz rate-limit próprio.
 """
@@ -59,8 +60,8 @@ async def _corpo(request: Request, modelo: type[BaseModel]):
         return modelo.model_validate(dados)
     except ValidationError as exc:
         erros = exc.errors(include_input=False, include_url=False, include_context=False)
-        if any(erro["loc"] and erro["loc"][0] == "token" for erro in erros):
-            raise _indisponivel() from None  # token malformado = link inexistente
+        if any(erro["loc"] and erro["loc"][0] in ("token", "slug") for erro in erros):
+            raise _indisponivel() from None  # token ou slug malformado/ausente = link inexistente
         detalhe = [
             {"campo": ".".join(str(parte) for parte in erro["loc"]) or "corpo", "mensagem": str(erro["msg"]).removeprefix("Value error, ")}
             for erro in erros
@@ -72,7 +73,7 @@ async def _corpo(request: Request, modelo: type[BaseModel]):
 async def consultar(request: Request, response: Response, db: Session = Depends(get_db)):
     corpo = await _corpo(request, AprovacaoPublicaConsultar)
     try:
-        resultado = aprovacao_service.consultar_publico(db, corpo.token)
+        resultado = aprovacao_service.consultar_publico(db, corpo.token, corpo.slug)
     except AprovacaoExternaIndisponivelError:
         raise _indisponivel() from None
     response.headers.update(_CABECALHOS)
@@ -103,7 +104,7 @@ async def artefato(request: Request, db: Session = Depends(get_db)):
     """Bytes do artefato `ordem`. Imagem → `inline`; PDF → `attachment` (o navegador nunca interpreta um PDF do cliente na nossa origem)."""
     corpo = await _corpo(request, AprovacaoPublicaArtefatoPedido)
     try:
-        servido = aprovacao_service.obter_artefato(db, corpo.token, corpo.ordem)
+        servido = aprovacao_service.obter_artefato(db, corpo.token, corpo.slug, corpo.ordem)
     except AprovacaoExternaIndisponivelError:
         raise _indisponivel() from None
     disposicao = "inline" if servido.inline else "attachment"
@@ -123,7 +124,7 @@ async def logo(request: Request, db: Session = Depends(get_db)):
     """Logo da empresa DONA do link (derivada do token). Sem token legível → 404 neutro."""
     corpo = await _corpo(request, AprovacaoPublicaConsultar)
     try:
-        caminho, mime, _versao = aprovacao_service.logo_publico(db, corpo.token)
+        caminho, mime, _versao = aprovacao_service.logo_publico(db, corpo.token, corpo.slug)
     except AprovacaoExternaIndisponivelError:
         raise _indisponivel() from None
     return FileResponse(caminho, media_type=mime, headers={**_CABECALHOS, "Content-Disposition": "inline"})

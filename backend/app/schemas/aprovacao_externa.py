@@ -15,6 +15,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.empresa_slug import validar_slug
 from app.schemas.configuracao_personalizacao import PublicoEmpresaBrandingRead
 
 EstadoAprovacaoExterna = Literal["pendente", "aprovada", "ajustes_solicitados", "revogada", "expirada", "obsoleta"]
@@ -151,9 +152,11 @@ class AprovacaoExternaRead(BaseModel):
 
 
 class AprovacaoExternaCriadaRead(AprovacaoExternaRead):
-    """Resposta ÚNICA da criação: carrega o token em claro (nunca mais recuperável — o banco guarda só o SHA-256)."""
+    """Resposta ÚNICA da criação: carrega o token em claro (nunca mais recuperável — o banco guarda só o SHA-256) e o slug da empresa dona do link, com o
+    qual a interface monta `/e/<slug>/aprovacao#token=…` (Fase 9D). O slug nunca é um valor fixo no cliente."""
 
     token: str
+    empresa_slug: str = Field(alias="empresaSlug")
 
 
 class ContatoClienteRead(BaseModel):
@@ -185,8 +188,20 @@ class AprovacaoExternaEstadoRead(BaseModel):
 
 
 class _CorpoComToken(BaseModel):
+    """Toda chamada pública carrega o `token` (a credencial) e o `slug` da URL `/e/<slug>/aprovacao` (Fase 9D). O slug NÃO concede nada: o serviço o compara
+    com a empresa dona do token e, se diferir, devolve o mesmo "link indisponível". Slug ausente ou malformado = link inexistente."""
+
+    slug: str
     token: str
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("slug")
+    @classmethod
+    def _slug(cls, value: str) -> str:
+        try:
+            return validar_slug(value)
+        except ValueError:
+            raise ValueError("slug inválido") from None
 
     @field_validator("token")
     @classmethod
