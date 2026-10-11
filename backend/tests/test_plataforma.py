@@ -37,6 +37,8 @@ from app.models.evento import Evento
 from app.models.usuario import Usuario
 from app.models.usuario_credencial import UsuarioCredencial
 
+from app.services.plataforma_service import gerar_senha_temporaria
+
 from tests.fixtures.usuarios import SENHA_CONHECIDA, _criar_usuario_com_credencial
 from tests.test_personalizacao_visual import png
 
@@ -95,22 +97,6 @@ def _payload_empresa(**extra) -> dict:
     corpo = {"nome": f"Empresa {sufixo}", "codigoInterno": f"emp-{sufixo}"}
     corpo.update(extra)
     return corpo
-
-
-def _token_do_convite(corpo: dict) -> str:
-    """Sem SMTP na empresa nova, o convite devolve o link de primeiro acesso para entrega manual (só nesta resposta). O token fica depois de `#token=`."""
-    assert corpo["convite"]["enviado"] is False and corpo["convite"]["linkAcesso"], corpo
-    return corpo["convite"]["linkAcesso"].split("#token=", 1)[1]
-
-
-def _definir_senha_pelo_convite(app, empresa: dict, convite_corpo: dict, senha: str = "SenhaDoGestor123!") -> str:
-    """O Gestor define a PRÓPRIA senha pelo mesmo fluxo de redefinição (`/auth/password-reset/confirm`). Devolve a senha escolhida."""
-    resposta = _client(app, None).post(
-        "/auth/password-reset/confirm",
-        json={"empresaSlug": empresa["slug"], "token": _token_do_convite(convite_corpo), "novaSenha": senha, "confirmacaoSenha": senha},
-    )
-    assert resposta.status_code in (200, 204), resposta.text
-    return senha
 
 
 def _criar_empresa(client: TestClient, **extra) -> dict:
@@ -355,15 +341,18 @@ def test_inativar_reativar_e_sem_hard_delete(client_plataforma: TestClient, db_s
 def test_empresa_inativa_derruba_a_sessao_e_o_login_tenant(app, client_plataforma: TestClient, db_session: Session) -> None:
     empresa = _criar_empresa(client_plataforma)
     gestor = client_plataforma.post(f"{PLAT}/empresas/{empresa['id']}/gestores", json={"nome": "G", "email": "g@acme.test"}).json()
-    senha = _definir_senha_pelo_convite(app, empresa, gestor)
-    login = _client(app, None).post("/auth/login", json={"empresaCodigo": empresa["codigoInterno"], "email": "g@acme.test", "senha": senha})
+    login = _client(app, None).post(
+        "/auth/login", json={"empresaCodigo": empresa["codigoInterno"], "email": "g@acme.test", "senha": gestor["senhaTemporaria"]}
+    )
     assert login.status_code == 200
     tenant = _client(app, login.json()["accessToken"])
     assert tenant.get("/auth/me").status_code == 200
 
     client_plataforma.post(f"{PLAT}/empresas/{empresa['id']}/inativar", json={})
     assert tenant.get("/auth/me").status_code == 401  # a sessão tenant cai na requisição seguinte
-    novo = _client(app, None).post("/auth/login", json={"empresaCodigo": empresa["codigoInterno"], "email": "g@acme.test", "senha": senha})
+    novo = _client(app, None).post(
+        "/auth/login", json={"empresaCodigo": empresa["codigoInterno"], "email": "g@acme.test", "senha": gestor["senhaTemporaria"]}
+    )
     assert novo.status_code == 401  # login normal rejeitado
 
     client_plataforma.post(f"{PLAT}/empresas/{empresa['id']}/reativar")
@@ -500,30 +489,24 @@ def test_listagem_de_usuarios_e_so_metadados_e_oculta_conta_de_sistema(
     assert "senha" not in resposta.text.lower() and "hash" not in resposta.text.lower()
 
 
-def test_criar_gestor_forca_perfil_e_usa_convite_sem_senha(app, client_plataforma: TestClient, db_session: Session) -> None:
+def test_criar_gestor_forca_perfil_senha_temporaria_e_troca_obrigatoria(app, client_plataforma: TestClient, db_session: Session) -> None:
     empresa = _criar_empresa(client_plataforma)
     resposta = client_plataforma.post(f"{PLAT}/empresas/{empresa['id']}/gestores", json={"nome": "Ana Gestora", "email": "ana@acme.test"})
     assert resposta.status_code == 201, resposta.text
     corpo = resposta.json()
-    assert corpo["usuario"]["perfilBase"] == "gestor" and corpo["usuario"]["primeiroAcessoPendente"] is True
-    # NENHUMA senha em lugar nenhum da resposta
-    assert not {"senhaTemporaria", "deveAlterarSenha", "senha"} & set(corpo)
+    assert corpo["usuario"]["perfilBase"] == "gestor" and corpo["deveAlterarSenha"] is True
+    senha = corpo["senhaTemporaria"]
+    assert len(senha) >= 12 and senha != SENHA_CONHECIDA
 
     usuario = db_session.scalar(select(Usuario).where(Usuario.id == corpo["usuario"]["id"]))
     assert usuario.empresa_id == empresa["id"] and usuario.perfil_base == "gestor" and usuario.acesso_sistema is True
     assert usuario.is_system_account is False
 
-    # antes do convite concluído, NINGUÉM entra (a senha da credencial é aleatória e descartada)
-    antes = _client(app, None).post("/auth/login", json={"empresaCodigo": empresa["codigoInterno"], "email": "ana@acme.test", "senha": "QualquerSenha123!"})
-    assert antes.status_code == 401
-    # o Gestor define a PRÓPRIA senha pelo link e então entra, sem troca obrigatória
-    senha = _definir_senha_pelo_convite(app, empresa, corpo)
+    # troca obrigatória no primeiro login
     login = _client(app, None).post("/auth/login", json={"empresaCodigo": empresa["codigoInterno"], "email": "ana@acme.test", "senha": senha})
-    assert login.status_code == 200 and login.json()["mustChangePassword"] is False
-    # e a empresa agora conta um Gestor ativo; o sinal de convite pendente some
+    assert login.status_code == 200 and login.json()["mustChangePassword"] is True
+    # e a empresa agora conta um Gestor ativo
     assert client_plataforma.get(f"{PLAT}/empresas/{empresa['id']}").json()["gestoresAtivos"] == 1
-    listados = client_plataforma.get(f"{PLAT}/empresas/{empresa['id']}/usuarios").json()
-    assert [u["primeiroAcessoPendente"] for u in listados if u["id"] == corpo["usuario"]["id"]] == [False]
 
 
 def test_criar_gestor_nunca_aceita_perfil_admin_nem_campos_extras(client_plataforma: TestClient) -> None:
@@ -553,24 +536,28 @@ def test_gestor_em_empresa_inativa_e_recusado(client_plataforma: TestClient) -> 
     assert client_plataforma.post(f"{PLAT}/empresas/{uuid.uuid4()}/gestores", json={"nome": "G", "email": "g@z.test"}).status_code == 404
 
 
-def test_token_do_convite_nunca_vaza_para_evento_log_ou_listagem(
+def test_senha_temporaria_nunca_vaza_para_evento_ou_log(
     client_plataforma: TestClient, db_session: Session, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.DEBUG)
     empresa = _criar_empresa(client_plataforma)
     corpo = client_plataforma.post(f"{PLAT}/empresas/{empresa['id']}/gestores", json={"nome": "Sigilo", "email": "sigilo@acme.test"}).json()
-    token = _token_do_convite(corpo)
+    senha = corpo["senhaTemporaria"]
 
     eventos = db_session.scalars(select(Evento).where(Evento.empresa_id == empresa["id"])).all()
     assert eventos, "a criação deve ser auditada"
-    assert token not in json.dumps([e.payload for e in eventos], default=str)
-    assert token not in json.dumps([e.metadata_ for e in eventos], default=str)
-    assert token not in caplog.text
-    # nem a empresa nem a listagem o devolvem de novo; no banco só existe o hash
-    assert token not in client_plataforma.get(f"{PLAT}/empresas/{empresa['id']}/usuarios").text
-    assert token not in client_plataforma.get(f"{PLAT}/empresas/{empresa['id']}").text
-    credencial = db_session.scalar(select(UsuarioCredencial).where(UsuarioCredencial.usuario_id == corpo["usuario"]["id"]))
-    assert credencial.reset_senha_token_hash and token not in credencial.reset_senha_token_hash
+    assert senha not in json.dumps([e.payload for e in eventos], default=str)
+    assert senha not in json.dumps([e.metadata_ for e in eventos], default=str)
+    assert senha not in caplog.text
+    # nem a empresa nem a listagem a devolvem de novo
+    assert senha not in client_plataforma.get(f"{PLAT}/empresas/{empresa['id']}/usuarios").text
+    assert senha not in client_plataforma.get(f"{PLAT}/empresas/{empresa['id']}").text
+
+
+def test_gerar_senha_temporaria_e_aleatoria_e_legivel() -> None:
+    senhas = {gerar_senha_temporaria() for _ in range(50)}
+    assert len(senhas) == 50
+    assert all(len(s) == 14 and not set(s) & set("0O1lI") for s in senhas)
 
 
 # --------------------------------------------------------------------------------------

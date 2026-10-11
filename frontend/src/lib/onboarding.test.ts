@@ -230,15 +230,15 @@ test("BFF da consulta: exige sessão, valida o CNPJ, tem timeout, não envia nem
 });
 
 // ── Gestor: UI e API ─────────────────────────────────────────────────────────────────────────────────
-test("Definir Gestor: um modal com as duas opções, labels 'Usuário'/'Gestor' e convite sem senha", () => {
+test("Definir Gestor: um modal com as duas opções, labels 'Usuário'/'Gestor' e senha temporária única", () => {
   const modal = ler("components/plataforma/DefinirGestorModal.tsx");
   assert.match(modal, /Escolher usuário existente/);
   assert.match(modal, /Criar novo Gestor/);
   assert.match(modal, /listarCandidatosGestor\(empresa\.id\)/);
   assert.match(modal, /promoverGestorEmpresa\(empresa\.id, escolhido\)/);
   assert.match(modal, /criarGestorEmpresa\(empresa\.id, \{ nome: nome\.trim\(\), email: email\.trim\(\) \}\)/);
-  assert.match(ler("components/plataforma/ConviteGestorAviso.tsx"), /uma única vez/); // link manual: exibido uma única vez
-  assert.match(modal, /<ConviteGestorAviso convite=\{criado\.convite\} \/>/);
+  assert.match(ler("components/plataforma/SenhaTemporariaAviso.tsx"), /AVISO_SENHA_UNICA/); // senha: exibida uma única vez
+  assert.match(modal, /<SenhaTemporariaAviso slug=\{empresa\.slug\} email=\{criado\.usuario\.email\} senha=\{criado\.senhaTemporaria\} \/>/);
   assert.match(modal, /setCriado\(null\)/); // fechar descarta o resultado
   assert.doesNotMatch(semComentarios(modal), /operador|localStorage|sessionStorage|console\./);
   assert.doesNotMatch(semComentarios(modal), /perfilBase|type="password"/); // perfil e senha nunca vêm do formulário

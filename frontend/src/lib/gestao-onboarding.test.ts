@@ -1,15 +1,15 @@
-// Fase 10B — onboarding de nova empresa pela Gestão. `npm run test:gestao-onboarding` (node --test, sem dependências).
-// Lógica pura (helpers do formulário, validações, payload, textos do convite, URL final) exercitada de verdade; telas/API (alias `@/`) são lidas como texto para provar
-// o que tipos não mostram: slug sugerido e editável, reservados, branding pelo mecanismo existente, convite sem senha, loading/erro/sucesso, copiar endereço, sem tenant
+// Fase 10B/10B.1 — onboarding de nova empresa pela Gestão (senha TEMPORÁRIA, sem convite/SMTP). `npm run test:gestao-onboarding` (node --test, sem dependências).
+// Lógica pura (helpers do formulário, validações, payload, textos da entrega da senha, URL final) exercitada de verdade; telas/API (alias `@/`) são lidas como texto para provar
+// o que tipos não mostram: slug sugerido e editável, reservados, branding pelo mecanismo existente, senha temporária única, loading/erro/sucesso, copiar endereço, sem tenant
 // switch nem impersonação.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   ONBOARDING_VAZIO,
-  absolutizarLink,
+  AVISO_SENHA_UNICA,
+  CONFIRMACAO_NOVA_SENHA_TEMPORARIA,
   brandingDoRascunho,
-  descreverConvite,
   erroDaCorOpcional,
   erroDoEmailDoGestor,
   erroDoNomeDoGestor,
@@ -119,46 +119,79 @@ test("identidade visual pelo mecanismo EXISTENTE: cores/tema via PATCH de person
   assert.match(semComentarios(ler("app/api/plataforma/[...path]/route.ts")), /if \(hasBody && resposta\.ok\) invalidarBranding\(\);/); // /e/<slug>/login reflete já
 });
 
-// ── convite: sem senha ───────────────────────────────────────────────────────────────────────────────────────
+// ── senha temporária: gerada no servidor, exibida UMA vez ────────────────────────────────────────────────────
 
-test("convite: estado claro (enviado × não enviado com o MOTIVO) e nunca esconde a falha de SMTP", () => {
-  assert.equal(descreverConvite({ enviado: true, motivo: null }).tom, "green");
-  const sem = descreverConvite({ enviado: false, motivo: "email_nao_configurado" });
-  assert.equal(sem.titulo, "Convite não enviado");
-  assert.match(sem.detalhe, /SMTP/);
-  assert.match(sem.detalhe, /criados normalmente/); // não desfaz a empresa
-  assert.equal(sem.tom, "amber");
-  assert.match(descreverConvite({ enviado: false, motivo: "falha_envio" }).detalhe, /não aceitou/);
-  assert.match(descreverConvite({ enviado: false, motivo: "url_publica_ausente" }).detalhe, /endereço público/);
-  assert.equal(absolutizarLink("https://taskflow.exemplo.com/", "/e/acme/redefinir-senha#token=x"), "https://taskflow.exemplo.com/e/acme/redefinir-senha#token=x");
-  assert.equal(absolutizarLink("https://x.com", "https://y.com/e/a/redefinir-senha#token=x"), "https://y.com/e/a/redefinir-senha#token=x");
-});
-
-test("NENHUMA senha é pedida, gerada ou exibida: só convite; o link manual aparece uma vez e some ao fechar", () => {
+test("o onboarding NÃO usa convite nem SMTP: nenhum token, link manual, reenvio de convite ou motivo de e-mail no frontend", () => {
   const todos = [
     "components/plataforma/NovaEmpresaModal.tsx",
     "components/plataforma/NovaEmpresaSecoes.tsx",
-    "components/plataforma/ConviteGestorAviso.tsx",
+    "components/plataforma/SenhaTemporariaAviso.tsx",
     "components/plataforma/DefinirGestorModal.tsx",
     "components/plataforma/EmpresaUsuariosSection.tsx",
+    "lib/plataforma-api.ts",
+    "lib/plataforma.ts",
+    "types/plataforma.ts",
   ].map((c) => semComentarios(ler(c)));
-  for (const texto of todos) assert.doesNotMatch(texto, /senhaTemporaria|type="password"|senha-temporaria|deveAlterarSenha/);
-  assert.doesNotMatch(ler("types/plataforma.ts"), /senhaTemporaria/);
-  const aviso = ler("components/plataforma/ConviteGestorAviso.tsx");
-  assert.match(aviso, /uma única vez/);
-  assert.match(aviso, /Copiar link/);
-  const modal = ler("components/plataforma/NovaEmpresaModal.tsx");
-  assert.match(modal, /function fechar\(\) \{\s*if \(salvando\) return;\s*reiniciar\(\);/); // descarta resultado e link
-  assert.match(modal, /setResultado\(null\)/);
+  for (const texto of todos) {
+    assert.doesNotMatch(texto, /ConviteGestorAviso|reenviarConvite|linkAcesso|\/convite|PlataformaConvite|descreverConvite|email_nao_configurado|url_publica_ausente|falha_envio|SMTP|#token=/);
+  }
+  assert.throws(() => ler("components/plataforma/ConviteGestorAviso.tsx"), /ENOENT/);
 });
 
-test("reenviar convite: só para quem tem convite pendente (sinal do servidor), com confirmação de resultado e link manual", () => {
+test("a senha temporária vem do SERVIDOR: a tela só a mostra; nada de gerar/derivar no navegador", () => {
+  const modal = semComentarios(ler("components/plataforma/NovaEmpresaModal.tsx"));
+  assert.match(modal, /senha=\{dados\.senhaTemporaria\}/);
+  for (const arquivo of ["NovaEmpresaModal", "NovaEmpresaSecoes", "SenhaTemporariaAviso", "EmpresaUsuariosSection", "DefinirGestorModal"]) {
+    const texto = semComentarios(ler(`components/plataforma/${arquivo}.tsx`));
+    assert.doesNotMatch(texto, /Math\.random|crypto\.(getRandomValues|randomUUID)|new Date\(\)\.getTime|btoa\(|type="password"/);
+  }
+  // o formulário não pede nem envia senha
+  assert.doesNotMatch(JSON.stringify(payloadDoOnboarding(valido)), /senha/i);
+});
+
+test("tela de sucesso: acesso (URL), usuário e senha temporária com Copiar endereço/usuário/senha e o aviso de exibição única", () => {
+  const aviso = semComentarios(ler("components/plataforma/SenhaTemporariaAviso.tsx"));
+  for (const botao of ["Copiar endereço", "Copiar usuário", "Copiar senha"]) assert.match(aviso, new RegExp(botao), botao);
+  for (const teste of ["url-acesso", "usuario-gestor", "senha-temporaria"]) assert.match(aviso, new RegExp(`teste: "${teste}"`), teste);
+  assert.match(aviso, /navigator\.clipboard\.writeText\(valor\)/);
+  assert.match(aviso, /\{AVISO_SENHA_UNICA\}/);
+  assert.equal(AVISO_SENHA_UNICA, "Esta senha será exibida somente agora. No primeiro acesso, o usuário deverá criar sua senha pessoal.");
+  assert.match(aviso, /Entregue por um canal seguro/);
+  // a senha nunca é gravada em storage, URL, console ou rota
+  assert.doesNotMatch(aviso, /localStorage|sessionStorage|indexedDB|document\.cookie|console\.|router\.|location\.|history\./);
+  const modal = ler("components/plataforma/NovaEmpresaModal.tsx");
+  assert.match(modal, /function fechar\(\) \{\s*if \(salvando\) return;\s*reiniciar\(\);/); // fechar descarta a senha
+  assert.match(modal, /setResultado\(null\)/);
+  assert.doesNotMatch(semComentarios(modal), /localStorage|sessionStorage|console\./);
+});
+
+test("fechou a tela = a senha some: sem persistência no cliente e o servidor nunca a devolve de novo (nem em GET)", () => {
+  const api = ler("lib/plataforma-api.ts");
+  // o tipo da senha existe só nas respostas de criação/regeneração
+  const tipos = ler("types/plataforma.ts");
+  assert.equal((semComentarios(tipos).match(/senhaTemporaria/g) ?? []).length, 2); // PlataformaGestorCriado e PlataformaOnboarding
+  const usuario = tipos.slice(tipos.indexOf("export type PlataformaUsuario"), tipos.indexOf("export type PlataformaGestorCreate"));
+  assert.doesNotMatch(usuario, /senha|hash|token/i);
+  const empresa = tipos.slice(tipos.indexOf("export type PlataformaEmpresa ="), tipos.indexOf("export type PlataformaEmpresaCreate"));
+  assert.doesNotMatch(empresa, /senha|hash|token/i);
+  assert.doesNotMatch(semComentarios(api), /localStorage|sessionStorage|cache:\s*"force-cache"/);
+  // as respostas da Gestão nunca são cacheadas
+  assert.match(semComentarios(ler("app/api/plataforma/[...path]/route.ts")), /headers: \{ "Cache-Control": "no-store" \}/);
+});
+
+test("regenerar: só para quem tem o primeiro acesso PENDENTE, com confirmação explícita e a nova senha exibida uma vez", () => {
   const secao = semComentarios(ler("components/plataforma/EmpresaUsuariosSection.tsx"));
   assert.match(secao, /usuario\.primeiroAcessoPendente \? \(/);
-  assert.match(secao, /Convite pendente/);
-  assert.match(secao, /reenviarConviteGestor\(empresa\.id, usuario\.id\)/);
-  assert.match(secao, /<ConviteGestorAviso convite=\{convite\.convite\} \/>/);
-  assert.match(ler("lib/plataforma-api.ts"), /\/usuarios\/\$\{encodeURIComponent\(usuarioId\)\}\/convite/);
+  assert.match(secao, /Primeiro acesso pendente/);
+  assert.match(secao, /Gerar nova senha temporária/);
+  assert.match(secao, /gerarNovaSenhaTemporaria\(empresa\.id, usuario\.id\)/);
+  assert.match(secao, /role="alertdialog"/);
+  assert.match(secao, /\{CONFIRMACAO_NOVA_SENHA_TEMPORARIA\}/);
+  assert.match(secao, /<SenhaTemporariaAviso slug=\{empresa\.slug\} email=\{senhaGerada\.usuario\.email\} senha=\{senhaGerada\.senhaTemporaria\} \/>/);
+  assert.match(secao, /<Badge tone="green">Concluído<\/Badge>/); // quem já concluiu o primeiro acesso não tem a ação
+  assert.match(CONFIRMACAO_NOVA_SENHA_TEMPORARIA, /deixa de funcionar imediatamente/);
+  assert.doesNotMatch(secao, /window\.confirm|confirm\(/); // confirmação na própria interface (o confirm nativo é frágil)
+  assert.match(ler("lib/plataforma-api.ts"), /\/usuarios\/\$\{encodeURIComponent\(usuarioId\)\}\/senha-temporaria/);
 });
 
 // ── loading, erro, sucesso, URL final, copiar ────────────────────────────────────────────────────────────────
@@ -180,16 +213,16 @@ test("sucesso: mostra 'Empresa criada', o endereço /e/<slug>/login (sem token) 
   assert.doesNotMatch(urlDeAcessoDaEmpresa("https://x.com", "acme"), /token|#|\?/);
   const modal = semComentarios(ler("components/plataforma/NovaEmpresaModal.tsx"));
   assert.match(modal, /Empresa criada/);
-  assert.match(modal, /<EmpresaAcessoCard slug=\{dados\.empresa\.slug\} urlAcesso=\{dados\.urlAcesso\} \/>/);
+  assert.match(modal, /<SenhaTemporariaAviso slug=\{dados\.empresa\.slug\} urlAcesso=\{dados\.urlAcesso\} email=\{dados\.gestor\.email\} senha=\{dados\.senhaTemporaria\} \/>/);
   assert.match(modal, /dados\.gestor\.nome/);
   const cartao = semComentarios(ler("components/plataforma/EmpresaAcessoCard.tsx"));
-  assert.match(cartao, /navigator\.clipboard\.writeText\(url\)/);
+  assert.match(cartao, /navigator\.clipboard\.writeText\(url\)/); // detalhe da empresa: só o endereço público
   assert.match(cartao, /Copiar endereço/);
-  assert.doesNotMatch(cartao, /token|tf_session|accessToken/);
+  assert.doesNotMatch(cartao, /token|tf_session|accessToken|senha/i);
 });
 
 test("a Gestão permanece na Gestão: sem tenant switch, sem impersonação, sem abrir /e/<slug> automaticamente", () => {
-  const arquivos = ["NovaEmpresaModal", "NovaEmpresaSecoes", "EmpresaAcessoCard", "ConviteGestorAviso"].map((n) => semComentarios(ler(`components/plataforma/${n}.tsx`)));
+  const arquivos = ["NovaEmpresaModal", "NovaEmpresaSecoes", "EmpresaAcessoCard", "SenhaTemporariaAviso"].map((n) => semComentarios(ler(`components/plataforma/${n}.tsx`)));
   for (const texto of arquivos) {
     assert.doesNotMatch(texto, /impersonate|useBranding|aplicarBranding|useTenantPath|tf_session|window\.open|location\.(href|assign|replace)/);
     assert.doesNotMatch(texto, /router\.(push|replace)\(`\/e\/|router\.(push|replace)\("\/e\//);
@@ -197,10 +230,11 @@ test("a Gestão permanece na Gestão: sem tenant switch, sem impersonação, sem
   const modal = semComentarios(ler("components/plataforma/NovaEmpresaModal.tsx"));
   assert.match(modal, /router\.push\(`\/gestao\/empresas\/\$\{id\}`\)/); // "Abrir empresa na Gestão" — nunca o tenant
   assert.match(modal, /nenhuma sessão da empresa foi aberta e ninguém foi impersonado/);
+  assert.match(modal, /usuário e a senha temporária do Gestor/);
   assert.match(semComentarios(ler("lib/plataforma-api.ts")), /onboardingEmpresaPlataforma = \(dados: PlataformaOnboardingCreate\)/);
 });
 
-test("detalhe da empresa na Gestão mostra nome, slug, status, endereço de acesso e Gestor(es) com convite — sem segredos", () => {
+test("detalhe da empresa na Gestão mostra nome, slug, status, endereço de acesso e Gestor(es) com sinal de primeiro acesso — sem segredos", () => {
   const detalhe = semComentarios(ler("components/plataforma/EmpresaPlataformaView.tsx"));
   assert.match(detalhe, /<EmpresaAcessoCard slug=\{empresa\.slug\} \/>/);
   assert.match(detalhe, /STATUS_EMPRESA_ROTULO\[empresa\.status\]/);
