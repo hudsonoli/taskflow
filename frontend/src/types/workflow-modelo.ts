@@ -20,6 +20,7 @@ export type WorkflowModeloEtapa = {
   nome: string;
   tipo: WorkflowEtapaTipo;
   // Prazo de referência da etapa, informado como "X [unidade] antes do deadline" da tarefa.
+  esforcoEstimadoMinutos?: number | null;
   quantidadeAntesDeadline: number;
   unidadePrazo: WorkflowUnidadePrazo;
   usuarioResponsavelIds: string[];

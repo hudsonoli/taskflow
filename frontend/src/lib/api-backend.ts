@@ -1484,6 +1484,7 @@ type DemandaWorkflowEtapaReadApi = {
   ordem: number;
   nome: string;
   tipo: DemandaWorkflowEtapa["tipo"];
+  esforcoEstimadoMinutos?: number | null;
   quantidadeAntesDeadline: number;
   unidadePrazo: DemandaWorkflowEtapa["unidadePrazo"];
   status: DemandaWorkflowEtapaStatus;
@@ -1493,6 +1494,7 @@ type DemandaWorkflowEtapaReadApi = {
   concluidaEm: string | null;
   concluidaPorUsuarioId: string | null;
   concluidaPorExternoNome?: string | null;
+  podeEditarEsforco?: boolean;
   podeAvancar: boolean;
   podeRejeitar?: boolean;
 };
@@ -1587,6 +1589,7 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       nome: etapa.nome,
       ordem: etapa.ordem,
       tipo: etapa.tipo,
+      esforcoEstimadoMinutos: etapa.esforcoEstimadoMinutos ?? null,
       quantidadeAntesDeadline: etapa.quantidadeAntesDeadline,
       unidadePrazo: etapa.unidadePrazo,
       status: etapa.status,
@@ -1596,6 +1599,7 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       concluidaEm: etapa.concluidaEm ?? null,
       concluidaPorUsuarioId: etapa.concluidaPorUsuarioId ?? null,
       concluidaPorExternoNome: etapa.concluidaPorExternoNome ?? null,
+      podeEditarEsforco: etapa.podeEditarEsforco === true,
       podeAvancar: etapa.podeAvancar === true,
       podeRejeitar: etapa.podeRejeitar === true,
     })),
@@ -2348,6 +2352,7 @@ type WorkflowModeloEtapaReadApi = {
   ordem: number;
   nome: string;
   tipo: WorkflowModeloEtapa["tipo"];
+  esforcoEstimadoMinutos?: number | null;
   quantidadeAntesDeadline: number;
   unidadePrazo: WorkflowModeloEtapa["unidadePrazo"];
   usuarioResponsavelIds: string[];
@@ -2382,6 +2387,7 @@ function mapWorkflowModeloReadToWorkflowModelo(data: WorkflowModeloReadApi): Wor
       id: etapa.id,
       nome: etapa.nome,
       tipo: etapa.tipo,
+      esforcoEstimadoMinutos: etapa.esforcoEstimadoMinutos ?? null,
       quantidadeAntesDeadline: etapa.quantidadeAntesDeadline,
       unidadePrazo: etapa.unidadePrazo,
       usuarioResponsavelIds: etapa.usuarioResponsavelIds,
@@ -2398,6 +2404,7 @@ function workflowModeloDraftParaPayload(draft: WorkflowModeloFormDraft) {
     etapas: draft.etapas.map((etapa) => ({
       nome: etapa.nome,
       tipo: etapa.tipo,
+      esforcoEstimadoMinutos: etapa.esforcoEstimadoMinutos ?? null,
       quantidadeAntesDeadline: etapa.quantidadeAntesDeadline,
       unidadePrazo: etapa.unidadePrazo,
       usuarioResponsavelIds: etapa.usuarioResponsavelIds,
@@ -3057,4 +3064,12 @@ export async function enviarLogoPersonalizacaoReal(arquivo: File): Promise<Brand
     throw new Error(message ?? `Erro ${response.status}`);
   }
   return normalizarBranding(await response.json());
+}
+
+/** Ajusta somente o esforço da etapa materializada; autoridade reavaliada pelo servidor. */
+export async function ajustarEsforcoEtapaReal(demandaId: string, etapaId: string, minutos: number | null): Promise<Demanda> {
+  const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/esforco`, {
+    method: "PATCH", body: JSON.stringify({ esforcoEstimadoMinutos: minutos }),
+  });
+  return mapDemandaReadToDemanda(atualizada);
 }

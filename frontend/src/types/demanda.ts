@@ -30,6 +30,7 @@ export type DemandaWorkflowEtapa = {
   nome: string;
   ordem: number;
   tipo: "execucao" | "aprovacao";
+  esforcoEstimadoMinutos?: number | null;
   quantidadeAntesDeadline: number;
   unidadePrazo: "dias_corridos" | "dias_uteis" | "horas";
   usuarioResponsavelIds: string[];
@@ -43,6 +44,7 @@ export type DemandaWorkflowEtapa = {
   /** Fase 9B — aprovada pelo CLIENTE no Portal de Aprovação: nome DECLARADO (não verificado), derivado da decisão externa. `concluidaPorUsuarioId` fica `null`. */
   concluidaPorExternoNome?: string | null;
   /** Calculado pelo SERVIDOR para o usuário logado: só na etapa atual, com autoridade real, fora da leitura da Pauta. */
+  podeEditarEsforco?: boolean;
   podeAvancar: boolean;
   /** Fase 8D — calculado pelo SERVIDOR: etapa atual de APROVAÇÃO com etapa anterior, para quem tem autoridade real, fora da leitura da Pauta. */
   podeRejeitar?: boolean;

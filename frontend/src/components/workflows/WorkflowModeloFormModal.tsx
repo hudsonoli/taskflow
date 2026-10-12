@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEsforco, parseEsforco } from "@/lib/esforco";
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Flag, Plus, Trash2, Workflow as WorkflowIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +28,7 @@ function createEtapa(): WorkflowModeloEtapa {
     id: generateId("etapa-modelo"),
     nome: "Nova etapa",
     tipo: "execucao",
+    esforcoEstimadoMinutos: null,
     quantidadeAntesDeadline: 1,
     unidadePrazo: "dias_corridos",
     usuarioResponsavelIds: [],
@@ -62,8 +64,16 @@ export function WorkflowModeloFormModal({
   const [draft, setDraft] = useState<WorkflowModeloFormDraft>(() => createInitialDraft(modelo));
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
+  const [textosEsforco, setTextosEsforco] = useState<Record<string, string>>({});
+  function textoEsforco(etapa: WorkflowModeloEtapa) {
+    return textosEsforco[etapa.id] ?? (etapa.esforcoEstimadoMinutos == null ? "" : formatEsforco(etapa.esforcoEstimadoMinutos));
+  }
+  function erroEsforco(etapa: WorkflowModeloEtapa): string | null {
+    try { parseEsforco(textoEsforco(etapa)); return null; }
+    catch (erro) { return erro instanceof Error ? erro.message : "Esforço inválido"; }
+  }
   const editing = modelo !== undefined;
-  const canSave = draft.nome.trim().length > 0 && draft.etapas.length > 0;
+  const canSave = draft.nome.trim().length > 0 && draft.etapas.length > 0 && draft.etapas.every((etapa) => !erroEsforco(etapa));
   const todasExpandidas = draft.etapas.length > 0 && draft.etapas.every((etapa) => expandedIds.has(etapa.id));
 
   // Responsáveis padrão: busca no servidor, usuário `ativo` para novo vínculo; os já responsáveis da
@@ -237,6 +247,14 @@ export function WorkflowModeloFormModal({
 
                 {expanded && (
                   <div className="flex flex-col gap-3 bg-surface p-3.5">
+                    <Input label="Esforço estimado" aria-label={`Esforço estimado de ${etapa.nome}`} placeholder="Não estimado" value={textoEsforco(etapa)}
+                      onChange={(event) => {
+                        const texto = event.target.value;
+                        setTextosEsforco((current) => ({ ...current, [etapa.id]: texto }));
+                        try { updateEtapa(etapa.id, { esforcoEstimadoMinutos: parseEsforco(texto) }); } catch { /* Exibe erro e bloqueia salvar. */ }
+                      }} />
+                    <p className="text-xs text-fg-muted">Tempo de trabalho previsto para esta etapa. Ex.: 30 min, 1h 30min. Vazio = não estimado.</p>
+                    {erroEsforco(etapa) && <p role="alert" className="text-xs text-red-600">{erroEsforco(etapa)}</p>}
                     <Input label="Nome da etapa" value={etapa.nome} onChange={(event) => updateEtapa(etapa.id, { nome: event.target.value })} />
 
                     <div className="grid gap-3 sm:grid-cols-3">

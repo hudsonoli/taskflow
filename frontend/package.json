@@ -37,7 +37,8 @@
     "test:arquivos-lote": "node --test src/lib/arquivos-lote.test.ts",
     "test:workflow-rejeicao": "node --test src/lib/workflow-rejeicao.test.ts",
     "test:aprovacao-externa-interna": "node --test src/lib/aprovacao-externa-interna.test.ts",
-    "test:aprovacao-externa-publica": "node --test src/lib/aprovacao-externa-publica.test.ts"
+    "test:aprovacao-externa-publica": "node --test src/lib/aprovacao-externa-publica.test.ts",
+    "test:esforco": "node --test src/lib/esforco.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
