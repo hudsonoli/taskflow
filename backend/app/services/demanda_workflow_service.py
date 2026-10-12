@@ -96,6 +96,45 @@ class DemandaWorkflowConflitoError(RuntimeError):
 
 
 class DemandaWorkflowService:
+    def ajustar_esforco(self, db: Session, demanda: Demanda, *, etapa_id: str,
+                        esforco_minutos: int | None, actor: Usuario) -> Demanda:
+        """Ajuste pontual auditado; usa autoridade existente, sem progressão ou mudança estrutural."""
+        try:
+            if actor.empresa_id != demanda.empresa_id:
+                raise DemandaWorkflowEtapaNaoEncontradaError("Etapa não encontrada nesta tarefa")
+            self.repository.bloquear_demanda_para_atualizacao(db, demanda)
+            etapas = self.repository.listar_etapas_workflow_travadas(db, demanda.id)
+            etapa = next((e for e in etapas if e.id == etapa_id), None)
+            if etapa is None:
+                raise DemandaWorkflowEtapaNaoEncontradaError("Etapa não encontrada nesta tarefa")
+            usuarios = self.repository.listar_etapa_responsavel_ids_em_lote(db, [etapa.id])
+            departamentos = self.repository.listar_etapa_departamento_ids_em_lote(db, [etapa.id])
+            if not pode_avancar_etapa(actor, usuario_responsavel_ids=usuarios.get(etapa.id, []),
+                                     departamento_responsavel_ids=departamentos.get(etapa.id, []),
+                                     departamentos_head=departamentos_head_para_workflow(db, actor)):
+                raise DemandaWorkflowSemAutoridadeError("Você não tem autoridade para ajustar o esforço desta etapa")
+            if demanda.status == STATUS_DEMANDA_ARQUIVADA:
+                raise DemandaWorkflowConflitoError("DEMANDA_ARQUIVADA", "Restaure a tarefa antes de ajustar o esforço")
+            anterior = etapa.esforco_estimado_minutos
+            if anterior != esforco_minutos:
+                now = agora_utc()
+                etapa.esforco_estimado_minutos = esforco_minutos
+                etapa.updated_at = now
+                demanda.updated_at = now
+                db.flush()
+                self.demanda_service.publicar_evento_demanda(
+                    db, demanda, DomainEventType.DEMANDA_WORKFLOW_ESFORCO_ALTERADO, actor.id,
+                    extra_payload={"etapaId": etapa.id, "etapaNome": etapa.nome,
+                                   "atorUsuarioId": actor.id, "valorAnteriorMinutos": anterior,
+                                   "valorNovoMinutos": esforco_minutos}, occurred_at=now,
+                )
+            db.commit()
+            db.refresh(demanda)
+            return demanda
+        except Exception:
+            db.rollback()
+            raise
+
     def __init__(
         self,
         repository: DemandaRepository | None = None,

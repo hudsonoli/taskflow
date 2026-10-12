@@ -301,7 +301,7 @@ def test_editar_workflow_depois_nao_altera_demanda_existente(
     client_admin: TestClient, usuario_gestor: Usuario, usuario_operador: Usuario
 ) -> None:
     modelo = _criar_workflow_modelo(
-        client_admin, etapas=[_etapa("Original", responsavel_ids=[usuario_gestor.id])]
+        client_admin, etapas=[{**_etapa("Original", responsavel_ids=[usuario_gestor.id]), "esforcoEstimadoMinutos": 240}]
     )
     criada = _criar_demanda(client_admin, workflowModeloId=modelo["id"]).json()
     etapa_original_id = criada["workflowEtapas"][0]["id"]
@@ -311,7 +311,7 @@ def test_editar_workflow_depois_nao_altera_demanda_existente(
         f"/workflow-modelos/{modelo['id']}",
         json={
             "nome": "Nome Totalmente Novo",
-            "etapas": [_etapa("Etapa Renomeada", responsavel_ids=[usuario_operador.id])],
+            "etapas": [{**_etapa("Etapa Renomeada", responsavel_ids=[usuario_operador.id]), "esforcoEstimadoMinutos": 480}],
         },
     )
 
@@ -319,6 +319,7 @@ def test_editar_workflow_depois_nao_altera_demanda_existente(
     assert len(atual["workflowEtapas"]) == 1
     assert atual["workflowEtapas"][0]["id"] == etapa_original_id
     assert atual["workflowEtapas"][0]["nome"] == "Original"
+    assert atual["workflowEtapas"][0]["esforcoEstimadoMinutos"] == 240
     assert atual["workflowEtapas"][0]["usuarioResponsavelIds"] == [usuario_gestor.id]
 
 

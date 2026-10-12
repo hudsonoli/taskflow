@@ -2,8 +2,9 @@ from datetime import date, datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 
+from app.schemas.esforco import EsforcoMinutos
 from app.schemas.sla_regra import SlaUnidadePrazo
 
 # `arquivada` no feminino acompanha o vocabulário do próprio domínio (concluida, cancelada,
@@ -190,6 +191,11 @@ class DemandaConclusaoEmailRegistrar(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+class DemandaWorkflowEsforcoUpdate(BaseModel):
+    esforco_estimado_minutos: EsforcoMinutos | None = Field(alias="esforcoEstimadoMinutos")
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
 class DemandaWorkflowEtapaRead(BaseModel):
     """Etapa de workflow materializada — snapshot, não referência ao WorkflowModelo (ver
     docstring de app/models/demanda_workflow_etapa.py)."""
@@ -198,6 +204,8 @@ class DemandaWorkflowEtapaRead(BaseModel):
     ordem: int
     nome: str
     tipo: WorkflowEtapaTipo
+    esforco_estimado_minutos: EsforcoMinutos | None = Field(default=None, alias="esforcoEstimadoMinutos")
+    pode_editar_esforco: bool = Field(default=False, alias="podeEditarEsforco")
     quantidade_antes_deadline: int = Field(alias="quantidadeAntesDeadline")
     unidade_prazo: WorkflowUnidadePrazo = Field(alias="unidadePrazo")
     status: DemandaWorkflowEtapaStatus
@@ -335,6 +343,27 @@ class DemandaRead(BaseModel):
     # nunca uma coluna: evita ciclo de FK com `demanda_workflow_etapas` e uma segunda fonte
     # de verdade. Sem etapas, ou todas concluídas, é `None`.
     workflow_etapas: list[DemandaWorkflowEtapaRead] = Field(default_factory=list, alias="workflowEtapas")
+    @computed_field(alias="estimadoConhecidoMinutos")
+    @property
+    def estimado_conhecido_minutos(self) -> int | None:
+        valores = [e.esforco_estimado_minutos for e in self.workflow_etapas if e.esforco_estimado_minutos is not None]
+        return sum(valores) if valores else None
+
+    @computed_field(alias="etapasEstimadas")
+    @property
+    def etapas_estimadas(self) -> int:
+        return sum(e.esforco_estimado_minutos is not None for e in self.workflow_etapas)
+
+    @computed_field(alias="etapasSemEstimativa")
+    @property
+    def etapas_sem_estimativa(self) -> int:
+        return len(self.workflow_etapas) - self.etapas_estimadas
+
+    @computed_field(alias="estimativaCompleta")
+    @property
+    def estimativa_completa(self) -> bool:
+        return bool(self.workflow_etapas) and self.etapas_sem_estimativa == 0
+
     etapa_atual_id: UUID | None = Field(default=None, alias="etapaAtualId")
     # Fase 8C.1 — o acesso a esta demanda veio SÓ do escopo derivado da etapa atual do Workflow (não é do escopo-base): a interface lê tudo e age no
     # Workflow, mas não oferece edição geral (o servidor também recusa). Só o detalhe e as ações do Workflow preenchem; nas listagens é sempre falso.

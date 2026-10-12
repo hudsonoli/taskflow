@@ -27,6 +27,8 @@ class DemandaWorkflowEtapa(Base):
 
     __tablename__ = "demanda_workflow_etapas"
     __table_args__ = (
+        CheckConstraint("esforco_estimado_minutos IS NULL OR esforco_estimado_minutos >= 0",
+                        name="ck_demanda_workflow_etapas_esforco_nao_negativo"),
         CheckConstraint("tipo IN ('execucao', 'aprovacao')", name="ck_demanda_workflow_etapas_tipo"),
         CheckConstraint(
             "unidade_prazo IN ('dias_corridos', 'dias_uteis', 'horas')",
@@ -50,6 +52,7 @@ class DemandaWorkflowEtapa(Base):
 
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
     tipo: Mapped[str] = mapped_column(String(32), nullable=False)
+    esforco_estimado_minutos: Mapped[int | None] = mapped_column(Integer, nullable=True)
     quantidade_antes_deadline: Mapped[int] = mapped_column(Integer, nullable=False)
     unidade_prazo: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)

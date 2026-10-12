@@ -1074,6 +1074,10 @@ class DemandaService:
                         ordem=etapa.ordem,
                         nome=etapa.nome,
                         tipo=etapa.tipo,
+                        esforcoEstimadoMinutos=etapa.esforco_estimado_minutos,
+                        podeEditarEsforco=bool(pode_calcular and usuario is not None and demanda_id not in arquivadas
+                            and pode_avancar_etapa(usuario, usuario_responsavel_ids=usuarios_ids,
+                                departamento_responsavel_ids=departamentos_ids, departamentos_head=departamentos_head)),
                         quantidadeAntesDeadline=etapa.quantidade_antes_deadline,
                         unidadePrazo=etapa.unidade_prazo,
                         status=etapa.status,
@@ -1315,6 +1319,7 @@ class DemandaService:
                 ordem=etapa_modelo.ordem,
                 nome=etapa_modelo.nome,
                 tipo=etapa_modelo.tipo,
+                esforco_estimado_minutos=etapa_modelo.esforco_estimado_minutos,
                 quantidade_antes_deadline=etapa_modelo.quantidade_antes_deadline,
                 unidade_prazo=etapa_modelo.unidade_prazo,
                 status=STATUS_ETAPA_WORKFLOW_PENDENTE,

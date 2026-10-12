@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.esforco import EsforcoMinutos
+
 WorkflowModeloStatus = Literal["ativo", "inativo", "arquivado"]
 WorkflowEtapaTipo = Literal["execucao", "aprovacao"]
 WorkflowUnidadePrazo = Literal["dias_corridos", "dias_uteis", "horas"]
@@ -20,6 +22,7 @@ def ensure_timezone_aware(value: datetime | None) -> datetime | None:
 class WorkflowModeloEtapaWrite(BaseModel):
     nome: str = Field(min_length=1, max_length=255)
     tipo: WorkflowEtapaTipo
+    esforco_estimado_minutos: EsforcoMinutos | None = Field(default=None, alias="esforcoEstimadoMinutos")
     quantidade_antes_deadline: int = Field(alias="quantidadeAntesDeadline", ge=0)
     unidade_prazo: WorkflowUnidadePrazo = Field(alias="unidadePrazo")
     usuario_responsavel_ids: list[UUID] = Field(default_factory=list, alias="usuarioResponsavelIds")
@@ -60,6 +63,7 @@ class WorkflowModeloEtapaRead(BaseModel):
     ordem: int
     nome: str
     tipo: WorkflowEtapaTipo
+    esforco_estimado_minutos: EsforcoMinutos | None = Field(default=None, alias="esforcoEstimadoMinutos")
     quantidade_antes_deadline: int = Field(alias="quantidadeAntesDeadline")
     unidade_prazo: WorkflowUnidadePrazo = Field(alias="unidadePrazo")
     usuario_responsavel_ids: list[UUID] = Field(alias="usuarioResponsavelIds")

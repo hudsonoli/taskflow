@@ -20,6 +20,8 @@ class WorkflowModeloEtapa(Base):
 
     __tablename__ = "workflow_modelo_etapas"
     __table_args__ = (
+        CheckConstraint("esforco_estimado_minutos IS NULL OR esforco_estimado_minutos >= 0",
+                        name="ck_workflow_modelo_etapas_esforco_nao_negativo"),
         CheckConstraint(
             "tipo IN ('execucao', 'aprovacao')",
             name="ck_workflow_modelo_etapas_tipo",
@@ -39,6 +41,7 @@ class WorkflowModeloEtapa(Base):
 
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
     tipo: Mapped[str] = mapped_column(String(32), nullable=False)
+    esforco_estimado_minutos: Mapped[int | None] = mapped_column(Integer, nullable=True)
     quantidade_antes_deadline: Mapped[int] = mapped_column(Integer, nullable=False)
     unidade_prazo: Mapped[str] = mapped_column(String(32), nullable=False)
 

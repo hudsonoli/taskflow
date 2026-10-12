@@ -215,6 +215,7 @@ class WorkflowModeloService:
         try:
             workflow_modelo = self.get_workflow_modelo(db, workflow_modelo_id)
             changed_fields: list[str] = []
+            auditoria_esforco: dict = {}
             updates = data.model_dump(exclude_unset=True, by_alias=False)
             now = agora_utc()
 
@@ -235,6 +236,10 @@ class WorkflowModeloService:
                     str(did) for etapa in data.etapas for did in etapa.departamento_responsavel_ids
                 }
                 self._ensure_departamentos_validos(db, workflow_modelo.empresa_id, departamento_ids)
+                auditoria_esforco = {
+                    "esforcoAnteriorMinutos": [e.esforco_estimado_minutos for e in self.repository.list_etapas(db, workflow_modelo.id)],
+                    "esforcoNovoMinutos": [e.esforco_estimado_minutos for e in data.etapas],
+                }
                 self._substituir_etapas(db, workflow_modelo, data.etapas, now=now)
                 changed_fields.append("etapas")
 
@@ -254,7 +259,7 @@ class WorkflowModeloService:
                     workflow_modelo,
                     DomainEventType.WORKFLOW_MODELO_ALTERADO,
                     actor_usuario_id,
-                    extra_payload={"camposAlterados": changed_fields},
+                    extra_payload={"camposAlterados": changed_fields, **auditoria_esforco},
                     occurred_at=now,
                 )
 
@@ -346,6 +351,7 @@ class WorkflowModeloService:
                 ordem=etapa.ordem,
                 nome=etapa.nome,
                 tipo=etapa.tipo,
+                esforcoEstimadoMinutos=etapa.esforco_estimado_minutos,
                 quantidadeAntesDeadline=etapa.quantidade_antes_deadline,
                 unidadePrazo=etapa.unidade_prazo,
                 usuarioResponsavelIds=responsaveis_por_etapa.get(etapa.id, []),
@@ -399,6 +405,7 @@ class WorkflowModeloService:
                 ordem=index,
                 nome=etapa_data.nome,
                 tipo=etapa_data.tipo,
+                esforco_estimado_minutos=etapa_data.esforco_estimado_minutos,
                 quantidade_antes_deadline=etapa_data.quantidade_antes_deadline,
                 unidade_prazo=etapa_data.unidade_prazo,
                 created_at=now,
