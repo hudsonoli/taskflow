@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.models.empresa import Empresa
 from tests.helpers.api import get
-from tests.test_trafego_carga import _agora_db, _departamento, _sessao, _usuario
+from tests.test_trafego_carga import _agora_db, _agregado_aceita_varias_ativas_por_usuario, _departamento, _sessao, _usuario  # noqa: F401  (autouse: ver docstring lá)
 
 
 def _url(**params: str | int | None) -> str:

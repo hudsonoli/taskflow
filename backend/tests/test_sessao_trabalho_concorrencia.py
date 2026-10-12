@@ -1,21 +1,14 @@
-"""C1 — Concorrência em SessaoTrabalho.open_session.
+"""C1 / 11B.2A — Concorrência em SessaoTrabalho.open_session.
 
-Duas requisições concorrentes para a MESMA chave lógica ((demanda_id, usuario_id) ou
-(demanda_id, departamento_id)) podem executar `get_active_equivalent` (nenhuma ativa) antes
-de qualquer uma commitar, e então colidir no INSERT contra o índice parcial único — sem
-tratamento, a perdedora recebia `IntegrityError` não tratado (500). `open_session` agora
-reexecuta a unidade inteira (relê ativa, encerra por substituição, cria a nova) dentro de um
-SAVEPOINT (`db.begin_nested()`), até 2 tentativas, convergindo pra mesma semântica de duas
-chamadas sequenciais — nunca 409, nunca "retorna a sessão do outro".
+Duas requisições concorrentes podem ler "nenhuma sessão ativa" antes de qualquer uma commitar e colidir no INSERT contra o índice parcial único. Fase 11B.2A:
 
-Os testes de corrida REAL usam duas/quatro `Session` independentes ligadas diretamente a
-`test_engine` (nunca a fixture `db_session`, cujo isolamento por SAVEPOINT-de-teste tornaria a
-concorrência real impossível de observar — mesmo racional de test_referencias.py e
-test_demanda_primeira_resposta.py) e `threading.Barrier` pra maximizar a chance de colisão
-real, sem `time.sleep`. Os testes do invariante do SAVEPOINT (que o Evento da "rota" sobrevive
-ao rollback da tentativa perdedora) usam colisão determinística via monkeypatch — provar isso
-por sorte de timing de thread seria frágil; a técnica aqui é exatamente a mesma classe de
-`patch.object` com captura do método original ANTES do patch, já usada em test_financeiro_visualizar.py.
+- sessão de PESSOA: uma ativa por pessoa em qualquer demanda (índice (empresa_id, usuario_id) WHERE status='ativa'). Quem perde a corrida recebe o MESMO 409
+  (`SessaoTrabalhoConflitoError` / SESSAO_ATIVA_EXISTENTE) de uma segunda abertura sequencial — nunca 500, nunca a sessão do outro, e a vencedora NÃO é encerrada;
+- sessão puramente DEPARTAMENTAL (sem usuário): semântica anterior preservada — a perdedora relê, encerra por substituição e cria a nova (até 2 tentativas).
+
+Os testes de corrida REAL usam duas/quatro `Session` independentes ligadas diretamente a `test_engine` (nunca a fixture `db_session`, cujo isolamento por
+SAVEPOINT-de-teste tornaria a concorrência real impossível de observar) e `threading.Barrier` para maximizar a chance de colisão, sem `time.sleep`. Os testes do
+invariante do SAVEPOINT (o Evento da "rota" sobrevive ao rollback da tentativa perdedora) usam colisão determinística via `patch.object`.
 """
 
 from __future__ import annotations
@@ -37,7 +30,13 @@ from app.models.usuario import Usuario
 from app.repositories.sessao_trabalho_repository import SessaoTrabalhoRepository
 from app.schemas.evento import EventoCreate
 from app.services.evento_service import EventoService
-from app.services.sessao_trabalho_service import STATUS_ATIVA, STATUS_ENCERRADA, SessaoTrabalhoService
+from app.services.sessao_trabalho_service import (
+    CODIGO_SESSAO_ATIVA_EXISTENTE,
+    STATUS_ATIVA,
+    STATUS_ENCERRADA,
+    SessaoTrabalhoConflitoError,
+    SessaoTrabalhoService,
+)
 
 # --------------------------------------------------------------------------------------
 # Auxiliares — mesmo padrão de tests/test_sessao_trabalho.py e tests/test_referencias.py
@@ -189,7 +188,8 @@ def test_mesmo_evento_inicio_id_repetido_continua_idempotente(db_session: Sessio
     assert total == 1
 
 
-def test_abertura_sequencial_encerra_anterior_e_cria_nova(db_session: Session, empresa: Empresa) -> None:
+def test_abertura_sequencial_de_pessoa_e_conflito_e_nao_encerra_a_anterior(db_session: Session, empresa: Empresa) -> None:
+    """11B.2A: antes, abrir de novo na MESMA demanda substituía a sessão em silêncio. Agora é 409 e a primeira continua ativa."""
     usuario = _criar_usuario(db_session, empresa.id)
     demanda_id = str(uuid.uuid4())
     servico = SessaoTrabalhoService()
@@ -198,9 +198,30 @@ def test_abertura_sequencial_encerra_anterior_e_cria_nova(db_session: Session, e
         db_session, empresa_id=empresa.id, demanda_id=demanda_id,
         evento_inicio_id=str(uuid.uuid4()), inicio_em=datetime.now(timezone.utc), usuario_id=usuario.id,
     )
+    with pytest.raises(SessaoTrabalhoConflitoError) as erro:
+        servico.open_session(
+            db_session, empresa_id=empresa.id, demanda_id=demanda_id,
+            evento_inicio_id=str(uuid.uuid4()), inicio_em=datetime.now(timezone.utc), usuario_id=usuario.id,
+        )
+    assert erro.value.codigo == CODIGO_SESSAO_ATIVA_EXISTENTE
+
+    db_session.refresh(primeira)
+    assert primeira.status == STATUS_ATIVA and primeira.fim_em is None and primeira.motivo_encerramento is None
+
+
+def test_abertura_sequencial_departamental_continua_substituindo(db_session: Session, empresa: Empresa) -> None:
+    """Sessão puramente departamental (sem usuário): semântica anterior preservada."""
+    departamento = _criar_departamento(db_session, empresa.id)
+    demanda_id = str(uuid.uuid4())
+    servico = SessaoTrabalhoService()
+
+    primeira = servico.open_session(
+        db_session, empresa_id=empresa.id, demanda_id=demanda_id,
+        evento_inicio_id=str(uuid.uuid4()), inicio_em=datetime.now(timezone.utc), departamento_id=departamento.id,
+    )
     segunda = servico.open_session(
         db_session, empresa_id=empresa.id, demanda_id=demanda_id,
-        evento_inicio_id=str(uuid.uuid4()), inicio_em=datetime.now(timezone.utc), usuario_id=usuario.id,
+        evento_inicio_id=str(uuid.uuid4()), inicio_em=datetime.now(timezone.utc), departamento_id=departamento.id,
     )
 
     db_session.refresh(primeira)
@@ -214,10 +235,9 @@ def test_abertura_sequencial_encerra_anterior_e_cria_nova(db_session: Session, e
 # --------------------------------------------------------------------------------------
 
 
-def test_duas_aberturas_concorrentes_por_usuario_nao_vazam_500_e_tenant_isolado(test_engine) -> None:
-    """Duas empresas, cada uma com sua própria corrida (demanda_id, usuario_id) — prova ao
-    mesmo tempo que a corrida não gera 500 e que a resolução de uma empresa não interfere na
-    outra (nenhum lock/estado global entre requisições)."""
+def test_duas_aberturas_concorrentes_por_usuario_uma_vence_a_outra_e_conflito_e_tenant_isolado(test_engine) -> None:
+    """Duas empresas, cada uma com sua corrida entre duas aberturas do MESMO usuário (demandas diferentes): em cada empresa exatamente uma sessão ativa nasce, a outra
+    abertura recebe o conflito de domínio (nunca 500) e a resolução de uma empresa não interfere na outra."""
     with SessionRaw(bind=test_engine) as setup:
         empresa_a = _criar_empresa(setup)
         usuario_a = _criar_usuario(setup, empresa_a.id)
@@ -227,8 +247,7 @@ def test_duas_aberturas_concorrentes_por_usuario_nao_vazam_500_e_tenant_isolado(
         empresa_b_id, usuario_b_id = empresa_b.id, usuario_b.id
         setup.commit()
 
-    demanda_a = str(uuid.uuid4())
-    demanda_b = str(uuid.uuid4())
+    demandas = [str(uuid.uuid4()) for _ in range(4)]
     barreira = threading.Barrier(4)
     resultados: dict[int, str] = {}
     erros: dict[int, BaseException] = {}
@@ -250,10 +269,10 @@ def test_duas_aberturas_concorrentes_por_usuario_nao_vazam_500_e_tenant_isolado(
             erros[indice] = exc
 
     threads = [
-        threading.Thread(target=worker, args=(0, empresa_a_id, demanda_a, usuario_a_id)),
-        threading.Thread(target=worker, args=(1, empresa_a_id, demanda_a, usuario_a_id)),
-        threading.Thread(target=worker, args=(2, empresa_b_id, demanda_b, usuario_b_id)),
-        threading.Thread(target=worker, args=(3, empresa_b_id, demanda_b, usuario_b_id)),
+        threading.Thread(target=worker, args=(0, empresa_a_id, demandas[0], usuario_a_id)),
+        threading.Thread(target=worker, args=(1, empresa_a_id, demandas[1], usuario_a_id)),
+        threading.Thread(target=worker, args=(2, empresa_b_id, demandas[2], usuario_b_id)),
+        threading.Thread(target=worker, args=(3, empresa_b_id, demandas[3], usuario_b_id)),
     ]
     try:
         for t in threads:
@@ -261,14 +280,19 @@ def test_duas_aberturas_concorrentes_por_usuario_nao_vazam_500_e_tenant_isolado(
         for t in threads:
             t.join()
 
-        assert erros == {}, f"pelo menos uma abertura concorrente explodiu: {erros}"
-        assert len(resultados) == 4
+        # nenhum 500: toda falha é o conflito de domínio, e há exatamente uma por empresa
+        assert all(isinstance(e, SessaoTrabalhoConflitoError) and e.codigo == CODIGO_SESSAO_ATIVA_EXISTENTE for e in erros.values()), erros
+        assert len(erros) == 2 and len(resultados) == 2
+        assert {i for i in resultados if i < 2} and {i for i in resultados if i >= 2}  # um vencedor em cada empresa
 
-        assert _contar_ativas(test_engine, demanda_id=demanda_a, usuario_id=usuario_a_id, departamento_id=None) == 1
-        assert _contar_ativas(test_engine, demanda_id=demanda_b, usuario_id=usuario_b_id, departamento_id=None) == 1
+        with SessionRaw(bind=test_engine) as verificacao:
+            for empresa_id, usuario_id in ((empresa_a_id, usuario_a_id), (empresa_b_id, usuario_b_id)):
+                assert verificacao.execute(
+                    text("SELECT count(*) FROM sessoes_trabalho WHERE empresa_id=:e AND usuario_id=:u AND status='ativa'"),
+                    {"e": empresa_id, "u": usuario_id},
+                ).scalar_one() == 1
 
-        # Invariante de auditoria: TODA sessão criada pelas 4 tentativas aponta pra um Evento
-        # que realmente existe — nenhum evento_inicio_id órfão, mesmo sob corrida real.
+        # Invariante de auditoria: toda sessão criada aponta pra um Evento que realmente existe.
         for sessao_id in resultados.values():
             with SessionRaw(bind=test_engine) as verificacao:
                 evento_inicio_id = verificacao.execute(
@@ -339,10 +363,9 @@ def test_duas_aberturas_concorrentes_por_departamento_nao_vazam_500(test_engine)
 
 
 def test_savepoint_preserva_evento_da_transacao_externa_apos_colisao(test_engine) -> None:
-    """Força a 1ª tentativa a "não enxergar" uma sessão ativa que JÁ FOI commitada por outra
-    conexão (fiel à janela real de corrida), garantindo IntegrityError na 1ª tentativa e
-    provando que o Evento da "rota" (nesta mesma sessão, commit=False) sobrevive ao rollback
-    do SAVEPOINT — não é um rollback da Session inteira."""
+    """Força a verificação de "já existe sessão ativa" a não enxergar uma sessão JÁ COMMITADA por outra conexão (fiel à janela real de corrida): o INSERT colide
+    no índice único do banco, a pessoa recebe o conflito de domínio e o Evento da "rota" (nesta mesma sessão, commit=False) sobrevive ao rollback do SAVEPOINT —
+    não é um rollback da Session inteira. A vencedora continua ativa e nenhuma sessão extra é criada."""
     with SessionRaw(bind=test_engine) as setup:
         empresa = _criar_empresa(setup)
         usuario = _criar_usuario(setup, empresa.id)
@@ -350,9 +373,9 @@ def test_savepoint_preserva_evento_da_transacao_externa_apos_colisao(test_engine
         setup.commit()
 
     demanda_id = str(uuid.uuid4())
+    outra_demanda_id = str(uuid.uuid4())
 
     try:
-        # Sessão "vencedora": já ativa e commitada por outra conexão antes da nossa chamada.
         with SessionRaw(bind=test_engine) as vencedor_sessao:
             evento_vencedor_id = _criar_evento_sessao(
                 vencedor_sessao, empresa_id=empresa_id, demanda_id=demanda_id, usuario_id=usuario_id
@@ -365,46 +388,45 @@ def test_savepoint_preserva_evento_da_transacao_externa_apos_colisao(test_engine
             vencedor_id = vencedor.id
 
         real_repo = SessaoTrabalhoRepository()
-        original_get_active = real_repo.get_active_equivalent
+        original = real_repo.get_active_by_usuario
         chamadas = {"n": 0}
 
-        def get_active_forcando_colisao_na_primeira(db, **kwargs):
+        def cego_na_primeira(db, **kwargs):
             chamadas["n"] += 1
             if chamadas["n"] == 1:
                 return None  # finge não ver a sessão do "vencedor", já commitada
-            return original_get_active(db, **kwargs)
+            return original(db, **kwargs)
 
         with SessionRaw(bind=test_engine) as nossa_sessao:
             evento_id = _criar_evento_sessao(
-                nossa_sessao, empresa_id=empresa_id, demanda_id=demanda_id, usuario_id=usuario_id
+                nossa_sessao, empresa_id=empresa_id, demanda_id=outra_demanda_id, usuario_id=usuario_id
             )
-            with patch.object(real_repo, "get_active_equivalent", side_effect=get_active_forcando_colisao_na_primeira):
-                nossa = SessaoTrabalhoService(repository=real_repo).open_session(
-                    nossa_sessao, empresa_id=empresa_id, demanda_id=demanda_id,
-                    evento_inicio_id=evento_id, inicio_em=datetime.now(timezone.utc), usuario_id=usuario_id,
-                )
-            nossa_sessao.commit()
-            nossa_id = nossa.id
+            with patch.object(real_repo, "get_active_by_usuario", side_effect=cego_na_primeira):
+                with pytest.raises(SessaoTrabalhoConflitoError) as erro:
+                    SessaoTrabalhoService(repository=real_repo).open_session(
+                        nossa_sessao, empresa_id=empresa_id, demanda_id=outra_demanda_id,
+                        evento_inicio_id=evento_id, inicio_em=datetime.now(timezone.utc), usuario_id=usuario_id,
+                    )
+            assert erro.value.codigo == CODIGO_SESSAO_ATIVA_EXISTENTE
+            nossa_sessao.commit()  # o que a rota NÃO faria no erro; aqui serve para provar que o Evento pendente não foi desfeito pelo SAVEPOINT
 
-        assert chamadas["n"] == 2, "a 1a tentativa precisa colidir e a 2a precisa de fato reler o estado"
-
-        # O Evento desta chamada (equivalente ao que a rota cria com commit=False ANTES de
-        # chamar open_session) sobrevive — não foi um rollback da Session inteira que o apagou.
+        assert chamadas["n"] == 2, "1a verificação cega, colisão no banco, 2a verificação enxerga a vencedora"
         assert _evento_existe(test_engine, evento_id)
-        assert _status_sessao(test_engine, nossa_id) == STATUS_ATIVA
-        assert _status_sessao(test_engine, vencedor_id) == STATUS_ENCERRADA
-        assert _contar_ativas(test_engine, demanda_id=demanda_id, usuario_id=usuario_id, departamento_id=None) == 1
+        assert _status_sessao(test_engine, vencedor_id) == STATUS_ATIVA
+        with SessionRaw(bind=test_engine) as verificacao:
+            assert verificacao.execute(
+                text("SELECT count(*) FROM sessoes_trabalho WHERE empresa_id=:e AND usuario_id=:u"), {"e": empresa_id, "u": usuario_id}
+            ).scalar_one() == 1
     finally:
         _limpar(test_engine, empresa_ids=[empresa_id])
 
 
-def test_segunda_colisao_consecutiva_propaga_sem_loop_infinito(test_engine) -> None:
-    """Se a contenção persistir na 2a tentativa também, a exceção deve propagar — nunca um
-    3o retry, nunca engolida silenciosamente."""
+def test_segunda_colisao_consecutiva_departamental_propaga_sem_loop_infinito(test_engine) -> None:
+    """Sessão departamental: se a contenção persistir na 2a tentativa também, a exceção deve propagar — nunca um 3o retry, nunca engolida silenciosamente."""
     with SessionRaw(bind=test_engine) as setup:
         empresa = _criar_empresa(setup)
-        usuario = _criar_usuario(setup, empresa.id)
-        empresa_id, usuario_id = empresa.id, usuario.id
+        departamento = _criar_departamento(setup, empresa.id)
+        empresa_id, departamento_id = empresa.id, departamento.id
         setup.commit()
 
     demanda_id = str(uuid.uuid4())
@@ -412,11 +434,11 @@ def test_segunda_colisao_consecutiva_propaga_sem_loop_infinito(test_engine) -> N
     try:
         with SessionRaw(bind=test_engine) as vencedor_sessao:
             evento_vencedor_id = _criar_evento_sessao(
-                vencedor_sessao, empresa_id=empresa_id, demanda_id=demanda_id, usuario_id=usuario_id
+                vencedor_sessao, empresa_id=empresa_id, demanda_id=demanda_id, usuario_id=None
             )
             SessaoTrabalhoService().open_session(
                 vencedor_sessao, empresa_id=empresa_id, demanda_id=demanda_id,
-                evento_inicio_id=evento_vencedor_id, inicio_em=datetime.now(timezone.utc), usuario_id=usuario_id,
+                evento_inicio_id=evento_vencedor_id, inicio_em=datetime.now(timezone.utc), departamento_id=departamento_id,
             )
             vencedor_sessao.commit()
 
@@ -429,13 +451,13 @@ def test_segunda_colisao_consecutiva_propaga_sem_loop_infinito(test_engine) -> N
 
         with SessionRaw(bind=test_engine) as nossa_sessao:
             evento_id = _criar_evento_sessao(
-                nossa_sessao, empresa_id=empresa_id, demanda_id=demanda_id, usuario_id=usuario_id
+                nossa_sessao, empresa_id=empresa_id, demanda_id=demanda_id, usuario_id=None
             )
             with patch.object(real_repo, "get_active_equivalent", side_effect=get_active_sempre_cego):
                 with pytest.raises(IntegrityError):
                     SessaoTrabalhoService(repository=real_repo).open_session(
                         nossa_sessao, empresa_id=empresa_id, demanda_id=demanda_id,
-                        evento_inicio_id=evento_id, inicio_em=datetime.now(timezone.utc), usuario_id=usuario_id,
+                        evento_inicio_id=evento_id, inicio_em=datetime.now(timezone.utc), departamento_id=departamento_id,
                     )
 
         assert chamadas["n"] == 2, "exatamente 2 tentativas — nunca mais, nunca menos"

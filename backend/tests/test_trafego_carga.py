@@ -29,6 +29,15 @@ from app.models.usuario import Usuario
 from tests.helpers.api import get
 
 
+@pytest.fixture(autouse=True)
+def _agregado_aceita_varias_ativas_por_usuario(db_session: Session) -> None:
+    """Fase 11B.2A: pelo caminho de abertura uma pessoa tem NO MÁXIMO uma sessão ativa (índice parcial único empresa+usuário). Esta suíte testa o SQL do
+    AGREGADO (agrupamento/soma/desempate sobre muitas linhas por usuário), que precisa continuar correto sobre qualquer conjunto de linhas — inclusive o que o
+    índice agora impede de nascer. Por isso o índice é derrubado SÓ dentro da transação do teste: DDL do PostgreSQL é transacional e o `db_session` sempre faz
+    rollback ao final, então nada vaza para os outros testes (a cobertura do índice está em test_sessao_trabalho_integridade.py)."""
+    db_session.execute(text("DROP INDEX IF EXISTS uq_sessoes_trabalho_ativa_empresa_usuario"))
+
+
 def _agora_db(db: Session) -> datetime:
     """`NOW()` da transação de teste — o mesmo relógio que o SQL do agregado usa."""
     return db.execute(text("SELECT now()")).scalar_one()

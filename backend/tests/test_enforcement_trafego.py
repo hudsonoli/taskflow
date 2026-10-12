@@ -50,12 +50,20 @@ def _override(db: Session, *, usuario: Usuario, permissao: str, efeito: str) -> 
     return override
 
 
-def _abrir_payload(empresa_id: str, usuario_id: str) -> dict:
-    return {"empresaId": empresa_id, "demandaId": str(uuid.uuid4()), "usuarioId": usuario_id}
+def _abrir_payload(empresa_id: str, usuario_id: str, demanda_id: str | None = None) -> dict:
+    # `demanda_id` omitido = id aleatório: serve só para os casos que param ANTES da validação da demanda (403 de permissão).
+    return {"empresaId": empresa_id, "demandaId": demanda_id or str(uuid.uuid4()), "usuarioId": usuario_id}
+
+
+def _demanda_real(client: TestClient) -> str:
+    # Fase 11B.2A: a abertura valida a demanda no servidor — o teste precisa de uma demanda real da empresa.
+    resposta = client.post("/demandas", json={"nome": f"Demanda {uuid.uuid4().hex[:8]}"})
+    assert resposta.status_code == 201, resposta.text
+    return resposta.json()["id"]
 
 
 def _abrir(client: TestClient, empresa_id: str, usuario_id: str) -> dict:
-    resposta = client.post("/sessoes-trabalho/abrir", json=_abrir_payload(empresa_id, usuario_id))
+    resposta = client.post("/sessoes-trabalho/abrir", json=_abrir_payload(empresa_id, usuario_id, _demanda_real(client)))
     assert resposta.status_code == 201, resposta.text
     return resposta.json()
 
@@ -293,7 +301,9 @@ def test_abrir_com_usuario_de_outra_empresa_rejeitado(
     db_session: Session, client_admin: TestClient, empresa: Empresa, outra_empresa: Empresa
 ) -> None:
     usuario_outra_empresa = _usuario(db_session, outra_empresa)
-    resposta = client_admin.post("/sessoes-trabalho/abrir", json=_abrir_payload(empresa.id, usuario_outra_empresa.id))
+    resposta = client_admin.post(
+        "/sessoes-trabalho/abrir", json=_abrir_payload(empresa.id, usuario_outra_empresa.id, _demanda_real(client_admin))
+    )
     assert resposta.status_code == 422
 
 
@@ -307,7 +317,9 @@ def test_lista_nao_gera_n_mais_1_de_overrides(
     client_admin: TestClient, db_session: Session, empresa: Empresa, usuario_operador: Usuario, usuario_admin: Usuario
 ) -> None:
     for _ in range(5):
-        _abrir(client_admin, empresa.id, usuario_operador.id)
+        sessao = _abrir(client_admin, empresa.id, usuario_operador.id)
+        # uma sessão ativa por pessoa (11B.2A): fecha cada uma para abrir a seguinte — a lista continua com 5 sessões
+        assert client_admin.post(f"/sessoes-trabalho/{sessao['id']}/fechar", json={"motivoEncerramento": "conclusao"}).status_code == 200
 
     chamadas = []
 
