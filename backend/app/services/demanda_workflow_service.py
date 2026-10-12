@@ -36,6 +36,7 @@ from app.models.usuario import Usuario
 from app.repositories.aprovacao_externa_repository import AprovacaoExternaRepository
 from app.repositories.demanda_repository import DemandaRepository
 from app.services.demanda_service import DemandaService
+from app.services.sessao_trabalho_service import MOTIVO_CONCLUSAO, MOTIVO_MUDANCA_ETAPA, SessaoTrabalhoService
 
 AcaoEtapa = Literal["concluir", "aprovar"]
 
@@ -140,8 +141,11 @@ class DemandaWorkflowService:
         repository: DemandaRepository | None = None,
         demanda_service: DemandaService | None = None,
         aprovacao_repository: AprovacaoExternaRepository | None = None,
+        sessao_service: SessaoTrabalhoService | None = None,
     ) -> None:
         self.repository = repository or DemandaRepository()
+        # Fase 11B.2A — concluir/aprovar/rejeitar uma etapa encerra as sessões ativas LIGADAS a ela (nunca abre uma nova).
+        self.sessao_service = sessao_service or SessaoTrabalhoService()
         self.demanda_service = demanda_service or DemandaService(repository=self.repository)
         self.aprovacao_repository = aprovacao_repository or AprovacaoExternaRepository()
 
@@ -202,6 +206,15 @@ class DemandaWorkflowService:
             anterior.updated_at = now
             demanda.updated_at = now
             db.flush()
+            # sessão ativa da etapa de aprovação rejeitada acaba aqui; a etapa de retorno é REABERTA sem sessão — quem vai trabalhar precisa iniciar a sua
+            self.sessao_service.encerrar_ativas_da_demanda(
+                db,
+                empresa_id=demanda.empresa_id,
+                demanda_id=demanda.id,
+                motivo_encerramento=MOTIVO_MUDANCA_ETAPA,
+                fim_em=now,
+                workflow_etapa_id=etapa.id,
+            )
 
             self.demanda_service.publicar_evento_demanda(
                 db,
@@ -355,6 +368,16 @@ class DemandaWorkflowService:
                 proxima.updated_at = now
             demanda.updated_at = now
             db.flush()
+            # Fase 11B.2A — a sessão ativa DESTA etapa termina com ela (o tempo não passa a contar na etapa seguinte); a próxima etapa começa sem sessão.
+            # Último passo do workflow = conclusão; senão, mudança de etapa.
+            self.sessao_service.encerrar_ativas_da_demanda(
+                db,
+                empresa_id=demanda.empresa_id,
+                demanda_id=demanda.id,
+                motivo_encerramento=MOTIVO_CONCLUSAO if proxima is None else MOTIVO_MUDANCA_ETAPA,
+                fim_em=now,
+                workflow_etapa_id=etapa.id,
+            )
 
             # 6) UM evento por ação, na mesma transação
             self.demanda_service.publicar_evento_demanda(

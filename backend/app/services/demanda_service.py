@@ -40,6 +40,13 @@ from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.regra_expediente_service import RegraExpedienteService
+from app.services.sessao_trabalho_service import (
+    MOTIVO_ARQUIVAMENTO,
+    MOTIVO_PAUSA,
+    MOTIVO_POR_STATUS_DEMANDA,
+    MOTIVO_TROCA_RESPONSAVEL,
+    SessaoTrabalhoService,
+)
 from app.services.sla_resolucao_service import resolver_e_calcular_sla
 
 # `tarefa` no gerador de referência (prefixo T) e `demanda` no contador operacional: são
@@ -190,8 +197,11 @@ class DemandaService:
         event_publisher: DomainEventPublisher | None = None,
         regra_expediente_service: RegraExpedienteService | None = None,
         regra_expediente: RegraExpediente | None = None,
+        sessao_service: SessaoTrabalhoService | None = None,
     ) -> None:
         self.repository = repository or DemandaRepository()
+        # Fase 11B.2A — transições da Demanda que tornam impossível continuar o trabalho encerram as sessões ativas (na MESMA transação).
+        self.sessao_service = sessao_service or SessaoTrabalhoService()
         self.cliente_repository = cliente_repository or ClienteRepository()
         self.projeto_repository = projeto_repository or ProjetoRepository()
         self.usuario_repository = usuario_repository or UsuarioRepository()
@@ -822,6 +832,9 @@ class DemandaService:
                 )
                 for tipo, payload in eventos:
                     self._publish_event(db, demanda, tipo, actor_usuario_id, extra_payload=payload, occurred_at=now)
+                self._encerrar_sessoes_por_transicao(
+                    db, demanda, status_anterior=status_anterior, status_final=status_final, eventos=eventos, quando=now
+                )
 
             db.commit()
             db.refresh(demanda)
@@ -860,6 +873,9 @@ class DemandaService:
             self._publish_event(
                 db, demanda, DomainEventType.DEMANDA_ARQUIVADA, actor_usuario_id,
                 extra_payload={"motivoArquivamento": motivo_arquivamento}, occurred_at=now,
+            )
+            self.sessao_service.encerrar_ativas_da_demanda(
+                db, empresa_id=demanda.empresa_id, demanda_id=demanda.id, motivo_encerramento=MOTIVO_ARQUIVAMENTO, fim_em=now
             )
             db.commit()
             db.refresh(demanda)
@@ -1484,6 +1500,41 @@ class DemandaService:
     # ----------------------------------------------------------------------------------
     # Vínculos
     # ----------------------------------------------------------------------------------
+
+    def _encerrar_sessoes_por_transicao(
+        self,
+        db: Session,
+        demanda: Demanda,
+        *,
+        status_anterior: str,
+        status_final: str,
+        eventos: list[tuple[DomainEventType, dict]],
+        quando: datetime,
+    ) -> None:
+        """Fase 11B.2A — sessões de trabalho ATIVAS desta demanda não sobrevivem a (a) sair de `em_execucao` (pausa, bloqueio, aguardando cliente, conclusão,
+        cancelamento, volta a rascunho/planejada) nem a (b) perder o responsável: usuário/departamento REMOVIDO da demanda tem a sessão dele encerrada
+        (`troca_responsavel`); o novo responsável começa do zero. Idempotente; só esta demanda; mesma transação (o chamador faz o commit)."""
+        if status_final != status_anterior and status_final != STATUS_EM_EXECUCAO:
+            self.sessao_service.encerrar_ativas_da_demanda(
+                db,
+                empresa_id=demanda.empresa_id,
+                demanda_id=demanda.id,
+                motivo_encerramento=MOTIVO_POR_STATUS_DEMANDA.get(status_final, MOTIVO_PAUSA),
+                fim_em=quando,
+            )
+            return  # todas as ativas da demanda já foram encerradas; remover responsáveis não tem mais o que encerrar
+        usuarios = [p["usuarioId"] for tipo, p in eventos if tipo == DomainEventType.DEMANDA_RESPONSAVEL_REMOVIDO]
+        departamentos = [p["departamentoId"] for tipo, p in eventos if tipo == DomainEventType.DEMANDA_DEPARTAMENTO_REMOVIDO]
+        if usuarios or departamentos:
+            self.sessao_service.encerrar_ativas_da_demanda(
+                db,
+                empresa_id=demanda.empresa_id,
+                demanda_id=demanda.id,
+                motivo_encerramento=MOTIVO_TROCA_RESPONSAVEL,
+                fim_em=quando,
+                usuario_ids=usuarios,
+                departamento_ids=departamentos,
+            )
 
     def _sincronizar_responsaveis(
         self, db: Session, demanda: Demanda, desejados: list[str]

@@ -11,9 +11,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.orm import Session
 
+from app.models.demanda import Demanda
+from app.models.demanda_workflow_etapa import DemandaWorkflowEtapa
 from app.models.sessao_trabalho import SessaoTrabalho
 
 
@@ -267,6 +269,59 @@ class SessaoTrabalhoRepository:
         statement = select(SessaoTrabalho).where(SessaoTrabalho.evento_fim_id == evento_fim_id)
         return db.scalar(statement)
 
+    def get_demanda(self, db: Session, demanda_id: str) -> Demanda | None:
+        return db.get(Demanda, demanda_id)
+
+    def get_etapa(self, db: Session, etapa_id: str) -> DemandaWorkflowEtapa | None:
+        return db.get(DemandaWorkflowEtapa, etapa_id)
+
+    def demanda_tem_etapas(self, db: Session, demanda_id: str) -> bool:
+        return db.scalar(select(DemandaWorkflowEtapa.id).where(DemandaWorkflowEtapa.demanda_id == demanda_id).limit(1)) is not None
+
+    def get_active_by_usuario(self, db: Session, *, empresa_id: str, usuario_id: str) -> SessaoTrabalho | None:
+        """A sessão ATIVA da pessoa, em qualquer demanda (regra: uma sessão ativa por pessoa)."""
+        return db.scalar(
+            select(SessaoTrabalho).where(
+                SessaoTrabalho.empresa_id == empresa_id,
+                SessaoTrabalho.usuario_id == usuario_id,
+                SessaoTrabalho.status == "ativa",
+            )
+        )
+
+    def listar_ativas_para_encerramento(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        demanda_id: str,
+        usuario_ids: Sequence[str] | None = None,
+        departamento_ids: Sequence[str] | None = None,
+        workflow_etapa_id: str | None = None,
+    ) -> list[SessaoTrabalho]:
+        """Sessões ATIVAS de UMA demanda (nunca de outra), travadas (`FOR UPDATE`) para o encerramento automático: duas transições concorrentes não
+        fecham a mesma sessão duas vezes — quem espera o lock relê o estado e já a encontra encerrada (predicado `status = 'ativa'` reavaliado).
+
+        Sem filtro de pessoa/departamento = todas da demanda. `usuario_ids` = sessões desses usuários; `departamento_ids` = sessões PURAMENTE departamentais
+        (sem usuário) desses departamentos; passando os dois, a união. `workflow_etapa_id` restringe às sessões ligadas àquela etapa."""
+        statement = select(SessaoTrabalho).where(
+            SessaoTrabalho.empresa_id == empresa_id,
+            SessaoTrabalho.demanda_id == demanda_id,
+            SessaoTrabalho.status == "ativa",
+        )
+        if workflow_etapa_id is not None:
+            statement = statement.where(SessaoTrabalho.workflow_etapa_id == workflow_etapa_id)
+        if usuario_ids is not None or departamento_ids is not None:
+            filtros = []
+            if usuario_ids:
+                filtros.append(SessaoTrabalho.usuario_id.in_(list(usuario_ids)))
+            if departamento_ids:
+                filtros.append(and_(SessaoTrabalho.usuario_id.is_(None), SessaoTrabalho.departamento_id.in_(list(departamento_ids))))
+            if not filtros:
+                return []
+            statement = statement.where(or_(*filtros))
+        statement = statement.order_by(SessaoTrabalho.inicio_em.asc(), SessaoTrabalho.id.asc())
+        return list(db.scalars(statement.with_for_update().execution_options(populate_existing=True)).all())
+
     def get_active_equivalent(
         self,
         db: Session,
@@ -328,7 +383,7 @@ class SessaoTrabalhoRepository:
         return list(db.scalars(statement).all())
 
     def horas_departamento(
-        self, db: Session, *, empresa_id: str, departamento_id: str
+        self, db: Session, *, empresa_id: str, departamento_id: str, as_of: datetime
     ) -> tuple[float, int]:
         """Agregado em SQL — nunca busca sessões individuais para o chamador somar.
 
@@ -346,10 +401,19 @@ class SessaoTrabalhoRepository:
 
         Sessão ENCERRADA usa `duracao_segundos`, já calculado no fechamento — não recalcula.
         Sessão ainda ATIVA (`duracao_segundos IS NULL`) calcula ao vivo:
-        `EXTRACT(EPOCH FROM (NOW() - inicio_em))`, com `GREATEST(0, ...)` (mesma defesa que o
+        `EXTRACT(EPOCH FROM (:as_of - inicio_em))`, com `GREATEST(0, ...)` (mesma defesa que o
         frontend fazia com `Math.max(0, …)` contra relógio adiantado) e `FLOOR(...)` (mesmo
-        truncamento de `Math.floor`, não arredondamento). `NOW()` e `inicio_em` são os dois
-        `timestamptz` — a subtração já é em UTC, sem conversão de fuso.
+        truncamento de `Math.floor`, não arredondamento). `as_of` é UM instante só por resposta
+        (informado por quem chama), `timestamptz` como `inicio_em` — a subtração já é em UTC.
+
+        ## Fase 11B.2A
+
+        Sessão `cancelada` NUNCA entra como realizado (antes entrava, e como não tem duração persistida
+        seria contada como tempo ao vivo crescendo para sempre). Uma sessão conta UMA vez, mesmo sendo
+        pertinente ao departamento pelas duas regras (pessoa lotada OU vínculo direto): o `OR` está no
+        predicado de linha, não numa junção — sessão puramente departamental não é multiplicada pelos
+        membros do departamento. O recorte por lotação ATUAL do usuário é limitação conhecida (P2):
+        a sessão de pessoa não persiste o departamento do momento da execução.
         """
         statement = text(
             """
@@ -357,12 +421,13 @@ class SessaoTrabalhoRepository:
                 COALESCE(SUM(
                     CASE
                         WHEN s.duracao_segundos IS NOT NULL THEN s.duracao_segundos
-                        ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - s.inicio_em))))
+                        ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (CAST(:as_of AS timestamptz) - s.inicio_em))))
                     END
                 ), 0) AS segundos_totais,
                 COUNT(*) AS sessoes_consideradas
             FROM sessoes_trabalho s
             WHERE s.empresa_id = :empresa_id
+              AND s.status <> 'cancelada'
               AND (
                 s.usuario_id IN (
                     SELECT id FROM usuarios
@@ -373,7 +438,7 @@ class SessaoTrabalhoRepository:
             """
         )
         resultado = db.execute(
-            statement, {"empresa_id": empresa_id, "departamento_id": departamento_id}
+            statement, {"empresa_id": empresa_id, "departamento_id": departamento_id, "as_of": as_of}
         ).one()
         horas_consumidas = float(resultado.segundos_totais) / 3600
         return horas_consumidas, int(resultado.sessoes_consideradas)

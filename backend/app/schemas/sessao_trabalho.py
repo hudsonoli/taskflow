@@ -14,6 +14,7 @@ MotivoEncerramento = Literal[
     "cancelamento",
     "troca_responsavel",
     "substituicao_sessao_ativa",
+    "arquivamento",
 ]
 
 

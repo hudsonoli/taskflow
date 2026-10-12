@@ -54,6 +54,16 @@ class SessaoTrabalho(Base):
             postgresql_where=text("usuario_id IS NOT NULL AND status = 'ativa'"),
             sqlite_where=text("usuario_id IS NOT NULL AND status = 'ativa'"),
         ),
+        # Fase 11B.2A — uma pessoa não executa duas sessões ao mesmo tempo (em qualquer demanda). Proteção de corrida no banco; a regra de produto
+        # (409 SESSAO_ATIVA_EXISTENTE) é aplicada antes, no service. Sessão departamental (usuario_id NULL) fica fora.
+        Index(
+            "uq_sessoes_trabalho_ativa_empresa_usuario",
+            "empresa_id",
+            "usuario_id",
+            unique=True,
+            postgresql_where=text("usuario_id IS NOT NULL AND status = 'ativa'"),
+            sqlite_where=text("usuario_id IS NOT NULL AND status = 'ativa'"),
+        ),
         Index(
             "uq_sessoes_trabalho_ativa_demanda_departamento",
             "demanda_id",

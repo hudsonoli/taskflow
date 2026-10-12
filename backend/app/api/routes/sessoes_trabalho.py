@@ -44,7 +44,12 @@ from app.schemas.sessao_trabalho import (
     SessaoTrabalhoTrafegoResumoRead,
 )
 from app.services.evento_service import EventoService
-from app.services.sessao_trabalho_service import SessaoTrabalhoDepartamentoNaoEncontradoError, SessaoTrabalhoService
+from app.services.sessao_trabalho_service import (
+    SessaoTrabalhoConflitoError,
+    SessaoTrabalhoDemandaNaoEncontradaError,
+    SessaoTrabalhoDepartamentoNaoEncontradoError,
+    SessaoTrabalhoService,
+)
 
 router = APIRouter(
     prefix="/sessoes-trabalho",
@@ -148,7 +153,7 @@ def abrir_sessao(
         commit=False,
     )
     try:
-        sessao = sessao_service.open_session(
+        sessao = sessao_service.abrir(
             db,
             empresa_id=empresa_id,
             agencia_id=payload.agencia_id,
@@ -159,6 +164,17 @@ def abrir_sessao(
             evento_inicio_id=evento.id,
             inicio_em=agora,
         )
+    except SessaoTrabalhoDemandaNaoEncontradaError as exc:
+        # inexistente OU de outra empresa: 404 nos dois casos (nunca confirma existência cross-tenant)
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except SessaoTrabalhoConflitoError as exc:
+        # 409 estruturado (Fase 11B.2A): `code` estável (SESSAO_ATIVA_EXISTENTE / DEMANDA_NAO_EXECUTAVEL) — a UI não depende do texto. Nunca expõe a
+        # sessão ativa nem dados de outra empresa; a anterior NÃO é encerrada.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"code": exc.codigo, "message": str(exc)}
+        ) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

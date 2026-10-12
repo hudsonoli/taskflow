@@ -5,11 +5,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.escopo import EscopoHorasNaoAutorizadoError, pode_consultar_horas_departamento
+from app.schemas.evento import EventoCreate
 from app.models.sessao_trabalho import SessaoTrabalho
 from app.models.usuario import Usuario
 from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.sessao_trabalho_repository import FiltrosSessaoAvancados, SessaoTrabalhoRepository
 from app.repositories.usuario_repository import UsuarioRepository
+from app.services.evento_service import EventoService
 
 # Mesmo conjunto usado em Projeto/Demanda: um usuário nestes estados não pode ser DEFINIDO
 # como responsável novo de uma sessão. Vínculo histórico (sessão já existente) não é afetado.
@@ -29,6 +31,7 @@ MOTIVO_CONCLUSAO = "conclusao"
 MOTIVO_CANCELAMENTO = "cancelamento"
 MOTIVO_TROCA_RESPONSAVEL = "troca_responsavel"
 MOTIVO_SUBSTITUICAO_SESSAO_ATIVA = "substituicao_sessao_ativa"
+MOTIVO_ARQUIVAMENTO = "arquivamento"
 MOTIVOS_ENCERRAMENTO = frozenset(
     {
         MOTIVO_PAUSA,
@@ -39,8 +42,30 @@ MOTIVOS_ENCERRAMENTO = frozenset(
         MOTIVO_CANCELAMENTO,
         MOTIVO_TROCA_RESPONSAVEL,
         MOTIVO_SUBSTITUICAO_SESSAO_ATIVA,
+        MOTIVO_ARQUIVAMENTO,
     }
 )
+
+# Fase 11B.2A — estados da Demanda em que NÃO se abre sessão de trabalho (e em que nenhuma sessão ativa pode continuar): o trabalho não é executável.
+# `rascunho`/`planejada`/`em_execucao` continuam permitidos (o trabalho pode começar de qualquer um deles).
+STATUS_DEMANDA_NAO_EXECUTAVEL = frozenset(
+    {"arquivada", "concluida", "cancelada", "pausada", "bloqueada", "aguardando_cliente"}
+)
+# Transição de status da Demanda -> motivo do encerramento automático (as sessões ativas acabam antes de o tempo "improdutivo" correr).
+MOTIVO_POR_STATUS_DEMANDA = {
+    "pausada": MOTIVO_PAUSA,
+    "bloqueada": MOTIVO_BLOQUEIO,
+    "aguardando_cliente": MOTIVO_AGUARDANDO_CLIENTE,
+    "concluida": MOTIVO_CONCLUSAO,
+    "cancelada": MOTIVO_CANCELAMENTO,
+    "arquivada": MOTIVO_ARQUIVAMENTO,
+    # voltar a rascunho/planejada interrompe o trabalho como uma pausa
+    "rascunho": MOTIVO_PAUSA,
+    "planejada": MOTIVO_PAUSA,
+}
+
+CODIGO_SESSAO_ATIVA_EXISTENTE = "SESSAO_ATIVA_EXISTENTE"
+CODIGO_DEMANDA_NAO_EXECUTAVEL = "DEMANDA_NAO_EXECUTAVEL"
 
 
 def utc_now() -> datetime:
@@ -67,16 +92,87 @@ class SessaoTrabalhoDepartamentoNaoEncontradoError(ValueError):
     SessaoTrabalhoDepartamentoInvalidoError, que é sobre abrir sessão nova, não consultar."""
 
 
+class SessaoTrabalhoDemandaNaoEncontradaError(LookupError):
+    """demandaId inexistente OU de outra empresa — 404 nos dois casos (existência cross-tenant não se confirma)."""
+
+
+class SessaoTrabalhoEtapaInvalidaError(ValueError):
+    """workflowEtapaId inexistente, de outra demanda ou de outra empresa (422, mensagem única: não revela qual)."""
+
+
+class SessaoTrabalhoConflitoError(RuntimeError):
+    """Conflito de domínio previsível (409): `codigo` estável para a UI, `str(exc)` legível."""
+
+    def __init__(self, codigo: str, mensagem: str) -> None:
+        super().__init__(mensagem)
+        self.codigo = codigo
+
+
 class SessaoTrabalhoService:
     def __init__(
         self,
         repository: SessaoTrabalhoRepository | None = None,
         usuario_repository: UsuarioRepository | None = None,
         departamento_repository: DepartamentoRepository | None = None,
+        evento_service: EventoService | None = None,
     ) -> None:
+        self.evento_service = evento_service or EventoService()
         self.repository = repository or SessaoTrabalhoRepository()
         self.usuario_repository = usuario_repository or UsuarioRepository()
         self.departamento_repository = departamento_repository or DepartamentoRepository()
+
+    def abrir(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        demanda_id: str,
+        evento_inicio_id: str,
+        inicio_em: datetime,
+        agencia_id: str | None = None,
+        workflow_etapa_id: str | None = None,
+        usuario_id: str | None = None,
+        departamento_id: str | None = None,
+    ) -> SessaoTrabalho:
+        """Abertura PELO SERVIDOR (Fase 11B.2A): nada que o cliente mandou é confiável. Valida, nesta ordem: responsável (usuário OU departamento) →
+        demanda (existe, é desta empresa, é executável) → etapa (se enviada: existe, é DESTA demanda) → depois `open_session` (usuário/departamento da empresa,
+        uma sessão ativa por pessoa).
+
+        `workflowEtapaId` ainda é opcional: o único chamador atual (Tráfego → "Iniciar sessão de teste") não o envia, e deduzir a etapa seria arbitrário.
+        Quando enviado é validado por inteiro; tornar a etapa obrigatória em demanda com workflow depende de decisão de produto (ver docs/sessoes-trabalho.md)."""
+        self._validate_responsavel(usuario_id=usuario_id, departamento_id=departamento_id, allow_usuario_and_departamento=False)
+        demanda = self._ensure_demanda_executavel(db, empresa_id, demanda_id)
+        if workflow_etapa_id:
+            self._ensure_etapa_da_demanda(db, demanda.id, workflow_etapa_id)
+        return self.open_session(
+            db,
+            empresa_id=empresa_id,
+            demanda_id=demanda.id,
+            evento_inicio_id=evento_inicio_id,
+            inicio_em=inicio_em,
+            agencia_id=agencia_id,
+            workflow_etapa_id=workflow_etapa_id,
+            usuario_id=usuario_id,
+            departamento_id=departamento_id,
+        )
+
+    def _ensure_demanda_executavel(self, db: Session, empresa_id: str, demanda_id: str):
+        demanda = self.repository.get_demanda(db, demanda_id)
+        if demanda is None or demanda.empresa_id != empresa_id:
+            raise SessaoTrabalhoDemandaNaoEncontradaError("Demanda não encontrada")
+        if demanda.status in STATUS_DEMANDA_NAO_EXECUTAVEL:
+            raise SessaoTrabalhoConflitoError(
+                CODIGO_DEMANDA_NAO_EXECUTAVEL,
+                f"A demanda está '{demanda.status}': não é possível iniciar uma sessão de trabalho nela",
+            )
+        return demanda
+
+    def _ensure_etapa_da_demanda(self, db: Session, demanda_id: str, workflow_etapa_id: str) -> None:
+        etapa = self.repository.get_etapa(db, workflow_etapa_id)
+        # a etapa pertence a UMA demanda (FK) e a demanda já foi validada na empresa: comparar com a demanda cobre etapa inexistente, de outra demanda
+        # e de outra empresa, com a mesma mensagem.
+        if etapa is None or etapa.demanda_id != demanda_id:
+            raise SessaoTrabalhoEtapaInvalidaError("Etapa não encontrada nesta demanda")
 
     def open_session(
         self,
@@ -111,38 +207,33 @@ class SessaoTrabalhoService:
 
         inicio_em = ensure_utc(inicio_em)
 
-        # Corrida (duas aberturas concorrentes pra mesma chave lógica): os índices parciais
-        # únicos (demanda_id, usuario_id)/(demanda_id, departamento_id) WHERE status='ativa'
-        # (ver app/models/sessao_trabalho.py) impedem duas sessões ativas simultâneas, mas o
-        # par SELECT (get_active_equivalent) + INSERT abaixo não é atômico — a segunda
-        # requisição pode ler "nenhuma ativa" antes da primeira commitar e estourar
-        # IntegrityError no INSERT. Reexecuta a MESMA unidade (relê ativa, encerra por
-        # substituição, cria a nova) dentro de um SAVEPOINT — nunca um rollback da Session
-        # inteira, porque a rota já adicionou um Evento não commitado ANTES de chamar
-        # open_session, e Session.begin_nested() faz autoflush do que estiver pendente antes
-        # de abrir o SAVEPOINT (confirmado empiricamente): um rollback do savepoint desfaz só
-        # a tentativa de INSERT/UPDATE desta unidade, nunca o Evento da transação externa.
-        # Mesmo teto de 2 tentativas do precedente já aprovado em
-        # UsuarioPermissaoService.definir_override — sem retry, a segunda requisição
-        # explodiria como 500 em vez de convergir pra mesma semântica de duas chamadas
-        # sequenciais (a última substitui a sessão ativa anterior).
+        # Fase 11B.2A — UMA sessão ativa por pessoa, em qualquer demanda. Segunda abertura = 409 SESSAO_ATIVA_EXISTENTE; a anterior NUNCA é encerrada em
+        # silêncio (antes, abrir de novo na MESMA demanda substituía a sessão). Só vale para sessão de PESSOA: a puramente departamental (sem usuário) mantém
+        # a semântica anterior (reabrir o mesmo departamento na mesma demanda substitui) e nunca é multiplicada pelos membros.
+        if usuario_id:
+            self._ensure_sem_sessao_ativa(db, empresa_id, usuario_id)
+
+        # Corrida (duas aberturas concorrentes): o índice parcial único (empresa_id, usuario_id) WHERE status='ativa' (e os de demanda) é a barreira real; o par
+        # SELECT + INSERT não é atômico. A tentativa roda num SAVEPOINT (nunca um rollback da Session inteira: a rota já adicionou o Evento da abertura, não
+        # commitado). Sessão de pessoa que perde a corrida vira o MESMO 409 de uma segunda abertura sequencial; a departamental converge pela substituição.
         for tentativa in (1, 2):
             try:
                 with db.begin_nested():
-                    active = self.repository.get_active_equivalent(
-                        db,
-                        demanda_id=demanda_id,
-                        usuario_id=usuario_id,
-                        departamento_id=departamento_id,
-                    )
-                    if active:
-                        self.close_session(
+                    if not usuario_id:
+                        active = self.repository.get_active_equivalent(
                             db,
-                            active,
-                            evento_fim_id=evento_inicio_id,
-                            fim_em=inicio_em,
-                            motivo_encerramento=MOTIVO_SUBSTITUICAO_SESSAO_ATIVA,
+                            demanda_id=demanda_id,
+                            usuario_id=None,
+                            departamento_id=departamento_id,
                         )
+                        if active:
+                            self.close_session(
+                                db,
+                                active,
+                                evento_fim_id=evento_inicio_id,
+                                fim_em=inicio_em,
+                                motivo_encerramento=MOTIVO_SUBSTITUICAO_SESSAO_ATIVA,
+                            )
 
                     now = utc_now()
                     sessao = SessaoTrabalho(
@@ -166,9 +257,18 @@ class SessaoTrabalhoService:
                     self.repository.create(db, sessao)
                 return sessao
             except IntegrityError:
+                if usuario_id:
+                    ja = self.repository.get_by_evento_inicio_id(db, evento_inicio_id)
+                    if ja:
+                        return ja
+                    self._ensure_sem_sessao_ativa(db, empresa_id, usuario_id)
                 if tentativa == 2:
                     raise
         raise AssertionError("inalcançável — o loop sempre retorna ou levanta antes daqui")
+
+    def _ensure_sem_sessao_ativa(self, db: Session, empresa_id: str, usuario_id: str) -> None:
+        if self.repository.get_active_by_usuario(db, empresa_id=empresa_id, usuario_id=usuario_id) is not None:
+            raise SessaoTrabalhoConflitoError(CODIGO_SESSAO_ATIVA_EXISTENTE, "Você já possui uma atividade em execução.")
 
     def _ensure_usuario_valido(self, db: Session, empresa_id: str, usuario_id: str) -> None:
         usuario = self.usuario_repository.get_by_id(db, usuario_id)
@@ -248,6 +348,64 @@ class SessaoTrabalhoService:
             motivo_encerramento=motivo_encerramento,
         )
 
+    def encerrar_ativas_da_demanda(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        demanda_id: str,
+        motivo_encerramento: str,
+        fim_em: datetime,
+        usuario_ids: list[str] | None = None,
+        departamento_ids: list[str] | None = None,
+        workflow_etapa_id: str | None = None,
+    ) -> list[SessaoTrabalho]:
+        """Encerramento AUTOMÁTICO por transição de domínio (Fase 11B.2A). Chamado DENTRO da transação da transição (não faz commit): o Evento de fim e o
+        fechamento entram junto com a mudança que os causou, ou nenhum entra.
+
+        - Escopo: SÓ sessões ATIVAS DESTA demanda (outra demanda nunca é tocada). Sem filtro = todas; `usuario_ids`/`departamento_ids` = só as dessas pessoas /
+          dessos departamentos (sessão puramente departamental); `workflow_etapa_id` = só as ligadas à etapa.
+        - Idempotente: sessão já encerrada/cancelada nem é selecionada (nada de segundo evento, duração ou carimbo alterado); a seleção trava as linhas
+          (`FOR UPDATE`), então transições concorrentes não fecham duas vezes.
+        - Duração = `fim_em - inicio_em` pela MESMA regra de `close_session` (nunca negativa). Um Evento `sessao_trabalho_encerrada` por sessão, com o
+          motivo e a marca `automatico` — a mesma forma do encerramento manual.
+        """
+        self._validate_motivo(motivo_encerramento)
+        ativas = self.repository.listar_ativas_para_encerramento(
+            db,
+            empresa_id=empresa_id,
+            demanda_id=demanda_id,
+            usuario_ids=usuario_ids,
+            departamento_ids=departamento_ids,
+            workflow_etapa_id=workflow_etapa_id,
+        )
+        fechadas: list[SessaoTrabalho] = []
+        for sessao in ativas:
+            evento = self.evento_service.create_evento(
+                db,
+                EventoCreate(
+                    empresaId=sessao.empresa_id,
+                    agenciaId=sessao.agencia_id,
+                    tipo="sessao_trabalho_encerrada",
+                    entidadeTipo="demanda",
+                    entidadeId=sessao.demanda_id,
+                    usuarioId=sessao.usuario_id,
+                    payload={
+                        "demandaId": sessao.demanda_id,
+                        "motivoEncerramento": motivo_encerramento,
+                        "automatico": True,
+                    },
+                    occurredAt=fim_em,
+                ),
+                commit=False,
+            )
+            fechadas.append(
+                self.close_session(
+                    db, sessao, evento_fim_id=evento.id, fim_em=fim_em, motivo_encerramento=motivo_encerramento
+                )
+            )
+        return fechadas
+
     def horas_departamento(
         self, db: Session, *, empresa_id: str, departamento_id: str, usuario: Usuario
     ) -> tuple[float, int]:
@@ -256,7 +414,10 @@ class SessaoTrabalhoService:
             raise SessaoTrabalhoDepartamentoNaoEncontradoError("Departamento não encontrado nesta empresa")
         if not pode_consultar_horas_departamento(db, usuario, departamento_id):
             raise EscopoHorasNaoAutorizadoError("Sem direito ao agregado de horas deste departamento")
-        return self.repository.horas_departamento(db, empresa_id=empresa_id, departamento_id=departamento_id)
+        # UM instante só por resposta: as sessões ativas são todas medidas até o mesmo `as_of`.
+        return self.repository.horas_departamento(
+            db, empresa_id=empresa_id, departamento_id=departamento_id, as_of=utc_now()
+        )
 
     def resumo_trafego(self, db: Session, *, empresa_id: str, periodo_inicio: datetime) -> float:
         return self.repository.resumo_trafego(db, empresa_id=empresa_id, periodo_inicio=periodo_inicio)
