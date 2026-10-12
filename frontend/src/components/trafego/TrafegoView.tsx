@@ -21,6 +21,7 @@ import { useNow } from "@/lib/useNow";
 import type { DemandaDiretorio } from "@/types/demanda";
 import type { TrafegoAgoraLinha, TrafegoCarga, TrafegoFiltersState, TrafegoIndicadores } from "@/types/trafego";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
+import { FiltrosAvancados } from "@/components/filtros/FiltrosAvancados";
 import { TempoOperacionalCard } from "./TempoOperacionalCard";
 import { TrafegoAgoraTable } from "./TrafegoAgoraTable";
 import { TrafegoCargaDepartamentos } from "./TrafegoCargaDepartamentos";
@@ -331,16 +332,19 @@ export function TrafegoView() {
   return (
     <div className="flex flex-col gap-6">
       <TrafegoHeader onRefresh={atualizar} refreshing={carregandoAgora} />
-      <TrafegoIniciarSessao onCreated={atualizar} demandas={diretorioNovaSessao} />
-      <TrafegoFilters
-        periodo={periodo}
-        onPeriodoChange={(proximo) => definirParam("periodo", proximo === PERIODO_PADRAO ? null : proximo)}
-        demandaQuery={demandaQuery}
-        onDemandaQueryChange={(texto) => definirParam("q", texto)}
-        definicoes={definicoesFiltros}
-        filtros={filtros}
-        onFiltrosChange={definirFiltros}
-      />
+      {/* Faixa operacional única: Usuário + Demanda + iniciar + período + busca na mesma linha (quebra sozinha em larguras menores); filtros avançados abaixo. */}
+      <section aria-label="Iniciar sessão e filtros operacionais" className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm">
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+          <TrafegoIniciarSessao onCreated={atualizar} demandas={diretorioNovaSessao} />
+          <TrafegoFilters
+            periodo={periodo}
+            onPeriodoChange={(proximo) => definirParam("periodo", proximo === PERIODO_PADRAO ? null : proximo)}
+            demandaQuery={demandaQuery}
+            onDemandaQueryChange={(texto) => definirParam("q", texto)}
+          />
+        </div>
+        <FiltrosAvancados definicoes={definicoesFiltros} filtros={filtros} onChange={definirFiltros} />
+      </section>
 
       {erroIndicadores && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">

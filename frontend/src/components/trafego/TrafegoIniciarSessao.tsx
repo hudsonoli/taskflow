@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Select } from "@/components/ui/Select";
 import { abrirSessaoTrabalho } from "@/lib/api";
+import { opcoesDeDemanda, podeIniciarSessao } from "@/lib/trafego-ui";
 import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import type { DemandaDiretorio } from "@/types/demanda";
 
@@ -48,36 +49,33 @@ export function TrafegoIniciarSessao({
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="grid flex-1 gap-3 sm:grid-cols-2">
-          {/* Busca no servidor (sem o corte de 200); qualquer status, como a lista de antes. O `usuarioId`
-              enviado continua sendo o UUID real do usuário. */}
-          <MemberSelector
-            label="Usuário"
-            multiple={false}
-            values={usuarioId ? [usuarioId] : []}
-            onChange={(values) => setUsuarioId(values[0] ?? "")}
-            placeholder="Selecionar…"
-            buscarOpcoes={buscarOpcoes}
-            emptyLabel="Nenhum usuário encontrado"
-          />
-          <Select
-            label="Demanda"
-            value={demandaId}
-            onChange={(event) => setDemandaId(event.target.value)}
-            options={demandas.map((demanda) => ({
-                value: demanda.id,
-                label: `${rotuloDemanda(demanda)} — ${demanda.nome}`,
-              }))}
-          />
-        </div>
-        <Button onClick={handleIniciar} disabled={loading || !demandaId || !usuarioId}>
-          <PlayCircle className="h-4 w-4" />
-          {loading ? "Iniciando…" : "Iniciar sessão de teste"}
-        </Button>
+    <div className="flex flex-[3_1_40rem] flex-wrap items-end gap-3">
+      {/* Busca no servidor (sem o corte de 200); qualquer status, como a lista de antes. O `usuarioId`
+          enviado continua sendo o UUID real do usuário. */}
+      <div className="min-w-[12rem] flex-1">
+        <MemberSelector
+          label="Usuário"
+          multiple={false}
+          values={usuarioId ? [usuarioId] : []}
+          onChange={(values) => setUsuarioId(values[0] ?? "")}
+          placeholder="Selecionar…"
+          buscarOpcoes={buscarOpcoes}
+          emptyLabel="Nenhum usuário encontrado"
+        />
       </div>
-      {erro && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{erro}</p>}
+      <div className="min-w-[14rem] flex-[1.4]">
+        <Select
+          label="Demanda"
+          value={demandaId}
+          onChange={(event) => setDemandaId(event.target.value)}
+          options={opcoesDeDemanda(demandas, (demanda) => ({ value: demanda.id, label: `${rotuloDemanda(demanda)} — ${demanda.nome}` }))}
+        />
+      </div>
+      <Button onClick={handleIniciar} disabled={!podeIniciarSessao({ enviando: loading, demandaId, usuarioId })} className="shrink-0">
+        <PlayCircle className="h-4 w-4" />
+        {loading ? "Iniciando…" : "Iniciar sessão de teste"}
+      </Button>
+      {erro && <p className="basis-full text-sm text-red-600 dark:text-red-400">{erro}</p>}
     </div>
   );
 }
