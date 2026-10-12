@@ -272,11 +272,28 @@ class SessaoTrabalhoRepository:
     def get_demanda(self, db: Session, demanda_id: str) -> Demanda | None:
         return db.get(Demanda, demanda_id)
 
+    def get_demanda_travada(self, db: Session, demanda_id: str) -> Demanda | None:
+        """A Demanda relida do banco e TRAVADA (`FOR UPDATE`) — o mesmo lock das transições de workflow e do UPDATE de status. Abrir uma sessão serializa com
+        "concluir etapa" / "mudar status": a etapa atual e o status lidos aqui não mudam até o commit da abertura, e a transição que esperou o lock já encontra
+        (e encerra) a sessão nova."""
+        return db.scalar(select(Demanda).where(Demanda.id == demanda_id).with_for_update().execution_options(populate_existing=True))
+
     def get_etapa(self, db: Session, etapa_id: str) -> DemandaWorkflowEtapa | None:
         return db.get(DemandaWorkflowEtapa, etapa_id)
 
     def demanda_tem_etapas(self, db: Session, demanda_id: str) -> bool:
         return db.scalar(select(DemandaWorkflowEtapa.id).where(DemandaWorkflowEtapa.demanda_id == demanda_id).limit(1)) is not None
+
+    def get_etapa_atual(self, db: Session, demanda_id: str) -> DemandaWorkflowEtapa | None:
+        """ETAPA ATUAL pela semântica oficial do domínio (a mesma de `DemandaService._derivar_etapa_atual_id` e de `DemandaWorkflowService._preparar_etapa_atual`):
+        a de MENOR `ordem` com `status != 'concluida'`. Inequívoca: `UNIQUE (demanda_id, ordem)`. `None` = nenhuma (workflow todo concluído, ou sem etapas)."""
+        return db.scalar(
+            select(DemandaWorkflowEtapa)
+            .where(DemandaWorkflowEtapa.demanda_id == demanda_id, DemandaWorkflowEtapa.status != "concluida")
+            .order_by(DemandaWorkflowEtapa.ordem.asc())
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
 
     def get_active_by_usuario(self, db: Session, *, empresa_id: str, usuario_id: str) -> SessaoTrabalho | None:
         """A sessão ATIVA da pessoa, em qualquer demanda (regra: uma sessão ativa por pessoa)."""

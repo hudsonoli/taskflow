@@ -31,7 +31,13 @@ from app.models.usuario import Usuario
 from app.models.usuario_credencial import UsuarioCredencial
 from app.models.usuario_permissao import UsuarioPermissao
 
+from tests.test_demanda import dentro_do_expediente  # noqa: F401  (fixture)
 from tests.test_sessao_trabalho import _client_para, _departamento, _usuario
+
+
+@pytest.fixture(autouse=True)
+def _expediente_aberto(dentro_do_expediente) -> None:  # noqa: F811
+    """Abrir sessão exige a demanda EM EXECUÇÃO (11B.2A); entrar em execução respeita o expediente — fixa a janela para o teste não depender da hora."""
 
 
 def _override(db: Session, *, usuario: Usuario, permissao: str, efeito: str) -> UsuarioPermissao:
@@ -59,7 +65,10 @@ def _demanda_real(client: TestClient) -> str:
     # Fase 11B.2A: a abertura valida a demanda no servidor — o teste precisa de uma demanda real da empresa.
     resposta = client.post("/demandas", json={"nome": f"Demanda {uuid.uuid4().hex[:8]}"})
     assert resposta.status_code == 201, resposta.text
-    return resposta.json()["id"]
+    demanda_id = resposta.json()["id"]
+    em_execucao = client.patch(f"/demandas/{demanda_id}", json={"status": "em_execucao"})
+    assert em_execucao.status_code == 200, em_execucao.text
+    return demanda_id
 
 
 def _abrir(client: TestClient, empresa_id: str, usuario_id: str) -> dict:

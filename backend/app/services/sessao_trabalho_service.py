@@ -46,11 +46,9 @@ MOTIVOS_ENCERRAMENTO = frozenset(
     }
 )
 
-# Fase 11B.2A — estados da Demanda em que NÃO se abre sessão de trabalho (e em que nenhuma sessão ativa pode continuar): o trabalho não é executável.
-# `rascunho`/`planejada`/`em_execucao` continuam permitidos (o trabalho pode começar de qualquer um deles).
-STATUS_DEMANDA_NAO_EXECUTAVEL = frozenset(
-    {"arquivada", "concluida", "cancelada", "pausada", "bloqueada", "aguardando_cliente"}
-)
+# Fase 11B.2A — sessão de trabalho representa EXECUÇÃO ATIVA: só se abre com a Demanda em `em_execucao`. Qualquer outro status do CHECK real
+# (rascunho, planejada, pausada, bloqueada, aguardando_cliente, concluida, cancelada, arquivada) não é executável — e nenhuma sessão ativa sobrevive a ele.
+STATUS_DEMANDA_EXECUTAVEL = frozenset({"em_execucao"})
 # Transição de status da Demanda -> motivo do encerramento automático (as sessões ativas acabam antes de o tempo "improdutivo" correr).
 MOTIVO_POR_STATUS_DEMANDA = {
     "pausada": MOTIVO_PAUSA,
@@ -66,6 +64,9 @@ MOTIVO_POR_STATUS_DEMANDA = {
 
 CODIGO_SESSAO_ATIVA_EXISTENTE = "SESSAO_ATIVA_EXISTENTE"
 CODIGO_DEMANDA_NAO_EXECUTAVEL = "DEMANDA_NAO_EXECUTAVEL"
+CODIGO_ETAPA_ATUAL_INDISPONIVEL = "ETAPA_ATUAL_INDISPONIVEL"
+CODIGO_ETAPA_NAO_ATUAL = "ETAPA_NAO_ATUAL"
+STATUS_ETAPA_PAUSADA = "pausada"
 
 
 def utc_now() -> datetime:
@@ -135,15 +136,18 @@ class SessaoTrabalhoService:
         departamento_id: str | None = None,
     ) -> SessaoTrabalho:
         """Abertura PELO SERVIDOR (Fase 11B.2A): nada que o cliente mandou é confiável. Valida, nesta ordem: responsável (usuário OU departamento) →
-        demanda (existe, é desta empresa, é executável) → etapa (se enviada: existe, é DESTA demanda) → depois `open_session` (usuário/departamento da empresa,
-        uma sessão ativa por pessoa).
+        demanda (existe, é desta empresa, está em execução) → etapa → depois `open_session` (usuário/departamento da empresa, uma sessão ativa por pessoa).
 
-        `workflowEtapaId` ainda é opcional: o único chamador atual (Tráfego → "Iniciar sessão de teste") não o envia, e deduzir a etapa seria arbitrário.
-        Quando enviado é validado por inteiro; tornar a etapa obrigatória em demanda com workflow depende de decisão de produto (ver docs/sessoes-trabalho.md)."""
+        ## Etapa (decisão de produto)
+        Demanda COM workflow: a sessão fica SEMPRE ligada à ETAPA ATUAL, resolvida aqui pela semântica oficial (menor `ordem` não concluída). O cliente pode omitir
+        `workflowEtapaId` (o servidor usa a atual) ou enviá-lo — e então ele precisa SER a atual: etapa inexistente/de outra demanda/de outra empresa = 422 (uma
+        mensagem só); etapa da demanda que já passou ou ainda não chegou = 409 `ETAPA_NAO_ATUAL`. Sem etapa atual inequívoca para executar (workflow concluído, etapa
+        atual pausada, workflow sem etapas materializadas) = 409 `ETAPA_ATUAL_INDISPONIVEL` — nunca uma sessão sem etapa, nunca "primeira/última/por responsável".
+        Demanda SEM workflow: `workflow_etapa_id` fica NULL (nada é fabricado). A Demanda é travada (`FOR UPDATE`) durante a resolução, serializando com o avanço
+        de etapa e com a mudança de status."""
         self._validate_responsavel(usuario_id=usuario_id, departamento_id=departamento_id, allow_usuario_and_departamento=False)
         demanda = self._ensure_demanda_executavel(db, empresa_id, demanda_id)
-        if workflow_etapa_id:
-            self._ensure_etapa_da_demanda(db, demanda.id, workflow_etapa_id)
+        workflow_etapa_id = self._resolver_etapa_da_sessao(db, demanda, workflow_etapa_id)
         return self.open_session(
             db,
             empresa_id=empresa_id,
@@ -157,22 +161,39 @@ class SessaoTrabalhoService:
         )
 
     def _ensure_demanda_executavel(self, db: Session, empresa_id: str, demanda_id: str):
-        demanda = self.repository.get_demanda(db, demanda_id)
+        demanda = self.repository.get_demanda_travada(db, demanda_id)
         if demanda is None or demanda.empresa_id != empresa_id:
             raise SessaoTrabalhoDemandaNaoEncontradaError("Demanda não encontrada")
-        if demanda.status in STATUS_DEMANDA_NAO_EXECUTAVEL:
+        if demanda.status not in STATUS_DEMANDA_EXECUTAVEL:
             raise SessaoTrabalhoConflitoError(
                 CODIGO_DEMANDA_NAO_EXECUTAVEL,
-                f"A demanda está '{demanda.status}': não é possível iniciar uma sessão de trabalho nela",
+                f"A demanda está '{demanda.status}': só é possível iniciar uma sessão de trabalho em demanda em execução",
             )
         return demanda
 
-    def _ensure_etapa_da_demanda(self, db: Session, demanda_id: str, workflow_etapa_id: str) -> None:
-        etapa = self.repository.get_etapa(db, workflow_etapa_id)
-        # a etapa pertence a UMA demanda (FK) e a demanda já foi validada na empresa: comparar com a demanda cobre etapa inexistente, de outra demanda
-        # e de outra empresa, com a mesma mensagem.
-        if etapa is None or etapa.demanda_id != demanda_id:
-            raise SessaoTrabalhoEtapaInvalidaError("Etapa não encontrada nesta demanda")
+    def _resolver_etapa_da_sessao(self, db: Session, demanda, workflow_etapa_id: str | None) -> str | None:
+        """A etapa a gravar na sessão (ver `abrir`): NULL só em demanda sem workflow; senão, a etapa ATUAL resolvida no servidor."""
+        if workflow_etapa_id:
+            etapa = self.repository.get_etapa(db, workflow_etapa_id)
+            # a etapa pertence a UMA demanda (FK) e a demanda já foi validada na empresa: comparar com a demanda cobre etapa inexistente, de outra demanda
+            # e de outra empresa, com a mesma mensagem (nunca confirma que existe em outro tenant).
+            if etapa is None or etapa.demanda_id != demanda.id:
+                raise SessaoTrabalhoEtapaInvalidaError("Etapa não encontrada nesta demanda")
+        atual = self.repository.get_etapa_atual(db, demanda.id)
+        tem_workflow = (
+            atual is not None or demanda.workflow_modelo_id is not None or self.repository.demanda_tem_etapas(db, demanda.id)
+        )
+        if not tem_workflow:
+            return None  # sem workflow: NULL é o valor correto (e uma etapa enviada já foi recusada acima)
+        if atual is None or atual.status == STATUS_ETAPA_PAUSADA:
+            raise SessaoTrabalhoConflitoError(
+                CODIGO_ETAPA_ATUAL_INDISPONIVEL, "Esta demanda não tem uma etapa atual disponível para execução"
+            )
+        if workflow_etapa_id and workflow_etapa_id != atual.id:
+            raise SessaoTrabalhoConflitoError(
+                CODIGO_ETAPA_NAO_ATUAL, "A sessão só pode ser iniciada na etapa atual do workflow"
+            )
+        return atual.id
 
     def open_session(
         self,

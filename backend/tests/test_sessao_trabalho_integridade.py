@@ -37,10 +37,29 @@ from tests.test_sessao_trabalho import _departamento, _usuario
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def _demanda(client: TestClient, **extra) -> dict:
+@pytest.fixture(autouse=True)
+def _expediente_aberto(dentro_do_expediente) -> None:  # noqa: F811
+    """Abrir sessão exige a demanda EM EXECUÇÃO; entrar em execução respeita o expediente — fixa a janela para o teste não depender da hora."""
+
+
+def _demanda(client: TestClient, *, executando: bool = True, **extra) -> dict:
+    """Demanda nova. `executando=True` (padrão) a coloca em `em_execucao` — o único status que aceita sessão."""
     resposta = client.post("/demandas", json={"nome": f"Demanda {uuid.uuid4().hex[:8]}", **extra})
     assert resposta.status_code == 201, resposta.text
-    return resposta.json()
+    demanda = resposta.json()
+    if executando:
+        demanda = _patch(client, demanda["id"], status="em_execucao")
+    return demanda
+
+
+def _demanda_wf(client: TestClient, etapas: list[dict], *, executando: bool = True, **extra) -> dict:
+    """Demanda com workflow materializado (`workflowEtapas` ordenadas em `_por_ordem`)."""
+    demanda = _demanda_com_workflow(client, etapas, **extra)
+    return _patch(client, demanda["id"], status="em_execucao") if executando else demanda
+
+
+def _concluir(client: TestClient, demanda: dict, etapa: dict) -> None:
+    assert client.post(_url(demanda["id"], etapa["id"], "concluir")).status_code == 200
 
 
 def _abrir(client: TestClient, demanda_id: str, usuario_id: str | None = None, *, etapa_id: str | None = None, departamento_id: str | None = None):
@@ -124,13 +143,31 @@ def client_do_(usuario: Usuario, db: Session) -> TestClient:
     return client_do(aplicacao, usuario)
 
 
-@pytest.mark.parametrize("status", ["concluida", "cancelada", "pausada", "aguardando_cliente"])
+@pytest.mark.parametrize("status", ["planejada", "concluida", "cancelada", "pausada", "aguardando_cliente"])
 def test_demanda_nao_executavel_e_409(client_admin: TestClient, usuario_operador: Usuario, status: str) -> None:
     demanda = _demanda(client_admin)
     _patch(client_admin, demanda["id"], status=status)
     resposta = _abrir(client_admin, demanda["id"], usuario_operador.id)
     assert resposta.status_code == 409
     assert resposta.json()["detail"]["code"] == "DEMANDA_NAO_EXECUTAVEL"
+
+
+def test_demanda_em_rascunho_nao_aceita_sessao(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda = _demanda(client_admin, executando=False)
+    assert demanda["status"] == "rascunho"
+    resposta = _abrir(client_admin, demanda["id"], usuario_operador.id)
+    assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "DEMANDA_NAO_EXECUTAVEL"
+    assert _sessoes(db_session, demanda["id"]) == []
+
+
+def test_apenas_em_execucao_e_executavel_entre_os_status_reais(db_session: Session) -> None:
+    """Confere a regra contra o CHECK real da tabela: se surgir um status novo, este teste obriga a decidir se ele é executável."""
+    from app.services.sessao_trabalho_service import STATUS_DEMANDA_EXECUTAVEL
+
+    definicao = db_session.execute(text("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_demandas_status'")).scalar_one()
+    reais = {t for t in ("rascunho", "planejada", "em_execucao", "pausada", "bloqueada", "aguardando_cliente", "concluida", "cancelada", "arquivada") if f"'{t}'" in definicao}
+    assert len(reais) == 9 and definicao.count("'") == 18, "o CHECK de status da Demanda mudou: reavalie quais status aceitam sessão"
+    assert STATUS_DEMANDA_EXECUTAVEL == {"em_execucao"}
 
 
 def test_demanda_bloqueada_e_409(client_admin: TestClient, usuario_operador: Usuario) -> None:
@@ -151,21 +188,22 @@ def test_volta_a_ser_executavel_permite_iniciar_de_novo(client_admin: TestClient
     demanda = _demanda(client_admin)
     _patch(client_admin, demanda["id"], status="pausada")
     assert _abrir(client_admin, demanda["id"], usuario_operador.id).status_code == 409
-    _patch(client_admin, demanda["id"], status="planejada")
+    _patch(client_admin, demanda["id"], status="em_execucao")
     assert _abrir(client_admin, demanda["id"], usuario_operador.id).status_code == 201
 
 
 def test_etapa_valida_da_demanda_fica_ligada_a_sessao(client_admin: TestClient, usuario_operador: Usuario) -> None:
-    demanda = _demanda_com_workflow(client_admin, [_etapa("Criação"), _etapa("Revisão")])
+    demanda = _demanda_wf(client_admin, [_etapa("Criação"), _etapa("Revisão")])
     etapas = _por_ordem(demanda)
     sessao = _abrir_ok(client_admin, demanda["id"], usuario_operador.id, etapa_id=etapas[0]["id"])
     assert sessao["workflowEtapaId"] == etapas[0]["id"]
 
 
-def test_sem_etapa_continua_aceito_em_demanda_com_workflow(client_admin: TestClient, usuario_operador: Usuario) -> None:
-    """CALLER_WITHOUT_STEP: o único chamador atual (Tráfego → 'Iniciar sessão de teste') não envia a etapa; torná-la obrigatória é decisão de produto."""
-    demanda = _demanda_com_workflow(client_admin, [_etapa("Criação")])
-    assert _abrir(client_admin, demanda["id"], usuario_operador.id).status_code == 201
+def test_demanda_sem_workflow_aceita_sessao_com_etapa_nula(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda = _demanda(client_admin)
+    assert demanda["workflowEtapas"] == [] and demanda["workflowModeloId"] is None
+    sessao = _abrir_ok(client_admin, demanda["id"], usuario_operador.id)
+    assert sessao["workflowEtapaId"] is None  # nenhuma etapa fictícia
 
 
 def test_etapa_inexistente_422(client_admin: TestClient, usuario_operador: Usuario) -> None:
@@ -179,7 +217,7 @@ def _ativas_vazio(resposta) -> bool:  # a resposta de erro nunca traz uma sessã
 
 
 def test_etapa_de_outra_demanda_422(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
-    com_workflow = _demanda_com_workflow(client_admin, [_etapa("Criação")])
+    com_workflow = _demanda_wf(client_admin, [_etapa("Criação")])
     outra = _demanda(client_admin)
     resposta = _abrir(client_admin, outra["id"], usuario_operador.id, etapa_id=com_workflow["workflowEtapas"][0]["id"])
     assert resposta.status_code == 422
@@ -350,7 +388,7 @@ def test_transicao_encerra_todas_as_sessoes_da_demanda_e_so_dela(db_session: Ses
     assert _sessao(db_session, de_outra["id"]).status == "ativa"  # sessão de OUTRA demanda nunca é tocada
 
 
-def test_entrar_em_execucao_nao_encerra_nada(db_session: Session, client_admin: TestClient, usuario_operador: Usuario, dentro_do_expediente) -> None:
+def test_reenviar_o_status_em_execucao_nao_encerra_nada(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
     demanda = _demanda(client_admin)
     sessao = _abrir_ok(client_admin, demanda["id"], usuario_operador.id)
     _patch(client_admin, demanda["id"], status="em_execucao")
@@ -456,7 +494,7 @@ def test_remover_departamento_encerra_a_sessao_departamental(db_session: Session
 def test_concluir_etapa_encerra_a_sessao_dela_e_a_nova_nasce_ligada_a_etapa_nova(
     db_session: Session, client_admin: TestClient, usuario_operador: Usuario
 ) -> None:
-    demanda = _demanda_com_workflow(client_admin, [_etapa("Criação"), _etapa("Revisão")])
+    demanda = _demanda_wf(client_admin, [_etapa("Criação"), _etapa("Revisão")])
     e1, e2 = _por_ordem(demanda)
     s1 = _abrir_ok(client_admin, demanda["id"], usuario_operador.id, etapa_id=e1["id"])
     assert client_admin.post(_url(demanda["id"], e1["id"], "concluir")).status_code == 200
@@ -468,26 +506,37 @@ def test_concluir_etapa_encerra_a_sessao_dela_e_a_nova_nasce_ligada_a_etapa_nova
 
 
 def test_concluir_a_ultima_etapa_fecha_com_conclusao(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
-    demanda = _demanda_com_workflow(client_admin, [_etapa("Única")])
+    demanda = _demanda_wf(client_admin, [_etapa("Única")])
     (e1,) = _por_ordem(demanda)
     s1 = _abrir_ok(client_admin, demanda["id"], usuario_operador.id, etapa_id=e1["id"])
     assert client_admin.post(_url(demanda["id"], e1["id"], "concluir")).status_code == 200
     assert _sessao(db_session, s1["id"]).motivo_encerramento == "conclusao"
 
 
-def test_sessao_sem_etapa_nao_e_encerrada_por_mudanca_de_etapa(db_session: Session, client_admin: TestClient, operadores: list[Usuario]) -> None:
-    """Sessão no nível da demanda (sem etapa) não pertence à etapa que terminou — não se deduz etapa; ela acaba pelas transições da DEMANDA."""
-    demanda = _demanda_com_workflow(client_admin, [_etapa("Criação"), _etapa("Revisão")])
+def test_sessao_legada_sem_etapa_nao_e_encerrada_por_mudanca_de_etapa(
+    db_session: Session, empresa: Empresa, client_admin: TestClient, operadores: list[Usuario]
+) -> None:
+    """Pela API uma demanda com workflow nunca mais gera sessão sem etapa. Linhas LEGADAS assim (criadas antes da 11B.2A) não pertencem à etapa que terminou — não
+    se deduz etapa —, e acabam pelas transições da DEMANDA."""
+    demanda = _demanda_wf(client_admin, [_etapa("Criação"), _etapa("Revisão")])
     e1, _ = _por_ordem(demanda)
-    da_demanda = _abrir_ok(client_admin, demanda["id"], operadores[0].id)
+    agora = datetime.now(timezone.utc)
+    legada = SessaoTrabalho(
+        id=str(uuid.uuid4()), empresa_id=empresa.id, demanda_id=demanda["id"], usuario_id=operadores[0].id, workflow_etapa_id=None,
+        evento_inicio_id=str(uuid.uuid4()), status="ativa", inicio_em=agora, created_at=agora, updated_at=agora,
+    )
+    db_session.add(legada)
+    db_session.flush()
     da_etapa = _abrir_ok(client_admin, demanda["id"], operadores[1].id, etapa_id=e1["id"])
-    assert client_admin.post(_url(demanda["id"], e1["id"], "concluir")).status_code == 200
+    _concluir(client_admin, demanda, e1)
     assert _sessao(db_session, da_etapa["id"]).status == "encerrada"
-    assert _sessao(db_session, da_demanda["id"]).status == "ativa"
+    assert _sessao(db_session, legada.id).status == "ativa"
+    _patch(client_admin, demanda["id"], status="pausada")
+    assert _sessao(db_session, legada.id).motivo_encerramento == "pausa"
 
 
 def test_aprovar_encerra_a_sessao_da_etapa_de_aprovacao(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
-    demanda = _demanda_com_workflow(client_admin, [_etapa("Criação"), _etapa("Aprovação", "aprovacao"), _etapa("Publicação")])
+    demanda = _demanda_wf(client_admin, [_etapa("Criação"), _etapa("Aprovação", "aprovacao"), _etapa("Publicação")])
     e1, e2, e3 = _por_ordem(demanda)
     assert client_admin.post(_url(demanda["id"], e1["id"], "concluir")).status_code == 200
     sessao = _abrir_ok(client_admin, demanda["id"], usuario_operador.id, etapa_id=e2["id"])
@@ -497,7 +546,7 @@ def test_aprovar_encerra_a_sessao_da_etapa_de_aprovacao(db_session: Session, cli
 
 
 def test_rejeitar_encerra_a_sessao_da_aprovacao_e_nao_abre_nenhuma_nova(db_session: Session, client_admin: TestClient, operadores: list[Usuario]) -> None:
-    demanda = _demanda_com_workflow(client_admin, [_etapa("Criação"), _etapa("Aprovação", "aprovacao")])
+    demanda = _demanda_wf(client_admin, [_etapa("Criação"), _etapa("Aprovação", "aprovacao")])
     e1, e2 = _por_ordem(demanda)
     s_exec = _abrir_ok(client_admin, demanda["id"], operadores[0].id, etapa_id=e1["id"])
     assert client_admin.post(_url(demanda["id"], e1["id"], "concluir")).status_code == 200
@@ -514,9 +563,128 @@ def test_rejeitar_encerra_a_sessao_da_aprovacao_e_nao_abre_nenhuma_nova(db_sessi
     assert reaberta.status == "pendente"
 
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------
+# D2. etapa AUTORITATIVA: o servidor resolve a etapa atual do workflow
+# ------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def _wf3(client: TestClient):
+    """X1 concluída, X2 atual, X3 futura."""
+    demanda = _demanda_wf(client, [_etapa("X1"), _etapa("X2"), _etapa("X3")])
+    x1, x2, x3 = _por_ordem(demanda)
+    _concluir(client, demanda, x1)
+    return demanda, x1, x2, x3
+
+
+def test_sem_etapa_o_servidor_usa_a_etapa_atual(client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda, x1, x2, x3 = _wf3(client_admin)
+    sessao = _abrir_ok(client_admin, demanda["id"], usuario_operador.id)  # o caller não envia a etapa
+    assert sessao["workflowEtapaId"] == x2["id"]
+    atual = client_admin.get(f"/demandas/{demanda['id']}").json()["etapaAtualId"]
+    assert sessao["workflowEtapaId"] == atual  # paridade com a "etapa atual" que a API de Demanda expõe
+
+
+def test_etapa_atual_explicita_e_aceita(client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda, x1, x2, x3 = _wf3(client_admin)
+    assert _abrir_ok(client_admin, demanda["id"], usuario_operador.id, etapa_id=x2["id"])["workflowEtapaId"] == x2["id"]
+
+
+@pytest.mark.parametrize("qual", ["anterior", "futura"])
+def test_etapa_anterior_ou_futura_e_409_etapa_nao_atual(db_session: Session, client_admin: TestClient, usuario_operador: Usuario, qual: str) -> None:
+    demanda, x1, x2, x3 = _wf3(client_admin)
+    alvo = x1 if qual == "anterior" else x3
+    resposta = _abrir(client_admin, demanda["id"], usuario_operador.id, etapa_id=alvo["id"])
+    assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "ETAPA_NAO_ATUAL"
+    assert _sessoes(db_session, demanda["id"]) == []
+
+
+def test_etapa_de_outra_demanda_com_workflow_e_422(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda, *_ = _wf3(client_admin)
+    outra, o1, *_ = (lambda d: (d, *_por_ordem(d)))(_demanda_wf(client_admin, [_etapa("O1")]))
+    resposta = _abrir(client_admin, demanda["id"], usuario_operador.id, etapa_id=o1["id"])
+    assert resposta.status_code == 422
+    assert _sessoes(db_session, demanda["id"]) == [] and _sessoes(db_session, outra["id"]) == []
+
+
+def test_etapa_de_outro_tenant_tem_a_mesma_resposta_segura_de_etapa_inexistente(
+    db_session: Session, client_admin: TestClient, usuario_operador: Usuario, outra_empresa: Empresa
+) -> None:
+    admin_b = _criar_usuario_com_credencial(db_session, empresa=outra_empresa, perfil_base="admin", email_prefixo="adminb3")
+    etapa_b = _demanda_com_workflow(client_do_(admin_b, db_session), [_etapa("B1")])["workflowEtapas"][0]["id"]
+    demanda, *_ = _wf3(client_admin)
+    alheia = _abrir(client_admin, demanda["id"], usuario_operador.id, etapa_id=etapa_b)
+    inexistente = _abrir(client_admin, demanda["id"], usuario_operador.id, etapa_id=str(uuid.uuid4()))
+    assert alheia.status_code == inexistente.status_code == 422 and alheia.json() == inexistente.json()
+
+
+def test_workflow_concluido_nao_abre_sessao_sem_etapa(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda = _demanda_wf(client_admin, [_etapa("A"), _etapa("B")])
+    a, b = _por_ordem(demanda)
+    _concluir(client_admin, demanda, a)
+    _concluir(client_admin, demanda, b)  # todas concluídas; a demanda continua em_execucao
+    resposta = _abrir(client_admin, demanda["id"], usuario_operador.id)
+    assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "ETAPA_ATUAL_INDISPONIVEL"
+    assert _sessoes(db_session, demanda["id"]) == []
+
+
+def test_etapa_atual_pausada_nao_abre_sessao(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda = _demanda_wf(client_admin, [_etapa("A"), _etapa("B")])
+    a, _ = _por_ordem(demanda)
+    db_session.execute(text("UPDATE demanda_workflow_etapas SET status = 'pausada' WHERE id = :e"), {"e": a["id"]})
+    resposta = _abrir(client_admin, demanda["id"], usuario_operador.id)
+    assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "ETAPA_ATUAL_INDISPONIVEL"
+    assert _sessoes(db_session, demanda["id"]) == []
+
+
+def test_workflow_sem_etapas_materializadas_nao_abre_sessao_sem_etapa(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    """A demanda declara um workflow (workflow_modelo_id) mas não há etapas para resolver: NUNCA abre sessão sem etapa nem escolhe uma."""
+    demanda = _demanda_wf(client_admin, [_etapa("A")])
+    db_session.execute(text("DELETE FROM demanda_workflow_etapas WHERE demanda_id = :d"), {"d": demanda["id"]})
+    resposta = _abrir(client_admin, demanda["id"], usuario_operador.id)
+    assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "ETAPA_ATUAL_INDISPONIVEL"
+    assert _sessoes(db_session, demanda["id"]) == []
+
+
+def test_mudanca_x1_para_x2_fecha_x1_nao_abre_x2_e_novo_start_liga_x2(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda = _demanda_wf(client_admin, [_etapa("X1"), _etapa("X2"), _etapa("X3")])
+    x1, x2, x3 = _por_ordem(demanda)
+    s1 = _abrir_ok(client_admin, demanda["id"], usuario_operador.id)  # sem etapa -> X1 (atual)
+    assert s1["workflowEtapaId"] == x1["id"]
+    _concluir(client_admin, demanda, x1)
+    assert _sessao(db_session, s1["id"]).motivo_encerramento == "mudanca_etapa"
+    assert _ativas(db_session, demanda["id"]) == [] and len(_sessoes(db_session, demanda["id"])) == 1  # X2 NÃO foi aberta sozinha
+    s2 = _abrir_ok(client_admin, demanda["id"], usuario_operador.id)
+    assert s2["workflowEtapaId"] == x2["id"]
+
+
+def test_etapa_de_aprovacao_atual_recebe_a_sessao(client_admin: TestClient, usuario_operador: Usuario) -> None:
+    demanda = _demanda_wf(client_admin, [_etapa("Criação"), _etapa("Aprovação", "aprovacao")])
+    e1, e2 = _por_ordem(demanda)
+    _concluir(client_admin, demanda, e1)
+    assert _abrir_ok(client_admin, demanda["id"], usuario_operador.id)["workflowEtapaId"] == e2["id"]
+
+
+def test_abertura_trava_a_demanda_e_serializa_com_o_avanco_de_etapa(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    """A etapa é resolvida com a Demanda travada (FOR UPDATE), o mesmo lock do avanço: a etapa lida não muda até o commit da abertura."""
+    from app.repositories.sessao_trabalho_repository import SessaoTrabalhoRepository as Repo
+
+    chamadas: list[str] = []
+    original = Repo.get_demanda_travada
+
+    def espiar(self, db, demanda_id):
+        chamadas.append(demanda_id)
+        return original(self, db, demanda_id)
+
+    demanda = _demanda_wf(client_admin, [_etapa("A")])
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(Repo, "get_demanda_travada", espiar)
+        _abrir_ok(client_admin, demanda["id"], usuario_operador.id)
+    assert chamadas == [demanda["id"]]
+
+
 def test_rejeicao_recusada_nao_encerra_sessao(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
     """Rollback conjunto: a rejeição inválida (etapa que não é de aprovação) não pode deixar a sessão encerrada."""
-    demanda = _demanda_com_workflow(client_admin, [_etapa("Criação"), _etapa("Aprovação", "aprovacao")])
+    demanda = _demanda_wf(client_admin, [_etapa("Criação"), _etapa("Aprovação", "aprovacao")])
     e1, _ = _por_ordem(demanda)
     sessao = _abrir_ok(client_admin, demanda["id"], usuario_operador.id, etapa_id=e1["id"])
     assert client_admin.post(_url(demanda["id"], e1["id"], "rejeitar"), json={"motivo": "x"}).status_code in (409, 422)

@@ -11,13 +11,23 @@ O servidor valida tudo; nada que o cliente manda é confiável. Ordem: responsá
 |---|---|
 | sem `usuarioId` nem `departamentoId`, ou os dois | 422 |
 | demanda inexistente **ou de outra empresa** | 404 (mesma resposta nos dois: não confirma existência cross-tenant) |
-| demanda `arquivada`, `concluida`, `cancelada`, `pausada`, `bloqueada`, `aguardando_cliente` | 409 `DEMANDA_NAO_EXECUTAVEL` |
-| `workflowEtapaId` inexistente, de outra demanda ou de outra empresa | 422 (mensagem única) |
+| demanda fora de `em_execucao` (`rascunho`, `planejada`, `pausada`, `bloqueada`, `aguardando_cliente`, `concluida`, `cancelada`, `arquivada`) | 409 `DEMANDA_NAO_EXECUTAVEL` |
+| demanda **com workflow**, sem `workflowEtapaId` | a sessão é ligada à **etapa atual**, resolvida no servidor |
+| `workflowEtapaId` enviado inexistente, de outra demanda ou de outra empresa | 422 (mensagem única) |
+| `workflowEtapaId` enviado de etapa da demanda que **não é a atual** (já concluída ou futura) | 409 `ETAPA_NAO_ATUAL` |
+| demanda com workflow mas **sem etapa atual executável** (workflow todo concluído, etapa atual `pausada`, workflow sem etapas materializadas) | 409 `ETAPA_ATUAL_INDISPONIVEL` — nunca abre sessão sem etapa |
+| demanda **sem workflow** | `workflow_etapa_id` fica NULL (nenhuma etapa fictícia) |
 | usuário/departamento de outra empresa ou inválido | 422 |
 | a pessoa já tem uma sessão ativa (qualquer demanda) | 409 `SESSAO_ATIVA_EXISTENTE` — a anterior **não** é encerrada |
 
 O 409 vem como `detail: { code, message }`; a UI não depende do texto. Não expõe a outra sessão nem dados de outra empresa.
-`rascunho`, `planejada` e `em_execucao` aceitam sessão.
+Sessão de trabalho representa **execução ativa**: só `em_execucao` aceita abertura. A abertura trava a Demanda (`FOR UPDATE`, o mesmo lock do avanço de etapa e do UPDATE de
+status), então a etapa/estado lidos não mudam até o commit e uma transição concorrente já encontra (e encerra) a sessão nova.
+
+### Etapa atual (autoridade do servidor)
+"Etapa atual" = a de **menor `ordem` com `status != 'concluida'`** — a mesma regra de `etapaAtualId` da API de Demanda e do avanço de workflow; `UNIQUE (demanda_id, ordem)` a
+torna inequívoca. O chamador atual (Tráfego → "Iniciar sessão de teste") continua omitindo o campo, e o servidor associa a etapa. O tempo realizado por etapa passa a ser
+rastreável (base de estimado × realizado, capacidade e relatórios). Nunca se escolhe "primeira/última/por responsável".
 
 ### Uma sessão ativa por pessoa
 Antes da 11B.2A, abrir de novo na **mesma** demanda substituía a sessão em silêncio e a mesma pessoa podia ter sessões ativas em demandas diferentes. Agora há **uma**
@@ -41,7 +51,7 @@ selecionada: nada de segundo evento, duração ou carimbo alterado.
 | status → `concluida` | todas | `conclusao` |
 | status → `cancelada` | todas | `cancelamento` |
 | arquivar | todas | `arquivamento` (novo) |
-| status → `rascunho`/`planejada` | todas | `pausa` |
+| status → `rascunho`/`planejada` | todas | `pausa` (só `em_execucao` mantém sessão) |
 | status → `em_execucao` | ninguém | — |
 | responsável/departamento **removido** da demanda | só a sessão dele(a) naquela demanda | `troca_responsavel` |
 | concluir/aprovar etapa | sessões ligadas **àquela etapa** | `mudanca_etapa` (última etapa: `conclusao`) |
@@ -70,13 +80,12 @@ Nada foi corrigido automaticamente. A migration confere os conflitos antes de cr
 
 ## Limitações conhecidas (fora do escopo desta fase)
 
-- **P1 de produto — etapa obrigatória:** `workflowEtapaId` ainda é opcional. O único chamador atual (Tráfego → "Iniciar sessão de teste") não envia a etapa, e deduzir a
-  etapa seria arbitrário. Sessão sem etapa em demanda com workflow não é encerrada por mudança de etapa (só pelas transições da demanda). Decidir antes do tempo realizado
-  por etapa.
-- **P2 — departamento histórico:** a sessão de pessoa não persiste o departamento do momento da execução; `horas_departamento` usa a lotação **atual**. Mudar a lotação
+- **Resolvido (decisão de produto):** demanda com workflow sempre tem sessão ligada à etapa atual (ver acima). Linhas **legadas** sem etapa em demanda com workflow (não há em
+  produção; no DEV a auditoria não achou) não são encerradas por mudança de etapa, só pelas transições da demanda.
+- **P2_SESSION_DEPARTMENT_HISTORY — departamento histórico:** a sessão de pessoa não persiste o departamento do momento da execução; `horas_departamento` usa a lotação **atual**. Mudar a lotação
   altera a leitura histórica. Resolver quando houver snapshot de lotação/capacidade.
 - **P2 — FKs:** `demanda_id`/`workflow_etapa_id` seguem sem FK (colunas `varchar(128)`); a validação é do service. A auditoria não achou órfãos no DEV nem em produção.
-- **P2 — sessão esquecida:** não há timeout nem watchdog. Sessão antiga aberta (no DEV há uma departamental de ~1400 h) é dado inconsistente a tratar com regra de produto
+- **P2_SESSION_STALE_POLICY — sessão esquecida:** não há timeout nem watchdog. Sessão antiga aberta (no DEV há uma departamental de ~1400 h) é dado inconsistente a tratar com regra de produto
   (qual limite? 8 h, 12 h, 24 h?) — nenhum limite foi inventado.
 - **P3 — relógio:** `indicadores/carga/agora/resumo` do Tráfego continuam usando `NOW()` por consulta (consistente dentro de cada consulta).
 
