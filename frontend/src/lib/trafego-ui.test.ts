@@ -2,8 +2,18 @@
 // `npm run test:trafego-ui` (node --test, sem DOM): lógica pura exercitada de verdade; telas (alias `@/`) lidas como texto.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { test } from "node:test";
-import { PLACEHOLDER_DEMANDA, TEXTO_INFO_TRAFEGO, opcoesDeDemanda, podeIniciarSessao } from "./trafego-ui.ts";
+import { mock, test } from "node:test";
+import { CODIGO_SESSAO_ATIVA_EXISTENTE, SessaoTrabalhoErro } from "./sessao-trabalho-erro.ts";
+import {
+  DURACAO_AVISO_MS,
+  MENSAGEM_SESSAO_ATIVA,
+  PLACEHOLDER_DEMANDA,
+  TEXTO_INFO_TRAFEGO,
+  agendarFechamento,
+  classificarErroAbrirSessao,
+  opcoesDeDemanda,
+  podeIniciarSessao,
+} from "./trafego-ui.ts";
 
 const SRC = new URL("../", import.meta.url);
 const ler = (caminho: string) => readFileSync(new URL(caminho, SRC), "utf8").replace(/\r\n/g, "\n");
@@ -107,4 +117,81 @@ test("Usuário + Demanda + iniciar + período + busca ficam numa só faixa (um c
   assert.match(faixa, /definirParam\("periodo"/);
   assert.match(faixa, /definirParam\("q"/);
   assert.match(faixa, /<FiltrosAvancados definicoes=\{definicoesFiltros\} filtros=\{filtros\} onChange=\{definirFiltros\} \/>/);
+});
+
+// ── aviso de sessão já ativa (toast) ──────────────────────────────────────────────────────────────────────────
+
+test("409 SESSAO_ATIVA_EXISTENTE vira aviso flutuante com o texto exato; decide pelo CÓDIGO, não pelo texto do servidor", () => {
+  assert.equal(MENSAGEM_SESSAO_ATIVA, "Você já possui uma atividade em execução.");
+  const conflito = new SessaoTrabalhoErro("qualquer texto que o servidor mande", { codigo: CODIGO_SESSAO_ATIVA_EXISTENTE, status: 409 });
+  assert.deepEqual(classificarErroAbrirSessao(conflito), { tipo: "aviso-sessao-ativa" });
+});
+
+test("os outros erros continuam no tratamento de erro de antes (mensagem do servidor), inclusive outro 409 de domínio", () => {
+  const naoExecutavel = new SessaoTrabalhoErro("A demanda está 'pausada': só é possível iniciar uma sessão de trabalho em demanda em execução", { codigo: "DEMANDA_NAO_EXECUTAVEL", status: 409 });
+  assert.deepEqual(classificarErroAbrirSessao(naoExecutavel), { tipo: "erro", mensagem: naoExecutavel.message });
+  assert.deepEqual(classificarErroAbrirSessao(new SessaoTrabalhoErro("Demanda não encontrada", { status: 404 })), { tipo: "erro", mensagem: "Demanda não encontrada" });
+  assert.deepEqual(classificarErroAbrirSessao(new SessaoTrabalhoErro("x", { codigo: CODIGO_SESSAO_ATIVA_EXISTENTE, status: 500 })), { tipo: "erro", mensagem: "x" }); // código sem 409 não é o aviso
+  assert.deepEqual(classificarErroAbrirSessao(new Error("Falha de rede")), { tipo: "erro", mensagem: "Falha de rede" });
+  assert.deepEqual(classificarErroAbrirSessao("estranho"), { tipo: "erro", mensagem: "Erro ao iniciar sessão" });
+});
+
+test("o aviso some sozinho em ~5 s (timeout) e o fechamento antes do prazo cancela o agendamento", () => {
+  assert.equal(DURACAO_AVISO_MS, 5000);
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    let fechou = 0;
+    agendarFechamento(() => (fechou += 1));
+    mock.timers.tick(DURACAO_AVISO_MS - 1);
+    assert.equal(fechou, 0); // ainda aberto
+    mock.timers.tick(1);
+    assert.equal(fechou, 1); // timeout removeu o aviso
+
+    let fechouManual = 0;
+    const cancelar = agendarFechamento(() => (fechouManual += 1));
+    cancelar(); // o usuário fechou antes (ou o efeito foi limpo): o prazo antigo não dispara
+    mock.timers.tick(DURACAO_AVISO_MS * 2);
+    assert.equal(fechouManual, 0);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("api.ts lança SessaoTrabalhoErro com o `code` e o status do 409 (para a tela decidir sem olhar o texto)", () => {
+  const api = ler("lib/api.ts"); // sem semComentarios: api.ts tem strings com "/*" que o removedor de comentários confundiria
+  const funcao = api.slice(api.indexOf("export async function abrirSessaoTrabalho"), api.indexOf("export interface ListEventosParams"));
+  assert.match(funcao, /throw new SessaoTrabalhoErro\(/);
+  assert.match(funcao, /codigo: typeof bruto === "object" && typeof bruto\?\.code === "string" \? bruto\.code : null/);
+  assert.match(funcao, /status: response\.status/);
+});
+
+test("a mensagem inline antiga NÃO existe mais na barra: o 409 não preenche `erro` e o aviso é fixo/portal (não desloca nada)", () => {
+  const tela = semComentarios(ler("components/trafego/TrafegoIniciarSessao.tsx"));
+  assert.doesNotMatch(tela, /Você já possui uma atividade em execução/); // o texto vem da constante, só do toast
+  assert.match(tela, /if \(resultado\.tipo === "aviso-sessao-ativa"\) setAviso\(/);
+  assert.match(tela, /else setErro\(resultado\.mensagem\)/);
+  assert.match(tela, /<AvisoFlutuante mensagem=\{MENSAGEM_SESSAO_ATIVA\}/);
+  // não há lógica nova de desabilitar por sessão ativa: o backend continua sendo a autoridade
+  assert.match(tela, /disabled=\{!podeIniciarSessao\(\{ enviando: loading, demandaId, usuarioId \}\)\}/);
+  assert.doesNotMatch(tela, /sessaoAtiva|temSessao|demandasAtivas|minhasAtivas/i);
+  // sem efeito que abra o aviso sozinho ao carregar a tela
+  assert.doesNotMatch(tela, /useEffect/);
+  // a barra não ganhou nenhuma linha extra para o aviso: ele é `fixed` e vai para o body
+  const aviso = semComentarios(ler("components/ui/AvisoFlutuante.tsx"));
+  assert.match(aviso, /createPortal\(/);
+  assert.match(aviso, /className="fixed right-4 top-4/);
+});
+
+test("o aviso é acessível e discreto: região status/aria-live, botão Fechar, Esc, tom âmbar (não vermelho), sem dependência nova", () => {
+  const aviso = semComentarios(ler("components/ui/AvisoFlutuante.tsx"));
+  assert.match(aviso, /role="status"/);
+  assert.match(aviso, /aria-live="polite"/);
+  assert.match(aviso, /aria-label="Fechar aviso"/);
+  assert.match(aviso, /<button\s+type="button"\s+onClick=\{onFechar\}/); // fechamento manual
+  assert.match(aviso, /evento\.key === "Escape"/);
+  assert.match(aviso, /agendarFechamento\(onFechar, duracaoMs\)/); // timeout
+  assert.match(aviso, /amber/);
+  assert.doesNotMatch(aviso, /red-|text-danger|bg-danger/);
+  const pacote = JSON.parse(readFileSync(new URL("../package.json", SRC), "utf8"));
+  assert.equal(Object.keys({ ...pacote.dependencies, ...pacote.devDependencies }).some((nome) => /toast|sonner|snackbar|notistack/i.test(nome)), false);
 });

@@ -1,6 +1,7 @@
 import type { TrafegoAgoraPagina, TrafegoCarga, TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
 import { parametrosFiltrosTrafego, type FiltrosTrafegoApi } from "@/lib/filtros-trafego";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
+import { SessaoTrabalhoErro } from "@/lib/sessao-trabalho-erro";
 import type { DemandaArquivo } from "@/types/demanda";
 import type { EventoApi } from "@/types/acesso";
 
@@ -95,7 +96,10 @@ export async function abrirSessaoTrabalho(payload: AbrirSessaoTrabalhoPayload): 
     const detail = await response.json().catch(() => null);
     // 409 de domínio (SESSAO_ATIVA_EXISTENTE / DEMANDA_NAO_EXECUTAVEL) vem como `{ code, message }`; os demais erros, como texto.
     const bruto = detail?.detail;
-    throw new Error((typeof bruto === "string" ? bruto : bruto?.message) ?? "Falha ao abrir sessão de trabalho");
+    throw new SessaoTrabalhoErro((typeof bruto === "string" ? bruto : bruto?.message) ?? "Falha ao abrir sessão de trabalho", {
+      codigo: typeof bruto === "object" && typeof bruto?.code === "string" ? bruto.code : null,
+      status: response.status,
+    });
   }
   return response.json();
 }

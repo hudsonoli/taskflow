@@ -16,6 +16,6 @@ test("abrirSessaoTrabalho mostra a mensagem do 409 estruturado (não '[object Ob
 
 test("a tela de Tráfego exibe o erro de abertura sem esconder o conflito", () => {
   const tela = ler("components/trafego/TrafegoIniciarSessao.tsx");
-  assert.match(tela, /setErro\(error instanceof Error \? error\.message : "Erro ao iniciar sessão"\)/);
+  assert.match(tela, /else setErro\(resultado\.mensagem\)/); // erros que não são o 409 de sessão ativa seguem exibindo a mensagem do servidor
   assert.match(tela, /\{erro && <p/);
 });

@@ -1,13 +1,14 @@
 "use client";
 
 import { rotuloDemanda } from "@/lib/referencias";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { PlayCircle } from "lucide-react";
+import { AvisoFlutuante } from "@/components/ui/AvisoFlutuante";
 import { Button } from "@/components/ui/Button";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Select } from "@/components/ui/Select";
 import { abrirSessaoTrabalho } from "@/lib/api";
-import { opcoesDeDemanda, podeIniciarSessao } from "@/lib/trafego-ui";
+import { classificarErroAbrirSessao, MENSAGEM_SESSAO_ATIVA, opcoesDeDemanda, podeIniciarSessao } from "@/lib/trafego-ui";
 import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import type { DemandaDiretorio } from "@/types/demanda";
 
@@ -31,6 +32,8 @@ export function TrafegoIniciarSessao({
   const [demandaId, setDemandaId] = useState("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState({ chave: 0, aberto: false });
+  const fecharAviso = useCallback(() => setAviso((anterior) => ({ ...anterior, aberto: false })), []);
 
   async function handleIniciar() {
     setLoading(true);
@@ -42,7 +45,10 @@ export function TrafegoIniciarSessao({
       });
       onCreated();
     } catch (error) {
-      setErro(error instanceof Error ? error.message : "Erro ao iniciar sessão");
+      const resultado = classificarErroAbrirSessao(error);
+      // 409 SESSAO_ATIVA_EXISTENTE = aviso flutuante (nada fixo na barra); os outros erros seguem no tratamento de antes.
+      if (resultado.tipo === "aviso-sessao-ativa") setAviso((anterior) => ({ chave: anterior.chave + 1, aberto: true }));
+      else setErro(resultado.mensagem);
     } finally {
       setLoading(false);
     }
@@ -76,6 +82,7 @@ export function TrafegoIniciarSessao({
         {loading ? "Iniciando…" : "Iniciar sessão de teste"}
       </Button>
       {erro && <p className="basis-full text-sm text-red-600 dark:text-red-400">{erro}</p>}
+      <AvisoFlutuante mensagem={MENSAGEM_SESSAO_ATIVA} aberto={aviso.aberto} chave={aviso.chave} onFechar={fecharAviso} />
     </div>
   );
 }
