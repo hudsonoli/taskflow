@@ -93,7 +93,9 @@ export async function abrirSessaoTrabalho(payload: AbrirSessaoTrabalhoPayload): 
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
-    throw new Error(detail?.detail ?? "Falha ao abrir sessão de trabalho");
+    // 409 de domínio (SESSAO_ATIVA_EXISTENTE / DEMANDA_NAO_EXECUTAVEL) vem como `{ code, message }`; os demais erros, como texto.
+    const bruto = detail?.detail;
+    throw new Error((typeof bruto === "string" ? bruto : bruto?.message) ?? "Falha ao abrir sessão de trabalho");
   }
   return response.json();
 }
