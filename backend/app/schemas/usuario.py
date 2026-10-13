@@ -66,6 +66,8 @@ class UsuarioCreate(UsuarioPerfilFields):
     email: str = Field(min_length=1, max_length=255)
     perfil_base: UsuarioPerfilBaseAtribuivel = Field(alias="perfilBase")
     acesso_sistema: bool = Field(default=True, alias="acessoSistema")
+    # Fase Expediente 1 — isenção individual do expediente (só o campo; ainda não afeta autenticação).
+    acesso_fora_expediente: bool = Field(default=False, alias="acessoForaExpediente")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -77,6 +79,7 @@ class UsuarioUpdate(UsuarioPerfilFields):
     email: str | None = Field(default=None, min_length=1, max_length=255)
     perfil_base: UsuarioPerfilBaseAtribuivel | None = Field(default=None, alias="perfilBase")
     acesso_sistema: bool | None = Field(default=None, alias="acessoSistema")
+    acesso_fora_expediente: bool | None = Field(default=None, alias="acessoForaExpediente")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -102,6 +105,7 @@ class UsuarioRead(BaseModel):
     email: str
     perfil_base: UsuarioPerfilBase = Field(alias="perfilBase")
     acesso_sistema: bool = Field(alias="acessoSistema")
+    acesso_fora_expediente: bool = Field(default=False, alias="acessoForaExpediente")
     status: UsuarioStatus
     telefone: str | None = None
     cpf: str | None = None

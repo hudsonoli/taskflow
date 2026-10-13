@@ -1,7 +1,9 @@
-from datetime import datetime, time
+from datetime import date, datetime, time
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -10,6 +12,8 @@ from sqlalchemy import (
     String,
     Time,
     UniqueConstraint,
+    false,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,6 +37,10 @@ class RegraExpediente(Base):
     __tablename__ = "regra_expediente"
     __table_args__ = (
         Index("ix_regra_expediente_empresa_id", "empresa_id"),
+        CheckConstraint(
+            "antecedencia_acesso_minutos >= 0 AND antecedencia_acesso_minutos <= 720",
+            name="ck_regra_expediente_antecedencia_acesso",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -44,7 +52,19 @@ class RegraExpediente(Base):
     # ser bloqueada por dia ou horário, independente do que os dias tenham configurado (ver
     # `esta_dentro_expediente` em app/core/expediente.py, semântica oficializada na Fase 2G.3).
     ativo: Mapped[bool] = mapped_column(nullable=False, default=True)
+
+    # LEGADO, semântica antiga PRESERVADA: minutos ANTES do início do 2º período em que a ENTRADA em execução já é aceita (`esta_dentro_expediente`). NÃO é a
+    # antecedência de acesso (ver `antecedencia_acesso_minutos`) e não entra no cálculo de SLA nem nas funções de janela de trabalho/acesso.
     tolerancia_retomada_minutos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Fase Expediente 1 — fundação. As duas flags críticas nascem FALSE e AINDA NÃO têm efeito: nenhum gate de acesso, scheduler ou pausa automática as lê
+    # (Fases 2/3). `antecedencia_acesso_minutos` é só ANTECEDÊNCIA DE ACESSO (não conta como trabalho).
+    bloquear_fora_expediente: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    pausar_no_fim_periodo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    antecedencia_acesso_minutos: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
+    # IANA (ex.: America/Sao_Paulo), validado no backend: autoridade do calendário da empresa — nunca o relógio do navegador.
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="America/Sao_Paulo", server_default="America/Sao_Paulo")
+    feriados_automaticos: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -56,22 +76,14 @@ class RegraExpedienteDia(Base):
     conjunto inteiro numa única transação, nunca incrementalmente (mesmo raciocínio de
     `WorkflowModeloService._substituir_etapas`).
 
-    `ativo=False` → dia inteiro fora do expediente; horários ficam `NULL` nesse caso (CHECK
-    abaixo exige o oposto quando `ativo=True`: as quatro colunas de horário preenchidas,
-    início < fim em cada janela, e a manhã não pode terminar depois que a tarde começa).
+    Fase Expediente 1 — OS PERÍODOS VIVEM EM `regra_expediente_periodos` (0, 1, 2 ou mais por dia). `ativo` aqui é DERIVADO (há pelo menos um período) e só é mantido
+    por compatibilidade; `manha_*`/`tarde_*` são LEGADO: espelho dos dois períodos quando o dia tem exatamente dois, `NULL` caso contrário. O cálculo NÃO as lê
+    mais; saem numa fase futura. O CHECK antigo (quatro horários obrigatórios em dia ativo) foi removido pela migration 0047.
     """
 
     __tablename__ = "regra_expediente_dias"
     __table_args__ = (
         CheckConstraint("dia_semana >= 0 AND dia_semana <= 6", name="ck_regra_expediente_dias_dia_semana"),
-        CheckConstraint(
-            "NOT ativo OR ("
-            "manha_inicio IS NOT NULL AND manha_fim IS NOT NULL AND "
-            "tarde_inicio IS NOT NULL AND tarde_fim IS NOT NULL AND "
-            "manha_inicio < manha_fim AND tarde_inicio < tarde_fim AND manha_fim <= tarde_inicio"
-            ")",
-            name="ck_regra_expediente_dias_janelas_validas",
-        ),
         UniqueConstraint("regra_expediente_id", "dia_semana", name="uq_regra_expediente_dias_regra_dia"),
         Index("ix_regra_expediente_dias_regra_id", "regra_expediente_id"),
     )
@@ -87,3 +99,79 @@ class RegraExpedienteDia(Base):
     manha_fim: Mapped[time | None] = mapped_column(Time(), nullable=True)
     tarde_inicio: Mapped[time | None] = mapped_column(Time(), nullable=True)
     tarde_fim: Mapped[time | None] = mapped_column(Time(), nullable=True)
+
+
+class RegraExpedientePeriodo(Base):
+    """Um período de trabalho de um dia da semana (Fase Expediente 1). 0 períodos = dia fechado; 1 ou mais = dia útil. Sem sobreposição dentro do dia (validado
+    no schema/service — o Postgres não tem constraint de intervalo sem extensão) e SEM virar a meia-noite (início < fim, V1). Fim exclusivo: `08:00–12:00` inclui
+    08:00:00 e exclui 12:00:00."""
+
+    __tablename__ = "regra_expediente_periodos"
+    __table_args__ = (
+        CheckConstraint("dia_semana >= 0 AND dia_semana <= 6", name="ck_regra_expediente_periodos_dia_semana"),
+        CheckConstraint("ordem >= 1", name="ck_regra_expediente_periodos_ordem"),
+        CheckConstraint("inicio < fim", name="ck_regra_expediente_periodos_inicio_fim"),
+        UniqueConstraint("regra_expediente_id", "dia_semana", "ordem", name="uq_regra_expediente_periodos_regra_dia_ordem"),
+        Index("ix_regra_expediente_periodos_regra_id", "regra_expediente_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    regra_expediente_id: Mapped[str] = mapped_column(ForeignKey("regra_expediente.id", ondelete="CASCADE"), nullable=False)
+    dia_semana: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    ordem: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    inicio: Mapped[time] = mapped_column(Time(), nullable=False)
+    fim: Mapped[time] = mapped_column(Time(), nullable=False)
+
+
+class RegraExpedienteDiaEspecial(Base):
+    """Dia especial do calendário da empresa (feriado, recesso, dia excepcional de trabalho ou "ignorado"). Fase Expediente 1: só modelo e cadastro MANUAL — a
+    importação automática (BrasilAPI) é de outra fase, e o calendário nunca é buscado fora do banco.
+
+    - `feriado`/`recesso` ATIVOS → o dia fica FECHADO; `trabalho_excepcional` ATIVO → usa os períodos de `regra_expediente_dias_especiais_periodos` no lugar dos da
+      semana; `ignorado` ATIVO → NEUTRALIZA a data (nenhum efeito próprio: vale a regra semanal, mesmo que exista um feriado automático nela). `ativo=False`
+      desliga a linha.
+    - Precedência (ver `app.core.expediente.resolver_dia_especial`): dia especial vence a regra semanal; numa mesma data a decisão MANUAL ativa vence a
+      AUTOMÁTICA. Uma linha por (regra, data, origem).
+    """
+
+    __tablename__ = "regra_expediente_dias_especiais"
+    __table_args__ = (
+        CheckConstraint("origem IN ('automatico', 'manual')", name="ck_regra_expediente_dias_especiais_origem"),
+        CheckConstraint(
+            "tipo IN ('feriado', 'recesso', 'trabalho_excepcional', 'ignorado')", name="ck_regra_expediente_dias_especiais_tipo"
+        ),
+        UniqueConstraint("regra_expediente_id", "data", "origem", name="uq_regra_expediente_dias_especiais_regra_data_origem"),
+        Index("ix_regra_expediente_dias_especiais_regra_data", "regra_expediente_id", "data"),
+        Index("ix_regra_expediente_dias_especiais_empresa_id", "empresa_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    empresa_id: Mapped[str] = mapped_column(ForeignKey("empresas.id"), nullable=False)
+    regra_expediente_id: Mapped[str] = mapped_column(ForeignKey("regra_expediente.id", ondelete="CASCADE"), nullable=False)
+    data: Mapped[date] = mapped_column(Date(), nullable=False)
+    nome: Mapped[str] = mapped_column(String(120), nullable=False)
+    origem: Mapped[str] = mapped_column(String(16), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(24), nullable=False)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RegraExpedienteDiaEspecialPeriodo(Base):
+    """Períodos próprios de um dia `trabalho_excepcional` (mesma forma de `RegraExpedientePeriodo`, sem dia da semana)."""
+
+    __tablename__ = "regra_expediente_dias_especiais_periodos"
+    __table_args__ = (
+        CheckConstraint("ordem >= 1", name="ck_regra_expediente_dias_especiais_periodos_ordem"),
+        CheckConstraint("inicio < fim", name="ck_regra_expediente_dias_especiais_periodos_inicio_fim"),
+        UniqueConstraint("dia_especial_id", "ordem", name="uq_regra_expediente_dias_especiais_periodos_dia_ordem"),
+        Index("ix_regra_expediente_dias_especiais_periodos_dia_id", "dia_especial_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    dia_especial_id: Mapped[str] = mapped_column(
+        ForeignKey("regra_expediente_dias_especiais.id", ondelete="CASCADE"), nullable=False
+    )
+    ordem: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    inicio: Mapped[time] = mapped_column(Time(), nullable=False)
+    fim: Mapped[time] = mapped_column(Time(), nullable=False)

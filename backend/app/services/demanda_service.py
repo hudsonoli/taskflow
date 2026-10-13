@@ -12,9 +12,9 @@ from app.core.escopo import (
     departamentos_como_head,
     eh_atendimento,
 )
-from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente
+from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente, janela_do_dia, momento_local
 from app.core.referencias import gerar_proxima_referencia
-from app.core.relogio import agora_local, agora_utc, ano_corrente
+from app.core.relogio import agora_utc, ano_corrente
 from app.core.sequencias_operacionais import reservar_proximo_identificado
 from app.core.sla_resolver import resolver_sla
 from app.domain.event_types import DomainEventType
@@ -59,6 +59,8 @@ TIPO_ENTIDADE = "demanda"
 STATUS_ARQUIVADA = "arquivada"
 STATUS_PADRAO = "rascunho"
 STATUS_EM_EXECUCAO = "em_execucao"
+STATUS_PAUSADA = "pausada"
+PAUSA_ORIGEM_MANUAL = "manual"
 STATUS_BLOQUEADA = "bloqueada"
 STATUS_CONCLUIDA = "concluida"
 
@@ -300,6 +302,9 @@ class DemandaService:
                 nome=data.nome,
                 status=status,
                 motivo_bloqueio=data.motivo_bloqueio if status == STATUS_BLOQUEADA else None,
+                # Fase Expediente 1: a origem da pausa é registrada junto com a transição (criar já pausada = pausa manual de quem criou)
+                pausa_origem=PAUSA_ORIGEM_MANUAL if status == STATUS_PAUSADA else None,
+                pausada_em=now if status == STATUS_PAUSADA else None,
                 cliente_id=cliente_id,
                 projeto_id=projeto_id,
                 criado_por_usuario_id=actor_usuario_id,
@@ -661,12 +666,16 @@ class DemandaService:
 
                 demanda.status = status_final
                 campos_alterados.append("status")
-                eventos.append(
-                    (
-                        DomainEventType.DEMANDA_STATUS_ALTERADO,
-                        {"de": status_anterior, "para": status_final},
-                    )
-                )
+                payload_status = {"de": status_anterior, "para": status_final}
+                # Fase Expediente 1: origem da pausa. A transição manual grava `manual` (a automática por expediente é de outra fase); sair de `pausada` limpa.
+                if status_final == STATUS_PAUSADA:
+                    demanda.pausa_origem = PAUSA_ORIGEM_MANUAL
+                    demanda.pausada_em = agora_utc()
+                    payload_status["pausaOrigem"] = PAUSA_ORIGEM_MANUAL
+                elif status_anterior == STATUS_PAUSADA:
+                    demanda.pausa_origem = None
+                    demanda.pausada_em = None
+                eventos.append((DomainEventType.DEMANDA_STATUS_ALTERADO, payload_status))
 
                 if status_final == STATUS_BLOQUEADA:
                     demanda.motivo_bloqueio = motivo_final
@@ -861,6 +870,8 @@ class DemandaService:
 
             now = agora_utc()
             demanda.status_anterior_arquivamento = demanda.status
+            demanda.pausa_origem = None  # arquivada não está "pausada"; ao restaurar a pausa volta como manual (origem original não é guardada)
+            demanda.pausada_em = None
             demanda.status = STATUS_ARQUIVADA
             demanda.arquivado_at = now
             demanda.arquivado_por_usuario_id = actor_usuario_id
@@ -896,6 +907,9 @@ class DemandaService:
             # arquivada por engano fora do ar até o dia seguinte.
             now = agora_utc()
             demanda.status = demanda.status_anterior_arquivamento or STATUS_PADRAO
+            if demanda.status == STATUS_PAUSADA:
+                demanda.pausa_origem = PAUSA_ORIGEM_MANUAL
+                demanda.pausada_em = now
             demanda.restaurado_at = now
             demanda.restaurado_por_usuario_id = actor_usuario_id
             demanda.arquivado_at = None
@@ -1140,6 +1154,8 @@ class DemandaService:
             "prioridade": demanda.prioridade,
             "sinalizada": demanda.sinalizada,
             "motivoBloqueio": demanda.motivo_bloqueio,
+            "pausaOrigem": demanda.pausa_origem,
+            "pausadaEm": demanda.pausada_em,
             "clienteId": demanda.cliente_id,
             "projetoId": demanda.projeto_id,
             "criadoPorUsuarioId": demanda.criado_por_usuario_id,
@@ -1214,18 +1230,18 @@ class DemandaService:
         regra = self.regra_expediente or self.regra_expediente_service.get_regra_calculo(
             db, empresa_id=empresa_id
         )
-        agora = agora_local()
+        agora = momento_local(None, regra)  # relógio da EMPRESA (fuso da regra), nunca o do navegador
         if esta_dentro_expediente(agora, regra=regra):
             return
 
-        dia_hoje = regra.dias.get(agora.weekday(), JanelaDia(ativo=False))
+        # Dia efetivo de hoje: 0, 1, 2 ou mais períodos, já com feriado/recesso/trabalho excepcional (Fase Expediente 1).
+        dia_hoje = janela_do_dia(regra, agora.date())
         if not dia_hoje.ativo:
             mensagem = "Fora do expediente: hoje não é dia útil"
         else:
-            mensagem = (
-                "Fora do expediente: execução permitida das "
-                f"{dia_hoje.manha_inicio} às {dia_hoje.manha_fim} e das "
-                f"{dia_hoje.tarde_inicio} às {dia_hoje.tarde_fim}"
+            faixas = [f"{inicio} às {fim}" for inicio, fim in dia_hoje.lista_periodos()]
+            mensagem = "Fora do expediente: execução permitida das " + (
+                faixas[0] if len(faixas) == 1 else ", das ".join(faixas[:-1]) + " e das " + faixas[-1]
             )
         raise DemandaForaDeExpedienteError(
             mensagem, dia_hoje=dia_hoje, tolerancia_retomada_minutos=regra.tolerancia_retomada_minutos

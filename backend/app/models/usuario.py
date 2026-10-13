@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -62,6 +63,9 @@ class Usuario(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     perfil_base: Mapped[str] = mapped_column(String(32), nullable=False)
     acesso_sistema: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    # Fase Expediente 1 — isenção individual do controle de expediente (para o usuário comum/operador). SÓ O CAMPO: nenhuma autenticação/autorização o lê ainda (o
+    # gate de acesso é de outra fase). Gestor/admin serão isentos pelo perfil, não por esta flag.
+    acesso_fora_expediente: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     status: Mapped[str] = mapped_column(String(32), nullable=False)
 
     # Perfil rico (portado do cadastro mock — ver frontend/src/types/usuario.ts).

@@ -55,6 +55,7 @@ function createInitialDraft(usuario?: Usuario): UsuarioFormDraft {
     departamentoId: usuario?.departamentoId ?? "",
     perfil: usuario?.perfil ?? "operador",
     liderDepartamento: usuario?.liderDepartamento ?? false,
+    acessoForaExpediente: usuario?.acessoForaExpediente ?? false,
     valorRecebidoMensal: usuario?.valorRecebidoMensal ?? null,
     horasTrabalhoAproximadas: usuario?.horasTrabalhoAproximadas ?? null,
     ativo: usuario?.ativo ?? true,
@@ -242,6 +243,21 @@ export function UsuarioFormModal({
                   description={draft.liderDepartamento ? "É head do departamento" : "Não é líder do departamento"}
                 />
               </div>
+
+              {/* Isenção do expediente: só faz sentido para o usuário comum (gestor/admin serão isentos pelo perfil). Por ora apenas registra a escolha. */}
+              {perfilTecnico(draft.perfil) === "operador" && (
+                <div
+                  className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700"
+                  title="Quando o controle de expediente passar a bloquear o acesso, este usuário continuará podendo entrar fora do horário."
+                >
+                  <Switch
+                    checked={draft.acessoForaExpediente}
+                    onChange={(checked) => updateDraft({ acessoForaExpediente: checked })}
+                    label="Permitir acesso fora do expediente"
+                    description={draft.acessoForaExpediente ? "Isento do horário de expediente" : "Segue o horário de expediente"}
+                  />
+                </div>
+              )}
             </div>
 
             <Textarea

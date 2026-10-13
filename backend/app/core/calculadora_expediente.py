@@ -32,9 +32,15 @@ duas vezes quando janelas são adjacentes por hipótese (ex.: manhã terminando 
 tarde começa). Um `inicio` recebido exatamente no fim de uma janela (ex.: `19:00:00` no fim do
 expediente do dia) é tratado como FORA, avançando pro próximo instante válido.
 
+## Fase Expediente 1 — períodos e dias especiais
+
+As janelas de cada dia vêm de `app.core.expediente.periodos_do_dia` (0, 1, 2 ou mais períodos NOMINAIS, já com a precedência de dia especial: feriado/recesso fecham o
+dia; `trabalho_excepcional` usa períodos próprios). A tolerância legada de retomada e a antecedência de acesso NÃO entram aqui — o SLA enxerga os horários nominais.
+Para a configuração migrada (sem dias especiais) o resultado é idêntico ao anterior.
+
 ## Timezone
 
-Todo cálculo acontece no fuso da aplicação (`app.core.relogio.fuso_aplicacao`) — `inicio` é
+Todo cálculo acontece no fuso da REGRA (`app.core.expediente.fuso_da_regra`; sem fuso na regra, o da aplicação) — `inicio` é
 normalizado via `astimezone` logo na entrada (precisa já ser aware; `naive` é erro), e todo
 instante construído internamente (fins de janela, próximos inícios) usa o mesmo `tzinfo`. Não
 há tratamento sofisticado de DST — não removemos timezone em nenhum passo, e o resultado é
@@ -54,8 +60,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from app.core.expediente import JanelaDia, RegraExpediente
-from app.core.relogio import fuso_aplicacao
+from app.core.expediente import RegraExpediente, dia_aberto, fuso_da_regra, periodos_do_dia
 
 UNIDADES_VALIDAS = {"minutos", "horas", "dias_corridos", "dias_uteis"}
 
@@ -91,7 +96,7 @@ def calcular_data_limite(
     if inicio.tzinfo is None or inicio.utcoffset() is None:
         raise SlaCalculoInvalidoError("inicio deve ser timezone-aware")
 
-    inicio_local = inicio.astimezone(fuso_aplicacao())
+    inicio_local = inicio.astimezone(fuso_da_regra(regra_expediente))
 
     if unidade == "dias_corridos":
         return inicio_local + timedelta(days=quantidade)
@@ -131,8 +136,7 @@ def _avancar_dias_uteis(inicio: datetime, quantidade: int, regra: RegraExpedient
         if restante <= 0:
             return cursor
         cursor = cursor + timedelta(days=1)
-        dia = regra.dias.get(cursor.weekday())
-        if dia is not None and dia.ativo:
+        if dia_aberto(regra, cursor.date()):
             restante -= 1
     raise SlaExpedienteSemJanelaUtilError(
         "Avanço de dias úteis excedeu o limite defensivo de iterações — verifique a configuração"
@@ -153,15 +157,9 @@ def _minuto_do_dia(momento: datetime) -> int:
     return momento.hour * 60 + momento.minute
 
 
-def _janelas_do_dia(dia: JanelaDia | None) -> list[tuple[int, int]]:
-    if dia is None or not dia.ativo:
-        return []
-    janelas: list[tuple[int, int]] = []
-    if dia.manha_inicio is not None and dia.manha_fim is not None:
-        janelas.append((_hhmm_para_minutos(dia.manha_inicio), _hhmm_para_minutos(dia.manha_fim)))
-    if dia.tarde_inicio is not None and dia.tarde_fim is not None:
-        janelas.append((_hhmm_para_minutos(dia.tarde_inicio), _hhmm_para_minutos(dia.tarde_fim)))
-    return sorted(janelas)
+def _janelas_da_data(regra: RegraExpediente, data: date) -> list[tuple[int, int]]:
+    """Janelas NOMINAIS (em minutos do dia) da data, na ordem — já com a precedência de dia especial."""
+    return sorted((_hhmm_para_minutos(inicio), _hhmm_para_minutos(fim)) for inicio, fim in periodos_do_dia(regra, data))
 
 
 def _combinar(dia: date, minuto_do_dia: int, tzinfo) -> datetime:
@@ -170,16 +168,16 @@ def _combinar(dia: date, minuto_do_dia: int, tzinfo) -> datetime:
 
 
 def _validar_existe_janela_utilizavel(regra: RegraExpediente) -> None:
-    if not any(_janelas_do_dia(dia) for dia in regra.dias.values()):
+    if not any(dia.lista_periodos() for dia in regra.dias.values()):
         raise SlaExpedienteSemJanelaUtilError(
-            "RegraExpediente não possui nenhuma janela de expediente (manhã/tarde) utilizável — "
+            "RegraExpediente não possui nenhum período de expediente utilizável — "
             "cálculo com considerar_apenas_expediente=True nunca encontraria um instante válido"
         )
 
 
 def _instante_dentro_de_janela(momento: datetime, regra: RegraExpediente) -> bool:
     minuto = _minuto_do_dia(momento)
-    return any(inicio_j <= minuto < fim_j for inicio_j, fim_j in _janelas_do_dia(regra.dias.get(momento.weekday())))
+    return any(inicio_j <= minuto < fim_j for inicio_j, fim_j in _janelas_da_data(regra, momento.date()))
 
 
 def _proximo_instante_valido(momento: datetime, regra: RegraExpediente) -> datetime:
@@ -195,7 +193,7 @@ def _proximo_instante_valido(momento: datetime, regra: RegraExpediente) -> datet
     for _ in range(_MAX_ITERACOES):
         candidatos = sorted(
             inicio_j
-            for inicio_j, _fim_j in _janelas_do_dia(regra.dias.get(data_cursor.weekday()))
+            for inicio_j, _fim_j in _janelas_da_data(regra, data_cursor)
             if inicio_j >= limite_inferior
         )
         if candidatos:
@@ -210,7 +208,7 @@ def _proximo_instante_valido(momento: datetime, regra: RegraExpediente) -> datet
 
 def _fim_janela_atual(momento: datetime, regra: RegraExpediente) -> datetime:
     minuto = _minuto_do_dia(momento)
-    for inicio_j, fim_j in _janelas_do_dia(regra.dias.get(momento.weekday())):
+    for inicio_j, fim_j in _janelas_da_data(regra, momento.date()):
         if inicio_j <= minuto < fim_j:
             return _combinar(momento.date(), fim_j, momento.tzinfo)
     raise AssertionError("_fim_janela_atual chamado com momento fora de qualquer janela — invariante violada")

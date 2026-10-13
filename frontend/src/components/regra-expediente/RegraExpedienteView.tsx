@@ -2,42 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock, Loader2, PauseCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, MinusCircle } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { atualizarRegraExpedienteReal, getEmAndamentoOperacional, getRegraExpedienteReal } from "@/lib/api-backend";
 import { useEstadoExpediente } from "@/lib/estadoExpediente";
-import type { DiaSemana, JanelaDia, RegraExpediente } from "@/types/regra-expediente";
+import { DIAS_ORDEM, diasNormalizados, diasParaEnvio, errosDaSemana, opcoesDeFuso } from "@/lib/expediente-periodos";
+import type { DiaEspecial, DiaSemana, PeriodoExpediente, RegraExpediente } from "@/types/regra-expediente";
+import { DiasEspeciaisSection } from "./DiasEspeciaisSection";
+import { PeriodosDoDia } from "./PeriodosDoDia";
 
-// Fase 2G.3 — regra real por Empresa (antes: só estado local/mock). A UI original tinha uma
-// única janela global; a única mudança estrutural aqui é a linha de dias da semana abaixo do
-// switch — o restante (turnos, tolerância, cartão "agora") segue o mesmo layout de antes,
-// com a janela compartilhada entre todos os dias marcados como úteis (o backend já suporta
-// horários distintos por dia — não expor isso na UI ainda é decisão deliberada de manter o
-// menor impacto visual possível, ver relatório da Fase 2G.3).
+// Fase Expediente 1 — fundação. A tela configura períodos por dia (0, 1, 2 ou mais), antecedência de acesso, fuso e dias especiais. O QUE TEM EFEITO HOJE: o
+// interruptor "Controle de expediente" (o gate que já existia: iniciar a execução de uma demanda só é aceito dentro dos períodos). Os interruptores de BLOQUEIO de
+// acesso e de PAUSA automática existem mas ficam desligados e travados — nenhum bloqueio nem pausa automática acontece nesta etapa (o servidor também recusa ligá-los).
 
-const ORDEM_DIAS: DiaSemana[] = [0, 1, 2, 3, 4, 5, 6];
-const DIAS_LABEL: Record<DiaSemana, string> = { 0: "Seg", 1: "Ter", 2: "Qua", 3: "Qui", 4: "Sex", 5: "Sáb", 6: "Dom" };
-
-function paraMinutos(horaMinuto: string): number {
-  const [horas, minutos] = horaMinuto.split(":").map(Number);
-  return horas * 60 + minutos;
-}
-
-function formatarMinutos(totalMinutos: number): string {
-  const normalizado = ((totalMinutos % 1440) + 1440) % 1440;
-  const horas = Math.floor(normalizado / 60);
-  const minutos = normalizado % 60;
-  return `${String(horas).padStart(2, "0")}:${String(minutos).padStart(2, "0")}`;
-}
-
-/** Início efetivo do turno da tarde (com tolerância) do dia usado como referência da janela
- * compartilhada — `null` quando nenhum dia ativo tem horário de tarde definido ainda. */
-function tardeInicioEfetivo(diaReferencia: JanelaDia | null, toleranciaRetomadaMinutos: number): string | null {
-  if (!diaReferencia?.tardeInicio) return null;
-  return formatarMinutos(paraMinutos(diaReferencia.tardeInicio) - toleranciaRetomadaMinutos);
+function normalizarRegra(dados: RegraExpediente): RegraExpediente {
+  const normalizados = diasNormalizados(dados.dias);
+  return {
+    ...dados,
+    dias: normalizados.map((dia) => ({ diaSemana: dia.diaSemana, ativo: dia.periodos.length > 0, periodos: dia.periodos })),
+  };
 }
 
 export function RegraExpedienteView() {
@@ -47,9 +35,8 @@ export function RegraExpedienteView() {
   const [erro, setErro] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
-  // D2-D3A — endpoint dedicado (`GET /demandas/operacional/em-andamento`, admin/gestor),
-  // agregado no servidor sobre o universo INTEGRAL — nunca mais
-  // `AppDataContext.demandas.filter(status === "em_execucao").length`. `null` distingue
+  const [salvoEm, setSalvoEm] = useState<string | null>(null);
+  // D2-D3A — endpoint dedicado (`GET /demandas/operacional/em-andamento`, admin/gestor), agregado no servidor sobre o universo INTEGRAL. `null` distingue
   // "carregando" de "zero confirmado".
   const [emAndamento, setEmAndamento] = useState<number | null>(null);
   const [erroEmAndamento, setErroEmAndamento] = useState(false);
@@ -57,7 +44,7 @@ export function RegraExpedienteView() {
   function buscar() {
     getRegraExpedienteReal()
       .then((dados) => {
-        setRegra(dados);
+        setRegra(normalizarRegra(dados));
         setErro(false);
       })
       .catch(() => setErro(true))
@@ -90,72 +77,49 @@ export function RegraExpedienteView() {
     return <EstadoErro mensagem="Não foi possível carregar a regra de expediente." onRetry={tentarNovamente} />;
   }
 
-  function updateRegra(patch: Partial<Pick<RegraExpediente, "ativo" | "toleranciaRetomadaMinutos">>) {
+  function updateRegra(patch: Partial<Pick<RegraExpediente, "ativo" | "toleranciaRetomadaMinutos" | "antecedenciaAcessoMinutos" | "timezone">>) {
+    setSalvoEm(null);
     setRegra((current) => (current ? { ...current, ...patch } : current));
   }
 
-  /** Aplica o novo horário a todos os dias marcados como úteis — janela compartilhada, ver
-   * comentário no topo do arquivo. */
-  function updateJanelaDosDiasAtivos(patch: Partial<Pick<JanelaDia, "manhaInicio" | "manhaFim" | "tardeInicio" | "tardeFim">>) {
+  function updatePeriodos(diaSemana: DiaSemana, periodos: PeriodoExpediente[]) {
+    setSalvoEm(null);
     setRegra((current) =>
-      current ? { ...current, dias: current.dias.map((dia) => (dia.ativo ? { ...dia, ...patch } : dia)) } : current,
+      current ? { ...current, dias: current.dias.map((dia) => (dia.diaSemana === diaSemana ? { ...dia, periodos, ativo: periodos.length > 0 } : dia)) } : current,
     );
   }
 
-  function toggleDia(diaSemana: DiaSemana) {
-    setRegra((current) => {
-      if (!current) return current;
-      const referencia = current.dias.find((dia) => dia.ativo) ?? {
-        manhaInicio: "09:00",
-        manhaFim: "12:00",
-        tardeInicio: "14:00",
-        tardeFim: "19:00",
-      };
-      return {
-        ...current,
-        dias: current.dias.map((dia) => {
-          if (dia.diaSemana !== diaSemana) return dia;
-          if (dia.ativo) {
-            return { ...dia, ativo: false, manhaInicio: null, manhaFim: null, tardeInicio: null, tardeFim: null };
-          }
-          return {
-            ...dia,
-            ativo: true,
-            manhaInicio: referencia.manhaInicio,
-            manhaFim: referencia.manhaFim,
-            tardeInicio: referencia.tardeInicio,
-            tardeFim: referencia.tardeFim,
-          };
-        }),
-      };
-    });
+  function updateDiasEspeciais(diasEspeciais: DiaEspecial[]) {
+    setRegra((current) => (current ? { ...current, diasEspeciais } : current));
   }
 
+  const errosPorDia = errosDaSemana(regra.dias);
+  const haErros = Object.keys(errosPorDia).length > 0;
+
   async function salvar() {
-    if (!regra) return;
+    if (!regra || haErros) return;
     setSalvando(true);
     setErroSalvar(null);
     try {
       const atualizada = await atualizarRegraExpedienteReal({
         ativo: regra.ativo,
         toleranciaRetomadaMinutos: regra.toleranciaRetomadaMinutos,
-        dias: regra.dias,
+        antecedenciaAcessoMinutos: regra.antecedenciaAcessoMinutos,
+        timezone: regra.timezone,
+        dias: diasParaEnvio(regra.dias),
       });
-      setRegra(atualizada);
+      setRegra(normalizarRegra(atualizada));
+      setSalvoEm(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
     } catch (error) {
-      setErroSalvar(error instanceof Error ? error.message : "Não foi possível salvar a regra de expediente.");
+      setErroSalvar(error instanceof Error && error.message ? error.message : "Não foi possível salvar a regra de expediente.");
     } finally {
       setSalvando(false);
     }
   }
 
-  const diaReferencia = regra.dias.find((dia) => dia.ativo) ?? null;
   const dentroDoExpediente = estado?.dentroExpediente ?? true;
-  const agoraFormatado = estado
-    ? new Date(estado.agora).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    : null;
+  const agoraFormatado = estado ? new Date(estado.agora).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null;
   const emExecucaoAgoraTexto = emAndamento === null && !erroEmAndamento ? "…" : erroEmAndamento ? "—" : emAndamento;
-  const inicioTarde = tardeInicioEfetivo(diaReferencia, regra.toleranciaRetomadaMinutos);
 
   return (
     <div className="flex flex-col gap-6">
@@ -172,8 +136,8 @@ export function RegraExpedienteView() {
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight text-fg">Horário de expediente</h1>
             <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
-              Fora do horário configurado, demandas &quot;Em execução&quot; são pausadas automaticamente — o
-              usuário precisa arrastar o card de volta para retomar.
+              Defina os períodos de trabalho de cada dia da semana, a antecedência de acesso e os dias especiais. Nesta etapa a configuração é registrada e já
+              vale para <strong>iniciar a execução</strong> de uma demanda; o bloqueio de acesso fora do horário e a pausa automática ainda não estão ativos.
             </p>
           </div>
         </div>
@@ -189,11 +153,11 @@ export function RegraExpedienteView() {
         {dentroDoExpediente ? (
           <CheckCircle2 className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
         ) : (
-          <PauseCircle className="h-5 w-5 text-amber-700 dark:text-amber-400" />
+          <MinusCircle className="h-5 w-5 text-amber-700 dark:text-amber-400" />
         )}
         <div>
           <p className={`text-sm font-semibold ${dentroDoExpediente ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
-            {dentroDoExpediente ? "Agora: dentro do expediente" : "Agora: fora do expediente — pausas automáticas ativas"}
+            {dentroDoExpediente ? "Agora: dentro do expediente" : "Agora: fora do expediente"}
           </p>
           <p className="mt-0.5 text-xs text-fg-muted">
             {agoraFormatado ?? "—"} · {emExecucaoAgoraTexto} demanda(s) em execução agora
@@ -201,123 +165,131 @@ export function RegraExpedienteView() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
-        <div className="max-w-sm rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
-          <Switch
-            checked={regra.ativo}
-            onChange={(checked) => updateRegra({ ativo: checked })}
-            label="Controle de expediente ativo"
-            description="Quando desativado, o sistema não bloqueia a operação por dia ou horário."
-          />
-        </div>
-
-        <div className="mt-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Dias úteis</p>
-          <div className="flex flex-wrap gap-2">
-            {ORDEM_DIAS.map((diaSemana) => {
-              const dia = regra.dias.find((item) => item.diaSemana === diaSemana);
-              const ativo = dia?.ativo ?? false;
-              return (
-                <button
-                  key={diaSemana}
-                  type="button"
-                  onClick={() => toggleDia(diaSemana)}
-                  aria-pressed={ativo}
-                  className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                    ativo
-                      ? "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300"
-                      : "border-line bg-zinc-50 text-fg-subtle hover:border-field-line dark:bg-zinc-950/30"
-                  }`}
-                >
-                  {DIAS_LABEL[diaSemana]}
-                </button>
-              );
-            })}
+      <section aria-labelledby="controle-titulo" className="rounded-xl border border-line bg-surface p-4 shadow-sm">
+        <h2 id="controle-titulo" className="text-sm font-semibold text-fg">
+          Controle
+        </h2>
+        <div className="mt-3 grid gap-3 lg:grid-cols-3">
+          <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
+            <Switch
+              checked={regra.ativo}
+              onChange={(checked) => updateRegra({ ativo: checked })}
+              label="Ativar controle de expediente"
+              description="Quando ativo, iniciar a execução de uma demanda só é aceito dentro dos períodos. Desativado, nada é restringido por dia ou horário."
+            />
           </div>
-        </div>
-
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Turno da manhã</p>
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Início"
-                type="time"
-                value={diaReferencia?.manhaInicio ?? ""}
-                disabled={!diaReferencia}
-                onChange={(event) => updateJanelaDosDiasAtivos({ manhaInicio: event.target.value })}
-              />
-              <Input
-                label="Fim"
-                type="time"
-                value={diaReferencia?.manhaFim ?? ""}
-                disabled={!diaReferencia}
-                onChange={(event) => updateJanelaDosDiasAtivos({ manhaFim: event.target.value })}
-              />
+          <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
+            <Switch
+              checked={false}
+              disabled
+              onChange={() => undefined}
+              label="Bloquear usuários fora do expediente"
+              description="Será ativado em uma próxima etapa."
+            />
+            <div className="mt-1.5">
+              <Badge>Em breve</Badge>
             </div>
           </div>
-
-          <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-fg-subtle">Turno da tarde</p>
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Início"
-                type="time"
-                value={diaReferencia?.tardeInicio ?? ""}
-                disabled={!diaReferencia}
-                onChange={(event) => updateJanelaDosDiasAtivos({ tardeInicio: event.target.value })}
-              />
-              <Input
-                label="Fim"
-                type="time"
-                value={diaReferencia?.tardeFim ?? ""}
-                disabled={!diaReferencia}
-                onChange={(event) => updateJanelaDosDiasAtivos({ tardeFim: event.target.value })}
-              />
+          <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
+            <Switch
+              checked={false}
+              disabled
+              onChange={() => undefined}
+              label="Pausar atividades ao final dos períodos"
+              description="Será ativado em uma próxima etapa."
+            />
+            <div className="mt-1.5">
+              <Badge>Em breve</Badge>
             </div>
           </div>
         </div>
 
-        {!diaReferencia && (
-          <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-            Selecione ao menos um dia útil acima para definir os turnos.
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <Input
+              label="Antecedência para acesso (minutos)"
+              type="number"
+              min={0}
+              max={720}
+              value={regra.antecedenciaAcessoMinutos}
+              onChange={(event) => updateRegra({ antecedenciaAcessoMinutos: Math.min(720, Math.max(0, Number(event.target.value) || 0)) })}
+            />
+            <p className="mt-1.5 text-xs text-fg-muted">
+              Só libera o <strong>acesso</strong> antes de cada período. Não conta como horário trabalhado e não muda os períodos abaixo.
+            </p>
+          </div>
+          <div>
+            <Select
+              label="Fuso horário da empresa"
+              value={regra.timezone}
+              onChange={(event) => updateRegra({ timezone: event.target.value })}
+              options={opcoesDeFuso(regra.timezone)}
+            />
+            <p className="mt-1.5 text-xs text-fg-muted">Os horários valem neste fuso — nunca no relógio do navegador.</p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="semana-titulo" className="rounded-xl border border-line bg-surface p-4 shadow-sm">
+        <h2 id="semana-titulo" className="text-sm font-semibold text-fg">
+          Horário semanal
+        </h2>
+        <p className="mt-0.5 text-xs text-fg-muted">
+          Um dia pode ter um ou vários períodos (ex.: 08:00–12:00 e 13:00–18:00). Sem períodos, o dia fica fechado. Um período não atravessa a meia-noite.
+        </p>
+        <div className="mt-2">
+          {DIAS_ORDEM.map((diaSemana) => {
+            const dia = regra.dias.find((item) => item.diaSemana === diaSemana);
+            return (
+              <PeriodosDoDia
+                key={diaSemana}
+                dia={diaSemana}
+                periodos={dia?.periodos ?? []}
+                erro={errosPorDia[diaSemana]}
+                onChange={(periodos) => updatePeriodos(diaSemana, periodos)}
+              />
+            );
+          })}
+        </div>
+
+        <details className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-950/30">
+          <summary className="cursor-pointer text-xs font-semibold text-fg-muted">Avançado — tolerância de retomada (legado)</summary>
+          <div className="mt-3 max-w-xs">
+            <Input
+              label="Tolerância de retomada (minutos)"
+              type="number"
+              min={0}
+              max={120}
+              value={regra.toleranciaRetomadaMinutos}
+              onChange={(event) => updateRegra({ toleranciaRetomadaMinutos: Math.max(0, Number(event.target.value) || 0) })}
+            />
+          </div>
+          <p className="mt-2 text-xs text-fg-muted">
+            Regra antiga, mantida como era: <strong>iniciar a execução</strong> já é aceito esta quantidade de minutos antes do início do 2º período do dia
+            (ex.: com 30 min, depois do almoço a execução pode começar 30 min antes). Não é a antecedência de acesso e não altera prazos nem SLA.
           </p>
-        )}
+        </details>
 
-        <div className="mt-5">
-          <Input
-            label="Tolerância de retomada antecipada (minutos)"
-            type="number"
-            min={0}
-            max={120}
-            value={regra.toleranciaRetomadaMinutos}
-            onChange={(event) => updateRegra({ toleranciaRetomadaMinutos: Number(event.target.value) || 0 })}
-          />
-          {inicioTarde && diaReferencia?.tardeFim && (
-            <p className="mt-2 text-xs text-fg-muted">
-              A partir das <span className="font-semibold text-zinc-700 dark:text-zinc-300">{inicioTarde}</span>, o
-              usuário já pode arrastar o card de volta para &quot;Em execução&quot; sem que a regra pause de novo — mesmo o
-              turno da tarde começando oficialmente às {diaReferencia.tardeInicio}.
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+          {erroSalvar && (
+            <p role="alert" className="mr-auto text-xs text-red-600 dark:text-red-400">
+              {erroSalvar}
             </p>
           )}
-        </div>
-
-        {diaReferencia?.manhaFim && inicioTarde && diaReferencia.tardeFim && (
-          <p className="mt-5 border-t border-zinc-100 pt-4 text-xs text-fg-subtle dark:border-zinc-800">
-            Fora dos turnos configurados (ex.: {diaReferencia.manhaFim}–{inicioTarde}, e após {diaReferencia.tardeFim}), nos
-            dias úteis marcados acima, toda demanda com status &quot;Em execução&quot; é movida automaticamente para
-            &quot;Pausada&quot;.
-          </p>
-        )}
-
-        <div className="mt-5 flex items-center justify-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-          {erroSalvar && <p className="mr-auto text-xs text-red-600 dark:text-red-400">{erroSalvar}</p>}
-          <Button type="button" onClick={salvar} disabled={salvando}>
+          {!erroSalvar && haErros && <p className="mr-auto text-xs text-amber-700 dark:text-amber-400">Corrija os períodos destacados para salvar.</p>}
+          {!erroSalvar && !haErros && salvoEm && (
+            <p role="status" className="mr-auto text-xs text-emerald-700 dark:text-emerald-400">
+              Salvo às {salvoEm}.
+            </p>
+          )}
+          <Button type="button" onClick={salvar} disabled={salvando || haErros}>
             {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             {salvando ? "Salvando…" : "Salvar alterações"}
           </Button>
         </div>
-      </div>
+      </section>
+
+      <DiasEspeciaisSection dias={regra.diasEspeciais} onChange={updateDiasEspeciais} />
     </div>
   );
 }

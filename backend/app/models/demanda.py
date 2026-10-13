@@ -149,6 +149,7 @@ class Demanda(Base):
             "'aguardando_cliente', 'concluida', 'cancelada', 'arquivada')",
             name="ck_demandas_status",
         ),
+        CheckConstraint("pausa_origem IS NULL OR pausa_origem IN ('manual', 'expediente')", name="ck_demandas_pausa_origem"),
         CheckConstraint("prioridade IN ('baixa', 'media', 'alta')", name="ck_demandas_prioridade"),
         CheckConstraint(
             "data_inicio IS NULL OR data_fim_prevista IS NULL OR data_fim_prevista >= data_inicio",
@@ -297,3 +298,9 @@ class Demanda(Base):
     restaurado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     restaurado_por_usuario_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status_anterior_arquivamento: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # Fase Expediente 1 — ORIGEM da pausa. `manual` (alguém pausou) | `expediente` (reservado: o sistema pausou no fim do período — Fase 3, nada o grava ainda) |
+    # NULL (a demanda não está pausada, ou pausa anterior a esta fase sem origem conhecida). Gravada junto com a transição de status; sair de `pausada` a limpa.
+    # `pausada_em` = instante em que entrou em `pausada` (NULL no legado).
+    pausa_origem: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    pausada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

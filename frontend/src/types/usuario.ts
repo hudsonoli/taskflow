@@ -91,6 +91,8 @@ export type Usuario = {
   ultimoAcesso?: { em: string; ip: string | null };
   // Marca a pessoa como líder/gerente do departamento (head) — dá permissão de cadastrar demandas.
   liderDepartamento: boolean;
+  // Fase Expediente 1: "Permitir acesso fora do expediente" — isenção individual do usuário comum. Só persiste; o bloqueio de acesso é de outra fase.
+  acessoForaExpediente: boolean;
   // Aba Financeiro (visível apenas para Gestão/Diretoria/Financeiro): cruzamento recebimento x hora.
   valorRecebidoMensal: number | null;
   horasTrabalhoAproximadas: number | null;

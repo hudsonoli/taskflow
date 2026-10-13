@@ -68,7 +68,7 @@ import type {
   WorkflowModeloStatus,
 } from "@/types/workflow-modelo";
 import type { TipoTarefa, TipoTarefaDiretorioItem, TipoTarefaFormDraft, TipoTarefaStatus } from "@/types/tipo-tarefa";
-import type { EstadoExpediente, RegraExpediente, RegraExpedienteUpdateDraft } from "@/types/regra-expediente";
+import type { DiaEspecial, DiaEspecialDraft, EstadoExpediente, RegraExpediente, RegraExpedienteUpdateDraft } from "@/types/regra-expediente";
 import type { CategoriaPeca, CategoriaPecaDiretorioItem, CategoriaPecaFormDraft } from "@/types/categoria-peca";
 import type { Peca, PecaDiretorioItem, PecaFormDraft } from "@/types/peca";
 import type { ModeloCampanha, ModeloCampanhaDiretorioItem, ModeloCampanhaFormDraft } from "@/types/modelo-campanha";
@@ -309,6 +309,8 @@ export type UsuarioReadApi = {
   cargo: string | null;
   fotoUrl: string | null;
   liderDepartamento: boolean;
+  /** Fase Expediente 1 — isenção individual do expediente (só o campo; ainda não afeta o acesso). */
+  acessoForaExpediente?: boolean;
   valorRecebidoMensalCentavos: number | null;
   horasTrabalhoAproximadas: number | null;
   observacoes: string | null;
@@ -341,6 +343,7 @@ export function mapUsuarioReadToUsuario(data: UsuarioReadApi): Usuario {
     cargo: data.cargo ?? undefined,
     fotoUrl: data.fotoUrl ?? undefined,
     liderDepartamento: data.liderDepartamento,
+    acessoForaExpediente: data.acessoForaExpediente ?? false,
     valorRecebidoMensal: data.valorRecebidoMensalCentavos != null ? data.valorRecebidoMensalCentavos / 100 : null,
     horasTrabalhoAproximadas: data.horasTrabalhoAproximadas,
     ativo: data.status === "ativo",
@@ -371,6 +374,7 @@ function draftParaPayload(draft: UsuarioFormDraft) {
     cargo: draft.cargo || null,
     fotoUrl: draft.fotoUrl || null,
     liderDepartamento: draft.liderDepartamento,
+    acessoForaExpediente: draft.acessoForaExpediente,
     valorRecebidoMensalCentavos: draft.valorRecebidoMensal != null ? Math.round(draft.valorRecebidoMensal * 100) : null,
     horasTrabalhoAproximadas: draft.horasTrabalhoAproximadas,
     observacoes: draft.observacoes || null,
@@ -2669,6 +2673,19 @@ export async function atualizarRegraExpedienteReal(
     method: "PATCH",
     body: JSON.stringify(draft),
   });
+}
+
+// Dias especiais (Fase Expediente 1): cadastro MANUAL. A origem ("manual") é do servidor — o cliente nunca a envia.
+export async function criarDiaEspecialReal(draft: DiaEspecialDraft): Promise<DiaEspecial> {
+  return request<DiaEspecial>("/regra-expediente/dias-especiais", { method: "POST", body: JSON.stringify(draft) });
+}
+
+export async function atualizarDiaEspecialReal(id: string, patch: Partial<DiaEspecialDraft>): Promise<DiaEspecial> {
+  return request<DiaEspecial>(`/regra-expediente/dias-especiais/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export async function removerDiaEspecialReal(id: string): Promise<void> {
+  await request<void>(`/regra-expediente/dias-especiais/${id}`, { method: "DELETE" });
 }
 
 // Leitura operacional enxuta — Kanban, capacidade de Meu Departamento. Nunca baixa a regra

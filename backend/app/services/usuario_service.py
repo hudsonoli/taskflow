@@ -157,6 +157,7 @@ class UsuarioService:
                 email=email,
                 perfil_base=data.perfil_base,
                 acesso_sistema=data.acesso_sistema,
+                acesso_fora_expediente=data.acesso_fora_expediente,
                 status=STATUS_ATIVO,
                 created_at=now,
                 updated_at=now,
@@ -360,6 +361,11 @@ class UsuarioService:
             if "acesso_sistema" in updates and updates["acesso_sistema"] != usuario.acesso_sistema:
                 usuario.acesso_sistema = updates["acesso_sistema"]
                 changed_fields.append("acessoSistema")
+
+            # Fase Expediente 1: isenção individual do expediente — só persiste e audita (USUARIO_ALTERADO.camposAlterados); nenhum acesso a lê ainda.
+            if "acesso_fora_expediente" in updates and updates["acesso_fora_expediente"] is not None and updates["acesso_fora_expediente"] != usuario.acesso_fora_expediente:
+                usuario.acesso_fora_expediente = updates["acesso_fora_expediente"]
+                changed_fields.append("acessoForaExpediente")
 
             if "departamento_id" in updates:
                 novo_departamento = str(updates["departamento_id"]) if updates["departamento_id"] else None
@@ -662,6 +668,7 @@ class UsuarioService:
             email=usuario.email,
             perfilBase=usuario.perfil_base,
             acessoSistema=usuario.acesso_sistema,
+            acessoForaExpediente=usuario.acesso_fora_expediente,
             status=usuario.status,
             telefone=usuario.telefone,
             cpf=usuario.cpf,

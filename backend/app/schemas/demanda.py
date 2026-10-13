@@ -269,6 +269,9 @@ class DemandaRead(BaseModel):
     prioridade: DemandaPrioridade
     sinalizada: bool
     motivo_bloqueio: str | None = Field(default=None, alias="motivoBloqueio")
+    # Fase Expediente 1 — origem da pausa (manual | expediente | null) e quando entrou em pausada. Só leitura: a API de escrita não aceita estes campos.
+    pausa_origem: Literal["manual", "expediente"] | None = Field(default=None, alias="pausaOrigem")
+    pausada_em: datetime | None = Field(default=None, alias="pausadaEm")
     cliente_id: UUID | None = Field(default=None, alias="clienteId")
     projeto_id: UUID | None = Field(default=None, alias="projetoId")
     criado_por_usuario_id: UUID | None = Field(default=None, alias="criadoPorUsuarioId")

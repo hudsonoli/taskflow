@@ -36,7 +36,7 @@ from app.models.empresa import Empresa
 from app.models.equipe import Equipe
 from app.models.equipe_membro import EquipeMembro
 from app.models.regra_expediente import RegraExpediente as RegraExpedienteModel
-from app.models.regra_expediente import RegraExpedienteDia
+from app.models.regra_expediente import RegraExpedienteDia, RegraExpedientePeriodo
 from app.models.usuario import Usuario
 
 
@@ -164,6 +164,9 @@ def _fixar_expediente_8h_todos_os_dias(db: Session, empresa: Empresa) -> None:
                 tarde_fim=time(8, 0),
             )
         )
+        # Fase Expediente 1: a fonte dos horários é a tabela de períodos (o espelho manhã/tarde acima é legado e não é mais lido).
+        db.add(RegraExpedientePeriodo(id=str(uuid.uuid4()), regra_expediente_id=regra.id, dia_semana=dia_semana, ordem=1, inicio=time(0, 0), fim=time(4, 0)))
+        db.add(RegraExpedientePeriodo(id=str(uuid.uuid4()), regra_expediente_id=regra.id, dia_semana=dia_semana, ordem=2, inicio=time(4, 0), fim=time(8, 0)))
     db.flush()
 
 

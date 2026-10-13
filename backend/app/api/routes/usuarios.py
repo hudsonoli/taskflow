@@ -61,6 +61,7 @@ PATCH_ALLOWED_FIELDS = {
     "email",
     "perfilBase",
     "acessoSistema",
+    "acessoForaExpediente",
     "telefone",
     "cpf",
     "dataNascimento",
