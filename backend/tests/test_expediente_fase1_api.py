@@ -439,3 +439,48 @@ def test_nenhum_mecanismo_pausa_sozinho(client_admin: TestClient, dentro_do_expe
     client_admin.get("/expediente/estado")
     client_admin.get("/regra-expediente")
     assert client_admin.get(f"/demandas/{demanda['id']}").json()["status"] == "em_execucao"
+
+
+# ── Fase 1: decisões de segurança antes do merge ─────────────────────────────────────────────────────────────────
+
+
+def test_p2_gate_legado_de_entrada_ainda_vale_para_gestor_e_admin(client_admin: TestClient, client_gestor: TestClient, regra_override) -> None:
+    """P2_EXPEDIENTE_GATE_PROFILE_EXEMPTIONS — registrado, NÃO corrigido na Fase 1: o gate de entrada em execução ainda se aplica a admin/gestor (a isenção por
+    perfil é da Fase 2). Se este teste quebrar sem a Fase 2, algo mudou o gate."""
+    hoje = momento_local(None, _regra_aberta_sempre()).date()
+    regra_override(_regra_aberta_sempre(dias_especiais=(DiaEspecial(data=hoje, tipo="feriado"),)))
+    for cliente in (client_admin, client_gestor):
+        demanda = _demanda_rascunho(cliente)
+        resposta = cliente.patch(f"/demandas/{demanda['id']}", json={"status": "em_execucao"})
+        assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "FORA_DE_EXPEDIENTE"
+
+
+def test_a_antecedencia_de_acesso_nao_substitui_a_tolerancia_legada_no_dto(client_admin: TestClient, db_session: Session, empresa: Empresa) -> None:
+    client_admin.patch("/regra-expediente", json={"toleranciaRetomadaMinutos": 30, "antecedenciaAcessoMinutos": 45})
+    dto = RegraExpedienteService().get_regra_calculo(db_session, empresa_id=empresa.id)
+    assert dto.tolerancia_retomada_minutos == 30 and dto.antecedencia_acesso_minutos == 45  # campos separados
+    assert client_admin.get("/regra-expediente").json()["toleranciaRetomadaMinutos"] == 30
+
+
+def test_nenhum_codigo_cria_pausa_origem_expediente() -> None:
+    """AUTO_PAUSE_ACTIVE=NÃO: o valor "expediente" só existe como constraint/reserva — nenhuma rotina de aplicação o grava."""
+    import pathlib
+    import re
+
+    raiz = pathlib.Path(__file__).resolve().parents[1] / "app"
+    atribuicoes = []
+    for arquivo in raiz.rglob("*.py"):
+        for linha in arquivo.read_text(encoding="utf-8").splitlines():
+            if re.search(r"pausa_origem\s*=\s*", linha) and not linha.strip().startswith("#"):
+                atribuicoes.append((arquivo.name, linha.strip()))
+    assert atribuicoes, "esperava as atribuições da pausa manual"
+    for arquivo, linha in atribuicoes:
+        assert "expediente" not in linha.lower() or "check" in linha.lower() or "Literal" in linha, (arquivo, linha)
+    assert not any(re.search(r'pausa_origem\s*=\s*["\']expediente', l) for _, l in atribuicoes)
+
+
+def test_pausa_manual_e_saida_da_pausa_continuam_registrando_a_origem(client_admin: TestClient, dentro_do_expediente) -> None:
+    d = _demanda_rascunho(client_admin)
+    client_admin.patch(f"/demandas/{d['id']}", json={"status": "em_execucao"})
+    assert client_admin.patch(f"/demandas/{d['id']}", json={"status": "pausada"}).json()["pausaOrigem"] == "manual"
+    assert client_admin.patch(f"/demandas/{d['id']}", json={"status": "bloqueada", "motivoBloqueio": "x"}).json()["pausaOrigem"] is None

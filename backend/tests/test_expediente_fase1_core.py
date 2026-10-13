@@ -392,3 +392,32 @@ def test_sla_pula_feriado_e_usa_dia_excepcional() -> None:
     excepcional = regra(especiais=[especial(SAB, "trabalho_excepcional", periodos=[("09:00", "12:00")])])
     sexta_tarde = datetime(2026, 10, 16, 17, 30, tzinfo=tz)
     assert calcular_data_limite(sexta_tarde, 1, "horas", True, excepcional) == datetime(2026, 10, 17, 9, 30, tzinfo=tz)
+
+
+# ── Fase 1: a tolerância LEGADA continua mandando no gate de entrada; a antecedência de ACESSO não o toca ─────────
+
+
+def test_tolerancia_legada_ainda_vale_no_gate_de_entrada_mas_nao_na_janela_de_trabalho() -> None:
+    """Produção: 09–12 / 13–18 com tolerância 30 → a ENTRADA em execução já vale às 12:30; o trabalho só às 13:00 (e o acesso às 12:30 com antecedência 30)."""
+    r = regra({d: (("09:00", "12:00"), ("13:00", "18:00")) for d in range(5)}, tolerancia=30, antecedencia=30)
+    assert esta_dentro_expediente(em(SEG, "12:29"), regra=r) is False
+    assert esta_dentro_expediente(em(SEG, "12:30"), regra=r) is True  # gate legado: tolerância
+    assert esta_dentro_janela_trabalho(em(SEG, "12:30"), regra=r) is False  # novo cálculo: trabalho só às 13:00
+    assert esta_dentro_janela_trabalho(em(SEG, "13:00"), regra=r) is True
+
+
+def test_antecedencia_de_acesso_nao_altera_o_gate_de_entrada_nem_o_trabalho() -> None:
+    base = {d: (("09:00", "12:00"), ("13:00", "18:00")) for d in range(5)}
+    sem, com = regra(base, tolerancia=30, antecedencia=0), regra(base, tolerancia=30, antecedencia=120)
+    for minuto in range(7 * 24 * 60):
+        momento = datetime(2026, 10, 12) + timedelta(minutes=minuto)
+        assert esta_dentro_expediente(momento, regra=sem) is esta_dentro_expediente(momento, regra=com), momento
+        assert esta_dentro_janela_trabalho(momento, regra=sem) is esta_dentro_janela_trabalho(momento, regra=com), momento
+
+
+def test_a_tolerancia_legada_nao_entra_no_acesso() -> None:
+    base = {d: (("09:00", "12:00"), ("13:00", "18:00")) for d in range(5)}
+    com_tolerancia, sem_tolerancia = regra(base, tolerancia=45, antecedencia=30), regra(base, tolerancia=0, antecedencia=30)
+    for minuto in range(24 * 60):
+        momento = datetime(2026, 10, 12) + timedelta(minutes=minuto)
+        assert esta_dentro_janela_acesso(momento, regra=com_tolerancia) is esta_dentro_janela_acesso(momento, regra=sem_tolerancia), momento

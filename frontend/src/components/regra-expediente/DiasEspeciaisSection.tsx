@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarPlus, Loader2, Trash2 } from "lucide-react";
+import { CalendarPlus, Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -98,6 +98,17 @@ export function DiasEspeciaisSection({ dias, onChange }: { dias: DiaEspecial[]; 
           Adicionar dia especial
         </Button>
       </div>
+
+      <p
+        role="note"
+        className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+      >
+        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <span>
+          <strong>Atenção:</strong> enquanto o novo controle de expediente não estiver ativado, os dias especiais <strong>ativos já afetam</strong> os dias úteis, a
+          entrada em execução das demandas e os cálculos de prazo (SLA). Cadastre só o que deve valer de verdade.
+        </span>
+      </p>
 
       {aberto && (
         <div className="mt-4 grid gap-3 rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30 md:grid-cols-[10rem_minmax(0,1fr)_14rem]">

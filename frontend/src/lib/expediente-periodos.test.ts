@@ -165,3 +165,12 @@ test("nenhum bloqueio de acesso foi ligado no frontend: nada trata FORA_DO_EXPED
     assert.equal(ler(arquivo).includes("FORA_DO_EXPEDIENTE"), false, arquivo);
   }
 });
+
+test("dias especiais: aviso claro de que, até o novo controle, dias ativos já afetam dias úteis, entrada em execução e prazos", () => {
+  const secao = semComentarios(ler("components/regra-expediente/DiasEspeciaisSection.tsx"));
+  assert.match(secao, /role="note"/);
+  assert.match(secao, /enquanto o novo controle de expediente não estiver ativado/);
+  assert.match(secao, /já afetam/);
+  assert.match(secao, /entrada em execução/);
+  assert.match(secao, /cálculos de prazo \(SLA\)/);
+});

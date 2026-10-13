@@ -30,3 +30,22 @@ Fase **somente de modelo, cálculo e configuração**. NADA bloqueia acesso e NA
 ## Backlog registrado (não implementado)
 
 Gate de acesso e tela "Fora do expediente" · scheduler/pausa automática (decisão: pausar se não restar sessão de usuário isento) · importação BrasilAPI (apenas feriados **nacionais**; estaduais/municipais são manuais) · sessão própria do operador (só para si) · período que atravessa a meia-noite · remoção das colunas legadas.
+
+## Dias especiais NÃO são inertes (leia antes de cadastrar)
+
+Esta fase não ativa o novo controle, mas **um dia especial ATIVO já afeta**: (a) os dias úteis (`dia_aberto`, avanço de `dias_uteis`); (b) o gate de ENTRADA em `em_execucao` (feriado/recesso ativo = "hoje não é dia útil", 409 `FORA_DE_EXPEDIENTE`); (c) o cálculo de prazos/SLA (`calcular_data_limite` pula o dia ou usa os períodos do `trabalho_excepcional`). Sem nenhum dia especial cadastrado, o comportamento é idêntico ao anterior. A tela avisa isso na seção de dias especiais.
+
+- **Não cadastrar dias especiais reais em produção** durante/depois do deploy desta fase, e **não habilitar feriados automáticos** (a API recusa ligar a flag).
+- **P2_EXPEDIENTE_GATE_PROFILE_EXEMPTIONS**: o gate legado de entrada em execução ainda se aplica a admin/gestor (coberto por teste). Na Fase 2, admin/gestor/conta de sistema (e o usuário com `acesso_fora_expediente`) serão isentos. Até lá, dias especiais reais **não** devem ser usados como mecanismo de bloqueio.
+
+## Tolerância legada × antecedência de acesso (decisão desta fase)
+
+- `tolerancia_retomada_minutos` (produção: **30**) **não foi alterada**: continua sendo usada pelo gate de entrada em execução (hoje a entrada já vale às 12:30). Não é zerada nem convertida.
+- `antecedencia_acesso_minutos` (30) é armazenada à parte e **não é lida por nenhuma autenticação/autorização** (`NEW_ACCESS_ANTICIPATION_ACTIVE_IN_AUTH = NÃO`); não substitui a tolerância no gate. Teste: variar a antecedência de 0 a 120 não muda nenhuma resposta do gate de entrada nem da janela de trabalho, e variar a tolerância não muda o acesso.
+- Na Fase 2 a semântica é substituída de forma consciente: 12:30 = acesso permitido, 13:00 = trabalho permitido.
+
+## Deploy e rollback em produção
+
+- Produção está em `f2c6a9d41b87`; a migration `0047` é `a3c8e5f17d24` com `down_revision = f2c6a9d41b87` (cabeça única, caminho linear).
+- **Backup do banco é obrigatório antes de aplicar a migration.**
+- O downgrade devolve o legado manhã/tarde a partir dos 2 primeiros períodos de cada dia: dia com 1 período volta inativo e do 3º período em diante é descartado (**perda estrutural aceita**). Portanto, **se for preciso reverter DEPOIS de alterações reais na nova configuração, NÃO execute o downgrade às cegas**: restaure o snapshot do banco ou reconcilie antes os períodos (deixe cada dia com 0 ou exatamente 2 períodos). Reverter só o código (sem downgrade) é seguro: as colunas legadas ficam espelhadas para dias com 2 períodos.
