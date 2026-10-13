@@ -273,3 +273,45 @@ test("a aba Progresso fica DENTRO de /projetos (sem novo item de menu)", () => {
   assert.match(projetos, /label: "Progresso"/);
   assert.equal(ler("app/e/[slug]/projetos/page.tsx").includes("Progresso"), false);
 });
+
+// ── polimento visual: estrutura (nenhuma regra mudou) ────────────────────────────────────────────────────────
+
+test("filtros: os cinco controles continuam presentes, em grade estável (sem classe arbitrária com repeat())", () => {
+  const view = semComentarios(ler("components/projetos/progresso/ProjetosProgressoView.tsx"));
+  assert.match(view, /placeholder="Projeto, campanha, código ou tarefa"/); // Busca
+  for (const rotulo of ["Cliente", "Departamento", "Status"]) assert.match(view, new RegExp(`label="${rotulo}"`));
+  assert.match(view, /<MemberSelector[\s\S]*?label="Responsável"/);
+  assert.match(view, /lg:grid-cols-6/);
+  assert.match(view, /lg:col-span-2/); // Busca ocupa 2 das 6 colunas
+  assert.equal(view.includes("repeat("), false);
+});
+
+test("cabeçalho do projeto mantém todas as métricas e os alertas acessíveis", () => {
+  const grupo = semComentarios(ler("components/projetos/progresso/ProjetoProgressoGrupo.tsx"));
+  for (const campo of ["resumo.percentual", "resumo.concluidas", "resumo.total", "resumo.bloqueadas", "resumo.atrasadas", "resumo.aguardandoCliente", "clienteNome", "projeto.codigoReferencia"]) {
+    assert.ok(grupo.includes(campo), `o cabeçalho perdeu ${campo}`);
+  }
+  assert.match(grupo, /<BarraStatusProjeto/);
+  assert.match(grupo, /sr-only/); // texto completo para leitor de tela nos alertas curtos
+  assert.match(grupo, /aria-expanded=\{aberto\}/);
+});
+
+test("responsáveis continuam separados de quem trabalha agora (pílula '+N agora', acessível, sem virar responsável)", () => {
+  const grupo = semComentarios(ler("components/projetos/progresso/ProjetoProgressoGrupo.tsx"));
+  assert.match(grupo, /<TambemAgora ids=\{vivo\.outrosAgora\}/);
+  assert.match(grupo, /Também trabalhando nesta tarefa/); // title
+  assert.match(grupo, /sem ser responsável da etapa atual/); // leitura para tecnologia assistiva
+  assert.match(grupo, /\+\{ids\.length\} agora/);
+  // quem não é responsável nunca passa pelo componente de responsável
+  assert.equal(/<ResponsavelAvatar[^>]*outrosAgora/.test(grupo), false);
+  assert.match(grupo, /agora=\{vivo\.responsaveisAgora\.includes\(id\)\}/);
+});
+
+test("contraste: 'planejada' e etapa pendente deixam de usar tons quase iguais ao fundo", () => {
+  const barra = ler("components/projetos/progresso/BarraStatusProjeto.tsx");
+  assert.equal(barra.includes('planejada: "bg-zinc-200'), false);
+  assert.match(barra, /planejada: "bg-surface ring-1 ring-inset ring-zinc-500"/);
+  const fluxo = ler("components/projetos/progresso/FluxoEtapas.tsx");
+  assert.equal(fluxo.includes("border-zinc-300"), false);
+  assert.match(fluxo, /pendente" && "border-\[1\.5px\] border-zinc-500"/);
+});

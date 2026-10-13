@@ -82,7 +82,7 @@ function Responsaveis({ demanda, usuarios, departamentos, agora }: { demanda: De
   const visiveis = responsaveis.usuarioIds.slice(0, MAX);
   const restantes = responsaveis.usuarioIds.length - visiveis.length;
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       {responsaveis.origem === "workflow_concluido" ? (
         <span className="text-xs text-fg-subtle">—</span>
       ) : responsaveis.semResponsavel ? (
@@ -101,21 +101,35 @@ function Responsaveis({ demanda, usuarios, departamentos, agora }: { demanda: De
           ))}
         </div>
       )}
-      {/* Quem trabalha na tarefa mas NÃO é responsável da etapa atual: indicador separado, sem afirmar que é responsável. */}
-      {vivo.outrosAgora.length > 0 && (
-        <span className="flex flex-wrap items-center gap-1 text-[11px] text-fg-muted">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />
-          Também trabalhando agora: {vivo.outrosAgora.map((id) => nomeDe(id) || "usuário").join(", ")}
-        </span>
-      )}
+      {/* Quem trabalha na tarefa mas NÃO é responsável da etapa atual: pílula compacta e separada ("+N agora"), com os nomes no title — nunca apresentada como responsável. */}
+      {vivo.outrosAgora.length > 0 && <TambemAgora ids={vivo.outrosAgora} usuarios={usuarios} />}
       {/* Só sabemos QUE há alguém trabalhando (perfil sem acesso às pessoas): sem nome, sem afirmar responsável. */}
       {agora.fonte === "demandas" && vivo.alguemAgora && (
-        <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />
           Em execução agora
         </span>
       )}
     </div>
+  );
+}
+
+/** "[avatares] +N agora": quem está trabalhando na tarefa SEM ser responsável da etapa atual. Compacto (uma pílula), com a explicação completa no title e para leitores de tela. */
+function TambemAgora({ ids, usuarios }: { ids: string[]; usuarios: Usuarios }) {
+  const nomes = ids.map((id) => usuarios?.[id]?.nome || "usuário");
+  return (
+    <span
+      title={`Também trabalhando nesta tarefa: ${nomes.join(", ")}`}
+      className="inline-flex items-center gap-1 self-center rounded-full bg-emerald-50 py-px pl-px pr-1.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+    >
+      <span className="flex -space-x-1.5" aria-hidden>
+        {ids.slice(0, 2).map((id, indice) => (
+          <Avatar key={id} nome={nomes[indice]} corIdentificacao={usuarios?.[id]?.corIdentificacao ?? ""} fotoUrl={usuarios?.[id]?.fotoUrl} className="h-4 w-4 rounded-full text-[7px] ring-1 ring-surface" />
+        ))}
+      </span>
+      +{ids.length} agora
+      <span className="sr-only"> — também trabalhando nesta tarefa, sem ser responsável da etapa atual: {nomes.join(", ")}</span>
+    </span>
   );
 }
 
@@ -205,12 +219,18 @@ function LinhaTarefa({ demanda, atrasada, usuarios, departamentos, agora, onAbri
   );
 }
 
-function ChipAlerta({ quantidade, singular, plural, tom, icone }: { quantidade: number; singular: string; plural: string; tom: "red" | "amber"; icone: React.ReactNode }) {
+/** Alerta curto do projeto: ícone + contagem + palavra (texto curto visível; o texto completo vai no title e na leitura para tecnologia assistiva). */
+function ChipAlerta({ quantidade, singular, plural, complemento = "", titulo, tom, icone }: { quantidade: number; singular: string; plural: string; complemento?: string; titulo?: string; tom: "red" | "amber"; icone: React.ReactNode }) {
   if (quantidade === 0) return null;
+  const palavra = quantidade === 1 ? singular : plural;
   return (
-    <span className={clsx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", tom === "red" ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400" : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400")}>
+    <span
+      title={`${quantidade} ${titulo ?? palavra}`}
+      className={clsx("inline-flex items-center gap-1 rounded-full px-1.5 text-[11px] font-semibold leading-5", tom === "red" ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400" : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400")}
+    >
       {icone}
-      {quantidade} {quantidade === 1 ? singular : plural}
+      {quantidade} {palavra}
+      {complemento && <span className="sr-only">{complemento}</span>}
     </span>
   );
 }
@@ -243,7 +263,7 @@ export function ProjetoProgressoGrupo({
   const idLista = `projeto-progresso-${projeto.id}`;
   return (
     <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm" aria-label={`Projeto ${projeto.nome}`}>
-      <div className="flex flex-col gap-3 px-4 py-3">
+      <div className="flex flex-col gap-2 px-4 py-2.5">
         <button
           type="button"
           onClick={onAlternar}
@@ -256,25 +276,27 @@ export function ProjetoProgressoGrupo({
             <span className="flex flex-wrap items-baseline gap-x-2">
               <span className="truncate text-sm font-semibold text-fg">{projeto.nome}</span>
               <span className="text-[11px] font-semibold text-fg-subtle">{projeto.codigoReferencia}</span>
+              <span className="truncate text-xs text-fg-muted">· {clienteNome}</span>
             </span>
-            <span className="block truncate text-xs text-fg-muted">{clienteNome}</span>
           </span>
-          <span className="shrink-0 text-right">
-            <span className="block text-sm font-semibold text-fg">{resumo.percentual === null ? "—" : `${resumo.percentual}%`}</span>
-            <span className="block whitespace-nowrap text-[11px] text-fg-muted">
-              {resumo.total === 0 ? "Sem tarefas" : `${resumo.concluidas} / ${resumo.total} tarefas concluídas`}
-            </span>
+          <span className="flex shrink-0 items-baseline gap-2 whitespace-nowrap text-right">
+            <span className="text-[11px] text-fg-muted">{resumo.total === 0 ? "Sem tarefas" : `${resumo.concluidas} / ${resumo.total} tarefas concluídas`}</span>
+            <span className="text-sm font-semibold text-fg">{resumo.percentual === null ? "—" : `${resumo.percentual}%`}</span>
           </span>
         </button>
-        {(resumo.bloqueadas > 0 || resumo.atrasadas > 0 || resumo.aguardandoCliente > 0) && (
-          <div className="flex flex-wrap gap-1.5 pl-6">
-            <ChipAlerta quantidade={resumo.bloqueadas} singular="bloqueada" plural="bloqueadas" tom="red" icone={<Ban className="h-3 w-3" aria-hidden />} />
-            <ChipAlerta quantidade={resumo.atrasadas} singular="atrasada" plural="atrasadas" tom="red" icone={<AlertTriangle className="h-3 w-3" aria-hidden />} />
-            <ChipAlerta quantidade={resumo.aguardandoCliente} singular="aguardando cliente" plural="aguardando cliente" tom="amber" icone={<Clock className="h-3 w-3" aria-hidden />} />
-          </div>
-        )}
         <div className="pl-6">
-          <BarraStatusProjeto resumo={resumo} />
+          <BarraStatusProjeto
+            resumo={resumo}
+            lateral={
+              (resumo.bloqueadas > 0 || resumo.atrasadas > 0 || resumo.aguardandoCliente > 0) && (
+                <span className="flex flex-wrap items-center gap-1">
+                  <ChipAlerta quantidade={resumo.bloqueadas} singular="bloqueada" plural="bloqueadas" tom="red" icone={<Ban className="h-3 w-3" aria-hidden />} />
+                  <ChipAlerta quantidade={resumo.atrasadas} singular="atrasada" plural="atrasadas" tom="red" icone={<AlertTriangle className="h-3 w-3" aria-hidden />} />
+                  <ChipAlerta quantidade={resumo.aguardandoCliente} singular="aguardando" plural="aguardando" complemento=" cliente" titulo="aguardando cliente" tom="amber" icone={<Clock className="h-3 w-3" aria-hidden />} />
+                </span>
+              )
+            }
+          />
         </div>
       </div>
 

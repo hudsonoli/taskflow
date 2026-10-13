@@ -124,8 +124,8 @@ export function ProjetosProgressoView() {
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
-          <label className="block text-sm md:col-span-2 lg:col-span-1">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+          <label className="block text-sm md:col-span-2 lg:col-span-2">
             <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Busca</span>
             <span className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />

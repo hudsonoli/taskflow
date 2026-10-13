@@ -34,7 +34,7 @@ export function FluxoEtapas({ fluxo }: { fluxo: FluxoDaTarefa }) {
                 passo.estado === "concluida" && "bg-emerald-500 text-white",
                 passo.estado === "atual" && "border-2 border-indigo-500 bg-indigo-500/20",
                 passo.estado === "atual_pausada" && "border-2 border-amber-500 bg-amber-500/20",
-                passo.estado === "pendente" && "border border-zinc-300 dark:border-zinc-600",
+                passo.estado === "pendente" && "border-[1.5px] border-zinc-500",
               )}
             >
               {passo.estado === "concluida" && <Check className="h-2 w-2" strokeWidth={4} />}
