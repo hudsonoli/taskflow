@@ -11,8 +11,6 @@ type OpcoesSeletor = {
   comSubtitulo?: boolean;
   /** Restringe as opções a um departamento (filtro exato do servidor). */
   departamentoId?: string;
-  /** Selecionado que não está `ativo` aparece como "<nome> (indisponível)". */
-  marcarIndisponiveis?: boolean;
   /**
    * Oferece usuários de QUALQUER status (inclusive inativo/bloqueado/arquivado) — para filtros e telas
    * administrativas que consultam registros históricos. Padrão: só `ativo` (novo vínculo).
@@ -20,18 +18,17 @@ type OpcoesSeletor = {
   todosStatus?: boolean;
 };
 
-function paraOpcao(
-  usuario: UsuarioDiretorioItem,
-  departamentos: DepartamentoDiretorioItem[],
-  { comSubtitulo, marcarIndisponiveis }: OpcoesSeletor,
-): MemberOption {
+function paraOpcao(usuario: UsuarioDiretorioItem, departamentos: DepartamentoDiretorioItem[], { comSubtitulo }: OpcoesSeletor): MemberOption {
   return {
     id: usuario.id,
-    nome: marcarIndisponiveis && usuario.status !== "ativo" ? `${usuario.nome} (indisponível)` : usuario.nome,
+    nome: usuario.nome,
+    // `inativo`: o seletor marca a pessoa ("Inativo") e não a oferece para um vínculo NOVO (quem já estava selecionado continua visível e removível).
+    inativo: usuario.status !== "ativo",
+    // segunda linha do dropdown: departamento (quando pedido) ou o cargo. O diretório do backend não expõe e-mail.
     subtitulo:
-      comSubtitulo && usuario.departamentoId
+      (comSubtitulo && usuario.departamentoId
         ? departamentos.find((departamento) => departamento.id === usuario.departamentoId)?.nome
-        : undefined,
+        : undefined) ?? usuario.cargo,
     corIdentificacao: usuario.corIdentificacao,
     fotoUrl: usuario.fotoUrl,
   };
@@ -52,7 +49,7 @@ function paraOpcao(
  */
 export function useUsuariosSelector(opcoes: OpcoesSeletor = {}): { buscarOpcoes: BuscarOpcoesMembros; resolverSelecionados: ResolverSelecionadosMembros } {
   const { departamentos } = useDiretorioDepartamentos();
-  const { comSubtitulo = false, departamentoId, marcarIndisponiveis = false, todosStatus = false } = opcoes;
+  const { comSubtitulo = false, departamentoId, todosStatus = false } = opcoes;
 
   const buscarOpcoes = useCallback<BuscarOpcoesMembros>(
     async ({ busca, limit, offset }) => {
@@ -69,8 +66,8 @@ export function useUsuariosSelector(opcoes: OpcoesSeletor = {}): { buscarOpcoes:
   );
 
   const resolverSelecionados = useCallback<ResolverSelecionadosMembros>(
-    async (ids) => (await resolverUsuariosPorIds(ids)).map((usuario) => paraOpcao(usuario, departamentos, { comSubtitulo, marcarIndisponiveis })),
-    [departamentos, comSubtitulo, marcarIndisponiveis],
+    async (ids) => (await resolverUsuariosPorIds(ids)).map((usuario) => paraOpcao(usuario, departamentos, { comSubtitulo })),
+    [departamentos, comSubtitulo],
   );
 
   return { buscarOpcoes, resolverSelecionados };

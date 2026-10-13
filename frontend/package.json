@@ -40,7 +40,8 @@
     "test:aprovacao-externa-publica": "node --test src/lib/aprovacao-externa-publica.test.ts",
     "test:esforco": "node --test src/lib/esforco.test.ts",
     "test:sessao-trabalho": "node --test src/lib/sessao-trabalho.test.ts",
-    "test:trafego-ui": "node --test src/lib/trafego-ui.test.ts"
+    "test:trafego-ui": "node --test src/lib/trafego-ui.test.ts",
+    "test:member-selector": "node --test src/lib/member-selector.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

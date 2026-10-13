@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { CheckCircle2, ClipboardCheck, Clock3 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { Select } from "@/components/ui/Select";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { getRelatorioColaboradores, getRelatorioPerformanceColaborador } from "@/lib/api-backend";
 import { useConsultaRelatorio } from "@/lib/useConsultaRelatorio";
 import type { RelatorioPerformanceColaborador } from "@/types/relatorios";
@@ -45,11 +45,17 @@ export function PerformanceColaboradorReport() {
   return (
     <div className="flex flex-col gap-4">
       <div className="max-w-xs">
-        <Select
+        {/* Consulta histórica (inclui quem não está mais ativo): `permitirInativos`. O valor continua sendo só o id do colaborador. */}
+        <MemberSelector
           label="Colaborador"
-          value={colaboradorId}
-          onChange={(event) => setColaboradorIdSelecionado(event.target.value)}
-          options={(opcoes ?? []).map((opcao) => ({ value: opcao.id, label: opcao.nome }))}
+          variant="compact"
+          permitirInativos
+          multiple={false}
+          values={colaboradorId ? [colaboradorId] : []}
+          onChange={(values) => setColaboradorIdSelecionado(values[0] ?? "")}
+          options={(opcoes ?? []).map((opcao) => ({ id: opcao.id, nome: opcao.nome }))}
+          placeholder="Selecionar colaborador…"
+          emptyLabel="Nenhum colaborador encontrado"
         />
       </div>
 

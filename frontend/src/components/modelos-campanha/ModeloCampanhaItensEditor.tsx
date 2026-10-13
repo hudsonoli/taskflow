@@ -83,8 +83,8 @@ export function ModeloCampanhaItensEditor({
   const { tiposTarefa, carregando: carregandoTiposTarefa, erro: erroTiposTarefa } = useDiretorioTiposTarefa();
   const { workflowModelos, carregando: carregandoWorkflows, erro: erroWorkflows } = useDiretorioWorkflowModelos();
   // Responsável sugerido: busca no servidor (sem o corte de 200). Usuário `ativo` para novo vínculo;
-  // o já gravado, se não estiver ativo, aparece como "<nome> (indisponível)".
-  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector({ marcarIndisponiveis: true });
+  // o já gravado, se não estiver ativo, aparece com a marca "Inativo" (e continua removível).
+  const { buscarOpcoes, resolverSelecionados } = useUsuariosSelector();
   const { departamentos, carregando: carregandoDepartamentos, erro: erroDepartamentos } = useDiretorioDepartamentos();
 
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());

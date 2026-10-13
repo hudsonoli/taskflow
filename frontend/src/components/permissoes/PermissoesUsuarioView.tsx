@@ -160,6 +160,8 @@ export function PermissoesUsuarioView() {
             novo no usuário selecionado limpa a seleção. */}
         <MemberSelector
           label="Usuário"
+          variant="compact"
+          permitirInativos
           multiple={false}
           values={usuarioId ? [usuarioId] : []}
           onChange={(values) => setUsuarioId(values[0] ?? "")}

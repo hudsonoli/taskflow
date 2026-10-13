@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { KeyRound, Loader2, UserCheck } from "lucide-react";
 import clsx from "clsx";
 import { SenhaTemporariaAviso } from "@/components/plataforma/SenhaTemporariaAviso";
+import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -240,22 +241,16 @@ export function DefinirGestorModal({
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando usuários…
               </p>
             ) : (
-              <label className="block text-sm">
-                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">Usuário da empresa</span>
-                <select
-                  value={escolhido}
-                  onChange={(event) => setEscolhido(event.target.value)}
-                  className="field w-full rounded-xl px-3 py-2.5 text-sm"
-                  aria-invalid={tentou && !escolhido}
-                >
-                  <option value="">Selecione…</option>
-                  {candidatos.map((usuario) => (
-                    <option key={usuario.id} value={usuario.id}>
-                      {usuario.nome} — {usuario.email}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MemberSelector
+                label="Usuário da empresa"
+                variant="compact"
+                multiple={false}
+                values={escolhido ? [escolhido] : []}
+                onChange={(values) => setEscolhido(values[0] ?? "")}
+                options={candidatos.map((usuario) => ({ id: usuario.id, nome: usuario.nome, email: usuario.email }))}
+                placeholder="Selecione…"
+                emptyLabel="Nenhum usuário encontrado"
+              />
             )}
             {tentou && !escolhido && <p className="-mt-1 text-xs font-medium text-danger">Selecione o usuário.</p>}
             {erroLista && <p className="text-xs font-medium text-danger">{erroLista}</p>}

@@ -61,6 +61,7 @@ export function TrafegoIniciarSessao({
       <div className="min-w-[12rem] flex-1">
         <MemberSelector
           label="Usuário"
+          variant="compact"
           multiple={false}
           values={usuarioId ? [usuarioId] : []}
           onChange={(values) => setUsuarioId(values[0] ?? "")}
