@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Tabs } from "@/components/ui/Tabs";
 import {
   ProjetoArquivadoConflictError,
   arquivarProjetoReal,
@@ -18,11 +19,20 @@ import type { Projeto, ProjetoFormDraft } from "@/types/projeto";
 import { ArquivarProjetoModal } from "./ArquivarProjetoModal";
 import { NovoProjetoModal } from "./NovoProjetoModal";
 import { ProjetoDetailsDrawer } from "./ProjetoDetailsDrawer";
+import { ProjetosProgressoView } from "./progresso/ProjetosProgressoView";
 import { ProjetosStats } from "./ProjetosStats";
 import { ProjetosTable } from "./ProjetosTable";
 import { type ProjetoStatusFiltro, ProjetosToolbar } from "./ProjetosToolbar";
 
+type VisaoProjetos = "projetos" | "progresso";
+
+const VISOES: Array<{ id: VisaoProjetos; label: string }> = [
+  { id: "projetos", label: "Projetos" },
+  { id: "progresso", label: "Progresso" },
+];
+
 export function ProjetosView() {
+  const [visao, setVisao] = useState<VisaoProjetos>("projetos");
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -134,13 +144,29 @@ export function ProjetosView() {
     setEditingProjectId(projetoId);
   }
 
-  return (
-    <div className="flex flex-col gap-6">
+  const cabecalho = (
+    <>
       <PageHeader
         icon={<FolderKanban className="h-5 w-5" />}
         title="Projetos"
         description="Raiz de cada empreendimento/campanha — as demandas se organizam a partir de um projeto."
       />
+      <Tabs tabs={VISOES} activeTab={visao} onChange={(id) => setVisao(id as VisaoProjetos)} />
+    </>
+  );
+
+  if (visao === "progresso") {
+    return (
+      <div className="flex flex-col gap-6">
+        {cabecalho}
+        <ProjetosProgressoView />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {cabecalho}
 
       {erro && (
         <div className="flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
