@@ -11,6 +11,7 @@ import { invalidarDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { invalidarDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { invalidarDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { REVALIDACAO_PERIODO_MS, contextoOperacionalMudou, podeRevalidar, usuarioMudou } from "@/lib/sessaoUsuario";
+import { criarCoordenadorDeSessaoExpirada, envolverFetch, hrefLoginPorExpiracao } from "@/lib/sessao-expirada";
 import type { Demanda } from "@/types/demanda";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
 
@@ -43,9 +44,17 @@ interface AppDataContextValue {
   perfilAtual: PerfilUsuario;
   logout: () => Promise<void>;
   recarregarSessao: () => Promise<void>;
+  /**
+   * Preenchido quando a sessão tenant foi encerrada por 401 (token expirado/inválido): o AppShell leva a pessoa a ESTE destino
+   * (`/e/<slug>/login?reason=session_expired&next=…`) em vez do login simples. `null` no logout normal e em sessão válida.
+   */
+  hrefLoginExpirado: string | null;
 }
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
+
+// Uma única coordenação por página (sobrevive a remontagens do provider): vários 401 simultâneos encerram a sessão UMA vez — ver lib/sessao-expirada.ts.
+const coordenadorSessaoExpirada = criarCoordenadorDeSessaoExpirada();
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
@@ -56,6 +65,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [autenticado, setAutenticado] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [usuarioAtual, setUsuarioAtual] = useState<Usuario | undefined>(undefined);
+  const [hrefLoginExpirado, setHrefLoginExpirado] = useState<string | null>(null);
   const perfilAtual: PerfilUsuario = usuarioAtual?.perfil ?? "operador";
   // `sincronizarSessao` é estável (useCallback sem dependências); fica numa ref para `recarregarSessao` continuar
   // sem dependências de efeito, como antes.
@@ -79,6 +89,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Há sessão válida de novo: a próxima expiração volta a ser tratada (e o destino "expirada" some).
+    coordenadorSessaoExpirada.resetar();
+    setHrefLoginExpirado(null);
     setAutenticado(true);
     setMustChangePassword(sessao.mustChangePassword);
 
@@ -95,6 +108,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
+    setHrefLoginExpirado(null);
     await logoutRequest();
     sincronizarSessaoRef.current(null);
     setAutenticado(false);
@@ -115,6 +129,42 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }, 0);
     return () => clearTimeout(timeout);
   }, [portalExterno]);
+
+  // SESSÃO TENANT EXPIRADA (401). Todas as chamadas autenticadas passam pelo proxy `/api/backend/*`; um 401 ali é sessão inválida. Este é o ÚNICO ponto que reage a
+  // isso (nenhuma tela trata 401 por conta própria): um `fetch` envolvido uma vez, que dispara o encerramento UMA só vez mesmo com várias respostas simultâneas.
+  // Limpa o estado autenticado (o AppShell troca a tela por um estado neutro e leva ao login com o motivo), limpa o cookie HttpOnly inválido pelo mecanismo já
+  // existente (`/api/auth/logout`) e nunca olha 403/404/409/5xx nem rotas de login, Portal, Gestão ou plataforma — ver lib/sessao-expirada.ts.
+  const autenticadoRef = useRef(false);
+  useEffect(() => {
+    autenticadoRef.current = autenticado;
+  }, [autenticado]);
+  const encerrarPorSessaoExpiradaRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    encerrarPorSessaoExpiradaRef.current = () => {
+      setHrefLoginExpirado(hrefLoginPorExpiracao(window.location.pathname, window.location.search));
+      setAutenticado(false);
+      setMustChangePassword(false);
+      setUsuarioAtual(undefined);
+      setDemandas([]);
+      sincronizarSessaoRef.current(null);
+      void logoutRequest().catch(() => undefined);
+    };
+  });
+  useEffect(() => {
+    const original = window.fetch;
+    const envolvido = envolverFetch(original, {
+      pathname: () => window.location.pathname,
+      origem: () => window.location.origin,
+      aoExpirar: () => {
+        if (!autenticadoRef.current) return; // já estava fora de sessão: nada a encerrar
+        coordenadorSessaoExpirada.disparar(() => encerrarPorSessaoExpiradaRef.current());
+      },
+    });
+    window.fetch = envolvido;
+    return () => {
+      if (window.fetch === envolvido) window.fetch = original;
+    };
+  }, []);
 
   // REVALIDAÇÃO DO USUÁRIO ATUAL. Perfil, permissões, departamento e Head são decididos pelo backend a cada requisição, mas
   // `usuarioAtual` era carregado só no login/montagem: promoção ou troca de departamento feita por OUTRA pessoa com a sessão
@@ -138,7 +188,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ultimaRevalidacaoRef.current = agora;
       try {
         const completo = await fetchUsuarioAtualCompleto();
-        if (cancelado || !completo) return; // 401/erro: o fluxo normal de sessão cuida; aqui nunca se "desloga" por falha
+        if (cancelado || !completo) return; // 401: o fetch envolvido acima já encerrou a sessão; outro erro (rede/5xx) nunca derruba a sessão
         const anterior = usuarioAtualRef.current;
         if (!usuarioMudou(anterior, completo)) return;
         if (contextoOperacionalMudou(anterior, completo)) {
@@ -219,6 +269,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         perfilAtual,
         logout,
         recarregarSessao,
+        hrefLoginExpirado,
       }}
     >
       {children}

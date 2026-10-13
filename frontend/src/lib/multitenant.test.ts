@@ -303,7 +303,7 @@ test("layout: marca SÓ pelo slug da rota (sem cookie, sem legado) e identidade 
 
 test("AppShell e menu voltam ao login DA EMPRESA (slug da URL/sessão); sem slug não há login para onde mandar", () => {
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
-  assert.match(shell, /router\.replace\(hrefLogin\(slugUrl\)\)/);
+  assert.match(shell, /router\.replace\(hrefLoginExpirado \?\? hrefLogin\(slugUrl\)\)/);
   assert.match(shell, /ehRotaDeLogin\(pathname\)/);
   assert.match(shell, /ehRotaDeRecuperacaoDeSenha\(pathname\)/);
   assert.doesNotMatch(shell, /router\.replace\("\/login"\)|"\/meu-dia"|"\/trocar-senha-inicial"/);

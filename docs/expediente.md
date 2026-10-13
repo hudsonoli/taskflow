@@ -49,3 +49,12 @@ Esta fase não ativa o novo controle, mas **um dia especial ATIVO já afeta**: (
 - Produção está em `f2c6a9d41b87`; a migration `0047` é `a3c8e5f17d24` com `down_revision = f2c6a9d41b87` (cabeça única, caminho linear).
 - **Backup do banco é obrigatório antes de aplicar a migration.**
 - O downgrade devolve o legado manhã/tarde a partir dos 2 primeiros períodos de cada dia: dia com 1 período volta inativo e do 3º período em diante é descartado (**perda estrutural aceita**). Portanto, **se for preciso reverter DEPOIS de alterações reais na nova configuração, NÃO execute o downgrade às cegas**: restaure o snapshot do banco ou reconcilie antes os períodos (deixe cada dia com 0 ou exatamente 2 períodos). Reverter só o código (sem downgrade) é seguro: as colunas legadas ficam espelhadas para dias com 2 períodos.
+
+## Decisões de produto aprovadas (somente desenho — NÃO implementado)
+
+Registradas após a fundação; nada abaixo existe em código ainda.
+
+- **Pausa automática ≠ logout automático (independentes).** O fim de **qualquer** período do expediente (manhã, tarde, noite…) pausa as tarefas em execução, **sem** deslogar o usuário. O logout automático é uma regra à parte, com **horário fixo da empresa** (ex.: 18:10), configurável por conta própria.
+- **Aviso da pausa automática:** toast discreto "Tarefas pausadas automaticamente." **somente quando houve mudança real** (alguma demanda foi de fato pausada); sem mudança, nenhum aviso.
+- **Origem da pausa:** `pausa_origem = 'expediente'` (já existe a coluna) para distinguir da pausa manual.
+- **Sessão expirada (hotfix 401):** a expiração do token (JWT 30 min) não é o logout automático. O front trata o 401 do tenant de forma central (`lib/sessao-expirada.ts`) e leva ao login do tenant com `?reason=session_expired`; o futuro logout automático pode reutilizar o mesmo caminho.

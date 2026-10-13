@@ -48,7 +48,7 @@ test("a rota da troca é /e/<slug>/trocar-senha-inicial e mantém o slug; é tel
 
 test("login normal com a senha temporária redireciona para /e/<slug>/trocar-senha-inicial (e o AppShell mantém o redirect em qualquer rota tenant)", () => {
   const login = semComentarios(ler("components/auth/LoginView.tsx"));
-  assert.equal((login.match(/router\.replace\(caminhoDoTenant\(slug, mustChangePassword \? "trocar-senha-inicial" : "meu-dia"\)\)/g) ?? []).length, 2); // senha + Google
+  assert.equal((login.match(/router\.replace\(mustChangePassword \? caminhoDoTenant\(slug, "trocar-senha-inicial"\) : destinoAposLogin\(slug, proximo, caminhoDoTenant\(slug, "meu-dia"\)\)\)/g) ?? []).length, 2); // senha + Google
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
   assert.match(shell, /if \(autenticado && mustChangePassword && !rotaTrocaSenha\) \{\s*router\.replace\(caminhoDoTenant\(slugUrl, "trocar-senha-inicial"\)\);/);
   // enquanto a troca está pendente a área autenticada nem renderiza (sem flash de conteúdo)

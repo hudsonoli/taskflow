@@ -97,7 +97,7 @@ test("/e/boxcom/login resolve a empresa pelo slug da URL; /e/boxcom/tarefas exig
   // /e/<slug>/tarefas NÃO é pública: o AppShell só libera login, recuperação e portal
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
   assert.match(shell, /const exigeSessao = !rotaLogin && !rotaRecuperacaoSenha && !rotaPortalExterno;/);
-  assert.match(shell, /if \(!autenticado && exigeSessao\) \{[\s\S]*?router\.replace\(hrefLogin\(slugUrl\)\)/);
+  assert.match(shell, /if \(!autenticado && exigeSessao\) \{[\s\S]*?router\.replace\(hrefLoginExpirado \?\? hrefLogin\(slugUrl\)\)/);
 });
 
 test("catálogo público mínimo: login, esqueci/redefinir senha e portal; nenhum outro /e/<slug>/... é público", () => {
@@ -183,7 +183,7 @@ test("Header/perfil, sino de notificações, listas e Pauta/Arquivos/Minhas Dema
 
 test("a tela inicial pós-login e a troca de senha inicial usam o slug (LoginView e AppShell)", () => {
   const login = semComentarios(ler("components/auth/LoginView.tsx"));
-  assert.equal((login.match(/router\.replace\(caminhoDoTenant\(slug, mustChangePassword \? "trocar-senha-inicial" : "meu-dia"\)\)/g) ?? []).length, 2); // senha + Google
+  assert.equal((login.match(/router\.replace\(mustChangePassword \? caminhoDoTenant\(slug, "trocar-senha-inicial"\) : destinoAposLogin\(slug, proximo, caminhoDoTenant\(slug, "meu-dia"\)\)\)/g) ?? []).length, 2); // senha + Google
   assert.match(semComentarios(ler("components/auth/TrocarSenhaInicialView.tsx")), /router\.replace\(tp\("meu-dia"\)\)/);
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
   assert.match(shell, /caminhoDoTenant\(slugUrl, "trocar-senha-inicial"\)/);
@@ -260,7 +260,7 @@ test("a Gestão vive em /gestao (e /plataforma deixou de existir), fora dos tena
   assert.equal(slugDaRota("/e/plataforma/login"), null); // 'plataforma' é slug reservado
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
   assert.match(shell, /Acesso restrito\. Entre pelo endereço de acesso da sua empresa\./);
-  assert.match(shell, /if \(slugUrl\) router\.replace\(hrefLogin\(slugUrl\)\);/);
+  assert.match(shell, /if \(slugUrl\) router\.replace\(hrefLoginExpirado \?\? hrefLogin\(slugUrl\)\);/);
 });
 
 test("Portal 9B/9D: o link gerado é /e/<slug>/aprovacao#token=… (slug do servidor), nunca ?token= nem /aprovacao sem slug", () => {

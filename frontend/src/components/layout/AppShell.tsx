@@ -17,6 +17,7 @@ import {
   hrefLogin,
   slugDaRota,
 } from "@/lib/tenant";
+import { destinoAposLogin } from "@/lib/sessao-expirada";
 
 // Fase 9D — catálogo EXPLÍCITO de telas sem sessão (todas por slug): login, recuperação de senha e Portal Externo de Aprovação; a troca da senha
 // inicial é "nua" mas exige sessão. Nenhum outro `/e/<slug>/...` é público. Fora de `/e/<slug>` e de `/gestao` (domínio nu, `/login`, `/plataforma`, `/tarefas`…)
@@ -25,7 +26,7 @@ import {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { sessaoCarregando, autenticado, mustChangePassword, logout } = useAppData();
+  const { sessaoCarregando, autenticado, mustChangePassword, logout, hrefLoginExpirado } = useAppData();
   const { sessaoSlug } = useBranding();
   const [saindo, setSaindo] = useState(false);
 
@@ -47,7 +48,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     if (!autenticado && exigeSessao) {
       // Sem slug (ex.: `/gestao` aberto direto, sem sessão) não há login para onde mandar: a tela abaixo explica.
-      if (slugUrl) router.replace(hrefLogin(slugUrl));
+      // Sessão expirada (401): login com o motivo e o caminho para voltar; logout/primeiro acesso sem sessão: login simples.
+      if (slugUrl) router.replace(hrefLoginExpirado ?? hrefLogin(slugUrl));
       return;
     }
     if (slugUrl === null) return;
@@ -56,9 +58,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       return;
     }
     if (autenticado && !mustChangePassword && (rotaLogin || rotaTrocaSenha)) {
-      router.replace(caminhoDoTenant(slugUrl, "meu-dia"));
+      // Quem já tem sessão e abre o login volta para o caminho de origem (`next`, só interno do tenant) ou para o Meu dia.
+      const proximo = rotaLogin ? new URLSearchParams(window.location.search).get("next") : null;
+      router.replace(destinoAposLogin(slugUrl, proximo, caminhoDoTenant(slugUrl, "meu-dia")));
     }
-  }, [semEmpresa, sessaoCarregando, autenticado, mustChangePassword, rotaLogin, rotaTrocaSenha, rotaRecuperacaoSenha, rotaPortalExterno, exigeSessao, sessaoDeOutraEmpresa, slugUrl, router]);
+  }, [semEmpresa, sessaoCarregando, autenticado, mustChangePassword, rotaLogin, rotaTrocaSenha, rotaRecuperacaoSenha, rotaPortalExterno, exigeSessao, sessaoDeOutraEmpresa, slugUrl, hrefLoginExpirado, router]);
 
   if (semEmpresa) return <>{children}</>;
 
@@ -94,8 +98,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     // Enquanto carrega ou durante o redirect (useEffect acima), não renderiza a área
     // autenticada — evita um flash do conteúdo protegido antes do guard agir.
     return (
-      <div className="flex h-screen items-center justify-center bg-app">
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-app" role="status">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-500 dark:border-zinc-700" />
+        {hrefLoginExpirado && <p className="text-xs text-fg-muted">Sessão expirada. Redirecionando para o login…</p>}
       </div>
     );
   }

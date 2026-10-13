@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { useAppData } from "@/lib/AppDataContext";
 import { login, loginGoogle } from "@/lib/auth";
 import { NOME_PRODUTO } from "@/lib/produto";
+import { MENSAGEM_SESSAO_EXPIRADA, destinoAposLogin } from "@/lib/sessao-expirada";
 import { caminhoDoTenant, hrefDoTenant } from "@/lib/tenant";
 
 // Tipagem mínima do Google Identity Services (carregado via <Script>, não um pacote npm —
@@ -41,10 +42,16 @@ export function LoginView({
   googleClientId,
   slug,
   nomeEmpresa,
+  sessaoExpirada = false,
+  proximo = null,
 }: {
   googleClientId: string | null;
   slug: string;
   nomeEmpresa?: string | null;
+  /** `?reason=session_expired`: mostra o aviso discreto (a sessão caiu por expiração, não por erro do usuário) */
+  sessaoExpirada?: boolean;
+  /** `?next=` já validado no servidor (caminho interno do tenant); `null` = destino padrão */
+  proximo?: string | null;
 }) {
   const router = useRouter();
   const { recarregarSessao } = useAppData();
@@ -64,7 +71,7 @@ export function LoginView({
     try {
       const { mustChangePassword } = await login(email, senha, slug);
       await recarregarSessao();
-      router.replace(caminhoDoTenant(slug, mustChangePassword ? "trocar-senha-inicial" : "meu-dia"));
+      router.replace(mustChangePassword ? caminhoDoTenant(slug, "trocar-senha-inicial") : destinoAposLogin(slug, proximo, caminhoDoTenant(slug, "meu-dia")));
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível entrar");
       setEnviando(false);
@@ -78,7 +85,7 @@ export function LoginView({
     try {
       const { mustChangePassword } = await loginGoogle(email, idToken, slug);
       await recarregarSessao();
-      router.replace(caminhoDoTenant(slug, mustChangePassword ? "trocar-senha-inicial" : "meu-dia"));
+      router.replace(mustChangePassword ? caminhoDoTenant(slug, "trocar-senha-inicial") : destinoAposLogin(slug, proximo, caminhoDoTenant(slug, "meu-dia")));
     } catch (error) {
       // Falha no Google nunca apaga email/senha já digitados — login local continua intacto.
       setErro(error instanceof Error ? error.message : "Não foi possível entrar com Google");
@@ -117,6 +124,12 @@ export function LoginView({
           {nomeEmpresa && <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-fg-subtle">Entrar no {NOME_PRODUTO}</p>}
           <p className="mt-1 text-sm text-fg-muted">Use o e-mail e a senha do seu cadastro.</p>
         </div>
+
+        {sessaoExpirada && (
+          <p role="status" className="mb-4 rounded-lg border border-line bg-surface-2 px-3 py-2 text-center text-xs text-fg-muted">
+            {MENSAGEM_SESSAO_EXPIRADA}
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input
