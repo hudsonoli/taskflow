@@ -86,5 +86,5 @@ def test_cadeia_linear_cabeca_unica() -> None:
     from alembic.script import ScriptDirectory
 
     diretorio = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert diretorio.get_heads() == [NOVA]
+    assert len(diretorio.get_heads()) == 1  # cabeça única (a 0049 vem depois da 0048)
     assert diretorio.get_revision(NOVA).down_revision == ANTERIOR

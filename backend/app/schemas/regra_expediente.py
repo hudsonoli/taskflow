@@ -8,8 +8,8 @@ DIAS_SEMANA_VALIDOS = frozenset(range(7))  # 0=segunda .. 6=domingo (datetime.we
 MAX_PERIODOS_POR_DIA = 8
 TIPOS_DIA_ESPECIAL_ESCRITA = ("feriado", "recesso", "trabalho_excepcional", "ignorado")
 
-# Fase Expediente 2: `bloquearForaExpediente` AGORA TEM EFEITO (gate de acesso) e pode ser ligada. As outras duas (`pausarNoFimPeriodo`: scheduler/pausa, Fase 3;
-# `feriadosAutomaticos`: sincronização de feriados) seguem sem mecanismo — a API recusa LIGÁ-LAS (desligar sempre pode).
+# Fase Expediente 2: `bloquearForaExpediente` TEM efeito (gate de acesso). Fase 3: `pausarNoFimPeriodo` TEM efeito (tick de pausa automática). Só `feriadosAutomaticos`
+# (sincronização de feriados) segue sem mecanismo — a API recusa LIGÁ-LA (desligar sempre pode).
 _MENSAGEM_PROXIMA_ETAPA = "ainda não está disponível: será ativado em uma próxima etapa"
 
 
@@ -135,7 +135,7 @@ class RegraExpedienteUpdate(BaseModel):
             raise ValueError("logoutHorario é obrigatório para ativar o logout automático")
         return self
 
-    @field_validator("pausar_no_fim_periodo", "feriados_automaticos")
+    @field_validator("feriados_automaticos")
     @classmethod
     def so_desligar_por_enquanto(cls, value: bool | None, info) -> bool | None:
         if value:
@@ -271,6 +271,8 @@ class RegraExpedienteRead(BaseModel):
     feriados_automaticos: bool = Field(alias="feriadosAutomaticos")
     logout_automatico_ativo: bool = Field(alias="logoutAutomaticoAtivo")
     logout_horario: time | None = Field(default=None, alias="logoutHorario")
+    # Fase 3: instante em que a pausa automática foi armada (null = nunca). Informativo; quem decide é o servidor.
+    pausa_automatica_ativada_em: datetime | None = Field(default=None, alias="pausaAutomaticaAtivadaEm")
     dias: list[JanelaDiaRead]
     dias_especiais: list[DiaEspecialRead] = Field(default_factory=list, alias="diasEspeciais")
     created_at: datetime = Field(alias="createdAt")
@@ -308,5 +310,21 @@ class EstadoExpedienteRead(BaseModel):
     proximo_trabalho: datetime | None = Field(default=None, alias="proximoTrabalho")
     proximo_trabalho_fim: datetime | None = Field(default=None, alias="proximoTrabalhoFim")
     timezone: str | None = None
+    # Fase 3 — a última pausa automática que atingiu ESTA pessoa (fonte do aviso "Tarefas pausadas automaticamente."). `null` = nunca. O front decide se ainda é
+    # recente comparando `em` com `agora` (relógio do SERVIDOR) e deduplica por `eventoId`.
+    ultima_pausa_automatica: "UltimaPausaAutomaticaRead | None" = Field(default=None, alias="ultimaPausaAutomatica")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class UltimaPausaAutomaticaRead(BaseModel):
+    evento_id: str = Field(alias="eventoId")
+    em: datetime
+    quantidade: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("em")
+    @classmethod
+    def validate_timezone(cls, value: datetime) -> datetime:
+        return ensure_timezone_aware(value)

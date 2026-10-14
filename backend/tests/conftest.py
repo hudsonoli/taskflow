@@ -15,6 +15,7 @@ import os
 from tests.fixtures.database import obter_url_teste_validada
 
 os.environ["DATABASE_URL"] = obter_url_teste_validada()
+os.environ["EXPEDIENTE_TICK_HABILITADO"] = "false"  # a suíte não sobe o tick em background (os testes chamam o serviço direto, com relógio injetado)
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -27,6 +28,19 @@ pytest_plugins = [
     "tests.fixtures.auth",
     "tests.fixtures.uploads",
 ]
+
+
+@pytest.fixture(autouse=True)
+def _relogio_do_expediente_fixo(monkeypatch):
+    """O "agora" do EXPEDIENTE (gate de trabalho, janelas, tick) é fixo por padrão: segunda-feira 2026-10-05, 10:00 em America/Sao_Paulo, DENTRO do padrão 09–12/14–19. A suíte
+    não pode depender da hora (nem do dia da semana) da máquina — o gate de trabalho também vale para abrir sessão (Fase 3). Testes que precisam de outro horário
+    sobrescrevem com `monkeypatch.setattr("app.core.expediente.agora_utc", ...)` (fixture `relogio`)."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    instante = datetime(2026, 10, 5, 10, 0, tzinfo=ZoneInfo("America/Sao_Paulo")).astimezone(timezone.utc)
+    monkeypatch.setattr("app.core.expediente.agora_utc", lambda: instante)
+    yield
 
 
 @pytest.fixture(autouse=True)

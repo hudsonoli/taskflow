@@ -22,7 +22,8 @@ importar `REGRA_PADRAO` para USAR como regra corrente — só para SEMEAR uma.
   `bloquear_fora_expediente` está ligada; o gate de ENTRADA em execução usa SÓ a janela de trabalho NOMINAL (a tolerância legada deixou de ser autoridade).
 - C. LOGOUT AUTOMÁTICO (`ultimo_corte_logout`): horário PRÓPRIO (`logout_horario`, hora local da empresa), independente de A, B e do fim do último período. Token emitido
   ANTES do último corte deixa de valer (401). Login depois do corte emite token novo e vale (o bloqueio, se ligado, é outro mecanismo).
-- D. PAUSA AUTOMÁTICA: NÃO existe (Fase 3). `pausar_no_fim_periodo` segue recusada com 422.
+- D. PAUSA AUTOMÁTICA (Fase 3): ao fim de CADA período (`cutoff_pendente`), o backend pausa as Demandas em execução (sem logout, sem retomada). O corte é o horário
+  CONFIGURADO (12:00), não o instante em que o tick rodou (12:00:42).
 - Quem está sujeito: SÓ `perfil_base == "operador"` que não é conta de sistema e não tem `acesso_fora_expediente` (`usuario_sujeito_ao_expediente`). Admin/gestor/
   sistema/override são isentos de A, B e C.
 
@@ -44,6 +45,7 @@ Cada regra carrega um fuso IANA (`timezone`); `None` (DTO montado à mão, teste
 da empresa; aware é convertido (`ZoneInfo`, seguro para horário de verão). Convenção de dia da semana: `datetime.weekday()` (0 = segunda … 6 = domingo).
 """
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -140,6 +142,8 @@ class RegraExpediente:
     # Logout automático (Fase 2): horário local "HH:MM" PRÓPRIO; só vale com `ativo` e `logout_automatico_ativo`.
     logout_automatico_ativo: bool = False
     logout_horario: str | None = None
+    # Fase 3: instante em que a pausa automática foi armada (ver `cutoff_pendente`); `None` = nunca armada → nada é pausado.
+    pausa_automatica_ativada_em: datetime | None = None
 
 
 def _dia_util_padrao() -> JanelaDia:
@@ -381,6 +385,73 @@ def sessao_encerrada_por_logout_automatico(emitido_em: datetime | float | int, a
         return False
     epoca = emitido_em.timestamp() if isinstance(emitido_em, datetime) else float(emitido_em)
     return epoca < corte.timestamp()
+
+
+# ── PAUSA AUTOMÁTICA (Fase Expediente 3) ─────────────────────────────────────────────────────────────────────────
+
+
+def fins_de_periodo(regra: RegraExpediente, data: date) -> list[datetime]:
+    """Instantes (aware, fuso da empresa) em que um período de trabalho TERMINA nesta data, já com dia especial/feriado/trabalho excepcional. Dia sem período não tem
+    corte. Um fim que coincide com o INÍCIO de outro período do mesmo dia (períodos encostados, ex.: 08–12 e 12–16) não é corte: o trabalho continua."""
+    fuso = fuso_da_regra(regra)
+    periodos = periodos_do_dia(regra, data)
+    inicios = {inicio for inicio, _fim in periodos}
+    return [_combinar(data, fim, fuso) for _inicio, fim in periodos if fim not in inicios]
+
+
+def ultimo_fim_de_periodo(agora: datetime | None, regra: RegraExpediente) -> datetime | None:
+    """O corte MAIS RECENTE que já passou (`≤ agora`), procurando hoje e até 7 dias para trás; `None` se não houver."""
+    momento = momento_local(agora, regra)
+    for deslocamento in range(8):
+        dia = momento.date() - timedelta(days=deslocamento)
+        passados = [corte for corte in fins_de_periodo(regra, dia) if corte.timestamp() <= momento.timestamp()]
+        if passados:
+            return max(passados)
+    return None
+
+
+def inicio_de_periodo_entre(regra: RegraExpediente, depois_de: datetime, ate: datetime) -> bool:
+    """Algum período de trabalho COMEÇOU em `(depois_de, ate]`? Serve de trava do catch-up: um corte perdido não pode ser aplicado depois que um novo período já começou."""
+    fuso = fuso_da_regra(regra)
+    dia = depois_de.astimezone(fuso).date()
+    ultimo = ate.astimezone(fuso).date()
+    while dia <= ultimo:
+        for inicio, _fim in periodos_do_dia(regra, dia):
+            instante = _combinar(dia, inicio, fuso)
+            if depois_de.timestamp() < instante.timestamp() <= ate.timestamp():
+                return True
+        dia += timedelta(days=1)
+    return False
+
+
+def cutoff_pendente(agora: datetime | None, regra: RegraExpediente) -> datetime | None:
+    """O corte (fim de período) que PODE ser processado agora, ou `None`. Todas as condições:
+    - controle-mestre e `pausar_no_fim_periodo` ligados e pausa ARMADA (`pausa_automatica_ativada_em`);
+    - o corte é o mais recente que já passou e é POSTERIOR à armadura (ligar às 12:15 não pausa o corte das 12:00);
+    - NENHUM período novo começou depois dele (restart às 13:10 não retro-pausa as 12:00; restart às 12:20 ainda pode processar as 12:00).
+    Quem chama ainda confere o registro de execução (idempotência) — esta função não toca em banco."""
+    if not (regra.ativo and regra.pausar_no_fim_periodo) or regra.pausa_automatica_ativada_em is None:
+        return None
+    momento = momento_local(agora, regra)
+    corte = ultimo_fim_de_periodo(momento, regra)
+    if corte is None or corte.timestamp() <= regra.pausa_automatica_ativada_em.timestamp():
+        return None
+    if inicio_de_periodo_entre(regra, corte, momento):
+        return None
+    return corte
+
+
+NAMESPACE_EXECUCAO_EXPEDIENTE = uuid.UUID("6f1d3c52-9a0e-4b7e-8c1a-0e5a7d2b94f3")
+
+
+def chave_de_execucao(empresa_id: str, corte: datetime) -> str:
+    """Chave determinística de UMA execução (empresa + dia LOCAL + HH:MM do corte): `expediente:<empresa>:2026-10-14:12:00`. O corte já vem no fuso da empresa."""
+    return f"expediente:{empresa_id}:{corte.date().isoformat()}:{corte.strftime('%H:%M')}"
+
+
+def correlation_id_da_execucao(chave: str) -> str:
+    """UUID v5 da chave: o mesmo corte gera SEMPRE o mesmo `eventos.correlation_id` (a coluna é UUID de 36 caracteres), entre processos e restarts."""
+    return str(uuid.uuid5(NAMESPACE_EXECUCAO_EXPEDIENTE, chave))
 
 
 def _intervalos(regra: RegraExpediente, data_base: date, antecedencia_minutos: int) -> list[tuple[datetime, datetime]]:

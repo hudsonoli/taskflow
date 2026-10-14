@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -46,7 +49,26 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
-app = FastAPI(title=settings.app_name)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Tick de backend da pausa automática por expediente (Fase 3): UMA task asyncio, cancelada no shutdown. Várias instâncias são seguras (advisory lock + idempotência)."""
+    from app.core.expediente_tick import loop_pausa_expediente, tick_habilitado
+
+    tarefa = asyncio.create_task(loop_pausa_expediente(settings.expediente_tick_segundos)) if tick_habilitado() else None
+    try:
+        yield
+    finally:
+        if tarefa is not None:
+            tarefa.cancel()
+            try:
+                await tarefa
+            except asyncio.CancelledError:
+                pass
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

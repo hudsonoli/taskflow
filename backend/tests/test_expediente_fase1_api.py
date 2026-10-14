@@ -134,8 +134,9 @@ def test_espelho_legado_so_com_exatamente_dois_periodos(client_admin: TestClient
 # ── flags, antecedência, fuso ────────────────────────────────────────────────────────────────────────────────────
 
 
-# Fase Expediente 2: `bloquearForaExpediente` passou a ter efeito (gate de acesso) e PODE ser ligada — ver test_expediente_fase2_api.py. As outras duas seguem recusadas.
-@pytest.mark.parametrize("campo", ["pausarNoFimPeriodo", "feriadosAutomaticos"])
+# Fase Expediente 2: `bloquearForaExpediente` passou a ter efeito (gate de acesso) e PODE ser ligada — ver test_expediente_fase2_api.py. Fase 3: `pausarNoFimPeriodo` também
+# (tick de pausa automática). Só `feriadosAutomaticos` segue recusada.
+@pytest.mark.parametrize("campo", ["feriadosAutomaticos"])
 def test_flags_criticas_nao_podem_ser_ligadas_nesta_fase(client_admin: TestClient, campo: str) -> None:
     resposta = client_admin.patch("/regra-expediente", json={campo: True})
     assert resposta.status_code == 422
@@ -463,8 +464,8 @@ def test_a_antecedencia_de_acesso_nao_substitui_a_tolerancia_legada_no_dto(clien
     assert client_admin.get("/regra-expediente").json()["toleranciaRetomadaMinutos"] == 30
 
 
-def test_nenhum_codigo_cria_pausa_origem_expediente() -> None:
-    """AUTO_PAUSE_ACTIVE=NÃO: o valor "expediente" só existe como constraint/reserva — nenhuma rotina de aplicação o grava."""
+def test_so_o_servico_de_pausa_automatica_grava_pausa_origem_expediente() -> None:
+    """Fase 3: o valor "expediente" é gravado por UM lugar — `ExpedientePausaService` (tick). Qualquer outra rotina (PATCH, criar, restaurar...) só grava `manual`."""
     import pathlib
     import re
 
@@ -472,12 +473,14 @@ def test_nenhum_codigo_cria_pausa_origem_expediente() -> None:
     atribuicoes = []
     for arquivo in raiz.rglob("*.py"):
         for linha in arquivo.read_text(encoding="utf-8").splitlines():
-            if re.search(r"pausa_origem\s*=\s*", linha) and not linha.strip().startswith("#"):
+            if re.match(r"\s*[\w.]*pausa_origem\s*=\s*", linha):
                 atribuicoes.append((arquivo.name, linha.strip()))
     assert atribuicoes, "esperava as atribuições da pausa manual"
     for arquivo, linha in atribuicoes:
-        assert "expediente" not in linha.lower() or "check" in linha.lower() or "Literal" in linha, (arquivo, linha)
-    assert not any(re.search(r'pausa_origem\s*=\s*["\']expediente', l) for _, l in atribuicoes)
+        if arquivo == "expediente_pausa_service.py":
+            assert linha == "demanda.pausa_origem = ORIGEM_PAUSA_EXPEDIENTE", linha
+        else:
+            assert "expediente" not in linha.lower() or "check" in linha.lower() or "Literal" in linha, (arquivo, linha)
 
 
 def test_pausa_manual_e_saida_da_pausa_continuam_registrando_a_origem(client_admin: TestClient, dentro_do_expediente) -> None:

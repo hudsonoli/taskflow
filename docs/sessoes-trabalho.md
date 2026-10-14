@@ -107,3 +107,8 @@ Registrado após a auditoria de 2026-10-14. Esta fase (11B.2A) e a tabela `sesso
 - **As métricas automáticas de DURAÇÃO NÃO serão expostas em produção antes da Fase Expediente 3** (pausa automática nos fins de período). Sem ela, uma tarefa esquecida em `em_execucao` acumularia tempo noturno falso. Contagens por status "agora" não dependem disso.
 - **Migração:** não inventar horas pessoais retroativas; a medição automática começa na migration, com marcador explícito de início (`medicao_automatica_desde`) e um intervalo aberto para cada Demanda que já estiver `em_execucao`.
 - **Pré-requisito já resolvido (hardening do gate, branch `fix/expediente-work-gate-entrypoints`):** as três portas para `em_execucao` — `PATCH /demandas/{id}`, `POST /demandas` com `status=em_execucao` e `POST /demandas/{id}/restaurar` de uma Demanda arquivada que estava em execução — passam pela **mesma** autoridade de horário (`DemandaService._ensure_dentro_expediente`); ver `docs/expediente.md`.
+
+## Fase Expediente 3 — encerramento por fim de período
+
+Motivo novo `fim_expediente` (ver `docs/expediente.md`): o tick de pausa automática encerra as sessões de usuários sujeitos ao fim de cada período, com `fim_em` = o corte configurado e evento sem usuário ator.
+Abrir sessão pessoal passou a respeitar o gate de TRABALHO (`FORA_DE_EXPEDIENTE`, 409). `close_session` nunca grava fim anterior ao início (limita ao início e registra warning).

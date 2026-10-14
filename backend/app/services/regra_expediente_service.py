@@ -3,6 +3,7 @@ import time as _time
 from datetime import datetime, time
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,7 @@ from app.core.expediente import (
 from app.core.expediente import RegraExpediente as RegraExpedienteCalculo
 from app.core.relogio import agora_utc, fuso_aplicacao
 from app.domain.event_types import DomainEventType
+from app.models.evento import Evento
 from app.models.regra_expediente import (
     RegraExpedienteDia,
     RegraExpedienteDiaEspecial,
@@ -37,6 +39,7 @@ from app.schemas.regra_expediente import (
     PeriodoWrite,
     RegraExpedienteRead,
     RegraExpedienteUpdate,
+    UltimaPausaAutomaticaRead,
     normalizar_periodos,
 )
 from app.services.domain_event_publisher import DomainEventPublisher
@@ -191,6 +194,7 @@ class RegraExpedienteService:
             feriados_automaticos=regra.feriados_automaticos,
             logout_automatico_ativo=regra.logout_automatico_ativo,
             logout_horario=_time_para_string(regra.logout_horario),
+            pausa_automatica_ativada_em=regra.pausa_automatica_ativada_em,
         )
 
     def get_regra_calculo_para_gate(self, db: Session, *, empresa_id: str) -> RegraExpedienteCalculo | None:
@@ -246,6 +250,12 @@ class RegraExpedienteService:
                 changed_fields.append("logoutHorario")
             if regra.logout_automatico_ativo and regra.logout_horario is None:
                 raise RegraExpedienteInvalidaError("logoutHorario é obrigatório para ativar o logout automático")
+            # Pausa automática (Fase 3): "armar" = carimbar o instante a partir do qual os cortes valem. Ligar a flag, religar o controle-mestre ou editar o calendário
+            # (dias, fuso) COM ela ligada rearma — um corte que já passou antes disso NUNCA é aplicado retroativamente. Desligar limpa.
+            if not regra.pausar_no_fim_periodo:
+                regra.pausa_automatica_ativada_em = None
+            elif {"pausarNoFimPeriodo", "ativo", "dias", "timezone"} & set(changed_fields):
+                regra.pausa_automatica_ativada_em = now
 
             if data.dias is not None and self._substituir_dias(db, regra.id, data.dias):
                 changed_fields.append("dias")
@@ -333,6 +343,7 @@ class RegraExpedienteService:
             )
             self.repository.save_dia_especial(db, dia)
             self.repository.replace_periodos_especiais(db, dia.id, self._linhas_especiais(dia.id, data.periodos))
+            self._rearmar_pausa_automatica(db, regra, now)
             self._publish_dia_especial_evento(db, regra, actor_usuario_id, "criado", dia, now)
             db.commit()
             invalidar_cache_regra(empresa_id)
@@ -371,6 +382,7 @@ class RegraExpedienteService:
             dia.updated_at = now
             self.repository.save_dia_especial(db, dia)
             self.repository.replace_periodos_especiais(db, dia.id, self._linhas_especiais(dia.id, periodos_finais))
+            self._rearmar_pausa_automatica(db, regra, now)
             self._publish_dia_especial_evento(db, regra, actor_usuario_id, "alterado", dia, now)
             db.commit()
             invalidar_cache_regra(empresa_id)
@@ -386,6 +398,7 @@ class RegraExpedienteService:
             if dia.origem == "automatico":
                 raise DiaEspecialNaoEditavelError("Um dia especial automático não é excluído — desative-o")
             now = agora_utc()
+            self._rearmar_pausa_automatica(db, regra, now)
             self._publish_dia_especial_evento(db, regra, actor_usuario_id, "removido", dia, now)
             self.repository.delete_dia_especial(db, dia)
             db.commit()
@@ -393,6 +406,12 @@ class RegraExpedienteService:
         except Exception:
             db.rollback()
             raise
+
+    def _rearmar_pausa_automatica(self, db: Session, regra: RegraExpedienteModel, now: datetime) -> None:
+        """Dia especial criado/alterado/removido com a pausa automática LIGADA muda os cortes de hoje: rearma (nenhum corte antigo é aplicado retroativamente)."""
+        if regra.pausar_no_fim_periodo:
+            regra.pausa_automatica_ativada_em = now
+            self.repository.update(db, regra)
 
     def _dia_da_empresa(self, db: Session, regra: RegraExpedienteModel, dia_especial_id: str) -> RegraExpedienteDiaEspecial:
         dia = self.repository.get_dia_especial(db, dia_especial_id)
@@ -486,13 +505,14 @@ class RegraExpedienteService:
             feriadosAutomaticos=regra.feriados_automaticos,
             logoutAutomaticoAtivo=regra.logout_automatico_ativo,
             logoutHorario=regra.logout_horario,
+            pausaAutomaticaAtivadaEm=regra.pausa_automatica_ativada_em,
             dias=leitura_dias,
             diasEspeciais=self._dias_especiais_read(db, regra),
             createdAt=regra.created_at,
             updatedAt=regra.updated_at,
         )
 
-    def to_estado_read(self, db: Session, *, empresa_id: str, sujeito: bool = False) -> EstadoExpedienteRead:
+    def to_estado_read(self, db: Session, *, empresa_id: str, sujeito: bool = False, usuario_id: str | None = None) -> EstadoExpedienteRead:
         """Estado para o usuário LOGADO (`sujeito` = está sob a política de expediente). `dentroExpediente` é da EMPRESA e da janela de trabalho NOMINAL (sem a
         tolerância legada, sem isenção): serve a capacidade. O que vale para esta pessoa está em `acessoPermitido`/`trabalhoPermitido`."""
         regra_calculo = self.get_regra_calculo_para_gate(db, empresa_id=empresa_id) or self.get_regra_calculo(db, empresa_id=empresa_id)
@@ -512,7 +532,29 @@ class RegraExpedienteService:
             proximoTrabalho=avaliacao.proximo_trabalho,
             proximoTrabalhoFim=avaliacao.proximo_trabalho_fim,
             timezone=avaliacao.timezone,
+            ultimaPausaAutomatica=self._ultima_pausa_automatica(db, empresa_id, usuario_id),
         )
+
+    @staticmethod
+    def _ultima_pausa_automatica(db: Session, empresa_id: str, usuario_id: str | None) -> UltimaPausaAutomaticaRead | None:
+        """O resumo MAIS RECENTE de pausa automática desta pessoa (evento `expediente.pausa_automatica_aplicada`, entidade = o usuário). Só existe quando alguma Demanda
+        foi realmente pausada; execução com 0 pausadas não gera resumo e, portanto, nunca avisa."""
+        if usuario_id is None:
+            return None
+        evento = db.scalar(
+            select(Evento)
+            .where(
+                Evento.empresa_id == empresa_id,
+                Evento.tipo == DomainEventType.EXPEDIENTE_PAUSA_AUTOMATICA_APLICADA.value,
+                Evento.entidade_tipo == "usuario",
+                Evento.entidade_id == usuario_id,
+            )
+            .order_by(Evento.occurred_at.desc(), Evento.created_at.desc())
+            .limit(1)
+        )
+        if evento is None:
+            return None
+        return UltimaPausaAutomaticaRead(eventoId=evento.id, em=evento.occurred_at, quantidade=int((evento.payload or {}).get("quantidade", 0)))
 
     # ----------------------------------------------------------------------------------
     # Regras internas

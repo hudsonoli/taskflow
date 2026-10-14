@@ -47,6 +47,7 @@ from app.services.demanda_workflow_service import (
     DemandaWorkflowSemAutoridadeError,
     DemandaWorkflowService,
 )
+from app.services.expediente_trabalho import detalhe_409_fora_de_expediente
 from app.services.demanda_service import (
     DemandaClienteForaDoEscopoError,
     DemandaClienteInvalidoError,
@@ -91,22 +92,7 @@ def handle_demanda_error(exc: Exception) -> None:
     if isinstance(exc, DemandaForaDeExpedienteError):
         # 409 estruturado — a interface só apresenta; a janela vem do servidor para não haver
         # duas fontes da mesma regra.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "FORA_DE_EXPEDIENTE",
-                "message": str(exc),
-                "expediente": {
-                    # Janela de HOJE — pode vir tudo `None` quando o dia não é útil (ver
-                    # docstring de DemandaForaDeExpedienteError, Fase 2G.3).
-                    "manhaInicio": exc.dia_hoje.manha_inicio,
-                    "manhaFim": exc.dia_hoje.manha_fim,
-                    "tardeInicio": exc.dia_hoje.tarde_inicio,
-                    "tardeFim": exc.dia_hoje.tarde_fim,
-                    "toleranciaRetomadaMinutos": exc.tolerancia_retomada_minutos,
-                },
-            },
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detalhe_409_fora_de_expediente(exc)) from exc
     if isinstance(exc, DemandaInvalidTransitionError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     # Progressão de workflow (Fase 8A). 409 estruturado: a interface recarrega o estado e mostra a mensagem do servidor.

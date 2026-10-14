@@ -52,8 +52,10 @@ export type RegraExpediente = {
   toleranciaRetomadaMinutos: number;
   /** Fase 2: TEM efeito — operadores sujeitos só usam o sistema dentro da janela de ACESSO (403 FORA_DO_EXPEDIENTE). */
   bloquearForaExpediente: boolean;
-  /** Fase 3 (ainda sem efeito): a API recusa ligar. */
+  /** Fase 3: TEM efeito — ao fim de cada período o servidor pausa as tarefas em execução (sem logout, sem retomar). */
   pausarNoFimPeriodo: boolean;
+  /** Instante em que a pausa foi "armada" (informativo; quem decide é o servidor). */
+  pausaAutomaticaAtivadaEm?: string | null;
   antecedenciaAcessoMinutos: number;
   /** IANA, ex.: America/Sao_Paulo */
   timezone: string;
@@ -78,6 +80,7 @@ export type RegraExpedienteUpdateDraft = {
   antecedenciaAcessoMinutos?: number;
   timezone?: string;
   bloquearForaExpediente?: boolean;
+  pausarNoFimPeriodo?: boolean;
   logoutAutomaticoAtivo?: boolean;
   /** "HH:MM"; `null` limpa (só aceito com o logout desligado). */
   logoutHorario?: string | null;
@@ -102,6 +105,15 @@ export type EstadoExpediente = {
   proximoTrabalho: string | null;
   proximoTrabalhoFim: string | null;
   timezone: string | null;
+  /** Fase 3: a última pausa automática que atingiu ESTA pessoa; `null` = nunca. Fonte do aviso "Tarefas pausadas automaticamente.". */
+  ultimaPausaAutomatica?: UltimaPausaAutomatica | null;
+};
+
+export type UltimaPausaAutomatica = {
+  eventoId: string;
+  /** instante do corte (ex.: 12:00) */
+  em: string;
+  quantidade: number;
 };
 
 /** Corpo do `403 FORA_DO_EXPEDIENTE` (sessão válida; a política recusa o uso agora). */

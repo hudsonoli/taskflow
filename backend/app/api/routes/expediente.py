@@ -29,5 +29,8 @@ def get_estado_expediente(
     db: Session = Depends(get_db),
 ):
     return regra_expediente_service.to_estado_read(
-        db, empresa_id=current_user.empresa_id, sujeito=usuario_esta_sujeito_ao_expediente(current_user)
+        db,
+        empresa_id=current_user.empresa_id,
+        sujeito=usuario_esta_sujeito_ao_expediente(current_user),
+        usuario_id=current_user.id,
     )

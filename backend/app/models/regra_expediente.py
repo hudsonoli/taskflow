@@ -75,6 +75,10 @@ class RegraExpediente(Base):
     logout_automatico_ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     logout_horario: Mapped[time | None] = mapped_column(Time, nullable=True)
 
+    # Fase Expediente 3 — instante em que a PAUSA AUTOMÁTICA foi "armada" (flag ligada, controle-mestre religado ou calendário editado com ela ligada). Só cortes
+    # POSTERIORES a ele são elegíveis: ligar às 12:15 não pausa retroativamente o corte das 12:00. NULL = nunca armada.
+    pausa_automatica_ativada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

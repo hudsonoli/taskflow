@@ -117,15 +117,14 @@ test("o fuso atual da empresa sempre aparece nas opções", () => {
 
 // ── estrutura: nada de bloqueio/pausa ativos nesta fase ──────────────────────────────────────────────────────────
 
-test("a tela envia o bloqueio e o logout automático (Fase 2), mas NUNCA a pausa automática nem feriados automáticos", () => {
+test("a tela envia bloqueio, pausa (Fase 3) e logout automático, mas NUNCA feriados automáticos", () => {
   const view = semComentarios(ler("components/regra-expediente/RegraExpedienteView.tsx"));
   const envio = view.slice(view.indexOf("atualizarRegraExpedienteReal({"), view.indexOf("});", view.indexOf("atualizarRegraExpedienteReal({")));
-  for (const chave of ["ativo", "toleranciaRetomadaMinutos", "antecedenciaAcessoMinutos", "timezone", "dias", "bloquearForaExpediente", "logoutAutomaticoAtivo", "logoutHorario"]) assert.ok(envio.includes(chave), chave);
-  for (const proibida of ["pausarNoFimPeriodo", "feriadosAutomaticos"]) assert.equal(envio.includes(proibida), false, proibida);
-  // só o interruptor de PAUSA continua travado e avisa que fica para a próxima etapa
-  assert.equal((view.match(/checked=\{false\}\s+disabled/g) ?? []).length, 1);
-  assert.ok((view.match(/Será ativado em uma próxima etapa/g) ?? []).length >= 1);
-  // a antiga promessa de pausa automática não pode voltar a aparecer
+  for (const chave of ["ativo", "toleranciaRetomadaMinutos", "antecedenciaAcessoMinutos", "timezone", "dias", "bloquearForaExpediente", "pausarNoFimPeriodo", "logoutAutomaticoAtivo", "logoutHorario"]) assert.ok(envio.includes(chave), chave);
+  assert.equal(envio.includes("feriadosAutomaticos"), false);
+  // nenhum interruptor fica travado/"Em breve" agora (a pausa foi liberada na Fase 3)
+  assert.equal((view.match(/checked=\{false\}\s+disabled/g) ?? []).length, 0);
+  // a antiga promessa de pausa automática por texto enganoso não pode voltar
   assert.equal(/pausadas automaticamente|pausas automáticas ativas/i.test(view), false);
 });
 

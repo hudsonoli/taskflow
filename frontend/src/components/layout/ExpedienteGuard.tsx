@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useSnapshotExpediente } from "@/lib/estadoExpediente";
 import { ForaDoExpedienteView } from "./ForaDoExpedienteView";
+import { PausaAutomaticaAviso } from "./PausaAutomaticaAviso";
 
 /**
  * Guarda de ACESSO por expediente (Fase Expediente 2) — só dentro da área autenticada do tenant. Lê o store ÚNICO de `/expediente/estado` (o mesmo polling de ~30 s que
@@ -12,5 +13,10 @@ import { ForaDoExpedienteView } from "./ForaDoExpedienteView";
 export function ExpedienteGuard({ children, onSair, saindo }: { children: ReactNode; onSair: () => void; saindo: boolean }) {
   const { bloqueio } = useSnapshotExpediente();
   if (bloqueio) return <ForaDoExpedienteView bloqueio={bloqueio} onSair={onSair} saindo={saindo} />;
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <PausaAutomaticaAviso />
+    </>
+  );
 }

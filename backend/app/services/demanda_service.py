@@ -12,14 +12,7 @@ from app.core.escopo import (
     departamentos_como_head,
     eh_atendimento,
 )
-from app.core.expediente import (
-    JanelaDia,
-    RegraExpediente,
-    esta_dentro_janela_trabalho,
-    janela_do_dia,
-    momento_local,
-    usuario_sujeito_ao_expediente,
-)
+from app.core.expediente import RegraExpediente
 from app.core.referencias import gerar_proxima_referencia
 from app.core.relogio import agora_utc, ano_corrente
 from app.core.sequencias_operacionais import reservar_proximo_identificado
@@ -46,6 +39,7 @@ from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead
 from app.services.domain_event_publisher import DomainEventPublisher
+from app.services.expediente_trabalho import DemandaForaDeExpedienteError, garantir_trabalho_permitido  # noqa: F401  (re-exporta o erro: contrato antigo)
 from app.services.regra_expediente_service import RegraExpedienteService
 from app.services.sessao_trabalho_service import (
     MOTIVO_ARQUIVAMENTO,
@@ -114,22 +108,6 @@ class DemandaInvalidTransitionError(ValueError):
 
 class DemandaMotivoBloqueioObrigatorioError(ValueError):
     """`bloqueada` sem motivo. 422 — é campo faltando, não conflito de estado."""
-
-
-class DemandaForaDeExpedienteError(ValueError):
-    """Tentativa de entrar em execução fora do expediente. Vira 409 estruturado.
-
-    Carrega a janela de HOJE (não a regra inteira — a Fase 2G.3 tornou a regra por dia da
-    semana, e o que a interface precisa pra dizer "quando poderá" é só o dia corrente) para
-    a interface conseguir dizer *quando* poderá — sem repetir a regra no cliente. `dia_hoje`
-    pode estar com as quatro janelas em `None` quando o dia não é útil (ex.: fim de semana no
-    padrão inicial).
-    """
-
-    def __init__(self, message: str, *, dia_hoje: JanelaDia, tolerancia_retomada_minutos: int) -> None:
-        super().__init__(message)
-        self.dia_hoje = dia_hoje
-        self.tolerancia_retomada_minutos = tolerancia_retomada_minutos
 
 
 class DemandaClienteInvalidoError(ValueError):
@@ -657,6 +635,14 @@ class DemandaService:
                 raise DemandaInvalidTransitionError(
                     "Demanda arquivada não pode ser editada — restaure-a antes"
                 )
+
+            # Mudança de STATUS serializa com o tick de pausa automática e com a abertura de sessão: trava a linha da Demanda e relê o estado COMMITADO. Quem espera o
+            # lock enxerga o resultado de quem venceu — o gate de horário abaixo roda DEPOIS do lock (11:59:59 × tick das 12:00: ou a transição vale antes do corte e o
+            # tick a pausa, ou o gate a recusa).
+            if updates.get("status") is not None:
+                self.repository.bloquear_demanda_para_atualizacao(db, demanda)
+                if demanda.status == STATUS_ARQUIVADA:
+                    raise DemandaInvalidTransitionError("Demanda arquivada não pode ser editada — restaure-a antes")
 
             status_anterior = demanda.status
             status_final = updates.get("status") or demanda.status
@@ -1242,35 +1228,11 @@ class DemandaService:
     def _ensure_dentro_expediente(self, db: Session, empresa_id: str, actor: Usuario) -> None:
         """ÚNICA autoridade para ENTRAR em `em_execucao` — usada por `update_demanda`, `create_demanda` e `restaurar_demanda`; nenhum outro lugar decide horário.
 
-        Gate de TRABALHO (entrada em `em_execucao`). Fase Expediente 2: usa SÓ a janela de trabalho NOMINAL (`esta_dentro_janela_trabalho`) — a tolerância legada
-        (`tolerancia_retomada_minutos`) deixou de ser autoridade; às 12:30 há ACESSO mas não há TRABALHO, às 13:00 sim. Isentos (não recebem 409): admin, gestor,
-        conta de sistema e `acesso_fora_expediente=true`. Regra desligada (`ativo=False`) libera."""
-        if not usuario_sujeito_ao_expediente(
-            perfil_base=actor.perfil_base,
-            is_system_account=bool(actor.is_system_account),
-            acesso_fora_expediente=bool(actor.acesso_fora_expediente),
-        ):
-            return
-        # Override do teste (fixtures dentro_do_expediente/fora_do_expediente) tem
-        # prioridade; sem ele, carrega a regra REAL da Empresa — Fase 2G.3.
-        regra = self.regra_expediente or self.regra_expediente_service.get_regra_calculo(
-            db, empresa_id=empresa_id
-        )
-        agora = momento_local(None, regra)  # relógio da EMPRESA (fuso da regra), nunca o do navegador
-        if esta_dentro_janela_trabalho(agora, regra=regra):
-            return
-
-        # Dia efetivo de hoje: 0, 1, 2 ou mais períodos, já com feriado/recesso/trabalho excepcional (Fase Expediente 1).
-        dia_hoje = janela_do_dia(regra, agora.date())
-        if not dia_hoje.ativo:
-            mensagem = "Fora do expediente: hoje não é dia útil"
-        else:
-            faixas = [f"{inicio} às {fim}" for inicio, fim in dia_hoje.lista_periodos()]
-            mensagem = "Fora do expediente: execução permitida das " + (
-                faixas[0] if len(faixas) == 1 else ", das ".join(faixas[:-1]) + " e das " + faixas[-1]
-            )
-        raise DemandaForaDeExpedienteError(
-            mensagem, dia_hoje=dia_hoje, tolerancia_retomada_minutos=regra.tolerancia_retomada_minutos
+        Delega a `garantir_trabalho_permitido` (app/services/expediente_trabalho.py), a MESMA função que a abertura de sessão pessoal usa: janela de trabalho NOMINAL,
+        fuso da empresa, dias especiais; isentos (admin, gestor, conta de sistema, `acesso_fora_expediente`) passam; regra desligada libera. O override de teste
+        (fixtures dentro_do_expediente/fora_do_expediente) tem prioridade sobre a regra real."""
+        garantir_trabalho_permitido(
+            db, empresa_id, actor, regra_override=self.regra_expediente, regra_service=self.regra_expediente_service
         )
 
     def _ensure_cliente_valido(self, db: Session, empresa_id: str, cliente_id: str) -> None:
@@ -1642,11 +1604,20 @@ class DemandaService:
         *,
         extra_payload: dict | None = None,
         occurred_at: datetime | None = None,
+        correlation_id: str | None = None,
+        metadata: dict | None = None,
     ) -> Evento:
-        """Ponto público para outros services do domínio Demanda (ex.: progressão de workflow) publicarem na MESMA timeline,
-        com o payload-base padrão (empresa, demanda, identificador, status)."""
+        """Ponto público para outros services do domínio Demanda (ex.: progressão de workflow, pausa automática por expediente) publicarem na MESMA timeline,
+        com o payload-base padrão (empresa, demanda, identificador, status). `actor_usuario_id=None` = ação do SISTEMA (nunca se finge um usuário)."""
         return self._publish_event(
-            db, demanda, tipo, actor_usuario_id, extra_payload=extra_payload, occurred_at=occurred_at
+            db,
+            demanda,
+            tipo,
+            actor_usuario_id,
+            extra_payload=extra_payload,
+            occurred_at=occurred_at,
+            correlation_id=correlation_id,
+            metadata=metadata,
         )
 
     def _publish_event(
@@ -1658,6 +1629,8 @@ class DemandaService:
         *,
         extra_payload: dict | None = None,
         occurred_at: datetime | None = None,
+        correlation_id: str | None = None,
+        metadata: dict | None = None,
     ) -> Evento:
         timestamp = occurred_at or agora_utc()
         payload = {
@@ -1683,4 +1656,6 @@ class DemandaService:
             usuario_id=actor_usuario_id,
             payload=payload,
             occurred_at=timestamp,
+            correlation_id=correlation_id,
+            metadata=metadata,
         )

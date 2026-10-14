@@ -27,6 +27,9 @@ class Settings:
     # 23:30 de 31/12 em São Paulo já seria 01/01 em UTC. Quando existir fuso por empresa,
     # este é o ponto a evoluir — não espalhar datetime.now() pelo código.
     app_timezone: str = field(default_factory=lambda: os.getenv("APP_TIMEZONE", "America/Sao_Paulo"))
+    # Fase Expediente 3 — tick de backend da pausa automática (asyncio no lifespan). Ligado por padrão; os testes o desligam (nenhuma task em background na suíte).
+    expediente_tick_habilitado: bool = field(default_factory=lambda: os.getenv("EXPEDIENTE_TICK_HABILITADO", "true").strip().lower() not in ("0", "false", "no", "off"))
+    expediente_tick_segundos: int = field(default_factory=lambda: max(5, int(os.getenv("EXPEDIENTE_TICK_SEGUNDOS", "60"))))
     database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", DEFAULT_SQLITE_URL))
     auth_secret_key: str = field(default_factory=lambda: os.getenv("AUTH_SECRET_KEY", DEV_INSECURE_AUTH_SECRET))
     auth_algorithm: str = field(default_factory=lambda: os.getenv("AUTH_ALGORITHM", "HS256"))

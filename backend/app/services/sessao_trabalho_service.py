@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -12,9 +13,12 @@ from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.sessao_trabalho_repository import FiltrosSessaoAvancados, SessaoTrabalhoRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.services.evento_service import EventoService
+from app.services.expediente_trabalho import garantir_trabalho_permitido
 
 # Mesmo conjunto usado em Projeto/Demanda: um usuário nestes estados não pode ser DEFINIDO
 # como responsável novo de uma sessão. Vínculo histórico (sessão já existente) não é afetado.
+logger = logging.getLogger(__name__)
+
 STATUS_USUARIO_INVALIDO = {"arquivado", "inativo", "bloqueado"}
 STATUS_DEPARTAMENTO_INVALIDO = {"arquivado"}
 
@@ -32,6 +36,9 @@ MOTIVO_CANCELAMENTO = "cancelamento"
 MOTIVO_TROCA_RESPONSAVEL = "troca_responsavel"
 MOTIVO_SUBSTITUICAO_SESSAO_ATIVA = "substituicao_sessao_ativa"
 MOTIVO_ARQUIVAMENTO = "arquivamento"
+# Fase Expediente 3 — encerramento AUTOMÁTICO pelo fim de um período de trabalho (tick de pausa automática). Motivo PRÓPRIO: não é uma pausa manual nem uma mudança de
+# status feita por pessoa, e a origem (expediente) não pode se perder.
+MOTIVO_FIM_EXPEDIENTE = "fim_expediente"
 MOTIVOS_ENCERRAMENTO = frozenset(
     {
         MOTIVO_PAUSA,
@@ -43,6 +50,7 @@ MOTIVOS_ENCERRAMENTO = frozenset(
         MOTIVO_TROCA_RESPONSAVEL,
         MOTIVO_SUBSTITUICAO_SESSAO_ATIVA,
         MOTIVO_ARQUIVAMENTO,
+        MOTIVO_FIM_EXPEDIENTE,
     }
 )
 
@@ -147,6 +155,10 @@ class SessaoTrabalhoService:
         de etapa e com a mudança de status."""
         self._validate_responsavel(usuario_id=usuario_id, departamento_id=departamento_id, allow_usuario_and_departamento=False)
         demanda = self._ensure_demanda_executavel(db, empresa_id, demanda_id)
+        # Fase Expediente 3 — a sessão pessoal é TRABALHO: a MESMA autoridade de horário do PATCH/criar/restaurar (`garantir_trabalho_permitido`). Sem isto, entre 12:00 e
+        # a execução do tick (a Demanda ainda `em_execucao`) uma sessão nova abriria. Quem está sujeito é a PESSOA da sessão (não quem clicou); sessão só de departamento
+        # (sem pessoa) é tratada como sujeita. Roda DEPOIS do lock da Demanda: serializa com o tick.
+        garantir_trabalho_permitido(db, empresa_id, self._usuario_da_sessao(db, usuario_id))
         workflow_etapa_id = self._resolver_etapa_da_sessao(db, demanda, workflow_etapa_id)
         return self.open_session(
             db,
@@ -159,6 +171,9 @@ class SessaoTrabalhoService:
             usuario_id=usuario_id,
             departamento_id=departamento_id,
         )
+
+    def _usuario_da_sessao(self, db: Session, usuario_id: str | None):
+        return self.usuario_repository.get_by_id(db, usuario_id) if usuario_id else None
 
     def _ensure_demanda_executavel(self, db: Session, empresa_id: str, demanda_id: str):
         demanda = self.repository.get_demanda_travada(db, demanda_id)
@@ -327,6 +342,14 @@ class SessaoTrabalhoService:
 
         fim_em = ensure_utc(fim_em)
         inicio_em = ensure_utc(sessao.inicio_em)
+        if fim_em < inicio_em:
+            # Estado impossível com o gate correto (um fim anterior ao início). Nunca grava fim < início nem duração negativa: o fim é limitado ao início (duração 0) e o
+            # fato fica registrado para investigação.
+            logger.warning(
+                "sessao_trabalho_fim_anterior_ao_inicio sessao=%s demanda=%s inicio=%s fim_solicitado=%s motivo=%s",
+                sessao.id, sessao.demanda_id, inicio_em.isoformat(), fim_em.isoformat(), motivo_encerramento,
+            )
+            fim_em = inicio_em
         duracao = max(0, int((fim_em - inicio_em).total_seconds()))
         sessao.status = STATUS_ENCERRADA
         sessao.fim_em = fim_em
@@ -426,6 +449,46 @@ class SessaoTrabalhoService:
                 )
             )
         return fechadas
+
+    def encerrar_por_expediente(
+        self,
+        db: Session,
+        sessao: SessaoTrabalho,
+        *,
+        corte: datetime,
+        chave: str,
+        correlation_id: str,
+    ) -> SessaoTrabalho:
+        """Encerramento AUTOMÁTICO pelo fim de um período (Fase Expediente 3). Ação do SISTEMA: o evento NÃO tem usuário ator (a pessoa da sessão só aparece no payload,
+        como dado — não como quem agiu). `fim_em` é o CORTE configurado (12:00), nunca o instante em que o tick rodou; se o corte for anterior ao início da sessão (estado
+        impossível com o gate correto), `close_session` limita o fim ao início e registra o aviso — nunca grava duração negativa. Não faz commit (mesma transação do tick)."""
+        evento = self.evento_service.create_evento(
+            db,
+            EventoCreate(
+                empresaId=sessao.empresa_id,
+                agenciaId=sessao.agencia_id,
+                tipo="sessao_trabalho_encerrada",
+                entidadeTipo="demanda",
+                entidadeId=sessao.demanda_id,
+                usuarioId=None,
+                correlationId=correlation_id,
+                payload={
+                    "demandaId": sessao.demanda_id,
+                    "sessaoId": sessao.id,
+                    "sessaoUsuarioId": sessao.usuario_id,
+                    "sessaoDepartamentoId": sessao.departamento_id,
+                    "motivoEncerramento": MOTIVO_FIM_EXPEDIENTE,
+                    "automatico": True,
+                    "origem": "expediente",
+                    "cutoff": corte.isoformat(),
+                    "chaveExecucao": chave,
+                },
+                metadata={"origem": "sistema", "fonte": "expediente"},
+                occurredAt=corte,
+            ),
+            commit=False,
+        )
+        return self.close_session(db, sessao, evento_fim_id=evento.id, fim_em=corte, motivo_encerramento=MOTIVO_FIM_EXPEDIENTE)
 
     def horas_departamento(
         self, db: Session, *, empresa_id: str, departamento_id: str, usuario: Usuario

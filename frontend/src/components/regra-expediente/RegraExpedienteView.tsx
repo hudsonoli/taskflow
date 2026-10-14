@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, Clock, Loader2, MinusCircle } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -17,8 +16,8 @@ import { DiasEspeciaisSection } from "./DiasEspeciaisSection";
 import { PeriodosDoDia } from "./PeriodosDoDia";
 
 // Fase Expediente 1/2. A tela configura períodos por dia (0, 1, 2 ou mais), antecedência de acesso, fuso e dias especiais. O QUE TEM EFEITO: o controle de expediente
-// (iniciar a execução só na janela de TRABALHO), o BLOQUEIO de acesso fora da janela de ACESSO e o LOGOUT automático em horário próprio — três coisas INDEPENDENTES. A PAUSA
-// automática segue travada ("Em breve"): o servidor também recusa ligá-la.
+// (iniciar a execução só na janela de TRABALHO), o BLOQUEIO de acesso fora da janela de ACESSO, a PAUSA automática no fim de cada período (Fase 3) e o LOGOUT automático em
+// horário próprio — coisas INDEPENDENTES (a pausa não faz logout e não retoma).
 
 function normalizarRegra(dados: RegraExpediente): RegraExpediente {
   const normalizados = diasNormalizados(dados.dias);
@@ -80,7 +79,10 @@ export function RegraExpedienteView() {
 
   function updateRegra(
     patch: Partial<
-      Pick<RegraExpediente, "ativo" | "toleranciaRetomadaMinutos" | "antecedenciaAcessoMinutos" | "timezone" | "bloquearForaExpediente" | "logoutAutomaticoAtivo" | "logoutHorario">
+      Pick<
+        RegraExpediente,
+        "ativo" | "toleranciaRetomadaMinutos" | "antecedenciaAcessoMinutos" | "timezone" | "bloquearForaExpediente" | "pausarNoFimPeriodo" | "logoutAutomaticoAtivo" | "logoutHorario"
+      >
     >,
   ) {
     setSalvoEm(null);
@@ -113,6 +115,7 @@ export function RegraExpedienteView() {
         antecedenciaAcessoMinutos: regra.antecedenciaAcessoMinutos,
         timezone: regra.timezone,
         bloquearForaExpediente: regra.bloquearForaExpediente,
+        pausarNoFimPeriodo: regra.pausarNoFimPeriodo,
         logoutAutomaticoAtivo: regra.logoutAutomaticoAtivo,
         logoutHorario: regra.logoutHorario ?? null,
         dias: diasParaEnvio(regra.dias),
@@ -146,8 +149,8 @@ export function RegraExpedienteView() {
             <h1 className="text-lg font-semibold tracking-tight text-fg">Horário de expediente</h1>
             <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
               Defina os períodos de trabalho de cada dia da semana, a antecedência de acesso e os dias especiais. A configuração vale para{" "}
-              <strong>iniciar a execução</strong> de uma demanda, para o <strong>bloqueio de acesso</strong> fora do horário e para o <strong>logout automático</strong>.
-              A pausa automática ainda não está ativa.
+              <strong>iniciar a execução</strong> de uma demanda, para o <strong>bloqueio de acesso</strong> fora do horário, para a <strong>pausa automática</strong> ao
+              fim de cada período e para o <strong>logout automático</strong>.
             </p>
           </div>
         </div>
@@ -203,15 +206,11 @@ export function RegraExpedienteView() {
           </div>
           <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
             <Switch
-              checked={false}
-              disabled
-              onChange={() => undefined}
+              checked={regra.pausarNoFimPeriodo}
+              onChange={(checked) => updateRegra({ pausarNoFimPeriodo: checked })}
               label="Pausar atividades ao final dos períodos"
-              description="Será ativado em uma próxima etapa."
+              description="Pausa automaticamente as atividades em execução ao final de cada período. As atividades não são retomadas automaticamente. Não faz logout."
             />
-            <div className="mt-1.5">
-              <Badge>Em breve</Badge>
-            </div>
           </div>
           <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
             <Switch

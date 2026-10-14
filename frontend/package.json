@@ -45,7 +45,8 @@
     "test:projetos-progresso": "node --test src/lib/projetos-progresso.test.ts",
     "test:expediente": "node --test src/lib/expediente-periodos.test.ts",
     "test:sessao-expirada": "node --test src/lib/sessao-expirada.test.ts",
-    "test:expediente-acesso": "node --test src/lib/expediente-acesso.test.ts"
+    "test:expediente-acesso": "node --test src/lib/expediente-acesso.test.ts",
+    "test:pausa-automatica": "node --test src/lib/pausa-automatica.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

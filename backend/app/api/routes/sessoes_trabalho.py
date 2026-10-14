@@ -44,6 +44,7 @@ from app.schemas.sessao_trabalho import (
     SessaoTrabalhoTrafegoResumoRead,
 )
 from app.services.evento_service import EventoService
+from app.services.expediente_trabalho import DemandaForaDeExpedienteError, detalhe_409_fora_de_expediente
 from app.services.sessao_trabalho_service import (
     SessaoTrabalhoConflitoError,
     SessaoTrabalhoDemandaNaoEncontradaError,
@@ -168,6 +169,10 @@ def abrir_sessao(
         # inexistente OU de outra empresa: 404 nos dois casos (nunca confirma existência cross-tenant)
         db.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except DemandaForaDeExpedienteError as exc:
+        # Fase Expediente 3: abrir sessão é TRABALHO — fora da janela nominal, o MESMO 409 FORA_DE_EXPEDIENTE do PATCH/criar/restaurar (nenhum código novo).
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detalhe_409_fora_de_expediente(exc)) from exc
     except SessaoTrabalhoConflitoError as exc:
         # 409 estruturado (Fase 11B.2A): `code` estável (SESSAO_ATIVA_EXISTENTE / DEMANDA_NAO_EXECUTAVEL) — a UI não depende do texto. Nunca expõe a
         # sessão ativa nem dados de outra empresa; a anterior NÃO é encerrada.

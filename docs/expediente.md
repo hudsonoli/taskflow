@@ -1,6 +1,66 @@
+# Expediente — Fase 3: pausa automática no fim dos períodos
+
+> **Estado:** implementado em branch (`feature/expediente-fase3`), **não mergeado nem deployado** (aguarda revisão e o fechamento do Teste C da 11B.2A em produção). As seções das fases anteriores
+> seguem válidas; onde a Fase 3 muda algo, está dito aqui.
+
+## O que faz (e o que NÃO faz)
+
+Com `pausarNoFimPeriodo` ligada (e o controle-mestre ativo), ao fim de **CADA período** do expediente (12:00, 18:00…) o **backend** pausa as Demandas em `em_execucao` da empresa, encerra as
+sessões pessoais dos usuários sujeitos e grava `pausa_origem='expediente'`, `pausada_em = corte`. **Não faz logout** (política independente: 18:00 pausa, 18:10 desloga se configurado), **não
+retoma** nada (às 13:00 a Demanda continua pausada; a pessoa decide voltar) e **não depende de navegador, aba, React ou relógio do cliente**.
+
+## Tick
+
+- `app/core/expediente_tick.py`: UMA `asyncio.Task` no `lifespan` (cancelada no shutdown), rodada a cada ~60 s (dorme até `HH:MM:01`), trabalho de banco em `asyncio.to_thread`. **Sem APScheduler, sem Redis, sem container novo.** Config: `EXPEDIENTE_TICK_HABILITADO` (padrão ligado; a suíte desliga) e `EXPEDIENTE_TICK_SEGUNDOS` (60). Uma rodada logo após subir (5 s) cobre restart.
+- `ExpedientePausaService` (`app/services/expediente_pausa_service.py`): `executar_tick` (empresas com a pausa ligada) → `processar_empresa` (um corte).
+
+## Corte efetivo = o horário CONFIGURADO
+
+`cutoff_pendente` (app/core/expediente.py): o fim de período mais recente já passado; se o tick roda às 12:00:42, o corte é **12:00** — `pausada_em`, `fim_em` das sessões e o `occurred_at` dos eventos usam 12:00. Períodos/feriado/recesso/trabalho excepcional/ignorado vêm dos MESMOS helpers de calendário (`periodos_do_dia`); dia sem período não tem corte; períodos encostados (12:00 = início de outro) não têm corte entre eles. Tudo no fuso `regra_expediente.timezone`.
+
+## Corte perdido (catch-up) — nunca retroativo
+
+Um corte só é elegível se (a) é **posterior** à "armadura" da pausa (`pausa_automatica_ativada_em`) e (b) **nenhum período novo começou** depois dele. 12:00 com restart às 12:20 → processa; restart às 13:10 → **não** retro-pausa as 12:00 (o 2º período começou e pode haver trabalho legítimo); 18:00 com restart às 18:30 → processa. Corte processado com atraso > 5 min gera o aviso estruturado `expediente_corte_perdido_processado_em_catch_up`.
+
+## Ligar no meio do intervalo (migration 0049)
+
+`regra_expediente.pausa_automatica_ativada_em TIMESTAMPTZ NULL` (revisão `c6e1a38d5b92`, down `b4d7f2a96c31`). É o instante em que a pausa foi **armada**: ao ligar a flag, religar o controle-mestre, editar dias/fuso ou criar/alterar/remover dia especial **com a pausa ligada**; desligar limpa. Ligar às 12:15 **não** pausa o corte das 12:00 (armadura 12:15 > corte 12:00); o das 18:00 vale. NULL = nunca armada = nada é pausado. Persistido no banco — nenhuma heurística de memória de processo. Nasce NULL para todas as regras existentes; o deploy não pausa nada.
+
+## Idempotência, multi-instância e atomicidade
+
+- **Chave** `expediente:<empresa>:<dia-local>:<HH:MM>` → `eventos.correlation_id` = UUID v5 determinístico. Ao concluir, grava o registro `expediente.pausa_automatica_executada` (entidade = a empresa, mesmo `correlation_id`); antes de executar confere se ele existe. Sem esse registro um restart às 18:30 repausaria o que um isento reabriu às 18:05.
+- **Advisory lock** `pg_try_advisory_xact_lock(hashtextextended(chave, 0))` por empresa+corte: outra instância no mesmo corte desiste (`lock_ocupado`); solta sozinho no commit/rollback/queda da conexão (sucesso, erro ou cancelamento).
+- **Granularidade:** UMA transação por empresa+corte com um **SAVEPOINT por Demanda** — sessões fechadas, pausa e eventos de uma Demanda nunca ficam pela metade, sem uma transação por demanda solta. Se uma Demanda falha, as outras seguem e o registro de conclusão NÃO é gravado (a próxima rodada refaz só o que faltou; quem já foi pausada não duplica).
+- **Serialização com o usuário:** o tick lê as Demandas `FOR UPDATE`; `update_demanda` (mudança de status) trava a linha ANTES do gate de horário e `abrir sessão` já travava. 11:59:59 × tick das 12:00: ou a transição vale antes do corte e o tick a pausa, ou o gate a recusa — nunca "sessão ativa + Demanda pausada".
+
+## Quais Demandas e sessões
+
+- **Pausa MESMO sem sessão** (o tempo operacional não depende de Play manual).
+- Sessões de usuários **sujeitos** (operador comum, mesmo Head/Atendimento) são encerradas com motivo próprio **`fim_expediente`** (`fim_em = corte`; nunca duração negativa — fim anterior ao início é limitado ao início com warning `sessao_trabalho_fim_anterior_ao_inicio`). Sessão só de departamento (sem pessoa) é tratada como sujeita.
+- Sobrou sessão ATIVA de pessoa **isenta** (admin, gestor, conta de sistema, `acesso_fora_expediente`) e usuário ativo? A Demanda **continua em execução** (a sessão do isento é preservada). Atividade NÃO é inferida só por ele ser responsável: precisa de sessão pessoal ativa. Isento inativo/bloqueado não segura a Demanda (e sua sessão é encerrada junto — nunca sessão ativa + Demanda pausada).
+- Pausa manual segue `pausa_origem='manual'`; só o tick grava `expediente` (teste estrutural).
+
+## Auditoria / ator
+
+Ação do **SISTEMA**: `usuario_id = NULL` + `metadata {origem: "sistema", fonte: "expediente"}` — nenhum usuário real é usado. Eventos por execução, todos com o mesmo `correlation_id`: `demanda.status_alterado` (de=em_execucao, para=pausada, `pausaOrigem=expediente`, `automatico`, `cutoff`, `chaveExecucao`) por Demanda pausada; `sessao_trabalho_encerrada` (`motivoEncerramento=fim_expediente`, `origem=expediente`) por sessão fechada; `expediente.pausa_automatica_aplicada` por PESSOA afetada (só se `quantidade > 0`); `expediente.pausa_automatica_executada` (conclusão do corte).
+
+## Aviso "Tarefas pausadas automaticamente."
+
+Fonte = servidor. `GET /expediente/estado` (o polling único de ~30 s) traz `ultimaPausaAutomatica {eventoId, em, quantidade}` da pessoa. Afetados por evidência: responsáveis atuais da Demanda **e da etapa atual** pausada ∪ quem teve sessão encerrada nela — nada global; quem só teve a sessão fechada mas cuja Demanda continuou em execução (isento ativo) **não** recebe. O front (`PausaAutomaticaAviso`, `AvisoFlutuante`, ~5 s, `role=status`, sem vermelho) mostra só evento **novo** (`eventoId` não apresentado; `localStorage` por usuário com try/catch e fallback em memória), **recente** (≤ 10 min contra o `agora` do servidor) e `quantidade > 0`. Segurança não depende do localStorage.
+
+## Abrir sessão pessoal é trabalho (gate)
+
+Antes: `POST /sessoes-trabalho/abrir` só exigia a Demanda em `em_execucao` — entre 12:00 e o tick uma sessão nova abriria. Agora usa a MESMA autoridade (`garantir_trabalho_permitido`, módulo `app/services/expediente_trabalho.py`, também usado pelo `DemandaService`) sobre a **pessoa da sessão**: fora da janela → o mesmo 409 `FORA_DE_EXPEDIENTE`. Sessão só de departamento = sujeita.
+
+## Limitações e o que continua fora
+
+Sem retomada automática; sem sincronização de feriados (`feriadosAutomaticos` segue 422); sem Tráfego V2 / `demanda_status_intervalos` / 11B.2B. O botão manual do Tráfego segue como está. Métricas de duração do Tráfego V2 só serão expostas depois desta fase estar em produção.
+
+---
+
 # Expediente — Fase 2: bloqueio de acesso e logout automático
 
-> **Estado:** implementado em branch (`feature/expediente-fase2`), **não mergeado nem deployado**. As seções "Fase 1" abaixo continuam válidas como histórico do modelo; onde a Fase 2 muda algo, está dito aqui.
+> **Estado:** **em produção** (Fase 2 deployada). As seções "Fase 1" abaixo continuam válidas como histórico do modelo; onde a Fase 2 muda algo, está dito aqui.
 
 ## Quatro conceitos, nunca misturados
 

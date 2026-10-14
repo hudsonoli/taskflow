@@ -146,6 +146,10 @@ class DomainEventType(StrEnum):
     # RegraExpediente (Fase 2G.3) é singleton por Empresa — sem criado/arquivado/restaurado,
     # só alterado (a criação automática do padrão inicial não é ação do usuário).
     REGRA_EXPEDIENTE_ALTERADA = "regra_expediente.alterada"
+    # Fase Expediente 3 — ações do SISTEMA (sem usuário ator). `_executada` = registro de conclusão de UM corte (empresa + dia local + HH:MM), a base da idempotência;
+    # `_aplicada` = resumo por PESSOA afetada (só existe com pelo menos uma Demanda realmente pausada) e é a fonte do aviso "Tarefas pausadas automaticamente.".
+    EXPEDIENTE_PAUSA_AUTOMATICA_EXECUTADA = "expediente.pausa_automatica_executada"
+    EXPEDIENTE_PAUSA_AUTOMATICA_APLICADA = "expediente.pausa_automatica_aplicada"
 
     # CategoriaPeca e Peca (Fase 2G.4) não têm tabela de histórico: estes eventos SÃO o
     # histórico — mesmo padrão de TipoTarefa/WorkflowModelo.

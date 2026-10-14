@@ -416,12 +416,12 @@ def test_a_demanda_em_execucao_nao_e_pausada_nem_ganha_origem_expediente(client_
 # ── configuração ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 
-def test_bloquear_pode_ser_ligado_mas_pausa_e_feriados_seguem_recusados(client_admin) -> None:
+def test_bloquear_e_pausa_podem_ser_ligados_mas_feriados_seguem_recusados(client_admin) -> None:
     assert client_admin.patch("/regra-expediente", json={"bloquearForaExpediente": True}).status_code == 200
-    assert client_admin.patch("/regra-expediente", json={"pausarNoFimPeriodo": True}).status_code == 422
+    assert client_admin.patch("/regra-expediente", json={"pausarNoFimPeriodo": True}).status_code == 200  # Fase 3: a pausa automática tem tick e pode ser ligada
     assert client_admin.patch("/regra-expediente", json={"feriadosAutomaticos": True}).status_code == 422
     corpo = client_admin.get("/regra-expediente").json()
-    assert corpo["bloquearForaExpediente"] is True and corpo["pausarNoFimPeriodo"] is False and corpo["feriadosAutomaticos"] is False
+    assert corpo["bloquearForaExpediente"] is True and corpo["pausarNoFimPeriodo"] is True and corpo["feriadosAutomaticos"] is False
 
 
 def test_logout_nasce_desligado_e_sem_horario(client_admin) -> None:

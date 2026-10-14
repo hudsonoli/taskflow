@@ -314,16 +314,12 @@ test("o Kanban usa a decisão do servidor para a pessoa (trabalhoPermitido)", ()
   assert.match(kanban, /estado\.trabalhoPermitido \?\? estado\.dentroExpediente/);
 });
 
-test("a tela de configuração: bloqueio liga, pausa continua 'Em breve' e o logout tem horário próprio", () => {
+test("a tela de configuração: bloqueio e pausa ligam, e o logout tem horário próprio (independentes)", () => {
   const view = semComentarios(ler("components/regra-expediente/RegraExpedienteView.tsx"));
   assert.match(view, /checked=\{regra\.bloquearForaExpediente\}/);
+  assert.match(view, /checked=\{regra\.pausarNoFimPeriodo\}/); // Fase 3: liberada
   assert.match(view, /checked=\{regra\.logoutAutomaticoAtivo\}/);
   assert.match(view, /type="time"/);
-  // pausa: travada
-  const pausa = view.slice(view.indexOf("Pausar atividades ao final dos períodos") - 200, view.indexOf("Pausar atividades ao final dos períodos") + 300);
-  assert.match(pausa, /checked=\{false\}/);
-  assert.match(pausa, /disabled/);
-  assert.match(view, /Em breve/);
   assert.match(view, /logoutHorario: regra\.logoutHorario \?\? null/);
   assert.match(view, /independentes/);
 });
