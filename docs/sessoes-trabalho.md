@@ -94,3 +94,16 @@ Nada foi corrigido automaticamente. A migration confere os conflitos antes de cr
 `tests/test_sessao_trabalho_integridade.py` (abertura, uma sessão por pessoa, banco, auto-encerramento, workflow, agregação), `tests/test_sessao_trabalho_concorrencia.py`
 (corrida real e SAVEPOINT), `tests/test_migration_0046_sessao_unica.py` (up/down e guarda de legado), frontend `npm run test:sessao-trabalho`.
 Os testes de agregação do Tráfego (`test_trafego_carga.py`) derrubam o índice só dentro da transação do teste para continuar exercitando o SQL sobre várias sessões por pessoa.
+
+## Direção: Tráfego V2 — tempo operacional automático (decisões aprovadas; NADA implementado)
+
+Registrado após a auditoria de 2026-10-14. Esta fase (11B.2A) e a tabela `sessoes_trabalho` **não mudam**.
+
+- **Tempo operacional automático ≠ tempo pessoal.** O tempo da **tarefa/etapa** (quanto ficou em cada estado) é automático e vem da mudança de status; o tempo de uma **pessoa** só existe com evidência real (hoje, a sessão aberta pelo botão). Nunca se divide por responsáveis (3 responsáveis × 2 h ≠ 6 h pessoais) e quem **move** a tarefa (gestor/admin/atendimento) **não** é, por isso, executor: `executor_usuario_id` não é inferido pelo simples ato de mover.
+- **Modelo futuro (opção B): `demanda_status_intervalos`** — uma **linha do tempo dos estados operacionais** (não só `em_execucao`): um intervalo por estado, com etapa do workflow no instante, motivo/ator de início e fim e `evento_inicio_id`/`evento_fim_id` únicos. Um intervalo aberto por Demanda (índice único parcial), fechamento e abertura na mesma transação da mudança de status/etapa, sempre pelo `DemandaService` e pelo `DemandaWorkflowService`. Tempo pausado, bloqueado e **aguardando cliente (bucket próprio)** saem da mesma tabela. Aprovação interna conta como **tempo na etapa / tempo operacional decorrido**, não como hora trabalhada por pessoa.
+- **`sessoes_trabalho` permanece o TEMPO PESSOAL** (e a regra de uma sessão ativa por pessoa). Não é fonte das métricas automáticas do Tráfego.
+- **Tráfego V2** = painel de **observação para gestores**. "Iniciar sessão de teste" fica temporariamente só para diagnóstico/admin e depois sai da experiência normal.
+- **Workflow:** quando todas as etapas materializadas estiverem concluídas e não houver aprovação pendente, a Demanda deve terminar como `concluida` (será implementado na fase do Tráfego V2, não antes).
+- **As métricas automáticas de DURAÇÃO NÃO serão expostas em produção antes da Fase Expediente 3** (pausa automática nos fins de período). Sem ela, uma tarefa esquecida em `em_execucao` acumularia tempo noturno falso. Contagens por status "agora" não dependem disso.
+- **Migração:** não inventar horas pessoais retroativas; a medição automática começa na migration, com marcador explícito de início (`medicao_automatica_desde`) e um intervalo aberto para cada Demanda que já estiver `em_execucao`.
+- **Pré-requisito já resolvido (hardening do gate, branch `fix/expediente-work-gate-entrypoints`):** as três portas para `em_execucao` — `PATCH /demandas/{id}`, `POST /demandas` com `status=em_execucao` e `POST /demandas/{id}/restaurar` de uma Demanda arquivada que estava em execução — passam pela **mesma** autoridade de horário (`DemandaService._ensure_dentro_expediente`); ver `docs/expediente.md`.

@@ -561,9 +561,7 @@ def restaurar_demanda(
     try:
         escopo = _escopo(db, current_user)
         demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
-        restaurada = demanda_service.restaurar_demanda(
-            db, demanda, actor_usuario_id=current_user.id
-        )
+        restaurada = demanda_service.restaurar_demanda(db, demanda, actor=current_user)
         return demanda_service.to_read(db, restaurada, usuario=current_user)
     except Exception as exc:
         handle_demanda_error(exc)

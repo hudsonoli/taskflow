@@ -281,6 +281,10 @@ class DemandaService:
             self._garantir_regra_expediente_antes_da_criacao(
                 db, empresa_id=empresa_id, prioridade=data.prioridade, cliente_id=cliente_id
             )
+            # Criar JÁ em execução é ENTRAR em execução: mesma autoridade do PATCH/restaurar (`_ensure_dentro_expediente`), antes de qualquer contador ou escrita —
+            # recusada, a Demanda não é criada (nenhum número queimado).
+            if status == STATUS_EM_EXECUCAO:
+                self._ensure_dentro_expediente(db, empresa_id, actor)
 
             # Os DOIS contadores, a entidade, os vínculos e os eventos na MESMA transação.
             # Se qualquer coisa abaixo falhar, ambos os incrementos sofrem rollback juntos e
@@ -902,16 +906,20 @@ class DemandaService:
             db.rollback()
             raise
 
-    def restaurar_demanda(
-        self, db: Session, demanda: Demanda, *, actor_usuario_id: str | None = None
-    ) -> Demanda:
+    def restaurar_demanda(self, db: Session, demanda: Demanda, *, actor: Usuario) -> Demanda:
+        actor_usuario_id = actor.id
         try:
             if demanda.status != STATUS_ARQUIVADA:
                 raise DemandaInvalidTransitionError("Somente demanda arquivada pode ser restaurada")
 
-            # Volta ao status de antes SEM passar pela checagem de expediente: restaurar não é
-            # iniciar trabalho, é desfazer um arquivamento. Barrar aqui deixaria uma demanda
-            # arquivada por engano fora do ar até o dia seguinte.
+            # Restaurar para `em_execucao` é ENTRAR em execução: sujeito à MESMA autoridade do PATCH/criação. Fora da janela de trabalho a restauração é RECUSADA com o
+            # contrato 409 FORA_DE_EXPEDIENTE e NADA muda (a Demanda segue arquivada) — nunca é restaurada em silêncio com outro status. Restaurar para qualquer outro
+            # status continua livre a qualquer hora (desfazer um arquivamento não é iniciar trabalho).
+            if (demanda.status_anterior_arquivamento or STATUS_PADRAO) == STATUS_EM_EXECUCAO:
+                self._ensure_dentro_expediente(db, demanda.empresa_id, actor)
+
+            # Volta ao status de antes. Só a volta a `em_execucao` passa pela checagem de expediente (acima); as demais não, para uma demanda arquivada por engano
+            # não ficar fora do ar até o dia seguinte.
             now = agora_utc()
             demanda.status = demanda.status_anterior_arquivamento or STATUS_PADRAO
             if demanda.status == STATUS_PAUSADA:
@@ -1232,7 +1240,9 @@ class DemandaService:
             )
 
     def _ensure_dentro_expediente(self, db: Session, empresa_id: str, actor: Usuario) -> None:
-        """Gate de TRABALHO (entrada em `em_execucao`). Fase Expediente 2: usa SÓ a janela de trabalho NOMINAL (`esta_dentro_janela_trabalho`) — a tolerância legada
+        """ÚNICA autoridade para ENTRAR em `em_execucao` — usada por `update_demanda`, `create_demanda` e `restaurar_demanda`; nenhum outro lugar decide horário.
+
+        Gate de TRABALHO (entrada em `em_execucao`). Fase Expediente 2: usa SÓ a janela de trabalho NOMINAL (`esta_dentro_janela_trabalho`) — a tolerância legada
         (`tolerancia_retomada_minutos`) deixou de ser autoridade; às 12:30 há ACESSO mas não há TRABALHO, às 13:00 sim. Isentos (não recebem 409): admin, gestor,
         conta de sistema e `acesso_fora_expediente=true`. Regra desligada (`ativo=False`) libera."""
         if not usuario_sujeito_ao_expediente(
