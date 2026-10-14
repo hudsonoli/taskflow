@@ -112,3 +112,9 @@ Registrado após a auditoria de 2026-10-14. Esta fase (11B.2A) e a tabela `sesso
 
 Motivo novo `fim_expediente` (ver `docs/expediente.md`): o tick de pausa automática encerra as sessões de usuários sujeitos ao fim de cada período, com `fim_em` = o corte configurado e evento sem usuário ator.
 Abrir sessão pessoal passou a respeitar o gate de TRABALHO (`FORA_DE_EXPEDIENTE`, 409). `close_session` nunca grava fim anterior ao início (limita ao início e registra warning).
+
+## Status da Fase 11B.2A — ENCERRADA (2026-10-14)
+
+`FASE_11B2A=CLOSED`, `AUTO_CLOSE_ON_PAUSE=OK`. Teste C humano em produção (main `46cccde`): PATCH em_execucao 200 → `POST /sessoes-trabalho/abrir` 201 (etapa atual) → PATCH pausada 200, sem fechamento manual; a sessão foi encerrada
+na mesma transação da pausa (`motivo_encerramento=pausa`, evento `sessao_trabalho_encerrada` único com `automatico=true`), `pausaOrigem=manual`, 0 sessões ativas, 0 erros. Evidências anteriores mantidas: segunda sessão ativa
+protegida, índice único parcial, vínculo com a etapa atual autoritativa, origem manual da pausa.
