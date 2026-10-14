@@ -35,6 +35,7 @@ from app.models.demanda_workflow_etapa import DemandaWorkflowEtapa
 from app.models.usuario import Usuario
 from app.repositories.aprovacao_externa_repository import AprovacaoExternaRepository
 from app.repositories.demanda_repository import DemandaRepository
+from app.services.demanda_intervalo_service import ORIGEM_TROCA_ETAPA
 from app.services.demanda_service import DemandaService
 from app.services.sessao_trabalho_service import MOTIVO_CONCLUSAO, MOTIVO_MUDANCA_ETAPA, SessaoTrabalhoService
 
@@ -216,7 +217,7 @@ class DemandaWorkflowService:
                 workflow_etapa_id=etapa.id,
             )
 
-            self.demanda_service.publicar_evento_demanda(
+            evento_rejeicao = self.demanda_service.publicar_evento_demanda(
                 db,
                 demanda,
                 DomainEventType.DEMANDA_WORKFLOW_ETAPA_REJEITADA,
@@ -234,6 +235,10 @@ class DemandaWorkflowService:
                     "etapaRetornoOrdem": anterior.ordem,
                 },
                 occurred_at=now,
+            )
+            # Linha do tempo operacional: a etapa ATUAL mudou (voltou à anterior) — fecha o intervalo da etapa rejeitada e abre o da etapa de retorno, com o MESMO status.
+            self.demanda_service.intervalo_service.sincronizar(
+                db, demanda, quando=now, origem=ORIGEM_TROCA_ETAPA, ator_usuario_id=_usuario_id_do_ator(actor), evento_id=evento_rejeicao.id
             )
             if durante is not None:
                 durante(etapa, now)
@@ -380,7 +385,7 @@ class DemandaWorkflowService:
             )
 
             # 6) UM evento por ação, na mesma transação
-            self.demanda_service.publicar_evento_demanda(
+            evento_avanco = self.demanda_service.publicar_evento_demanda(
                 db,
                 demanda,
                 tipo_evento,
@@ -398,6 +403,11 @@ class DemandaWorkflowService:
                     "workflowConcluido": proxima is None,
                 },
                 occurred_at=now,
+            )
+            # Linha do tempo operacional: a etapa ATUAL avançou (ou o workflow acabou) com o status da Demanda igual — fecha o intervalo da etapa e abre o da próxima
+            # (workflow concluído → etapa NULL). A Demanda NÃO é concluída por aqui (decisão do 8A ainda vigente).
+            self.demanda_service.intervalo_service.sincronizar(
+                db, demanda, quando=now, origem=ORIGEM_TROCA_ETAPA, ator_usuario_id=_usuario_id_do_ator(actor), evento_id=evento_avanco.id
             )
             if durante is not None:
                 durante(etapa, now)

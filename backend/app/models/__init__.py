@@ -26,6 +26,7 @@ from app.models import (  # noqa: F401
     demanda,
     demanda_departamento,
     demanda_responsavel,
+    demanda_status_intervalo,
     departamento,
     empresa,
     equipe,

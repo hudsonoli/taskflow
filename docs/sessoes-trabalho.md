@@ -118,3 +118,55 @@ Abrir sessão pessoal passou a respeitar o gate de TRABALHO (`FORA_DE_EXPEDIENTE
 `FASE_11B2A=CLOSED`, `AUTO_CLOSE_ON_PAUSE=OK`. Teste C humano em produção (main `46cccde`): PATCH em_execucao 200 → `POST /sessoes-trabalho/abrir` 201 (etapa atual) → PATCH pausada 200, sem fechamento manual; a sessão foi encerrada
 na mesma transação da pausa (`motivo_encerramento=pausa`, evento `sessao_trabalho_encerrada` único com `automatico=true`), `pausaOrigem=manual`, 0 sessões ativas, 0 erros. Evidências anteriores mantidas: segunda sessão ativa
 protegida, índice único parcial, vínculo com a etapa atual autoritativa, origem manual da pausa.
+
+## Tráfego V2 — Fase 1: motor de intervalos operacionais (`demanda_status_intervalos`) — implementado em branch
+
+> **Estado:** branch `feature/trafego-v2-intervalos`, migration `0050` (`d7f3b91e4a58`, down `c6e1a38d5b92`), **sem merge e sem deploy**. Sem frontend e sem endpoints novos: o painel do Tráfego e as
+> métricas vêm em fases seguintes. Esta seção substitui o "modelo futuro" descrito acima.
+
+### TEMPO OPERACIONAL ≠ TEMPO PESSOAL (regra de ouro)
+
+- **Intervalo de status** (`demanda_status_intervalos`) = tempo **decorrido da Demanda/etapa** num estado (ex.: `em_execucao` 09:12 → 10:47 = 1h35 operacionais).
+- **Sessão** (`sessoes_trabalho`) = tempo **atribuível a uma pessoa**, com evidência explícita. Continua exatamente como está (inclusive o botão manual do Tráfego).
+- **Nunca** converter um no outro: não existe `executor`, `horas por usuário` nem função que some intervalos "por pessoa" neste modelo. `iniciado_por_usuario_id` é **auditoria** ("quem provocou a abertura");
+  um gestor que move a tarefa para `em_execucao` aparece ali e **nenhuma hora pessoal** é atribuída a ele. Os eventos seguem como auditoria; métricas de duração consultam a tabela, não JSON de evento.
+
+### Modelo
+
+Uma linha por **estado** (e por **etapa atual do workflow**): `empresa_id`, `demanda_id` (FK), `status`, `workflow_etapa_id` (NULL sem workflow ou com o workflow já concluído), `inicio_em`, `fim_em`/`duracao_segundos`
+(só fechado), `motivo_fim`, `iniciado_por_usuario_id`, `origem`, `evento_inicio_id`/`evento_fim_id` (liga ao evento de domínio que causou a mudança), `created_at`/`updated_at`.
+Estados com intervalo: `rascunho`, `planejada`, `em_execucao`, `pausada`, `bloqueada`, `aguardando_cliente` (**bucket próprio** — nunca se mistura com execução).
+
+**Estados terminais** (`concluida`, `cancelada`, `arquivada`) **não têm intervalo**: entrar neles só **fecha** o anterior (`conclusao`/`cancelamento`/`arquivamento`). Decisão: uma Demanda concluída não acumula "tempo concluída"
+por meses; o fim do último intervalo já marca o fechamento da linha do tempo. Reabrir (concluída → em execução) abre um intervalo novo; o buraco entre os dois é real.
+
+**Invariantes no banco:** no máximo **1 intervalo aberto por Demanda** (índice único parcial `WHERE fim_em IS NULL`); aberto ⇒ sem fim/duração/motivo; fechado ⇒ `fim_em ≥ inicio_em`, `duracao_segundos ≥ 0`, motivo; status/origem/motivo enumerados;
+`evento_inicio_id` único (o mesmo evento nunca abre dois intervalos). `duracao_segundos` é o **piso** em segundos (4500 = 1h15).
+
+### Mecanismo único (`DemandaIntervaloService.sincronizar`)
+
+Toda mudança de estado operacional chama `sincronizar` **dentro da transação** que a causou. Ele não recebe "o que aconteceu": compara o estado ATUAL da Demanda (status + etapa atual) com o intervalo aberto —
+igual → **no-op** (mesmo status ou retry nunca duplicam tempo); diferente → fecha o aberto e abre o novo. Trava a linha da Demanda (`FOR UPDATE`) antes; o índice único é a segunda barreira. Pontos de entrada (todos no domínio, nenhuma rota):
+criar (`create_demanda`), mudar status (`update_demanda`), arquivar, restaurar, **progressão de workflow** (concluir/aprovar/rejeitar → a ETAPA atual mudou, mesmo status → fecha e reabre) e a **pausa automática do expediente**.
+A "etapa atual" é a **autoridade existente** (`get_etapa_atual`: menor `ordem` não concluída) — nenhuma definição nova.
+
+### Instante efetivo (`quando`)
+
+Parâmetro explícito, nunca `datetime.now()` escondido: ação manual = o instante da operação; **pausa automática = o CORTE configurado** (12:00:00), não o do tick (12:00:07) — o scheduler não tem integração especial, só passa `quando=corte`.
+Se `quando` for anterior ao início do aberto, usa-se o início (sem fim < início, sem sobreposição, com aviso `demanda_intervalo_instante_anterior_ao_inicio`).
+
+### Histórico e início da medição
+
+Nada é reconstruído. A migration abre **um intervalo por Demanda NÃO terminal** com `inicio_em = now()` da migration e `origem='migracao'` — esse é o marcador do início da medição. "Dados disponíveis a partir de…" = o **menor `inicio_em`** da
+empresa (modelo mínimo: sem coluna genérica nova). Terminais não ganham nada. Downgrade remove só a tabela.
+
+### O que o modelo já suporta (consultas futuras, sem ambiguidade)
+
+Tempo em execução / pausado / bloqueado / aguardando cliente por **Demanda, Projeto, etapa, departamento da etapa e período**; duração total, média e maior tempo **por etapa** — sempre como **tempo operacional decorrido**.
+Métricas de duração só serão expostas em produção depois da Fase Expediente 3 em uso (acumulação noturna) — agora publicada, com a pausa automática já encerrando o intervalo no corte.
+
+### Pendente (decisão separada): conclusão automática do workflow
+
+Hoje **concluir o último passo encerra o workflow e NÃO conclui a Demanda** (decisão do 8A, coberta por testes). A decisão de produto aprovada diz que, com todas as etapas concluídas e sem aprovação pendente, a Demanda deve convergir para `concluida`. Não foi implementado aqui
+(`WORKFLOW_FINAL_AUTO_COMPLETE_PENDING=SIM`): mexe num contrato existente e tem efeitos colaterais (resolução de SLA, notificações, `status_alterado` com ator, aprovação externa em aberto, e o `workflow_etapa_id` NULL do último intervalo). Desenho: no fim de
+`_avancar_etapa`, se `proxima is None` e nenhuma `aprovacao_externa` aberta, chamar o MESMO caminho de `update_demanda` para `concluida` (um único ponto, com o ator da ação) — o motor de intervalos já o trataria como terminal. Até lá, o último intervalo fica `em_execucao` com etapa NULL.

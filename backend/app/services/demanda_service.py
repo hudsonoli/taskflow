@@ -38,6 +38,12 @@ from app.repositories.projeto_repository import ProjetoRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead
+from app.services.demanda_intervalo_service import (
+    ORIGEM_CRIACAO,
+    ORIGEM_RESTAURACAO,
+    ORIGEM_TRANSICAO,
+    DemandaIntervaloService,
+)
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.expediente_trabalho import DemandaForaDeExpedienteError, garantir_trabalho_permitido  # noqa: F401  (re-exporta o erro: contrato antigo)
 from app.services.regra_expediente_service import RegraExpedienteService
@@ -185,8 +191,12 @@ class DemandaService:
         regra_expediente_service: RegraExpedienteService | None = None,
         regra_expediente: RegraExpediente | None = None,
         sessao_service: SessaoTrabalhoService | None = None,
+        intervalo_service: DemandaIntervaloService | None = None,
     ) -> None:
         self.repository = repository or DemandaRepository()
+        # Tráfego V2 / Fase 1 — a linha do tempo OPERACIONAL (`demanda_status_intervalos`) é escrita SÓ por este serviço, na mesma transação de cada mudança de estado.
+        # TEMPO OPERACIONAL ≠ TEMPO PESSOAL: nada aqui toca `sessoes_trabalho`.
+        self.intervalo_service = intervalo_service or DemandaIntervaloService()
         # Fase 11B.2A — transições da Demanda que tornam impossível continuar o trabalho encerram as sessões ativas (na MESMA transação).
         self.sessao_service = sessao_service or SessaoTrabalhoService()
         self.cliente_repository = cliente_repository or ClienteRepository()
@@ -322,7 +332,7 @@ class DemandaService:
                     ),
                 )
 
-            self._publish_event(db, demanda, DomainEventType.DEMANDA_CRIADA, actor_usuario_id, occurred_at=now)
+            evento_criada = self._publish_event(db, demanda, DomainEventType.DEMANDA_CRIADA, actor_usuario_id, occurred_at=now)
             if workflow_modelo_id is not None:
                 # Completa a timeline com o marco que só existia como coluna
                 # (`demandas.workflow_modelo_id`) até a Fase 2E.4 — payload minimal de
@@ -350,6 +360,10 @@ class DemandaService:
                     extra_payload={"departamentoId": departamento_id}, occurred_at=now,
                 )
 
+            # Primeiro intervalo da linha do tempo operacional (estado inicial + etapa atual), na MESMA transação. Estado terminal na criação não abre intervalo.
+            self.intervalo_service.sincronizar(
+                db, demanda, quando=now, origem=ORIGEM_CRIACAO, ator_usuario_id=actor_usuario_id, evento_id=evento_criada.id
+            )
             db.commit()
             db.refresh(demanda)
             return demanda
@@ -836,11 +850,19 @@ class DemandaService:
                     db, demanda, DomainEventType.DEMANDA_ALTERADA, actor_usuario_id,
                     extra_payload={"camposAlterados": campos_alterados}, occurred_at=now,
                 )
+                evento_status_id: str | None = None
                 for tipo, payload in eventos:
-                    self._publish_event(db, demanda, tipo, actor_usuario_id, extra_payload=payload, occurred_at=now)
+                    publicado = self._publish_event(db, demanda, tipo, actor_usuario_id, extra_payload=payload, occurred_at=now)
+                    if tipo == DomainEventType.DEMANDA_STATUS_ALTERADO:
+                        evento_status_id = publicado.id
                 self._encerrar_sessoes_por_transicao(
                     db, demanda, status_anterior=status_anterior, status_final=status_final, eventos=eventos, quando=now
                 )
+                # Linha do tempo operacional: fecha o intervalo do estado anterior e abre o do novo (ou só fecha, se terminal) — mesma transação, instante da operação.
+                if "status" in campos_alterados:
+                    self.intervalo_service.sincronizar(
+                        db, demanda, quando=now, origem=ORIGEM_TRANSICAO, ator_usuario_id=actor_usuario_id, evento_id=evento_status_id
+                    )
 
             db.commit()
             db.refresh(demanda)
@@ -862,6 +884,7 @@ class DemandaService:
         actor_usuario_id: str | None = None,
     ) -> Demanda:
         try:
+            self.repository.bloquear_demanda_para_atualizacao(db, demanda)  # lock + estado COMMITADO antes de decidir (serializa com o tick e com outras transições)
             if demanda.status == STATUS_ARQUIVADA:
                 raise DemandaInvalidTransitionError("Demanda já está arquivada")
 
@@ -878,12 +901,16 @@ class DemandaService:
             demanda.updated_at = now
 
             self.repository.update(db, demanda)
-            self._publish_event(
+            evento_arquivada = self._publish_event(
                 db, demanda, DomainEventType.DEMANDA_ARQUIVADA, actor_usuario_id,
                 extra_payload={"motivoArquivamento": motivo_arquivamento}, occurred_at=now,
             )
             self.sessao_service.encerrar_ativas_da_demanda(
                 db, empresa_id=demanda.empresa_id, demanda_id=demanda.id, motivo_encerramento=MOTIVO_ARQUIVAMENTO, fim_em=now
+            )
+            # Arquivada é TERMINAL na linha do tempo: só fecha o intervalo aberto (motivo `arquivamento`).
+            self.intervalo_service.sincronizar(
+                db, demanda, quando=now, origem=ORIGEM_TRANSICAO, ator_usuario_id=actor_usuario_id, evento_id=evento_arquivada.id
             )
             db.commit()
             db.refresh(demanda)
@@ -895,6 +922,7 @@ class DemandaService:
     def restaurar_demanda(self, db: Session, demanda: Demanda, *, actor: Usuario) -> Demanda:
         actor_usuario_id = actor.id
         try:
+            self.repository.bloquear_demanda_para_atualizacao(db, demanda)  # lock + estado COMMITADO antes de decidir
             if demanda.status != STATUS_ARQUIVADA:
                 raise DemandaInvalidTransitionError("Somente demanda arquivada pode ser restaurada")
 
@@ -920,8 +948,12 @@ class DemandaService:
             demanda.updated_at = now
 
             self.repository.update(db, demanda)
-            self._publish_event(
+            evento_restaurada = self._publish_event(
                 db, demanda, DomainEventType.DEMANDA_RESTAURADA, actor_usuario_id, occurred_at=now
+            )
+            # Volta ao estado de antes: abre o intervalo desse estado (terminal anterior — concluída/cancelada — não abre nenhum).
+            self.intervalo_service.sincronizar(
+                db, demanda, quando=now, origem=ORIGEM_RESTAURACAO, ator_usuario_id=actor_usuario_id, evento_id=evento_restaurada.id
             )
             db.commit()
             db.refresh(demanda)

@@ -275,7 +275,7 @@ class ExpedientePausaService:
         demanda.pausada_em = corte  # o instante do CORTE (12:00), não o do tick (12:00:42)
         demanda.updated_at = agora
         self.demanda_service.repository.update(db, demanda)
-        self.demanda_service.publicar_evento_demanda(
+        evento_status = self.demanda_service.publicar_evento_demanda(
             db,
             demanda,
             DomainEventType.DEMANDA_STATUS_ALTERADO,
@@ -292,6 +292,11 @@ class ExpedientePausaService:
             occurred_at=corte,
             correlation_id=correlation_id,
             metadata={"origem": "sistema", "fonte": ORIGEM_PAUSA_EXPEDIENTE},
+        )
+        # Linha do tempo operacional (Tráfego V2): a pausa passa pelo MESMO mecanismo de qualquer transição, com o instante EFETIVO = o CORTE (12:00:00), não o do tick.
+        # Sem integração especial do scheduler: fecha o intervalo `em_execucao` e abre `pausada` a partir do corte.
+        self.demanda_service.intervalo_service.sincronizar(
+            db, demanda, quando=corte, origem="expediente", ator_usuario_id=None, evento_id=evento_status.id, motivo_fim="fim_expediente"
         )
         afetados = self._pessoas_afetadas(db, demanda) | fechadas_de_usuarios
         return True, afetados, total_fechadas
