@@ -117,14 +117,14 @@ test("o fuso atual da empresa sempre aparece nas opções", () => {
 
 // ── estrutura: nada de bloqueio/pausa ativos nesta fase ──────────────────────────────────────────────────────────
 
-test("a tela não envia (nem liga) bloqueio, pausa automática ou feriados automáticos", () => {
+test("a tela envia o bloqueio e o logout automático (Fase 2), mas NUNCA a pausa automática nem feriados automáticos", () => {
   const view = semComentarios(ler("components/regra-expediente/RegraExpedienteView.tsx"));
   const envio = view.slice(view.indexOf("atualizarRegraExpedienteReal({"), view.indexOf("});", view.indexOf("atualizarRegraExpedienteReal({")));
-  for (const chave of ["ativo", "toleranciaRetomadaMinutos", "antecedenciaAcessoMinutos", "timezone", "dias"]) assert.ok(envio.includes(chave), chave);
-  for (const proibida of ["bloquearForaExpediente", "pausarNoFimPeriodo", "feriadosAutomaticos"]) assert.equal(envio.includes(proibida), false, proibida);
-  // os dois interruptores críticos aparecem travados e avisam que ficam para a próxima etapa
-  assert.equal((view.match(/checked=\{false\}\s+disabled/g) ?? []).length, 2);
-  assert.ok((view.match(/Será ativado em uma próxima etapa/g) ?? []).length >= 2);
+  for (const chave of ["ativo", "toleranciaRetomadaMinutos", "antecedenciaAcessoMinutos", "timezone", "dias", "bloquearForaExpediente", "logoutAutomaticoAtivo", "logoutHorario"]) assert.ok(envio.includes(chave), chave);
+  for (const proibida of ["pausarNoFimPeriodo", "feriadosAutomaticos"]) assert.equal(envio.includes(proibida), false, proibida);
+  // só o interruptor de PAUSA continua travado e avisa que fica para a próxima etapa
+  assert.equal((view.match(/checked=\{false\}\s+disabled/g) ?? []).length, 1);
+  assert.ok((view.match(/Será ativado em uma próxima etapa/g) ?? []).length >= 1);
   // a antiga promessa de pausa automática não pode voltar a aparecer
   assert.equal(/pausadas automaticamente|pausas automáticas ativas/i.test(view), false);
 });
@@ -160,9 +160,10 @@ test("usuário: o campo de isenção existe no tipo, no payload e no formulário
   assert.match(form, /perfilTecnico\(draft\.perfil\) === "operador"/);
 });
 
-test("nenhum bloqueio de acesso foi ligado no frontend: nada trata FORA_DO_EXPEDIENTE", () => {
-  for (const arquivo of ["lib/api-backend.ts", "lib/AppDataContext.tsx", "components/layout/AppShell.tsx", "lib/api.ts"]) {
-    assert.equal(ler(arquivo).includes("FORA_DO_EXPEDIENTE"), false, arquivo);
+test("o 403 FORA_DO_EXPEDIENTE é tratado SÓ nos módulos centrais (expediente-acesso) — telas e cliente HTTP não o conhecem", () => {
+  assert.equal(ler("lib/expediente-acesso.ts").includes("FORA_DO_EXPEDIENTE"), true);
+  for (const arquivo of ["lib/api-backend.ts", "components/layout/AppShell.tsx", "lib/api.ts", "lib/sessao-expirada.ts"]) {
+    assert.equal(semComentarios(ler(arquivo)).includes("FORA_DO_EXPEDIENTE"), false, arquivo);
   }
 });
 

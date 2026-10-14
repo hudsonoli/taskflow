@@ -16,13 +16,20 @@ importar `REGRA_PADRAO` para USAR como regra corrente — só para SEMEAR uma.
 - JANELA DE ACESSO: a janela de trabalho ANTECIPADA em `antecedencia_acesso_minutos` (`07:30–12:00`, `12:30–18:00` com 30 min). É só o direito de ENTRAR no sistema; a
   antecedência NÃO conta como trabalho. `esta_dentro_janela_acesso`, `proximo_acesso`.
 
-Nesta fase NADA enforça essas janelas: as flags `bloquear_fora_expediente`/`pausar_no_fim_periodo` existem e nascem falsas, e nenhum acesso é negado por elas.
+## Fase Expediente 2 — quatro conceitos, SEM misturar
 
-## `esta_dentro_expediente` (gate de ENTRADA em execução, preservado)
+- A. ACESSO (`esta_dentro_janela_acesso`) e B. TRABALHO (`esta_dentro_janela_trabalho`): ENFORÇADOS. O acesso é negado (403 FORA_DO_EXPEDIENTE) quando
+  `bloquear_fora_expediente` está ligada; o gate de ENTRADA em execução usa SÓ a janela de trabalho NOMINAL (a tolerância legada deixou de ser autoridade).
+- C. LOGOUT AUTOMÁTICO (`ultimo_corte_logout`): horário PRÓPRIO (`logout_horario`, hora local da empresa), independente de A, B e do fim do último período. Token emitido
+  ANTES do último corte deixa de valer (401). Login depois do corte emite token novo e vale (o bloqueio, se ligado, é outro mecanismo).
+- D. PAUSA AUTOMÁTICA: NÃO existe (Fase 3). `pausar_no_fim_periodo` segue recusada com 422.
+- Quem está sujeito: SÓ `perfil_base == "operador"` que não é conta de sistema e não tem `acesso_fora_expediente` (`usuario_sujeito_ao_expediente`). Admin/gestor/
+  sistema/override são isentos de A, B e C.
 
-É o gate que já existia (2G.3): recusa colocar uma Demanda em `em_execucao` fora do expediente. Preserva a semântica LEGADA da tolerância
-(`tolerancia_retomada_minutos`: a entrada já vale X min antes do início do 2º período). Ela NÃO faz parte das funções novas de janela de trabalho/acesso, e o SLA não
-a usa (a calculadora enxerga os períodos nominais).
+## `esta_dentro_expediente` (LEGADO / deprecated — não é mais autoridade de nada em produção)
+
+Era o gate de ENTRADA em execução (2G.3) e honrava a tolerância legada (`tolerancia_retomada_minutos`: a entrada valia X min antes do início do 2º período). A partir da
+Fase 2 o gate usa `esta_dentro_janela_trabalho`. A função e a coluna ficam por compatibilidade (testes, payload 409, rollback); o SLA nunca a usou.
 
 ## Precedência (dia especial × regra semanal)
 
@@ -123,13 +130,16 @@ class RegraExpediente:
     # LEGADO (semântica antiga, preservada): minutos antes do início do 2º período em que a ENTRADA em execução já é aceita. Ver docstring do módulo.
     tolerancia_retomada_minutos: int
     dias: dict[int, JanelaDia]  # chave: 0 (segunda) .. 6 (domingo)
-    # Fase Expediente 1 — nada abaixo é enforçado ainda (as flags existem, sem efeito no acesso).
     antecedencia_acesso_minutos: int = 30
     timezone: str | None = None
     dias_especiais: tuple[DiaEspecial, ...] = field(default_factory=tuple)
+    # Fase Expediente 2: `bloquear_fora_expediente` é ENFORÇADA (gate de acesso). `pausar_no_fim_periodo` e `feriados_automaticos` seguem sem efeito (Fase 3+).
     bloquear_fora_expediente: bool = False
     pausar_no_fim_periodo: bool = False
     feriados_automaticos: bool = False
+    # Logout automático (Fase 2): horário local "HH:MM" PRÓPRIO; só vale com `ativo` e `logout_automatico_ativo`.
+    logout_automatico_ativo: bool = False
+    logout_horario: str | None = None
 
 
 def _dia_util_padrao() -> JanelaDia:
@@ -273,6 +283,104 @@ def proximo_acesso(agora: datetime | None = None, *, regra: RegraExpediente) -> 
     """Primeiro instante, a partir de `agora`, em que o ACESSO é permitido: o próprio `agora` se já é, senão o início antecipado do próximo período. `None` se
     não houver nenhum nos próximos ~366 dias."""
     return _proximo_instante(agora, regra, antecedencia_minutos=regra.antecedencia_acesso_minutos)
+
+
+def proximo_periodo_trabalho(agora: datetime | None = None, *, regra: RegraExpediente) -> tuple[datetime, datetime] | None:
+    """(início, fim) do período de trabalho EM CURSO ou, se não houver, do PRÓXIMO (pode ser em outro dia). Só para mensagem ("Próximo período de trabalho:
+    13:00–18:00"); nunca decide acesso. `None` com a regra desligada ou sem nenhum período nos próximos ~366 dias."""
+    if not regra.ativo:
+        return None
+    momento = momento_local(agora, regra)
+    fuso = fuso_da_regra(regra)
+    melhor: tuple[datetime, datetime] | None = None
+    for deslocamento in range(-1, _HORIZONTE_DIAS + 1):
+        dia = momento.date() + timedelta(days=deslocamento)
+        for inicio, fim in periodos_do_dia(regra, dia):
+            inicio_dt, fim_dt = _combinar(dia, inicio, fuso), _combinar(dia, fim, fuso)
+            if fim_dt.timestamp() > momento.timestamp() and (melhor is None or inicio_dt.timestamp() < melhor[0].timestamp()):
+                melhor = (inicio_dt, fim_dt)
+        if melhor is not None and dia > melhor[0].date():
+            break
+    return melhor
+
+
+# ── quem está sujeito + avaliação do gate (Fase Expediente 2) ────────────────────────────────────────────────────
+
+
+def usuario_sujeito_ao_expediente(*, perfil_base: str, is_system_account: bool, acesso_fora_expediente: bool) -> bool:
+    """SÓ o operador "comum" está sujeito (acesso, trabalho e logout automático). A autoridade é o `perfil_base` — nunca um rótulo de tela, nem relações como
+    Head/Atendimento. Isentos: admin, gestor, conta de sistema e quem tem `acesso_fora_expediente`."""
+    return perfil_base == "operador" and not is_system_account and not acesso_fora_expediente
+
+
+@dataclass(frozen=True)
+class AvaliacaoExpediente:
+    """Resultado do gate para UM usuário num instante, tudo no fuso da empresa. `acesso_permitido=False` ⇒ 403 FORA_DO_EXPEDIENTE; `trabalho_permitido=False` ⇒
+    não pode ENTRAR em execução. Sem efeitos colaterais: quem chama decide o que fazer."""
+
+    agora: datetime
+    timezone: str
+    sujeito: bool
+    controle_ativo: bool
+    bloqueio_ativo: bool
+    acesso_permitido: bool
+    trabalho_permitido: bool
+    proximo_acesso: datetime | None
+    proximo_trabalho: datetime | None
+    proximo_trabalho_fim: datetime | None
+
+
+def avaliar_expediente(agora: datetime | None, *, regra: RegraExpediente, sujeito: bool) -> AvaliacaoExpediente:
+    momento = momento_local(agora, regra)
+    bloqueio = regra.ativo and regra.bloquear_fora_expediente
+    dentro_acesso = esta_dentro_janela_acesso(momento, regra=regra)
+    dentro_trabalho = esta_dentro_janela_trabalho(momento, regra=regra)
+    acesso_permitido = (not sujeito) or (not bloqueio) or dentro_acesso
+    trabalho_permitido = (not sujeito) or dentro_trabalho
+    periodo = None if dentro_trabalho else proximo_periodo_trabalho(momento, regra=regra)
+    return AvaliacaoExpediente(
+        agora=momento,
+        timezone=regra.timezone or fuso_aplicacao().key,
+        sujeito=sujeito,
+        controle_ativo=regra.ativo,
+        bloqueio_ativo=bloqueio,
+        acesso_permitido=acesso_permitido,
+        trabalho_permitido=trabalho_permitido,
+        proximo_acesso=None if acesso_permitido else proximo_acesso(momento, regra=regra),
+        proximo_trabalho=None if trabalho_permitido else (periodo[0] if periodo else None),
+        proximo_trabalho_fim=None if trabalho_permitido else (periodo[1] if periodo else None),
+    )
+
+
+# ── LOGOUT AUTOMÁTICO ────────────────────────────────────────────────────────────────────────────────────────────
+
+
+def logout_automatico_vigente(regra: RegraExpediente) -> bool:
+    return bool(regra.ativo and regra.logout_automatico_ativo and regra.logout_horario)
+
+
+def ultimo_corte_logout(agora: datetime | None = None, *, regra: RegraExpediente) -> datetime | None:
+    """O corte de logout MAIS RECENTE que já passou (`≤ agora`): o de hoje se `logout_horario` já chegou, senão o de ontem. `None` com o logout desligado.
+    Horário PRÓPRIO — não deriva do fim do último período — e sempre no fuso da empresa."""
+    if not logout_automatico_vigente(regra):
+        return None
+    momento = momento_local(agora, regra)
+    fuso = fuso_da_regra(regra)
+    assert regra.logout_horario is not None
+    hoje = _combinar(momento.date(), regra.logout_horario, fuso)
+    if hoje.timestamp() <= momento.timestamp():
+        return hoje
+    return _combinar(momento.date() - timedelta(days=1), regra.logout_horario, fuso)
+
+
+def sessao_encerrada_por_logout_automatico(emitido_em: datetime | float | int, agora: datetime | None = None, *, regra: RegraExpediente) -> bool:
+    """O token emitido em `emitido_em` (claim `iat`) já foi alcançado por algum corte? Verdadeiro quando foi emitido ANTES do último corte. Token emitido no próprio
+    corte ou depois (novo login) segue valendo. `iat` do JWT tem resolução de segundos; datetime aware ou epoch."""
+    corte = ultimo_corte_logout(agora, regra=regra)
+    if corte is None:
+        return False
+    epoca = emitido_em.timestamp() if isinstance(emitido_em, datetime) else float(emitido_em)
+    return epoca < corte.timestamp()
 
 
 def _intervalos(regra: RegraExpediente, data_base: date, antecedencia_minutos: int) -> list[tuple[datetime, datetime]]:

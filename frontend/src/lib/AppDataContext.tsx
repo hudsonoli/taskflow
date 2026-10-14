@@ -12,6 +12,8 @@ import { invalidarDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { invalidarDiretorioUsuarios } from "@/lib/diretorioUsuarios";
 import { REVALIDACAO_PERIODO_MS, contextoOperacionalMudou, podeRevalidar, usuarioMudou } from "@/lib/sessaoUsuario";
 import { criarCoordenadorDeSessaoExpirada, envolverFetch, hrefLoginPorExpiracao } from "@/lib/sessao-expirada";
+import { bloqueioDoDetalhe, detalheDeForaDoExpediente } from "@/lib/expediente-acesso";
+import { storeEstadoExpediente } from "@/lib/estadoExpediente";
 import type { Demanda } from "@/types/demanda";
 import type { PerfilUsuario, Usuario } from "@/types/usuario";
 
@@ -109,6 +111,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     setHrefLoginExpirado(null);
+    storeEstadoExpediente.limpar();
     await logoutRequest();
     sincronizarSessaoRef.current(null);
     setAutenticado(false);
@@ -146,6 +149,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setMustChangePassword(false);
       setUsuarioAtual(undefined);
       setDemandas([]);
+      storeEstadoExpediente.limpar();
       sincronizarSessaoRef.current(null);
       void logoutRequest().catch(() => undefined);
     };
@@ -158,6 +162,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       aoExpirar: () => {
         if (!autenticadoRef.current) return; // já estava fora de sessão: nada a encerrar
         coordenadorSessaoExpirada.disparar(() => encerrarPorSessaoExpiradaRef.current());
+      },
+      // 403 FORA_DO_EXPEDIENTE (Fase Expediente 2): sessão VÁLIDA, política recusa o uso agora → o guarda do AppShell mostra "Fora do horário de expediente". NUNCA login.
+      // Qualquer outro 403 (permissão, troca de senha obrigatória...) não é tocado aqui e segue o tratamento normal de cada tela.
+      aoRecusar: ({ status, resposta }) => {
+        if (status !== 403) return;
+        resposta
+          .clone()
+          .json()
+          .then((corpo: unknown) => {
+            const detalhe = detalheDeForaDoExpediente(corpo);
+            if (detalhe) storeEstadoExpediente.registrarBloqueio(bloqueioDoDetalhe(detalhe));
+          })
+          .catch(() => undefined);
       },
     });
     window.fetch = envolvido;

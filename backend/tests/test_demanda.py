@@ -1484,12 +1484,14 @@ def test_criar_ja_bloqueada_exige_motivo(client_admin: TestClient) -> None:
 
 
 def test_entrar_em_execucao_fora_do_expediente_devolve_409_estruturado(
-    client_admin: TestClient, fora_do_expediente
+    client_admin: TestClient, client_operador: TestClient, usuario_operador, fora_do_expediente
 ) -> None:
     """A regra passa a valer no servidor: até aqui qualquer `curl` iniciava uma tarefa fora do
-    horário, porque a verificação só existia no Kanban."""
-    criada = _criar(client_admin)
-    resposta = client_admin.patch(f"/demandas/{criada['id']}", json={"status": "em_execucao"})
+    horário, porque a verificação só existia no Kanban.
+
+    Fase Expediente 2: o gate vale para o operador SUJEITO à política (admin/gestor/sistema/override são isentos), por isso a Demanda é atribuída a ele."""
+    criada = _criar(client_admin, usuarioResponsavelIds=[usuario_operador.id])
+    resposta = client_operador.patch(f"/demandas/{criada['id']}", json={"status": "em_execucao"})
 
     assert resposta.status_code == 409, resposta.text
     detalhe = resposta.json()["detail"]

@@ -29,6 +29,16 @@ pytest_plugins = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _cache_regra_expediente_limpo():
+    """O gate de expediente guarda a regra por empresa por alguns segundos (cache em memória do processo). Cada teste começa e termina sem esse estado."""
+    from app.services.regra_expediente_service import invalidar_cache_regra
+
+    invalidar_cache_regra()
+    yield
+    invalidar_cache_regra()
+
+
 @pytest.fixture()
 def app(db_session: Session):
     """App real, com `get_db` trocado pra devolver a sessão transacional do teste (ver

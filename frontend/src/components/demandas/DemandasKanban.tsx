@@ -45,7 +45,8 @@ export function DemandasKanban({
   // Enquanto `estado` não chegou (primeira busca a GET /expediente/estado) tratamos como
   // fora do expediente: é o lado seguro — não libera arrastar antes de saber o estado real.
   const expediente = estado
-    ? avaliarExpedienteOperacional(estado.dentroExpediente)
+    ? // `trabalhoPermitido` (Fase Expediente 2): a decisão do SERVIDOR para ESTA pessoa — janela de trabalho nominal, com as isenções (admin/gestor/sistema/override).
+      avaliarExpedienteOperacional(estado.trabalhoPermitido ?? estado.dentroExpediente)
     : { dentroExpediente: false, podeArrastar: false, podeIniciar: false, motivoBloqueio: undefined };
 
   const groupedDemands = useMemo(

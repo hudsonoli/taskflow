@@ -318,6 +318,10 @@ class AuthService:
             raise
 
     def get_current_user_from_token(self, db: Session, token: str) -> Usuario:
+        return self.autenticar_token(db, token)[0]
+
+    def autenticar_token(self, db: Session, token: str) -> tuple[Usuario, dict]:
+        """Usuário do token + as claims (o gate de logout automático precisa do `iat`). Mesmas recusas de sempre; nada de expediente aqui."""
         from app.core.security import AuthTokenError, decode_access_token
 
         try:
@@ -335,7 +339,7 @@ class AuthService:
         if not self._usuario_can_authenticate(usuario):
             raise AuthUnauthorizedError("Token inválido")
 
-        return usuario
+        return usuario, claims
 
     def me(self, db: Session, usuario: Usuario) -> AuthMeResponse:
         credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)

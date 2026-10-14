@@ -234,6 +234,7 @@ def test_query_count_constante_e_uma_unica_busca_por_ids(
     client_admin: TestClient, db_session: Session, empresa: Empresa
 ) -> None:
     usuarios = [_usuario(db_session, empresa) for _ in range(40)]
+    client_admin.get("/usuarios/me")  # aquece o cache do gate de expediente (1ª requisição lê a regra; as demais não)
 
     total_1, por_ids_1 = _contar_sql(client_admin, db_session, [usuarios[0].id])
     total_5, por_ids_5 = _contar_sql(client_admin, db_session, [u.id for u in usuarios[:5]])

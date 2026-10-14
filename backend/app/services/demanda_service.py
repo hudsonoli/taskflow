@@ -12,7 +12,14 @@ from app.core.escopo import (
     departamentos_como_head,
     eh_atendimento,
 )
-from app.core.expediente import JanelaDia, RegraExpediente, esta_dentro_expediente, janela_do_dia, momento_local
+from app.core.expediente import (
+    JanelaDia,
+    RegraExpediente,
+    esta_dentro_janela_trabalho,
+    janela_do_dia,
+    momento_local,
+    usuario_sujeito_ao_expediente,
+)
 from app.core.referencias import gerar_proxima_referencia
 from app.core.relogio import agora_utc, ano_corrente
 from app.core.sequencias_operacionais import reservar_proximo_identificado
@@ -662,7 +669,7 @@ class DemandaService:
                 # concluir e cancelar seguem livres a qualquer hora — o que a regra protege é
                 # o início do trabalho, não o registro dele.
                 if status_final == STATUS_EM_EXECUCAO:
-                    self._ensure_dentro_expediente(db, demanda.empresa_id)
+                    self._ensure_dentro_expediente(db, demanda.empresa_id, actor)
 
                 demanda.status = status_final
                 campos_alterados.append("status")
@@ -1224,14 +1231,23 @@ class DemandaService:
                 "motivoBloqueio é obrigatório para status 'bloqueada'"
             )
 
-    def _ensure_dentro_expediente(self, db: Session, empresa_id: str) -> None:
+    def _ensure_dentro_expediente(self, db: Session, empresa_id: str, actor: Usuario) -> None:
+        """Gate de TRABALHO (entrada em `em_execucao`). Fase Expediente 2: usa SÓ a janela de trabalho NOMINAL (`esta_dentro_janela_trabalho`) — a tolerância legada
+        (`tolerancia_retomada_minutos`) deixou de ser autoridade; às 12:30 há ACESSO mas não há TRABALHO, às 13:00 sim. Isentos (não recebem 409): admin, gestor,
+        conta de sistema e `acesso_fora_expediente=true`. Regra desligada (`ativo=False`) libera."""
+        if not usuario_sujeito_ao_expediente(
+            perfil_base=actor.perfil_base,
+            is_system_account=bool(actor.is_system_account),
+            acesso_fora_expediente=bool(actor.acesso_fora_expediente),
+        ):
+            return
         # Override do teste (fixtures dentro_do_expediente/fora_do_expediente) tem
         # prioridade; sem ele, carrega a regra REAL da Empresa — Fase 2G.3.
         regra = self.regra_expediente or self.regra_expediente_service.get_regra_calculo(
             db, empresa_id=empresa_id
         )
         agora = momento_local(None, regra)  # relógio da EMPRESA (fuso da regra), nunca o do navegador
-        if esta_dentro_expediente(agora, regra=regra):
+        if esta_dentro_janela_trabalho(agora, regra=regra):
             return
 
         # Dia efetivo de hoje: 0, 1, 2 ou mais períodos, já com feriado/recesso/trabalho excepcional (Fase Expediente 1).

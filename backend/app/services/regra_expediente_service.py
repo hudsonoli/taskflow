@@ -1,3 +1,5 @@
+import threading
+import time as _time
 from datetime import datetime, time
 from uuid import uuid4
 
@@ -7,11 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.expediente import (
     REGRA_PADRAO,
     DiaEspecial,
+    avaliar_expediente,
     duracao_horas_dia,
-    esta_dentro_expediente,
+    esta_dentro_janela_trabalho,
     janela_de_periodos,
     janela_do_dia,
-    momento_local,
 )
 from app.core.expediente import RegraExpediente as RegraExpedienteCalculo
 from app.core.relogio import agora_utc, fuso_aplicacao
@@ -40,6 +42,25 @@ from app.schemas.regra_expediente import (
 from app.services.domain_event_publisher import DomainEventPublisher
 
 TIPO_ENTIDADE = "regra_expediente"
+
+# Cache CURTO da regra de cálculo por empresa, para o gate global (autenticação) não refazer ~5 queries por requisição. Guarda SÓ a regra (nunca decisão por usuário:
+# `acesso_fora_expediente`/perfil vêm do usuário carregado na própria requisição). `None` também é cacheado (empresa sem regra → sem política). Invalidado ao salvar a
+# regra e os dias especiais NESTE processo; com mais de um worker, o TTL limita o atraso (config por pessoa muda no segundo seguinte porque não é cacheada).
+_CACHE_TTL_SEGUNDOS = 10.0
+_cache_regra: dict[str, tuple[float, RegraExpedienteCalculo | None]] = {}
+_cache_lock = threading.Lock()
+
+
+def invalidar_cache_regra(empresa_id: str | None = None) -> None:
+    with _cache_lock:
+        if empresa_id is None:
+            _cache_regra.clear()
+        else:
+            _cache_regra.pop(empresa_id, None)
+
+
+class RegraExpedienteInvalidaError(ValueError):
+    """Configuração inconsistente no estado final (ex.: logout automático ligado sem horário) — 422."""
 
 
 class DiaEspecialNaoEncontradoError(LookupError):
@@ -133,7 +154,7 @@ class RegraExpedienteService:
         return regra
 
     def get_regra_calculo(self, db: Session, *, empresa_id: str) -> RegraExpedienteCalculo:
-        """Converte o model SQL pro DTO puro que `esta_dentro_expediente` consome — ver
+        """Converte o model SQL pro DTO puro que as funções de janela/gate consomem — ver
         docstring de app/core/expediente.py sobre não misturar as duas representações."""
         regra = self.get_ou_criar(db, empresa_id=empresa_id)
         periodos = self.repository.list_periodos(db, regra.id)
@@ -168,7 +189,22 @@ class RegraExpedienteService:
             bloquear_fora_expediente=regra.bloquear_fora_expediente,
             pausar_no_fim_periodo=regra.pausar_no_fim_periodo,
             feriados_automaticos=regra.feriados_automaticos,
+            logout_automatico_ativo=regra.logout_automatico_ativo,
+            logout_horario=_time_para_string(regra.logout_horario),
         )
+
+    def get_regra_calculo_para_gate(self, db: Session, *, empresa_id: str) -> RegraExpedienteCalculo | None:
+        """Regra para o GATE de autenticação: SOMENTE LEITURA (não cria a regra padrão — empresa sem regra = sem política) e com cache curto por empresa."""
+        agora = _time.monotonic()
+        with _cache_lock:
+            hit = _cache_regra.get(empresa_id)
+            if hit is not None and agora - hit[0] < _CACHE_TTL_SEGUNDOS:
+                return hit[1]
+        existente = self.repository.get_by_empresa(db, empresa_id)
+        regra = self.get_regra_calculo(db, empresa_id=empresa_id) if existente is not None else None
+        with _cache_lock:
+            _cache_regra[empresa_id] = (agora, regra)
+        return regra
 
     # ----------------------------------------------------------------------------------
     # Alteração
@@ -201,6 +237,15 @@ class RegraExpedienteService:
                 if atributo in updates and updates[atributo] is not None and updates[atributo] != getattr(regra, atributo):
                     setattr(regra, atributo, updates[atributo])
                     changed_fields.append(rotulo)
+            # Logout automático (Fase 2): o horário aceita `null` explícito (limpar), por isso fora do laço acima.
+            if "logout_automatico_ativo" in updates and updates["logout_automatico_ativo"] is not None and updates["logout_automatico_ativo"] != regra.logout_automatico_ativo:
+                regra.logout_automatico_ativo = updates["logout_automatico_ativo"]
+                changed_fields.append("logoutAutomaticoAtivo")
+            if "logout_horario" in updates and updates["logout_horario"] != regra.logout_horario:
+                regra.logout_horario = updates["logout_horario"]
+                changed_fields.append("logoutHorario")
+            if regra.logout_automatico_ativo and regra.logout_horario is None:
+                raise RegraExpedienteInvalidaError("logoutHorario é obrigatório para ativar o logout automático")
 
             if data.dias is not None and self._substituir_dias(db, regra.id, data.dias):
                 changed_fields.append("dias")
@@ -211,6 +256,7 @@ class RegraExpedienteService:
                 self._publish_event(db, regra, actor_usuario_id, campos_alterados=changed_fields, occurred_at=now)
 
             db.commit()
+            invalidar_cache_regra(empresa_id)
             db.refresh(regra)
             return regra
         except Exception:
@@ -289,6 +335,7 @@ class RegraExpedienteService:
             self.repository.replace_periodos_especiais(db, dia.id, self._linhas_especiais(dia.id, data.periodos))
             self._publish_dia_especial_evento(db, regra, actor_usuario_id, "criado", dia, now)
             db.commit()
+            invalidar_cache_regra(empresa_id)
             return self._dia_especial_read(db, dia)
         except Exception:
             db.rollback()
@@ -326,6 +373,7 @@ class RegraExpedienteService:
             self.repository.replace_periodos_especiais(db, dia.id, self._linhas_especiais(dia.id, periodos_finais))
             self._publish_dia_especial_evento(db, regra, actor_usuario_id, "alterado", dia, now)
             db.commit()
+            invalidar_cache_regra(empresa_id)
             return self._dia_especial_read(db, dia)
         except Exception:
             db.rollback()
@@ -341,6 +389,7 @@ class RegraExpedienteService:
             self._publish_dia_especial_evento(db, regra, actor_usuario_id, "removido", dia, now)
             self.repository.delete_dia_especial(db, dia)
             db.commit()
+            invalidar_cache_regra(empresa_id)
         except Exception:
             db.rollback()
             raise
@@ -435,21 +484,34 @@ class RegraExpedienteService:
             antecedenciaAcessoMinutos=regra.antecedencia_acesso_minutos,
             timezone=regra.timezone,
             feriadosAutomaticos=regra.feriados_automaticos,
+            logoutAutomaticoAtivo=regra.logout_automatico_ativo,
+            logoutHorario=regra.logout_horario,
             dias=leitura_dias,
             diasEspeciais=self._dias_especiais_read(db, regra),
             createdAt=regra.created_at,
             updatedAt=regra.updated_at,
         )
 
-    def to_estado_read(self, db: Session, *, empresa_id: str) -> EstadoExpedienteRead:
-        regra_calculo = self.get_regra_calculo(db, empresa_id=empresa_id)
-        agora = momento_local(None, regra_calculo)
+    def to_estado_read(self, db: Session, *, empresa_id: str, sujeito: bool = False) -> EstadoExpedienteRead:
+        """Estado para o usuário LOGADO (`sujeito` = está sob a política de expediente). `dentroExpediente` é da EMPRESA e da janela de trabalho NOMINAL (sem a
+        tolerância legada, sem isenção): serve a capacidade. O que vale para esta pessoa está em `acessoPermitido`/`trabalhoPermitido`."""
+        regra_calculo = self.get_regra_calculo_para_gate(db, empresa_id=empresa_id) or self.get_regra_calculo(db, empresa_id=empresa_id)
+        avaliacao = avaliar_expediente(None, regra=regra_calculo, sujeito=sujeito)
+        agora = avaliacao.agora
         return EstadoExpedienteRead(
             ativo=regra_calculo.ativo,
-            dentroExpediente=esta_dentro_expediente(agora, regra=regra_calculo),
+            dentroExpediente=esta_dentro_janela_trabalho(agora, regra=regra_calculo),
             agora=agora,
             toleranciaRetomadaMinutos=regra_calculo.tolerancia_retomada_minutos,
             horasUteisHoje=duracao_horas_dia(janela_do_dia(regra_calculo, agora.date())),
+            sujeitoAoExpediente=avaliacao.sujeito,
+            bloqueioAtivo=avaliacao.bloqueio_ativo,
+            acessoPermitido=avaliacao.acesso_permitido,
+            trabalhoPermitido=avaliacao.trabalho_permitido,
+            proximoAcesso=avaliacao.proximo_acesso,
+            proximoTrabalho=avaliacao.proximo_trabalho,
+            proximoTrabalhoFim=avaliacao.proximo_trabalho_fim,
+            timezone=avaliacao.timezone,
         )
 
     # ----------------------------------------------------------------------------------

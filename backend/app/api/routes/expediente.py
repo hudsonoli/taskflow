@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.dependencies.auth import get_current_user_password_ready
+from app.dependencies.auth import get_current_user_password_ready_sem_expediente, usuario_esta_sujeito_ao_expediente
 from app.models.usuario import Usuario
 from app.schemas.regra_expediente import EstadoExpedienteRead
 from app.services.regra_expediente_service import RegraExpedienteService
@@ -24,7 +24,10 @@ regra_expediente_service = RegraExpedienteService()
 
 @router.get("/estado", response_model=EstadoExpedienteRead)
 def get_estado_expediente(
-    current_user: Usuario = Depends(get_current_user_password_ready),
+    # SEM o gate de acesso de propósito: precisa responder fora da janela (é o polling que avisa que o acesso voltou). O 401 do logout automático ainda vale.
+    current_user: Usuario = Depends(get_current_user_password_ready_sem_expediente),
     db: Session = Depends(get_db),
 ):
-    return regra_expediente_service.to_estado_read(db, empresa_id=current_user.empresa_id)
+    return regra_expediente_service.to_estado_read(
+        db, empresa_id=current_user.empresa_id, sujeito=usuario_esta_sujeito_ao_expediente(current_user)
+    )

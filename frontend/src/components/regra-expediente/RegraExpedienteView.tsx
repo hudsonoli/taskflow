@@ -11,19 +11,20 @@ import { Switch } from "@/components/ui/Switch";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { atualizarRegraExpedienteReal, getEmAndamentoOperacional, getRegraExpedienteReal } from "@/lib/api-backend";
 import { useEstadoExpediente } from "@/lib/estadoExpediente";
-import { DIAS_ORDEM, diasNormalizados, diasParaEnvio, errosDaSemana, opcoesDeFuso } from "@/lib/expediente-periodos";
+import { DIAS_ORDEM, diasNormalizados, diasParaEnvio, errosDaSemana, normalizarHora, opcoesDeFuso } from "@/lib/expediente-periodos";
 import type { DiaEspecial, DiaSemana, PeriodoExpediente, RegraExpediente } from "@/types/regra-expediente";
 import { DiasEspeciaisSection } from "./DiasEspeciaisSection";
 import { PeriodosDoDia } from "./PeriodosDoDia";
 
-// Fase Expediente 1 — fundação. A tela configura períodos por dia (0, 1, 2 ou mais), antecedência de acesso, fuso e dias especiais. O QUE TEM EFEITO HOJE: o
-// interruptor "Controle de expediente" (o gate que já existia: iniciar a execução de uma demanda só é aceito dentro dos períodos). Os interruptores de BLOQUEIO de
-// acesso e de PAUSA automática existem mas ficam desligados e travados — nenhum bloqueio nem pausa automática acontece nesta etapa (o servidor também recusa ligá-los).
+// Fase Expediente 1/2. A tela configura períodos por dia (0, 1, 2 ou mais), antecedência de acesso, fuso e dias especiais. O QUE TEM EFEITO: o controle de expediente
+// (iniciar a execução só na janela de TRABALHO), o BLOQUEIO de acesso fora da janela de ACESSO e o LOGOUT automático em horário próprio — três coisas INDEPENDENTES. A PAUSA
+// automática segue travada ("Em breve"): o servidor também recusa ligá-la.
 
 function normalizarRegra(dados: RegraExpediente): RegraExpediente {
   const normalizados = diasNormalizados(dados.dias);
   return {
     ...dados,
+    logoutHorario: dados.logoutHorario ? normalizarHora(dados.logoutHorario) || null : null,
     dias: normalizados.map((dia) => ({ diaSemana: dia.diaSemana, ativo: dia.periodos.length > 0, periodos: dia.periodos })),
   };
 }
@@ -77,7 +78,11 @@ export function RegraExpedienteView() {
     return <EstadoErro mensagem="Não foi possível carregar a regra de expediente." onRetry={tentarNovamente} />;
   }
 
-  function updateRegra(patch: Partial<Pick<RegraExpediente, "ativo" | "toleranciaRetomadaMinutos" | "antecedenciaAcessoMinutos" | "timezone">>) {
+  function updateRegra(
+    patch: Partial<
+      Pick<RegraExpediente, "ativo" | "toleranciaRetomadaMinutos" | "antecedenciaAcessoMinutos" | "timezone" | "bloquearForaExpediente" | "logoutAutomaticoAtivo" | "logoutHorario">
+    >,
+  ) {
     setSalvoEm(null);
     setRegra((current) => (current ? { ...current, ...patch } : current));
   }
@@ -94,7 +99,8 @@ export function RegraExpedienteView() {
   }
 
   const errosPorDia = errosDaSemana(regra.dias);
-  const haErros = Object.keys(errosPorDia).length > 0;
+  const logoutSemHorario = regra.logoutAutomaticoAtivo && !regra.logoutHorario;
+  const haErros = Object.keys(errosPorDia).length > 0 || logoutSemHorario;
 
   async function salvar() {
     if (!regra || haErros) return;
@@ -106,6 +112,9 @@ export function RegraExpedienteView() {
         toleranciaRetomadaMinutos: regra.toleranciaRetomadaMinutos,
         antecedenciaAcessoMinutos: regra.antecedenciaAcessoMinutos,
         timezone: regra.timezone,
+        bloquearForaExpediente: regra.bloquearForaExpediente,
+        logoutAutomaticoAtivo: regra.logoutAutomaticoAtivo,
+        logoutHorario: regra.logoutHorario ?? null,
         dias: diasParaEnvio(regra.dias),
       });
       setRegra(normalizarRegra(atualizada));
@@ -136,8 +145,9 @@ export function RegraExpedienteView() {
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight text-fg">Horário de expediente</h1>
             <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
-              Defina os períodos de trabalho de cada dia da semana, a antecedência de acesso e os dias especiais. Nesta etapa a configuração é registrada e já
-              vale para <strong>iniciar a execução</strong> de uma demanda; o bloqueio de acesso fora do horário e a pausa automática ainda não estão ativos.
+              Defina os períodos de trabalho de cada dia da semana, a antecedência de acesso e os dias especiais. A configuração vale para{" "}
+              <strong>iniciar a execução</strong> de uma demanda, para o <strong>bloqueio de acesso</strong> fora do horário e para o <strong>logout automático</strong>.
+              A pausa automática ainda não está ativa.
             </p>
           </div>
         </div>
@@ -169,26 +179,27 @@ export function RegraExpedienteView() {
         <h2 id="controle-titulo" className="text-sm font-semibold text-fg">
           Controle
         </h2>
-        <div className="mt-3 grid gap-3 lg:grid-cols-3">
+        <p className="mt-0.5 text-xs text-fg-muted">
+          <strong>Bloqueio</strong>, <strong>pausa</strong> e <strong>logout</strong>{" "}
+          são independentes: cada um liga e desliga sozinho. Administradores, gestores, contas de
+          sistema e usuários com &ldquo;acesso fora do expediente&rdquo; ficam isentos do bloqueio, do logout e da restrição de iniciar execução fora do horário.
+        </p>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
             <Switch
               checked={regra.ativo}
               onChange={(checked) => updateRegra({ ativo: checked })}
               label="Ativar controle de expediente"
-              description="Quando ativo, iniciar a execução de uma demanda só é aceito dentro dos períodos. Desativado, nada é restringido por dia ou horário."
+              description="Chave-mestra. Desativada, nada é restringido por dia ou horário (nem bloqueio, nem logout). Ativa, iniciar a execução de uma demanda só é aceito dentro dos períodos."
             />
           </div>
           <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
             <Switch
-              checked={false}
-              disabled
-              onChange={() => undefined}
+              checked={regra.bloquearForaExpediente}
+              onChange={(checked) => updateRegra({ bloquearForaExpediente: checked })}
               label="Bloquear usuários fora do expediente"
-              description="Será ativado em uma próxima etapa."
+              description="Operadores só usam o sistema dentro do horário de acesso (períodos antecipados pela antecedência). Fora dele veem a tela “Fora do horário de expediente”."
             />
-            <div className="mt-1.5">
-              <Badge>Em breve</Badge>
-            </div>
           </div>
           <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
             <Switch
@@ -201,6 +212,28 @@ export function RegraExpedienteView() {
             <div className="mt-1.5">
               <Badge>Em breve</Badge>
             </div>
+          </div>
+          <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
+            <Switch
+              checked={regra.logoutAutomaticoAtivo}
+              onChange={(checked) => updateRegra({ logoutAutomaticoAtivo: checked })}
+              label="Logout automático"
+              description="Encerra as sessões de operadores no horário abaixo (qualquer aba ou dispositivo). Não pausa tarefas e não depende do fim dos períodos."
+            />
+            <div className="mt-2.5 max-w-[11rem]">
+              <Input
+                label="Horário"
+                type="time"
+                value={regra.logoutHorario ?? ""}
+                disabled={!regra.logoutAutomaticoAtivo && !regra.logoutHorario}
+                onChange={(event) => updateRegra({ logoutHorario: event.target.value || null })}
+              />
+            </div>
+            {logoutSemHorario && (
+              <p role="alert" className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
+                Informe o horário para ativar o logout automático.
+              </p>
+            )}
           </div>
         </div>
 
@@ -253,7 +286,7 @@ export function RegraExpedienteView() {
         </div>
 
         <details className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-950/30">
-          <summary className="cursor-pointer text-xs font-semibold text-fg-muted">Avançado — tolerância de retomada (legado)</summary>
+          <summary className="cursor-pointer text-xs font-semibold text-fg-muted">Avançado — tolerância de retomada (legado, sem efeito)</summary>
           <div className="mt-3 max-w-xs">
             <Input
               label="Tolerância de retomada (minutos)"
@@ -265,8 +298,8 @@ export function RegraExpedienteView() {
             />
           </div>
           <p className="mt-2 text-xs text-fg-muted">
-            Regra antiga, mantida como era: <strong>iniciar a execução</strong> já é aceito esta quantidade de minutos antes do início do 2º período do dia
-            (ex.: com 30 min, depois do almoço a execução pode começar 30 min antes). Não é a antecedência de acesso e não altera prazos nem SLA.
+            Regra antiga, <strong>descontinuada</strong>: deixou de valer para iniciar a execução, que agora usa só os períodos nominais (às 12:30 há acesso, mas só às
+            13:00 pode-se iniciar). O campo permanece por compatibilidade. Não é a antecedência de acesso e não altera prazos nem SLA.
           </p>
         </details>
 

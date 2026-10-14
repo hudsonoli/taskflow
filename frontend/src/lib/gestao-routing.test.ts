@@ -95,7 +95,9 @@ test("o Administrador da Plataforma NÃO vira membro implícito de tenant: sem e
   // AppShell: Gestão sem sessão = mensagem única, sem empresa para devolver ao login; fora de /e/<slug> e /gestao nada é tenant
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
   assert.match(shell, /const semEmpresa = slugUrl === null && !gestao;/);
-  assert.match(shell, /\{gestao \? <GestaoTopBar \/> : <TopNav \/>\}/);
+  // Gestão: barra própria e SEM o guarda de expediente (que é do tenant); o guarda só envolve a área tenant
+  assert.match(shell, /\{gestao \? \(\s*<>\s*<GestaoTopBar \/>/);
+  assert.match(shell, /<ExpedienteGuard[\s\S]*?<TopNav \/>/);
   assert.match(shell, /Acesso restrito\. Entre pelo endereço de acesso da sua empresa\./);
   // a Gestão não escolhe empresa: a barra não usa nada de tenant
   const barra = semComentarios(ler("components/layout/GestaoTopBar.tsx"));

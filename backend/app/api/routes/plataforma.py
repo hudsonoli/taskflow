@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.configuracao_personalizacao import handle_logo_error
 from app.db.session import get_db
-from app.dependencies.auth import get_current_user_password_ready
+from app.dependencies.auth import get_current_user_password_ready_sem_expediente
 from app.dependencies.plataforma import ContextoPlataforma, require_platform_admin
 from app.models.usuario import Usuario
 from app.schemas.configuracao_personalizacao import PersonalizacaoRead, PersonalizacaoUpdate
@@ -78,14 +78,16 @@ def _tratar_erro(exc: Exception) -> None:
 # --------------------------------------------------------------------------------------
 
 
+# Fase Expediente 2: `/acesso` e `/sessao` são a PORTA do administrador da plataforma (troca a sessão tenant por um token de plataforma). Administrador da plataforma é ISENTO
+# do gate de acesso por expediente — por isso usam a dependência SEM expediente (o 401 do logout automático ainda vale para o token tenant; o token de plataforma é outro).
 @router.get("/acesso", response_model=PlataformaAcessoRead)
-def acesso(current_user: Usuario = Depends(get_current_user_password_ready), db: Session = Depends(get_db)):
+def acesso(current_user: Usuario = Depends(get_current_user_password_ready_sem_expediente), db: Session = Depends(get_db)):
     """Fonte de verdade da UI para mostrar (ou não) a entrada "Administração da Plataforma" — nunca e-mail/perfil."""
     return PlataformaAcessoRead(administradorPlataforma=plataforma_service.administrador_ativo_de(db, current_user) is not None)
 
 
 @router.post("/sessao", response_model=PlataformaSessaoRead)
-def iniciar_sessao(current_user: Usuario = Depends(get_current_user_password_ready), db: Session = Depends(get_db)):
+def iniciar_sessao(current_user: Usuario = Depends(get_current_user_password_ready_sem_expediente), db: Session = Depends(get_db)):
     """Troca a sessão tenant válida por um token de plataforma curto. Quem não é administrador ativo recebe 403."""
     try:
         return plataforma_service.emitir_sessao(db, current_user)

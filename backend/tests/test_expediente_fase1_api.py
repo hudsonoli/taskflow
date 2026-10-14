@@ -134,7 +134,8 @@ def test_espelho_legado_so_com_exatamente_dois_periodos(client_admin: TestClient
 # ── flags, antecedência, fuso ────────────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("campo", ["bloquearForaExpediente", "pausarNoFimPeriodo", "feriadosAutomaticos"])
+# Fase Expediente 2: `bloquearForaExpediente` passou a ter efeito (gate de acesso) e PODE ser ligada — ver test_expediente_fase2_api.py. As outras duas seguem recusadas.
+@pytest.mark.parametrize("campo", ["pausarNoFimPeriodo", "feriadosAutomaticos"])
 def test_flags_criticas_nao_podem_ser_ligadas_nesta_fase(client_admin: TestClient, campo: str) -> None:
     resposta = client_admin.patch("/regra-expediente", json={campo: True})
     assert resposta.status_code == 422
@@ -311,16 +312,17 @@ def regra_override(app):
     rotas.demanda_service.regra_expediente = original
 
 
-def _demanda_rascunho(cliente: TestClient) -> dict:
-    resposta = cliente.post("/demandas", json={"nome": f"D {uuid.uuid4().hex[:6]}"})
+def _demanda_rascunho(cliente: TestClient, **extra) -> dict:
+    resposta = cliente.post("/demandas", json={"nome": f"D {uuid.uuid4().hex[:6]}", **extra})
     assert resposta.status_code == 201, resposta.text
     return resposta.json()
 
 
-def test_feriado_de_hoje_barra_a_entrada_em_execucao(client_admin: TestClient, regra_override) -> None:
+def test_feriado_de_hoje_barra_a_entrada_em_execucao(client_admin: TestClient, client_operador: TestClient, usuario_operador, regra_override) -> None:
+    # Fase 2: o gate vale para o operador SUJEITO (admin/gestor são isentos) — a Demanda é atribuída a ele.
     hoje = momento_local(None, _regra_aberta_sempre()).date()
     regra_override(_regra_aberta_sempre(dias_especiais=(DiaEspecial(data=hoje, tipo="feriado"),)))
-    resposta = client_admin.patch(f"/demandas/{_demanda_rascunho(client_admin)['id']}", json={"status": "em_execucao"})
+    resposta = client_operador.patch(f"/demandas/{_demanda_rascunho(client_admin, usuarioResponsavelIds=[usuario_operador.id])['id']}", json={"status": "em_execucao"})
     assert resposta.status_code == 409
     assert resposta.json()["detail"]["code"] == "FORA_DE_EXPEDIENTE"
     assert "hoje não é dia útil" in resposta.json()["detail"]["message"]
@@ -444,15 +446,14 @@ def test_nenhum_mecanismo_pausa_sozinho(client_admin: TestClient, dentro_do_expe
 # ── Fase 1: decisões de segurança antes do merge ─────────────────────────────────────────────────────────────────
 
 
-def test_p2_gate_legado_de_entrada_ainda_vale_para_gestor_e_admin(client_admin: TestClient, client_gestor: TestClient, regra_override) -> None:
-    """P2_EXPEDIENTE_GATE_PROFILE_EXEMPTIONS — registrado, NÃO corrigido na Fase 1: o gate de entrada em execução ainda se aplica a admin/gestor (a isenção por
-    perfil é da Fase 2). Se este teste quebrar sem a Fase 2, algo mudou o gate."""
+def test_p2_gate_de_entrada_isenta_gestor_e_admin_desde_a_fase_2(client_admin: TestClient, client_gestor: TestClient, regra_override) -> None:
+    """P2_EXPEDIENTE_GATE_PROFILE_EXEMPTIONS — RESOLVIDO na Fase 2: o gate de entrada em execução só se aplica ao operador sujeito; admin e gestor são isentos."""
     hoje = momento_local(None, _regra_aberta_sempre()).date()
     regra_override(_regra_aberta_sempre(dias_especiais=(DiaEspecial(data=hoje, tipo="feriado"),)))
     for cliente in (client_admin, client_gestor):
         demanda = _demanda_rascunho(cliente)
         resposta = cliente.patch(f"/demandas/{demanda['id']}", json={"status": "em_execucao"})
-        assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "FORA_DE_EXPEDIENTE"
+        assert resposta.status_code == 200, resposta.text
 
 
 def test_a_antecedencia_de_acesso_nao_substitui_a_tolerancia_legada_no_dto(client_admin: TestClient, db_session: Session, empresa: Empresa) -> None:

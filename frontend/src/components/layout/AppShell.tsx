@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { SessaoOutraEmpresaView } from "@/components/layout/SessaoOutraEmpresaView";
+import { ExpedienteGuard } from "@/components/layout/ExpedienteGuard";
 import { GestaoTopBar } from "@/components/layout/GestaoTopBar";
 import { TopNav } from "@/components/layout/TopNav";
 import { useAppData } from "@/lib/AppDataContext";
@@ -107,8 +108,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen flex-col bg-app">
-      {gestao ? <GestaoTopBar /> : <TopNav />}
-      <main className="min-w-0 flex-1 overflow-y-auto px-4 py-8 sm:px-6">{children}</main>
+      {gestao ? (
+        <>
+          <GestaoTopBar />
+          <main className="min-w-0 flex-1 overflow-y-auto px-4 py-8 sm:px-6">{children}</main>
+        </>
+      ) : (
+        // Acesso por expediente (Fase Expediente 2): só na área tenant; /gestao usa a sessão de plataforma e não passa por aqui.
+        <ExpedienteGuard onSair={() => void sair()} saindo={saindo}>
+          <TopNav />
+          <main className="min-w-0 flex-1 overflow-y-auto px-4 py-8 sm:px-6">{children}</main>
+        </ExpedienteGuard>
+      )}
     </div>
   );
 }

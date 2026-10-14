@@ -205,7 +205,7 @@ def test_sem_token_e_401_em_toda_a_plataforma(app) -> None:
 def test_toda_rota_de_plataforma_tem_guarda(app) -> None:
     """Nenhuma rota `/plataforma/*` fica sem guarda: ou `require_platform_admin`, ou as duas que partem da sessão
     TENANT (`/sessao` e `/acesso`)."""
-    from app.dependencies.auth import get_current_user_password_ready
+    from app.dependencies.auth import get_current_user_password_ready_sem_expediente
 
     permitidas_tenant = {"/plataforma/sessao", "/plataforma/acesso"}
     from app.api.routes import plataforma as modulo_plataforma
@@ -226,7 +226,8 @@ def test_toda_rota_de_plataforma_tem_guarda(app) -> None:
     for rota in rotas:
         deps = chamaveis(rota.dependant)
         if rota.path in permitidas_tenant:
-            assert get_current_user_password_ready in deps, rota.path
+            # Fase Expediente 2: a porta do administrador da plataforma é ISENTA do gate de expediente (mas mantém o gate da troca de senha obrigatória).
+            assert get_current_user_password_ready_sem_expediente in deps, rota.path
         else:
             assert require_platform_admin in deps, f"{rota.methods} {rota.path} sem require_platform_admin"
         assert "DELETE" not in rota.methods or rota.path.endswith(("/personalizacao", "/logo")), (

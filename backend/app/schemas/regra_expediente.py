@@ -8,8 +8,8 @@ DIAS_SEMANA_VALIDOS = frozenset(range(7))  # 0=segunda .. 6=domingo (datetime.we
 MAX_PERIODOS_POR_DIA = 8
 TIPOS_DIA_ESPECIAL_ESCRITA = ("feriado", "recesso", "trabalho_excepcional", "ignorado")
 
-# As três flags abaixo EXISTEM mas ainda não têm efeito: não há gate de acesso, scheduler nem sincronização de feriados (Fases 2/3 e posteriores). Até lá a API recusa
-# LIGÁ-LAS — assim nenhuma empresa fica "armada" antes de o mecanismo existir (desligar sempre pode).
+# Fase Expediente 2: `bloquearForaExpediente` AGORA TEM EFEITO (gate de acesso) e pode ser ligada. As outras duas (`pausarNoFimPeriodo`: scheduler/pausa, Fase 3;
+# `feriadosAutomaticos`: sincronização de feriados) seguem sem mecanismo — a API recusa LIGÁ-LAS (desligar sempre pode).
 _MENSAGEM_PROXIMA_ETAPA = "ainda não está disponível: será ativado em uma próxima etapa"
 
 
@@ -109,6 +109,9 @@ class RegraExpedienteUpdate(BaseModel):
     antecedencia_acesso_minutos: int | None = Field(default=None, alias="antecedenciaAcessoMinutos", ge=0, le=720)
     timezone: str | None = Field(default=None, max_length=64)
     feriados_automaticos: bool | None = Field(default=None, alias="feriadosAutomaticos")
+    # Logout automático (Fase 2): horário PRÓPRIO, independente de bloqueio e pausa. `logoutHorario` aceita `null` (limpar); ligar exige horário no estado final.
+    logout_automatico_ativo: bool | None = Field(default=None, alias="logoutAutomaticoAtivo")
+    logout_horario: time | None = Field(default=None, alias="logoutHorario")
     # Full-replace: quando enviado, precisa vir com os 7 dias — mesmo raciocínio de
     # WorkflowModeloUpdate.etapas (o form sempre edita o conjunto inteiro de uma vez).
     dias: list[JanelaDiaWrite] | None = Field(default=None)
@@ -120,7 +123,19 @@ class RegraExpedienteUpdate(BaseModel):
     def fuso_valido(cls, value: str | None) -> str | None:
         return None if value is None else validar_fuso_iana(value)
 
-    @field_validator("bloquear_fora_expediente", "pausar_no_fim_periodo", "feriados_automaticos")
+    @field_validator("logout_horario")
+    @classmethod
+    def horario_sem_segundos(cls, value: time | None) -> time | None:
+        # A configuração é em minutos ("18:10"): segundos/microssegundos são descartados para o corte ser exato e previsível.
+        return None if value is None else value.replace(second=0, microsecond=0, tzinfo=None)
+
+    @model_validator(mode="after")
+    def logout_ligado_exige_horario(self) -> "RegraExpedienteUpdate":
+        if self.logout_automatico_ativo and "logout_horario" in self.model_fields_set and self.logout_horario is None:
+            raise ValueError("logoutHorario é obrigatório para ativar o logout automático")
+        return self
+
+    @field_validator("pausar_no_fim_periodo", "feriados_automaticos")
     @classmethod
     def so_desligar_por_enquanto(cls, value: bool | None, info) -> bool | None:
         if value:
@@ -254,6 +269,8 @@ class RegraExpedienteRead(BaseModel):
     antecedencia_acesso_minutos: int = Field(alias="antecedenciaAcessoMinutos")
     timezone: str
     feriados_automaticos: bool = Field(alias="feriadosAutomaticos")
+    logout_automatico_ativo: bool = Field(alias="logoutAutomaticoAtivo")
+    logout_horario: time | None = Field(default=None, alias="logoutHorario")
     dias: list[JanelaDiaRead]
     dias_especiais: list[DiaEspecialRead] = Field(default_factory=list, alias="diasEspeciais")
     created_at: datetime = Field(alias="createdAt")
@@ -281,5 +298,15 @@ class EstadoExpedienteRead(BaseModel):
     # Duração (soma dos períodos) do dia de hoje, em horas — 0 se hoje não for dia útil. Só para
     # estimativa de capacidade (ver capacidadeAproximada no frontend); nunca os horários.
     horas_uteis_hoje: float = Field(alias="horasUteisHoje")
+    # Fase Expediente 2 — o que vale para ESTA pessoa (decidido no servidor, no fuso da empresa; nunca o relógio do navegador). `acessoPermitido=False` é o que a
+    # tela "Fora do horário de expediente" mostra; `trabalhoPermitido=False` é o que impede ENTRAR em execução. Isentos: sempre True.
+    sujeito_ao_expediente: bool = Field(default=False, alias="sujeitoAoExpediente")
+    bloqueio_ativo: bool = Field(default=False, alias="bloqueioAtivo")
+    acesso_permitido: bool = Field(default=True, alias="acessoPermitido")
+    trabalho_permitido: bool = Field(default=True, alias="trabalhoPermitido")
+    proximo_acesso: datetime | None = Field(default=None, alias="proximoAcesso")
+    proximo_trabalho: datetime | None = Field(default=None, alias="proximoTrabalho")
+    proximo_trabalho_fim: datetime | None = Field(default=None, alias="proximoTrabalhoFim")
+    timezone: str | None = None
 
     model_config = ConfigDict(populate_by_name=True)

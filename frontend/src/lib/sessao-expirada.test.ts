@@ -227,7 +227,7 @@ test("uma única fonte de verdade: só o AppDataProvider instala o handler; nenh
   for (const arquivo of espalhado) assert.equal(/=== 401|status\s*===\s*401/.test(semComentarios(ler(arquivo))), false, arquivo);
 });
 
-test("não há logout por horário, bloqueio de expediente nem polling novo nesta correção", () => {
+test("o handler de sessão expirada em si não tem logout por horário, bloqueio de expediente nem polling (isso vive em lib/expediente-*)", () => {
   const lib = semComentarios(ler("lib/sessao-expirada.ts"));
   assert.equal(/FORA_DO_EXPEDIENTE|setInterval|setTimeout|agendar/i.test(lib), false);
   const contexto = semComentarios(ler("lib/AppDataContext.tsx"));

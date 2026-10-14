@@ -46,17 +46,22 @@ export type DiaEspecialDraft = {
 export type RegraExpediente = {
   id: string;
   empresaId: string;
-  /** Chave-mestra do controle de expediente (hoje: o gate de ENTRADA em execução). */
+  /** Chave-mestra do controle de expediente (gate de acesso, de TRABALHO e logout automático — cada um com sua flag). */
   ativo: boolean;
-  /** LEGADO: minutos antes do início do 2º período em que a ENTRADA em execução já é aceita. NÃO é a antecedência de acesso. */
+  /** LEGADO/deprecated (Fase 2): NÃO é mais autoridade de nada — o trabalho usa a janela NOMINAL. Mantido só por compatibilidade. NÃO é a antecedência de acesso. */
   toleranciaRetomadaMinutos: number;
-  // Fase Expediente 1 — as duas primeiras existem mas AINDA não têm efeito (nascem falsas; a API recusa ligá-las até a próxima etapa).
+  /** Fase 2: TEM efeito — operadores sujeitos só usam o sistema dentro da janela de ACESSO (403 FORA_DO_EXPEDIENTE). */
   bloquearForaExpediente: boolean;
+  /** Fase 3 (ainda sem efeito): a API recusa ligar. */
   pausarNoFimPeriodo: boolean;
   antecedenciaAcessoMinutos: number;
   /** IANA, ex.: America/Sao_Paulo */
   timezone: string;
   feriadosAutomaticos: boolean;
+  /** Fase 2: logout automático com horário PRÓPRIO, independente de bloqueio e pausa. */
+  logoutAutomaticoAtivo: boolean;
+  /** "HH:MM:SS" da API; a tela usa "HH:MM". `null` = sem horário. */
+  logoutHorario: string | null;
   dias: JanelaDia[];
   diasEspeciais: DiaEspecial[];
   createdAt: string;
@@ -72,6 +77,10 @@ export type RegraExpedienteUpdateDraft = {
   toleranciaRetomadaMinutos?: number;
   antecedenciaAcessoMinutos?: number;
   timezone?: string;
+  bloquearForaExpediente?: boolean;
+  logoutAutomaticoAtivo?: boolean;
+  /** "HH:MM"; `null` limpa (só aceito com o logout desligado). */
+  logoutHorario?: string | null;
   dias?: DiaSemanaWrite[];
 };
 
@@ -79,8 +88,28 @@ export type RegraExpedienteUpdateDraft = {
 // Departamento). Nunca as janelas por dia, só agregados: ver EstadoExpedienteRead no backend.
 export type EstadoExpediente = {
   ativo: boolean;
+  /** Da EMPRESA: dentro da janela de trabalho NOMINAL agora (sem isenção, sem tolerância legada). */
   dentroExpediente: boolean;
   agora: string;
   toleranciaRetomadaMinutos: number;
   horasUteisHoje: number;
+  // Fase 2 — o que vale para ESTA pessoa, decidido pelo servidor (fuso da empresa; nunca o relógio do navegador).
+  sujeitoAoExpediente: boolean;
+  bloqueioAtivo: boolean;
+  acessoPermitido: boolean;
+  trabalhoPermitido: boolean;
+  proximoAcesso: string | null;
+  proximoTrabalho: string | null;
+  proximoTrabalhoFim: string | null;
+  timezone: string | null;
+};
+
+/** Corpo do `403 FORA_DO_EXPEDIENTE` (sessão válida; a política recusa o uso agora). */
+export type DetalheForaDoExpediente = {
+  code: "FORA_DO_EXPEDIENTE";
+  message: string;
+  proximoAcesso: string | null;
+  proximoTrabalho: string | null;
+  proximoTrabalhoFim: string | null;
+  timezone: string | null;
 };

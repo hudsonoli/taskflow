@@ -41,6 +41,10 @@ class RegraExpediente(Base):
             "antecedencia_acesso_minutos >= 0 AND antecedencia_acesso_minutos <= 720",
             name="ck_regra_expediente_antecedencia_acesso",
         ),
+        CheckConstraint(
+            "NOT logout_automatico_ativo OR logout_horario IS NOT NULL",
+            name="ck_regra_expediente_logout_exige_horario",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -65,6 +69,11 @@ class RegraExpediente(Base):
     # IANA (ex.: America/Sao_Paulo), validado no backend: autoridade do calendário da empresa — nunca o relógio do navegador.
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="America/Sao_Paulo", server_default="America/Sao_Paulo")
     feriados_automaticos: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+
+    # Fase Expediente 2 — LOGOUT AUTOMÁTICO: horário PRÓPRIO (hora local da empresa, `timezone`), independente do fim do último período, do bloqueio de acesso e da
+    # pausa de Demandas (Fase 3). Ligado, tokens emitidos ANTES do último corte (`ultimo_corte_logout`) deixam de valer (401). Nasce desligado.
+    logout_automatico_ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    logout_horario: Mapped[time | None] = mapped_column(Time, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.dependencies.auth import get_current_user, get_current_user_password_ready
+from app.dependencies.auth import get_current_user, get_current_user_password_ready, get_current_user_password_ready_sem_expediente
 from app.models.evento import Evento
 from app.models.usuario import Usuario
 from app.models.usuario_credencial import UsuarioCredencial
@@ -167,7 +167,9 @@ def test_toda_rota_tenant_autenticada_passa_pelo_gate_da_troca_obrigatoria(app) 
     for contexto in _rotas_efetivas(app):
         total += 1
         usadas = set(chamadas(contexto.dependant))
-        if get_current_user in usadas and get_current_user_password_ready not in usadas and contexto.path not in ROTAS_LIVRES_DO_GATE:
+        # `..._sem_expediente` APLICA o mesmo gate da troca obrigatória (só dispensa o de expediente: polling `/expediente/estado` e a porta da plataforma).
+        tem_gate = get_current_user_password_ready in usadas or get_current_user_password_ready_sem_expediente in usadas
+        if get_current_user in usadas and not tem_gate and contexto.path not in ROTAS_LIVRES_DO_GATE:
             sem_gate.append(f"{sorted(contexto.methods)[0]} {contexto.path}")
     # Guarda contra teste vazio: no FastAPI >= 0.139 os routers incluídos aparecem como `_IncludedRouter` em `app.routes` (nenhum APIRoute direto).
     assert total > 100, f"apenas {total} rotas verificadas — a varredura das rotas efetivas quebrou"

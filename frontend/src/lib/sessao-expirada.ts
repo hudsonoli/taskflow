@@ -111,17 +111,29 @@ type FetchComMarca = typeof fetch & { [MARCA]?: true };
 /**
  * Envolve um `fetch`: depois de cada resposta, se for um 401 do proxy tenant numa área autenticada, chama `aoExpirar` (o coordenador garante uma só execução).
  * A resposta é devolvida INTACTA — quem chamou ainda a recebe, mas a tela já está sendo trocada. Idempotente (não envolve duas vezes).
+ *
+ * `aoRecusar` (opcional) recebe QUALQUER resposta não-ok do proxy tenant numa área autenticada, para outros tratamentos centrais que não são sessão expirada (ex.:
+ * o 403 de política da Fase Expediente 2, decodificado por quem instala). Só observa: nunca altera a resposta e nunca redireciona por conta própria.
  */
 export function envolverFetch(
   original: typeof fetch,
-  opcoes: { aoExpirar: () => void; pathname: () => string; origem?: () => string | undefined },
+  opcoes: {
+    aoExpirar: () => void;
+    pathname: () => string;
+    origem?: () => string | undefined;
+    aoRecusar?: (info: { url: string; status: number; resposta: Response }) => void;
+  },
 ): typeof fetch {
   if ((original as FetchComMarca)[MARCA]) return original;
   const envolvido: FetchComMarca = async (entrada, init) => {
     const resposta = await original(entrada, init);
-    if (resposta.status === 401) {
+    if (!resposta.ok) {
       const url = typeof entrada === "string" ? entrada : entrada instanceof URL ? entrada.href : entrada.url;
-      if (deveEncerrarPorSessaoExpirada({ url, status: resposta.status, pathname: opcoes.pathname(), origem: opcoes.origem?.() })) opcoes.aoExpirar();
+      if (resposta.status === 401) {
+        if (deveEncerrarPorSessaoExpirada({ url, status: resposta.status, pathname: opcoes.pathname(), origem: opcoes.origem?.() })) opcoes.aoExpirar();
+      } else if (opcoes.aoRecusar && ehChamadaTenantAutenticada(url, opcoes.origem?.()) && ehAreaAutenticadaDoTenant(opcoes.pathname())) {
+        opcoes.aoRecusar({ url, status: resposta.status, resposta });
+      }
     }
     return resposta;
   };

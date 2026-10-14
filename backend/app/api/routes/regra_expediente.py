@@ -29,6 +29,7 @@ from app.services.regra_expediente_service import (
     DiaEspecialConflitoError,
     DiaEspecialNaoEditavelError,
     DiaEspecialNaoEncontradoError,
+    RegraExpedienteInvalidaError,
     RegraExpedienteService,
 )
 
@@ -55,9 +56,12 @@ def update_regra_expediente(
     current_user: Usuario = Depends(require_admin_or_gestor),
     db: Session = Depends(get_db),
 ):
-    regra = regra_expediente_service.atualizar(
-        db, payload, empresa_id=current_user.empresa_id, actor_usuario_id=current_user.id
-    )
+    try:
+        regra = regra_expediente_service.atualizar(
+            db, payload, empresa_id=current_user.empresa_id, actor_usuario_id=current_user.id
+        )
+    except RegraExpedienteInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return regra_expediente_service.to_read(db, regra)
 
 

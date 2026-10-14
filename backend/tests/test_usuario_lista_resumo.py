@@ -333,6 +333,7 @@ def test_query_count_constante_resumo_e_listagem(client_admin: TestClient, db_se
     departamento = _departamento(db_session, empresa, "Contagem")
     for _ in range(3):
         _usuario(db_session, empresa, departamento=departamento)
+    client_admin.get("/usuarios/me")  # aquece o cache do gate de expediente (1ª requisição lê a regra; as demais não)
     params = {"empresaId": empresa.id}
 
     resumo_pouco = _contar(client_admin, db_session, "/usuarios/resumo", params)

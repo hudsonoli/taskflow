@@ -279,7 +279,7 @@ export type PermissoesExpediente = {
  *   Atendimento, heads e gestão (ver `podeCriarDemanda` em types/usuario.ts). Criar não é
  *   iniciar: a tarefa entra como rascunho/planejada e só roda no próximo turno.
  *
- * `dentroExpediente` vem de `GET /expediente/estado` (ver lib/estadoExpediente.ts) — desde a
+ * `dentroExpediente` (no Kanban: `trabalhoPermitido`, que já traz as isenções) vem de `GET /expediente/estado` (ver lib/estadoExpediente.ts) — desde a
  * Fase 2G.3 o cálculo é sempre do servidor, nunca do relógio do navegador nem de uma regra
  * baixada aqui. O gate real (que de fato bloqueia `em_execucao`) já é aplicado no backend em
  * `DemandaService._ensure_dentro_expediente`; esta função só espelha esse resultado pra UX.

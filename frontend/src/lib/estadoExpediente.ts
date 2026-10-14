@@ -1,51 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { getEstadoExpedienteReal } from "@/lib/api-backend";
-import type { EstadoExpediente } from "@/types/regra-expediente";
+import { criarStoreEstadoExpediente, type SnapshotEstadoExpediente } from "@/lib/expediente-estado-store";
 
 /**
- * Estado operacional de expediente (Fase 2G.3), calculado no servidor — nunca no relógio do
- * navegador (ver GET /expediente/estado). Poll simples por componente, sem cache
- * compartilhado: diferente dos diretórios (Cliente/Projeto/TipoTarefa/...), este dado muda
- * sozinho com o tempo, então cada consumidor já precisa de um intervalo próprio — um cache
- * compartilhado só adicionaria complexidade sem remover nenhum poll.
+ * Estado operacional de expediente (Fase 2G.3 / Fase Expediente 2), calculado no servidor — nunca no relógio do navegador (ver GET /expediente/estado).
+ *
+ * UM store e UM polling (~30 s) para o app inteiro, ativo só enquanto há quem use: Kanban, Meu Departamento, a tela de configuração e o guarda do AppShell (que mostra
+ * "Fora do horário de expediente") assinam o MESMO dado. A lógica vive em `lib/expediente-estado-store.ts` (pura e testada).
  */
 
-const INTERVALO_MS = 30_000;
+export const storeEstadoExpediente = criarStoreEstadoExpediente({ buscar: getEstadoExpedienteReal });
 
-type Resultado = {
-  estado: EstadoExpediente | null;
-  carregando: boolean;
-};
+const SNAPSHOT_SERVIDOR: SnapshotEstadoExpediente = { estado: null, carregando: true, bloqueio: null };
 
-export function useEstadoExpediente(): Resultado {
-  const [estado, setEstado] = useState<EstadoExpediente | null>(null);
-  const [carregando, setCarregando] = useState(true);
+export function useSnapshotExpediente(): SnapshotEstadoExpediente {
+  return useSyncExternalStore(storeEstadoExpediente.subscribe, storeEstadoExpediente.getSnapshot, () => SNAPSHOT_SERVIDOR);
+}
 
-  useEffect(() => {
-    let cancelado = false;
-
-    function buscar() {
-      getEstadoExpedienteReal()
-        .then((novo) => {
-          if (!cancelado) {
-            setEstado(novo);
-            setCarregando(false);
-          }
-        })
-        .catch(() => {
-          if (!cancelado) setCarregando(false);
-        });
-    }
-
-    buscar();
-    const intervalId = setInterval(buscar, INTERVALO_MS);
-    return () => {
-      cancelado = true;
-      clearInterval(intervalId);
-    };
-  }, []);
-
+export function useEstadoExpediente() {
+  const { estado, carregando } = useSnapshotExpediente();
   return { estado, carregando };
 }
