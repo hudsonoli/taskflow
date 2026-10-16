@@ -184,8 +184,16 @@ def _chaves(valor) -> set[str]:
 
 
 def _etapa_por_nome(corpo: dict, nome: str) -> dict:
-    [linha] = [e for e in corpo["etapas"] if e["etapaNome"].strip().lower() == nome.lower()]
+    [linha] = [e for e in corpo["etapas"] if e["definicaoEtapa"]["nome"].strip().lower() == nome.lower()]
     return linha
+
+
+def _definicoes(corpo: dict, campo: str = "etapas", metrica: str = "n") -> dict[tuple, int]:
+    """{(nome em minúsculas, tipo, (ids de departamento ordenados)): métrica} — a identidade DEFINIÇÃO de etapa devolvida pela API."""
+    return {
+        (e["definicaoEtapa"]["nome"].strip().lower(), e["definicaoEtapa"]["tipo"], tuple(sorted(d["id"] for d in e["definicaoEtapa"]["departamentos"]))): e[metrica]
+        for e in corpo[campo]
+    }
 
 
 # ── AGORA ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -382,10 +390,10 @@ def _cenario_gargalos(db: Session, empresa: Empresa):
     _intervalo(db, x, "pausada", _t(10, 10), _t(10, 12), etapa=ex)  # 2 h
     _intervalo(db, x, "em_execucao", _t(10, 12), _t(11, 0), etapa=ex)  # 12 h (2º ciclo, MESMA etapa)
     _intervalo(db, x, "aguardando_cliente", _t(11, 0), _t(13, 0), etapa=ex)  # termina DEPOIS do período → só 24 h contam
-    # Y — OUTRA Demanda, MESMA definição de etapa (nome com caixa/espaços diferentes), departamento d2, cliente c2
+    # Y — OUTRA Demanda, MESMA definição de etapa (nome com caixa/espaços diferentes; mesmo tipo e MESMO departamento d1), cliente c2
     y = _demanda(db, empresa, cliente_id=c2.id, projeto_id=p2.id)
     ey = _etapa(db, y, 1, "  REDACAO ")
-    _dep_etapa(db, ey, d2)
+    _dep_etapa(db, ey, d1)
     _intervalo(db, y, "em_execucao", _t(11, 0), _t(11, 6), etapa=ey)  # 6 h
     _intervalo(db, y, "bloqueada", _t(11, 6), _t(11, 8), etapa=ey)  # 2 h
     # Z — etapa "Revisao" (aprovacao), departamento d1, cliente c1
@@ -393,7 +401,7 @@ def _cenario_gargalos(db: Session, empresa: Empresa):
     ez = _etapa(db, z, 1, "Revisao", tipo="aprovacao")
     _dep_etapa(db, ez, d1)
     _intervalo(db, z, "em_execucao", _t(10, 0), _t(10, 1), etapa=ez)  # 1 h
-    # W — etapa "Revisao" com intervalo ABERTO desde 13/10 00:00 (só entra em períodos que alcançam 13/10)
+    # W — "Revisao" (aprovacao) mas em OUTRO departamento (d2): outra definição que Z, apesar do mesmo nome e tipo; intervalo ABERTO desde 13/10 00:00
     w = _demanda(db, empresa, cliente_id=c2.id, projeto_id=p2.id)
     ew = _etapa(db, w, 1, "Revisao", tipo="aprovacao")
     _dep_etapa(db, ew, d2)
@@ -416,7 +424,7 @@ def test_gargalos_recorte_ciclos_n_media_e_maior(client_admin, db_session, empre
     corpo = _get(client_admin, "gargalos", **P1).json()
     redacao = _etapa_por_nome(corpo, "redacao")
     # X e Y são DEFINIÇÕES iguais (normalização) e 2 ocorrências — não 6, que seria a contagem bruta de intervalos
-    assert redacao["n"] == 2 and redacao["tipo"] == "execucao"
+    assert redacao["n"] == 2 and redacao["definicaoEtapa"]["tipo"] == "execucao"
     assert redacao["nExecucao"] == 2
     assert redacao["tempoExecucaoTotalSegundos"] == (10 + 12 + 6) * 3600  # X: 10 h recortada + 12 h; Y: 6 h
     assert redacao["tempoExecucaoMedioSegundos"] == 14 * 3600  # 28 h ÷ 2 ocorrências
@@ -425,10 +433,10 @@ def test_gargalos_recorte_ciclos_n_media_e_maior(client_admin, db_session, empre
     assert (redacao["nBloqueado"], redacao["tempoBloqueadoTotalSegundos"], redacao["tempoBloqueadoMaiorSegundos"]) == (1, 2 * 3600, 2 * 3600)
     assert (redacao["nAguardandoCliente"], redacao["tempoAguardandoClienteTotalSegundos"], redacao["tempoAguardandoClienteMaiorSegundos"]) == (1, 24 * 3600, 24 * 3600)
     revisao = _etapa_por_nome(corpo, "revisao")
-    assert revisao["n"] == 1 and revisao["tempoExecucaoTotalSegundos"] == 3600 and revisao["tipo"] == "aprovacao"  # o intervalo aberto de W começa em 13/10: fora do período
+    assert revisao["n"] == 1 and revisao["tempoExecucaoTotalSegundos"] == 3600 and revisao["definicaoEtapa"]["tipo"] == "aprovacao"  # o intervalo aberto de W começa em 13/10: fora do período
     assert corpo["semEtapa"]["n"] == 1 and corpo["semEtapa"]["tempoExecucaoTotalSegundos"] == 300
     # ordenação documentada: maior tempo médio em execução primeiro
-    assert [e["etapaNome"].strip().lower() for e in corpo["etapas"]] == ["redacao", "revisao"] and corpo["etapasTotal"] == 2
+    assert [e["definicaoEtapa"]["nome"].strip().lower() for e in corpo["etapas"]] == ["redacao", "revisao"] and corpo["etapasTotal"] == 2
 
 
 def test_gargalos_intervalo_que_cobre_o_periodo_inteiro_e_fronteiras(client_admin, db_session, empresa) -> None:
@@ -450,6 +458,96 @@ def test_gargalos_etapas_homonimas_na_mesma_demanda_sao_duas_ocorrencias(client_
     linha = _etapa_por_nome(_get(client_admin, "gargalos", **P1).json(), "alteracao")
     assert linha["n"] == 2 and linha["nExecucao"] == 2 and linha["tempoExecucaoTotalSegundos"] == 6 * 3600
     assert linha["tempoExecucaoMedioSegundos"] == 3 * 3600 and linha["tempoExecucaoMaiorSegundos"] == 4 * 3600
+
+
+def _colisoes(db: Session, empresa: Empresa):
+    """Demandas com etapas que COLIDEM por nome/tipo mas diferem em departamento, nome ou tipo (todas com 1 h de execução dentro de P1)."""
+    atendimento, criacao = _departamento(db, empresa), _departamento(db, empresa)
+
+    def etapa_de(nome: str, tipo: str, departamentos: list, *, ordem_de_gravacao=None):
+        demanda = _demanda(db, empresa)
+        etapa = _etapa(db, demanda, 1, nome, tipo=tipo)
+        for dep in (departamentos if ordem_de_gravacao is None else ordem_de_gravacao):
+            _dep_etapa(db, etapa, dep)
+        _intervalo(db, demanda, "em_execucao", _t(10, 0), _t(10, 1), etapa=etapa)
+        return etapa
+
+    return {
+        "atendimento": atendimento,
+        "criacao": criacao,
+        "a1": etapa_de("Aprovacao", "aprovacao", [atendimento]),
+        "a2": etapa_de(" aprovacao ", "aprovacao", [atendimento]),  # mesmo nome normalizado + tipo + departamento → MESMA definição de a1
+        "b1": etapa_de("Aprovacao", "aprovacao", [criacao]),  # mesmo nome e tipo, OUTRO departamento
+        "c1": etapa_de("Aprovacao Final", "aprovacao", [atendimento]),  # nome diferente
+        "d1": etapa_de("Aprovacao", "execucao", [atendimento]),  # tipo diferente
+        "e1": etapa_de("Aprovacao", "aprovacao", [atendimento, criacao]),  # conjunto de departamentos diferente
+        "e2": etapa_de("Aprovacao", "aprovacao", [atendimento, criacao], ordem_de_gravacao=[criacao, atendimento]),  # mesmo conjunto, gravado em OUTRA ordem
+        "f1": etapa_de("Aprovacao", "aprovacao", []),  # sem departamento
+    }
+
+
+def test_definicao_de_etapa_agrupa_so_quando_nome_tipo_e_departamentos_coincidem(client_admin, db_session, empresa) -> None:
+    ctx = _colisoes(db_session, empresa)
+    at, cr = ctx["atendimento"].id, ctx["criacao"].id
+    corpo = _get(client_admin, "gargalos", **P1).json()
+    assert _definicoes(corpo) == {
+        ("aprovacao", "aprovacao", (at,)): 2,  # A: a1 + a2 (nome normalizado igual, mesmo tipo, mesmo departamento) → agrupa
+        ("aprovacao", "aprovacao", (cr,)): 1,  # B: mesmo nome e tipo, departamento diferente → NÃO agrupa
+        ("aprovacao final", "aprovacao", (at,)): 1,  # C: nome diferente
+        ("aprovacao", "execucao", (at,)): 1,  # tipo diferente
+        ("aprovacao", "aprovacao", tuple(sorted((at, cr)))): 2,  # conjunto {atendimento, criacao}: a ordem de gravação não importa (e1 + e2)
+        ("aprovacao", "aprovacao", ()): 1,  # sem departamento é outra definição
+    }
+    # as chaves são distintas por definição e estáveis entre chamadas
+    chaves = [e["definicaoEtapa"]["chave"] for e in corpo["etapas"]]
+    assert len(set(chaves)) == len(chaves) == 6 and all(len(c) == 40 and int(c, 16) >= 0 for c in chaves)
+    assert [e["definicaoEtapa"]["chave"] for e in _get(client_admin, "gargalos", **P1).json()["etapas"]] == chaves
+    assert all(e["tempoExecucaoTotalSegundos"] == e["n"] * 3600 for e in corpo["etapas"])
+
+
+def test_filtro_workflow_etapa_id_so_traz_a_mesma_definicao(client_admin, db_session, empresa) -> None:
+    ctx = _colisoes(db_session, empresa)
+    at, cr = ctx["atendimento"].id, ctx["criacao"].id
+
+    def por_etapa(etapa):
+        corpo = _get(client_admin, "gargalos", **P1, workflowEtapaId=etapa.id).json()
+        return _definicoes(corpo), corpo
+
+    # a1 → só a definição A (a1 e a2): NÃO as etapas de mesmo nome/tipo de outros departamentos, nem nome parecido, nem outro tipo
+    achado, corpo = por_etapa(ctx["a1"])
+    assert achado == {("aprovacao", "aprovacao", (at,)): 2}
+    assert corpo["semEtapa"]["n"] == 0
+    assert por_etapa(ctx["a2"])[0] == achado  # qualquer etapa da mesma definição dá o mesmo resultado
+    assert por_etapa(ctx["b1"])[0] == {("aprovacao", "aprovacao", (cr,)): 1}
+    assert por_etapa(ctx["d1"])[0] == {("aprovacao", "execucao", (at,)): 1}
+    assert por_etapa(ctx["e1"])[0] == {("aprovacao", "aprovacao", tuple(sorted((at, cr)))): 2}
+    assert por_etapa(ctx["f1"])[0] == {("aprovacao", "aprovacao", ()): 1}
+    # a fila atual obedece à mesma definição (nada aberto aqui, mas o filtro não pode ampliar o resultado)
+    assert _get(client_admin, "gargalos", **P1, workflowEtapaId=ctx["a1"].id).json()["fila"] == []
+
+
+def test_filtro_workflow_etapa_id_nao_vaza_entre_empresas(client_admin, db_session, empresa, outra_empresa) -> None:
+    """Etapas de MESMO nome e tipo, ambas sem departamento (a identidade coincide entre as empresas): o filtro de A nunca traz tempo de B."""
+    propria = _demanda(db_session, empresa)
+    etapa_propria = _etapa(db_session, propria, 1, "Revisao", tipo="aprovacao")
+    _intervalo(db_session, propria, "em_execucao", _t(10, 0), _t(10, 1), etapa=etapa_propria)
+    alheia = _demanda(db_session, outra_empresa)
+    etapa_alheia = _etapa(db_session, alheia, 1, "Revisao", tipo="aprovacao")
+    _intervalo(db_session, alheia, "em_execucao", _t(10, 0), _t(10, 9), etapa=etapa_alheia)
+    corpo = _get(client_admin, "gargalos", **P1, workflowEtapaId=etapa_propria.id).json()
+    assert _definicoes(corpo) == {("revisao", "aprovacao", ()): 1} and corpo["etapas"][0]["tempoExecucaoTotalSegundos"] == 3600  # só a 1 h própria (a de B teria 9 h)
+    assert _get(client_admin, "gargalos", **P1, workflowEtapaId=etapa_alheia.id).status_code == 404
+
+
+def test_contrato_nao_expoe_id_de_etapa_materializada_nas_agregacoes(client_admin, db_session, empresa) -> None:
+    ctx = _colisoes(db_session, empresa)
+    corpo = _get(client_admin, "gargalos", **P1).json()
+    [linha] = [e for e in corpo["etapas"] if e["definicaoEtapa"]["departamentos"] == [] ]
+    assert set(linha["definicaoEtapa"]) == {"chave", "nome", "tipo", "departamentos"}
+    assert "etapaId" not in linha and "etapaNome" not in linha and "workflowEtapaId" not in linha
+    ids_materializados = {ctx[k].id for k in ("a1", "a2", "b1", "c1", "d1", "e1", "e2", "f1")}
+    texto = str(corpo)
+    assert not [i for i in ids_materializados if i in texto], "nenhum id de etapa materializada deve aparecer nas agregações"
 
 
 def test_gargalos_intervalo_aberto_conta_ate_o_fim_efetivo(client_admin, db_session, empresa) -> None:
@@ -501,21 +599,23 @@ def test_gargalos_filtros_compoem(client_admin, db_session, empresa) -> None:
 
     def etapas(**filtros):
         corpo = _get(client_admin, "gargalos", **P1, **filtros).json()
-        return {e["etapaNome"].strip().lower(): e["n"] for e in corpo["etapas"]}, corpo
+        return {nome: n for (nome, _tipo, _deps), n in _definicoes(corpo).items()}, corpo
 
-    assert etapas(departamentoId=d1)[0] == {"redacao": 1, "revisao": 1}  # X e Z
-    assert etapas(departamentoId=d2)[0] == {"redacao": 1}  # só Y (W é de d2 mas está fora do período)
-    assert etapas(clienteId=c1)[0] == {"redacao": 1, "revisao": 1}
-    assert etapas(clienteId=c2)[0] == {"redacao": 1}
+    assert etapas(departamentoId=d1)[0] == {"redacao": 2, "revisao": 1}  # X, Y e Z (W é de d2 e está fora do período)
+    assert etapas(departamentoId=d2)[0] == {}
+    assert etapas(clienteId=c1)[0] == {"redacao": 1, "revisao": 1}  # X, Z
+    assert etapas(clienteId=c2)[0] == {"redacao": 1}  # Y
     assert etapas(projetoId=p1)[0] == {"redacao": 1, "revisao": 1} and etapas(projetoId=p2)[0] == {"redacao": 1}
-    # combinações: período + departamento + cliente
+    # combinações: período + departamento + cliente (+ projeto)
     assert etapas(departamentoId=d1, clienteId=c1)[0] == {"redacao": 1, "revisao": 1}
-    assert etapas(departamentoId=d1, clienteId=c2)[0] == {}
+    assert etapas(departamentoId=d1, clienteId=c2)[0] == {"redacao": 1}
+    assert etapas(departamentoId=d2, clienteId=c2)[0] == {}
     assert etapas(departamentoId=d1, clienteId=c1, projetoId=p2)[0] == {}
-    # filtro por etapa (id materializado → expande para a DEFINIÇÃO): Redacao de TODAS as Demandas, sem Revisao
+    # filtro por etapa: UMA etapa materializada → a MESMA definição (nome + tipo + departamentos), em todas as Demandas
     por_etapa, corpo = etapas(workflowEtapaId=ctx["ex"].id)
-    assert por_etapa == {"redacao": 2} and corpo["filtros"]["workflowEtapaId"] == ctx["ex"].id
-    assert etapas(workflowEtapaId=ctx["ex"].id, departamentoId=d2)[0] == {"redacao": 1}
+    assert por_etapa == {"redacao": 2} and corpo["filtros"]["workflowEtapaId"] == ctx["ex"].id  # X e Y
+    assert etapas(workflowEtapaId=ctx["ex"].id, departamentoId=d2)[0] == {}  # a definição é de d1: combinar com d2 não acha nada
+    assert etapas(workflowEtapaId=ctx["ex"].id, clienteId=c2)[0] == {"redacao": 1}
     # o filtro por departamento é DA ETAPA: intervalos sem etapa ficam de fora
     assert etapas(departamentoId=d1)[1]["semEtapa"]["n"] == 0
     assert etapas()[1]["semEtapa"]["n"] == 1
@@ -573,7 +673,7 @@ def _cenario_fila(db: Session, empresa: Empresa):
 def test_fila_wip_idade_na_etapa_e_estado(client_admin, db_session, empresa) -> None:
     _cenario_fila(db_session, empresa)
     corpo = _get(client_admin, "gargalos", **P1).json()
-    por_nome = {f["etapaNome"]: f for f in corpo["fila"]}
+    por_nome = {f["definicaoEtapa"]["nome"]: f for f in corpo["fila"]}
     redacao = por_nome["Redacao"]
     assert (redacao["wip"], redacao["emExecucao"], redacao["bloqueadas"], redacao["aguardandoCliente"], redacao["pausadas"], redacao["planejadas"]) == (3, 1, 1, 1, 0, 0)
     # idade NA ETAPA do mais antigo: f1 (execução+pausa+execução contíguas) desde 12/10 00:00 → 2 d 15 h; f3 NÃO conta 10/10 (voltou de Revisao); f2 só desde 13/10
@@ -582,11 +682,11 @@ def test_fila_wip_idade_na_etapa_e_estado(client_admin, db_session, empresa) -> 
     # idade no ESTADO atual do mais antigo: f1 em_execucao desde 12/10 10:00 (2 d 5 h) — pergunta diferente da idade na etapa
     assert redacao["idadeEstadoMaisAntigoSegundos"] == (2 * 24 + 5) * 3600
     revisao = por_nome["Revisao"]
-    assert revisao["wip"] == 1 and revisao["planejadas"] == 1 and revisao["tipo"] == "aprovacao"
+    assert revisao["wip"] == 1 and revisao["planejadas"] == 1 and revisao["definicaoEtapa"]["tipo"] == "aprovacao"
     assert revisao["maisAntigaTruncadaPelaMedicao"] is True and revisao["maisAntigaDesde"].startswith("2026-10-05T00:00:00")  # começa na migração: idade real pode ser maior
     assert corpo["atual"] == {"wip": 6, "planejadas": 1, "emExecucao": 2, "pausadas": 1, "bloqueadas": 1, "aguardandoCliente": 1}  # rascunho fora
     assert corpo["filaSemEtapa"] == {"workflowConcluido": 1, "semWorkflow": 1}
-    assert [f["etapaNome"] for f in corpo["fila"]] == ["Redacao", "Revisao"] and corpo["filaTotal"] == 2  # maior WIP primeiro
+    assert [f["definicaoEtapa"]["nome"] for f in corpo["fila"]] == ["Redacao", "Revisao"] and corpo["filaTotal"] == 2  # maior WIP primeiro
 
 
 def test_fila_devolucao_recomeca_a_contagem(client_admin, db_session, empresa) -> None:
@@ -605,7 +705,7 @@ def test_fila_respeita_filtros_e_departamento(client_admin, db_session, empresa)
     _dep_etapa(db_session, ctx["e1"], departamento)  # só a etapa de f1 pertence ao departamento
     corpo = _get(client_admin, "gargalos", **P1, departamentoId=departamento.id).json()
     [redacao] = corpo["fila"]
-    assert redacao["wip"] == 1 and redacao["emExecucao"] == 1 and redacao["departamentos"] == [{"id": departamento.id, "nome": departamento.nome}]
+    assert redacao["wip"] == 1 and redacao["emExecucao"] == 1 and redacao["definicaoEtapa"]["departamentos"] == [{"id": departamento.id, "nome": departamento.nome}]
     assert corpo["atual"]["wip"] == 1 and corpo["filaSemEtapa"] == {"workflowConcluido": 0, "semWorkflow": 0}
 
 
@@ -689,20 +789,21 @@ def _contar_queries(db_session: Session, chamada) -> int:
     return len(n)
 
 
-def _popular_volume(db: Session, empresa: Empresa, *, demandas: int, semente: int) -> dict[str, dict]:
+def _popular_volume(db: Session, empresa: Empresa, *, demandas: int, semente: int) -> dict[tuple, dict]:
     """Dataset sintético: `demandas` Demandas, 5 definições de etapa, 3 departamentos, 4 clientes, vários ciclos por etapa. Devolve o ESPERADO por definição calculado em Python (independente do SQL)."""
     rng = random.Random(semente)
     deps = [_departamento(db, empresa) for _ in range(3)]
     clientes = [_cliente(db, empresa) for _ in range(4)]
     nomes = ["Briefing", "Redacao", "Arte", "Revisao", "Aprovacao"]
     inicio, fim = _t(10, 0), _t(14, 0)  # período consultado nos testes de volume (termina antes do agora, 14/10 15:00)
-    esperado: dict[str, dict] = {nome: {"ocorrencias": 0, "exec": {}, "total_exec": 0, "maior_exec": 0, "n_exec": 0} for nome in nomes}
+    esperado: dict[tuple, dict] = {}  # (nome, id do departamento) → esperado; a definição é nome + tipo + departamentos
     for _ in range(demandas):
         d = _demanda(db, empresa, cliente_id=rng.choice(clientes).id, status="pausada")
         cursor = _t(8, 0) + timedelta(minutes=rng.randint(0, 3000))
         for ordem, nome in enumerate(rng.sample(nomes, rng.randint(1, 3)), start=1):
             etapa = _etapa(db, d, ordem, nome)
-            _dep_etapa(db, etapa, rng.choice(deps))
+            departamento = rng.choice(deps)
+            _dep_etapa(db, etapa, departamento)
             exec_etapa = 0
             for ciclo in range(rng.randint(1, 3)):
                 for status in ("em_execucao", "pausada"):
@@ -712,7 +813,7 @@ def _popular_volume(db: Session, empresa: Empresa, *, demandas: int, semente: in
                         recorte = max(timedelta(0), min(cursor + duracao, fim) - max(cursor, inicio))
                         exec_etapa += int(recorte.total_seconds())
                     cursor += duracao
-            registro = esperado[nome]
+            registro = esperado.setdefault((nome, departamento.id), {"total_exec": 0, "maior_exec": 0, "n_exec": 0})
             if exec_etapa > 0:
                 registro["n_exec"] += 1
                 registro["total_exec"] += exec_etapa
@@ -725,15 +826,16 @@ def test_volume_logico_agregacao_bate_com_calculo_independente(client_admin, db_
     esperado = _popular_volume(db_session, empresa, demandas=120, semente=7)
     _popular_volume(db_session, outra_empresa, demandas=60, semente=99)  # a OUTRA empresa não pode interferir
     corpo = _get(client_admin, "gargalos", inicio=_iso(_t(10, 0)), fim=_iso(_t(14, 0)), limite=200).json()
-    achado = {e["etapaNome"]: e for e in corpo["etapas"]}
-    for nome, exp in esperado.items():
+    achado = {(e["definicaoEtapa"]["nome"], e["definicaoEtapa"]["departamentos"][0]["id"]): e for e in corpo["etapas"]}
+    assert len(achado) == len(corpo["etapas"])  # cada (nome, departamento) é UMA definição — sem colisão entre departamentos
+    for chave, exp in esperado.items():
         if exp["n_exec"] == 0:
             continue
-        linha = achado[nome]
-        assert linha["nExecucao"] == exp["n_exec"], nome
-        assert linha["tempoExecucaoTotalSegundos"] == exp["total_exec"], nome
-        assert linha["tempoExecucaoMaiorSegundos"] == exp["maior_exec"], nome
-        assert linha["tempoExecucaoMedioSegundos"] == exp["total_exec"] // exp["n_exec"], nome
+        linha = achado[chave]
+        assert linha["nExecucao"] == exp["n_exec"], chave
+        assert linha["tempoExecucaoTotalSegundos"] == exp["total_exec"], chave
+        assert linha["tempoExecucaoMaiorSegundos"] == exp["maior_exec"], chave
+        assert linha["tempoExecucaoMedioSegundos"] == exp["total_exec"] // exp["n_exec"], chave
 
 
 def _em_execucao_extras(db: Session, empresa: Empresa, quantidade: int) -> None:
@@ -760,4 +862,4 @@ def test_numero_de_queries_nao_cresce_com_o_volume(client_admin, db_session, emp
     _em_execucao_extras(db_session, empresa, 20)
     grande = (_contar_queries(db_session, lambda: _get(client_admin, "agora")), _contar_queries(db_session, lambda: _get(client_admin, "gargalos", inicio=_iso(_t(10, 0)), fim=_iso(_t(14, 0)))))
     assert pequeno == grande  # sem N+1: o mesmo número de consultas com 5 ou 155 Demandas
-    assert grande[0] <= 8 and grande[1] <= 8  # teto documentado: AGORA = 6 de métricas, GARGALOS = 5, mais autenticação/permissão
+    assert grande[0] <= 8 and grande[1] <= 6  # teto documentado: AGORA = 6 de métricas, GARGALOS = 4, mais autenticação/permissão

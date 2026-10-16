@@ -14,8 +14,11 @@ Escopo de triagem = `planejada`, `em_execucao`, `pausada`, `bloqueada`, `aguarda
 ## GARGALOS (histórico por período + fila atual)
 - Período padrão = últimos 30 dias; máximo 90. `fimEfetivo = min(fim, agora)`.
 - Recorte: cada intervalo conta só a parte que cai em [inicio, fimEfetivo] (`duracao_segundos` integral NUNCA é usado); intervalo aberto usa `fimEfetivo` (nada é gravado).
-- Identidade da etapa: definição = nome normalizado + tipo (a etapa de workflow é snapshot por Demanda; ids não são estáveis). Ocorrência = (Demanda × etapa materializada): vários ciclos
+- Identidade da etapa: as métricas são "por DEFINIÇÃO de etapa", não "por etapa materializada". A etapa de workflow é snapshot por Demanda (ids diferentes em cada Demanda; a etapa do template é
+  recriada a cada edição do modelo e não é copiada para o snapshot — não existe origem estável por etapa). Definição = nome normalizado + tipo + CONJUNTO CANÔNICO de departamentos responsáveis
+  (ids ordenados): mesmo nome e tipo com departamentos diferentes NÃO se agrupam. O workflow de origem não entra na identidade. Ocorrência = (Demanda × etapa materializada): vários ciclos
   execução → pausa → execução da mesma Demanda na mesma etapa somam numa ocorrência. `n` = ocorrências com tempo medido; cada média = soma ÷ ocorrências com tempo > 0 NAQUELE estado.
+- `workflowEtapaId` (filtro): UMA etapa materializada → métricas da MESMA definição (nome + tipo + departamentos dessa etapa) em todas as Demandas da empresa; nunca "qualquer etapa de mesmo nome".
 - Cobertura: `medicaoDesde` = menor início de intervalo da empresa; `coberturaParcial` quando o período começa antes dele. O passado não é estimado.
 - Fila/WIP: estado ATUAL (ignora o período), pela etapa do intervalo aberto (mantida em sincronia com a etapa atual do workflow pelo motor). Idade NA ETAPA = início da sequência contínua de
   intervalos da mesma etapa; devolução à etapa anterior recomeça a contagem.
@@ -24,6 +27,7 @@ Escopo de triagem = `planejada`, `em_execucao`, `pausada`, `bloqueada`, `aguarda
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -41,6 +45,7 @@ from app.schemas.trafego_operacional import (
     AgoraDemandaRead,
     AgoraKpisRead,
     AtualRead,
+    DefinicaoEtapaRead,
     EtapaAtualRead,
     FiltrosGargalosRead,
     FilaEtapaRead,
@@ -70,6 +75,23 @@ class EtapaNaoEncontradaError(LookupError):
 
 def _media(total: int, n: int) -> int | None:
     return total // n if n > 0 else None
+
+
+def _ids_de_departamentos(deps: str | None) -> list[str]:
+    """Conjunto canônico ('id1,id2', ids ordenados) → lista de ids."""
+    return [parte for parte in (deps or "").split(",") if parte]
+
+
+def _definicao(linha: dict, nomes_departamento: dict[str, str]) -> DefinicaoEtapaRead:
+    """Identidade da DEFINIÇÃO de etapa: nome normalizado + tipo + conjunto canônico de departamentos. `chave` é um hash determinístico dessa tripla (opaco para o cliente)."""
+    ids = _ids_de_departamentos(linha["deps"])
+    chave = hashlib.sha1(f"{linha['chave']}\x1f{linha['tipo']}\x1f{','.join(ids)}".encode("utf-8")).hexdigest()  # noqa: S324 — identificador, não segurança
+    return DefinicaoEtapaRead(
+        chave=chave,
+        nome=linha["nome"],
+        tipo=linha["tipo"],
+        departamentos=[RefNomeRead(id=i, nome=nomes_departamento[i]) for i in ids if i in nomes_departamento],
+    )
 
 
 class TrafegoOperacionalService:
@@ -200,27 +222,29 @@ class TrafegoOperacionalService:
             raise PeriodoInvalidoError(f"O período máximo é de {PERIODO_MAXIMO.days} dias.")
         fim_efetivo = min(fim, agora)
 
-        etapa_chave = etapa_tipo = None
+        etapa_chave = etapa_tipo = etapa_deps = None
         if workflow_etapa_id is not None:
             definicao = self.repository.definicao_da_etapa(db, empresa_id=empresa_id, etapa_id=workflow_etapa_id)
             if definicao is None:
                 raise EtapaNaoEncontradaError("Etapa não encontrada.")
-            etapa_chave, etapa_tipo = definicao
+            etapa_chave, etapa_tipo, etapa_deps = definicao
         filtros = FiltrosOperacionais(
-            departamento_id=departamento_id, cliente_id=cliente_id, projeto_id=projeto_id, etapa_chave=etapa_chave, etapa_tipo=etapa_tipo
+            departamento_id=departamento_id,
+            cliente_id=cliente_id,
+            projeto_id=projeto_id,
+            etapa_chave=etapa_chave,
+            etapa_tipo=etapa_tipo,
+            etapa_deps=etapa_deps,
         )
 
         medicao = self.repository.medicao_desde(db, empresa_id=empresa_id)
         parcial = medicao is None or inicio < medicao
 
         linhas = self.repository.tempo_por_etapa(db, empresa_id=empresa_id, inicio=inicio, fim_efetivo=fim_efetivo, filtros=filtros) if fim_efetivo > inicio else []
-        deps_por_def: dict[tuple[str, str], list[RefNomeRead]] = defaultdict(list)
-        if linhas:
-            for chave, tipo, departamento, nome in self.repository.departamentos_por_definicao_no_periodo(
-                db, empresa_id=empresa_id, inicio=inicio, fim_efetivo=fim_efetivo, filtros=filtros
-            ):
-                deps_por_def[(chave, tipo)].append(RefNomeRead(id=departamento, nome=nome))
-
+        fila_linhas = self.repository.fila_atual(db, empresa_id=empresa_id, filtros=filtros)
+        # Nomes dos departamentos das definições devolvidas (período + fila) — UMA consulta; os ids vêm do próprio conjunto canônico da definição.
+        ids_departamento = sorted({i for linha in (*linhas, *fila_linhas) if linha["chave"] is not None for i in _ids_de_departamentos(linha["deps"])})
+        nomes_departamento = self.repository.departamentos_por_ids(db, empresa_id=empresa_id, departamento_ids=ids_departamento)
         etapas: list[GargaloEtapaRead] = []
         sem_etapa = TempoSemEtapaRead(
             n=0, nExecucao=0, tempoExecucaoTotalSegundos=0, tempoExecucaoMedioSegundos=None, tempoExecucaoMaiorSegundos=None, nPausado=0, tempoPausadoTotalSegundos=0,
@@ -244,10 +268,7 @@ class TrafegoOperacionalService:
                 continue
             etapas.append(
                 GargaloEtapaRead(
-                    etapaId=linha["etapa_ref_id"],
-                    etapaNome=linha["nome"],
-                    tipo=linha["tipo"],
-                    departamentos=deps_por_def.get((linha["chave"], linha["tipo"]), []),
+                    definicaoEtapa=_definicao(linha, nomes_departamento),
                     n=linha["n"],
                     nExecucao=linha["n_exec"],
                     tempoExecucaoTotalSegundos=linha["exec_total"],
@@ -268,12 +289,6 @@ class TrafegoOperacionalService:
                 )
             )
 
-        fila_linhas = self.repository.fila_atual(db, empresa_id=empresa_id, filtros=filtros)
-        deps_fila: dict[tuple[str, str], list[RefNomeRead]] = defaultdict(list)
-        if any(linha["categoria"] == "etapa" for linha in fila_linhas):
-            for chave, tipo, departamento, nome in self.repository.departamentos_da_fila(db, empresa_id=empresa_id, filtros=filtros):
-                deps_fila[(chave, tipo)].append(RefNomeRead(id=departamento, nome=nome))
-
         fila: list[FilaEtapaRead] = []
         concluido = sem_workflow = 0
         wip = planejadas = em_execucao = pausadas = bloqueadas = aguardando = 0
@@ -292,10 +307,7 @@ class TrafegoOperacionalService:
                 continue
             fila.append(
                 FilaEtapaRead(
-                    etapaId=linha["etapa_ref_id"],
-                    etapaNome=linha["nome"],
-                    tipo=linha["tipo"],
-                    departamentos=deps_fila.get((linha["chave"], linha["tipo"]), []),
+                    definicaoEtapa=_definicao(linha, nomes_departamento),
                     wip=linha["wip"],
                     planejadas=linha["planejadas"],
                     emExecucao=linha["em_execucao"],

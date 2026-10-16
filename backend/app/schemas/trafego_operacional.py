@@ -96,17 +96,27 @@ class FiltrosGargalosRead(_Read):
     workflow_etapa_id: str | None = Field(alias="workflowEtapaId")
 
 
+class DefinicaoEtapaRead(_Read):
+    """DEFINIÇÃO de etapa — a identidade usada para agregar. Métricas "por definição" agregam MUITAS etapas materializadas (uma por Demanda); por isso nenhum id de etapa materializada é
+    devolvido aqui como se fosse a identidade global.
+
+    A definição é: nome normalizado (minúsculas, sem espaços nas pontas) + `tipo` + CONJUNTO CANÔNICO de departamentos responsáveis (ids ordenados). Mesmo nome e tipo com departamentos
+    diferentes são definições diferentes; a ordem em que os departamentos foram gravados não importa. O workflow (modelo) de origem NÃO faz parte da identidade.
+    `chave` = identificador opaco e determinístico (hash) dessa tripla — serve de chave de lista na UI; `nome` é só apresentação (nome com espaços aparados, como gravado)."""
+
+    chave: str
+    nome: str
+    tipo: str
+    departamentos: list[RefNomeRead]
+
+
 class GargaloEtapaRead(_Read):
-    """Uma DEFINIÇÃO de etapa (nome normalizado + tipo) agregada sobre todas as Demandas do período. A etapa de workflow é um snapshot por Demanda (ids não são estáveis entre Demandas); a
-    definição é a identidade que o gestor reconhece. `etapaId` é o id de UMA etapa materializada representativa (serve de filtro `workflowEtapaId`, que se expande para a definição).
+    """Métricas de UMA definição de etapa (ver `DefinicaoEtapaRead`) agregadas sobre todas as Demandas do período — NÃO de uma etapa materializada.
 
     `n` = ocorrências de etapa (par Demanda × etapa materializada) com algum tempo medido no período. Cada média usa como denominador SÓ as ocorrências com tempo > 0 naquele estado
     (`nExecucao`, `nPausado`...). Todos os tempos são OPERACIONAIS, recortados ao período."""
 
-    etapa_id: str = Field(alias="etapaId")
-    etapa_nome: str = Field(alias="etapaNome")
-    tipo: str
-    departamentos: list[RefNomeRead]
+    definicao_etapa: DefinicaoEtapaRead = Field(alias="definicaoEtapa")
     n: int
 
     n_execucao: int = Field(alias="nExecucao")
@@ -153,10 +163,7 @@ class FilaEtapaRead(_Read):
     aberto — uma devolução à etapa anterior recomeça a contagem. `idadeEstadoMaisAntigoSegundos` = idade no ESTADO atual do item de estado mais antigo (outra pergunta).
     `maisAntigaTruncadaPelaMedicao`: a sequência começa no intervalo inicial da migração (a idade real pode ser maior que a medida)."""
 
-    etapa_id: str = Field(alias="etapaId")
-    etapa_nome: str = Field(alias="etapaNome")
-    tipo: str
-    departamentos: list[RefNomeRead]
+    definicao_etapa: DefinicaoEtapaRead = Field(alias="definicaoEtapa")
     wip: int
     planejadas: int
     em_execucao: int = Field(alias="emExecucao")

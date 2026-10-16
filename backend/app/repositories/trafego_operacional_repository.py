@@ -4,7 +4,8 @@ Fonte do tempo: `demanda_status_intervalos` (tempo OPERACIONAL). Este módulo NU
 todas com `empresa_id` em CADA tabela tocada (demandas, intervalos, usuários, departamentos, projetos, clientes — inclusive nas subconsultas), e SQL com parâmetros ligados: os filtros
 opcionais entram como FRAGMENTOS FIXOS deste arquivo (nunca texto vindo do cliente concatenado).
 
-Etapa de workflow é snapshot por Demanda (sem FK para o template e ids não estáveis): a identidade agregável é a DEFINIÇÃO = `lower(btrim(nome))` + `tipo`.
+Etapa de workflow é snapshot por Demanda (sem FK para a etapa do template — recriada a cada edição do modelo — e com ids diferentes em cada Demanda): a identidade agregável é a
+DEFINIÇÃO = `lower(btrim(nome))` + `tipo` + CONJUNTO CANÔNICO de departamentos responsáveis (ids ordenados). Mesmo nome e tipo com departamentos diferentes NÃO são a mesma definição.
 """
 
 from __future__ import annotations
@@ -21,8 +22,22 @@ from sqlalchemy.orm import Session
 STATUS_TRIAGEM = ("planejada", "em_execucao", "pausada", "bloqueada", "aguardando_cliente")
 STATUS_TEMPO = ("em_execucao", "pausada", "bloqueada", "aguardando_cliente")
 
-# Definição de etapa (identidade agregável) — fragmento SQL fixo, reusado em todas as consultas.
+# Definição de etapa (identidade agregável) — fragmentos SQL fixos, reusados em todas as consultas.
 _CHAVE_ETAPA = "lower(btrim(e.nome))"
+# Conjunto canônico de departamentos responsáveis da etapa materializada `e`: ids ordenados e unidos por vírgula ('' = nenhum). Determinístico e independente da ordem de gravação.
+_DEPARTAMENTOS_DA_ETAPA = (
+    "(SELECT COALESCE(string_agg(dr.departamento_id, ',' ORDER BY dr.departamento_id), '') "
+    "FROM demanda_workflow_etapa_departamentos_responsaveis dr WHERE dr.demanda_workflow_etapa_id = e.id)"
+)
+
+
+def _deps_da_etapa(etapa_id_sql: str) -> str:
+    """Conjunto canônico de departamentos responsáveis da etapa `etapa_id_sql` ('' = nenhum, ou sem etapa) — subconsulta correlacionada resolvida pela PK
+    (`demanda_workflow_etapa_id`, `departamento_id`), calculada UMA vez por ocorrência de etapa (nunca por linha de intervalo)."""
+    return (
+        "COALESCE((SELECT string_agg(dr.departamento_id, ',' ORDER BY dr.departamento_id) "
+        f"FROM demanda_workflow_etapa_departamentos_responsaveis dr WHERE dr.demanda_workflow_etapa_id = {etapa_id_sql}), '')"
+    )
 
 
 @dataclass(frozen=True)
@@ -30,9 +45,10 @@ class FiltrosOperacionais:
     departamento_id: str | None = None
     cliente_id: str | None = None
     projeto_id: str | None = None
-    # Definição de etapa (resolvida de `workflowEtapaId` pelo service): (chave normalizada, tipo).
+    # Definição de etapa (resolvida de `workflowEtapaId` pelo service): (nome normalizado, tipo, conjunto canônico de departamentos).
     etapa_chave: str | None = None
     etapa_tipo: str | None = None
+    etapa_deps: str | None = None
 
 
 def _inteiro(valor: Any) -> int:
@@ -67,16 +83,27 @@ class TrafegoOperacionalRepository:
             {"empresa_id": empresa_id},
         ).scalar_one_or_none()
 
-    def definicao_da_etapa(self, db: Session, *, empresa_id: str, etapa_id: str) -> tuple[str, str] | None:
-        """(chave, tipo) da definição da etapa materializada `etapa_id`, SÓ se ela pertence a uma Demanda da empresa (outra empresa = inexistente)."""
+    def definicao_da_etapa(self, db: Session, *, empresa_id: str, etapa_id: str) -> tuple[str, str, str] | None:
+        """(nome normalizado, tipo, conjunto canônico de departamentos) da definição da etapa materializada `etapa_id` — a definição DESTA etapa, não "qualquer etapa de mesmo nome".
+        Só se ela pertence a uma Demanda da empresa (outra empresa = inexistente)."""
         linha = db.execute(
             text(
-                f"SELECT {_CHAVE_ETAPA} AS chave, e.tipo AS tipo FROM demanda_workflow_etapas e "
+                f"SELECT {_CHAVE_ETAPA} AS chave, e.tipo AS tipo, {_DEPARTAMENTOS_DA_ETAPA} AS deps FROM demanda_workflow_etapas e "
                 "JOIN demandas d ON d.id = e.demanda_id AND d.empresa_id = :empresa_id WHERE e.id = :etapa_id"
             ),
             {"empresa_id": empresa_id, "etapa_id": etapa_id},
         ).one_or_none()
-        return (linha.chave, linha.tipo) if linha is not None else None
+        return (linha.chave, linha.tipo, linha.deps) if linha is not None else None
+
+    def departamentos_por_ids(self, db: Session, *, empresa_id: str, departamento_ids: list[str]) -> dict[str, str]:
+        """{departamento_id: nome} (só departamentos da empresa)."""
+        if not departamento_ids:
+            return {}
+        linhas = db.execute(
+            text("SELECT id, nome FROM departamentos WHERE empresa_id = :empresa_id AND id = ANY(:ids)"),
+            {"empresa_id": empresa_id, "ids": departamento_ids},
+        ).all()
+        return {linha[0]: linha[1] for linha in linhas}
 
     # ----------------------------------------------------------------------------------
     # AGORA
@@ -218,9 +245,10 @@ class TrafegoOperacionalRepository:
             )
             params["f_departamento_id"] = filtros.departamento_id
         if filtros.etapa_chave is not None:
-            partes.append(f"AND {_CHAVE_ETAPA} = :f_etapa_chave AND e.tipo = :f_etapa_tipo")
+            partes.append(f"AND {_CHAVE_ETAPA} = :f_etapa_chave AND e.tipo = :f_etapa_tipo AND {_DEPARTAMENTOS_DA_ETAPA} = :f_etapa_deps")
             params["f_etapa_chave"] = filtros.etapa_chave
             params["f_etapa_tipo"] = filtros.etapa_tipo
+            params["f_etapa_deps"] = filtros.etapa_deps or ""
         return " ".join(partes)
 
     def _base_gargalos(self, empresa_id: str, inicio: datetime, fim_efetivo: datetime, filtros: FiltrosOperacionais) -> tuple[str, dict[str, Any]]:
@@ -254,14 +282,14 @@ class TrafegoOperacionalRepository:
         sql = f"""
             WITH {base},
             ocorrencia AS (
-                SELECT demanda_id, workflow_etapa_id,
+                SELECT demanda_id, workflow_etapa_id, {_deps_da_etapa("workflow_etapa_id")} AS deps,
                        COALESCE(SUM(seg) FILTER (WHERE status = 'em_execucao'), 0) AS exec_s,
                        COALESCE(SUM(seg) FILTER (WHERE status = 'pausada'), 0) AS pausa_s,
                        COALESCE(SUM(seg) FILTER (WHERE status = 'bloqueada'), 0) AS bloq_s,
                        COALESCE(SUM(seg) FILTER (WHERE status = 'aguardando_cliente'), 0) AS cli_s
                 FROM base GROUP BY demanda_id, workflow_etapa_id
             )
-            SELECT {_CHAVE_ETAPA} AS chave, e.tipo AS tipo, min(e.nome) AS nome, min(e.id) AS etapa_ref_id,
+            SELECT {_CHAVE_ETAPA} AS chave, e.tipo AS tipo, o.deps AS deps, min(btrim(e.nome)) AS nome,
                    count(*) AS n,
                    count(*) FILTER (WHERE o.exec_s > 0) AS n_exec, COALESCE(sum(o.exec_s), 0) AS exec_total, max(o.exec_s) FILTER (WHERE o.exec_s > 0) AS exec_maior,
                    count(*) FILTER (WHERE o.pausa_s > 0) AS n_pausa, COALESCE(sum(o.pausa_s), 0) AS pausa_total, max(o.pausa_s) FILTER (WHERE o.pausa_s > 0) AS pausa_maior,
@@ -269,17 +297,17 @@ class TrafegoOperacionalRepository:
                    count(*) FILTER (WHERE o.cli_s > 0) AS n_cli, COALESCE(sum(o.cli_s), 0) AS cli_total, max(o.cli_s) FILTER (WHERE o.cli_s > 0) AS cli_maior
             FROM ocorrencia o
             LEFT JOIN demanda_workflow_etapas e ON e.id = o.workflow_etapa_id AND e.demanda_id = o.demanda_id
-            GROUP BY {_CHAVE_ETAPA}, e.tipo
+            GROUP BY {_CHAVE_ETAPA}, e.tipo, o.deps
             ORDER BY (COALESCE(sum(o.exec_s) FILTER (WHERE o.exec_s > 0), 0) / NULLIF(count(*) FILTER (WHERE o.exec_s > 0), 0)) DESC NULLS LAST,
-                     count(*) DESC, {_CHAVE_ETAPA} ASC NULLS LAST, e.tipo ASC NULLS LAST
+                     count(*) DESC, {_CHAVE_ETAPA} ASC NULLS LAST, e.tipo ASC NULLS LAST, o.deps ASC
         """
         linhas = db.execute(text(sql), params).all()
         return [
             {
                 "chave": linha.chave,
                 "tipo": linha.tipo,
+                "deps": linha.deps,
                 "nome": linha.nome,
-                "etapa_ref_id": linha.etapa_ref_id,
                 "n": int(linha.n),
                 "n_exec": int(linha.n_exec),
                 "exec_total": _inteiro(linha.exec_total),
@@ -297,22 +325,6 @@ class TrafegoOperacionalRepository:
             for linha in linhas
         ]
 
-    def departamentos_por_definicao_no_periodo(
-        self, db: Session, *, empresa_id: str, inicio: datetime, fim_efetivo: datetime, filtros: FiltrosOperacionais
-    ) -> list[tuple[str, str, str, str]]:
-        """(chave, tipo, departamento_id, nome) — departamentos responsáveis só das etapas que aparecem na `base` do período (limitado pelos dados medidos, não pela empresa inteira)."""
-        base, params = self._base_gargalos(empresa_id, inicio, fim_efetivo, filtros)
-        sql = f"""
-            WITH {base}
-            SELECT DISTINCT {_CHAVE_ETAPA} AS chave, e.tipo, dep.id, dep.nome
-            FROM (SELECT DISTINCT workflow_etapa_id FROM base WHERE workflow_etapa_id IS NOT NULL) b
-            JOIN demanda_workflow_etapas e ON e.id = b.workflow_etapa_id
-            JOIN demanda_workflow_etapa_departamentos_responsaveis dr ON dr.demanda_workflow_etapa_id = e.id
-            JOIN departamentos dep ON dep.id = dr.departamento_id AND dep.empresa_id = :empresa_id
-            ORDER BY dep.nome, dep.id
-        """
-        return [(linha[0], linha[1], linha[2], linha[3]) for linha in db.execute(text(sql), params).all()]
-
     # ----------------------------------------------------------------------------------
     # GARGALOS — fila / WIP atual por etapa
     # ----------------------------------------------------------------------------------
@@ -322,7 +334,7 @@ class TrafegoOperacionalRepository:
         filtro_sql = self._filtros_sql(filtros, params)
         sql = f"""
             abertos AS (
-                SELECT i.demanda_id, i.workflow_etapa_id, i.status, i.inicio_em,
+                SELECT i.demanda_id, i.workflow_etapa_id, i.status, i.inicio_em, {_deps_da_etapa("i.workflow_etapa_id")} AS deps,
                        EXISTS (SELECT 1 FROM demanda_workflow_etapas w WHERE w.demanda_id = d.id) AS tem_workflow
                 FROM demanda_status_intervalos i
                 JOIN demandas d ON d.id = i.demanda_id AND d.empresa_id = :empresa_id
@@ -367,7 +379,7 @@ class TrafegoOperacionalRepository:
             )
             SELECT
                 CASE WHEN a.workflow_etapa_id IS NOT NULL THEN 'etapa' WHEN a.tem_workflow THEN 'workflow_concluido' ELSE 'sem_workflow' END AS categoria,
-                {_CHAVE_ETAPA} AS chave, e.tipo AS tipo, min(e.nome) AS nome, min(e.id) AS etapa_ref_id,
+                {_CHAVE_ETAPA} AS chave, e.tipo AS tipo, a.deps AS deps, min(btrim(e.nome)) AS nome,
                 count(*) AS wip,
                 count(*) FILTER (WHERE a.status = 'planejada') AS planejadas,
                 count(*) FILTER (WHERE a.status = 'em_execucao') AS em_execucao,
@@ -381,22 +393,8 @@ class TrafegoOperacionalRepository:
             JOIN aberto_seq asq ON asq.demanda_id = a.demanda_id
             JOIN desde ds ON ds.demanda_id = asq.demanda_id AND ds.seq = asq.seq
             LEFT JOIN demanda_workflow_etapas e ON e.id = a.workflow_etapa_id AND e.demanda_id = a.demanda_id
-            GROUP BY 1, {_CHAVE_ETAPA}, e.tipo
-            ORDER BY count(*) DESC, min(ds.etapa_desde) ASC, {_CHAVE_ETAPA} ASC NULLS LAST, e.tipo ASC NULLS LAST
+            GROUP BY 1, {_CHAVE_ETAPA}, e.tipo, a.deps
+            ORDER BY count(*) DESC, min(ds.etapa_desde) ASC, {_CHAVE_ETAPA} ASC NULLS LAST, e.tipo ASC NULLS LAST, a.deps ASC
         """
         linhas = db.execute(text(sql), params).all()
         return [dict(linha._mapping) for linha in linhas]
-
-    def departamentos_da_fila(self, db: Session, *, empresa_id: str, filtros: FiltrosOperacionais) -> list[tuple[str, str, str, str]]:
-        """(chave, tipo, departamento_id, nome) dos departamentos responsáveis das etapas ATUAIS da fila."""
-        abertos, params = self._abertos_sql(empresa_id, filtros)
-        sql = f"""
-            WITH {abertos}
-            SELECT DISTINCT {_CHAVE_ETAPA} AS chave, e.tipo, dep.id, dep.nome
-            FROM (SELECT DISTINCT workflow_etapa_id FROM abertos WHERE workflow_etapa_id IS NOT NULL) b
-            JOIN demanda_workflow_etapas e ON e.id = b.workflow_etapa_id
-            JOIN demanda_workflow_etapa_departamentos_responsaveis dr ON dr.demanda_workflow_etapa_id = e.id
-            JOIN departamentos dep ON dep.id = dr.departamento_id AND dep.empresa_id = :empresa_id
-            ORDER BY dep.nome, dep.id
-        """
-        return [(linha[0], linha[1], linha[2], linha[3]) for linha in db.execute(text(sql), params).all()]
