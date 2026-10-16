@@ -170,3 +170,68 @@ Métricas de duração só serão expostas em produção depois da Fase Expedien
 Hoje **concluir o último passo encerra o workflow e NÃO conclui a Demanda** (decisão do 8A, coberta por testes). A decisão de produto aprovada diz que, com todas as etapas concluídas e sem aprovação pendente, a Demanda deve convergir para `concluida`. Não foi implementado aqui
 (`WORKFLOW_FINAL_AUTO_COMPLETE_PENDING=SIM`): mexe num contrato existente e tem efeitos colaterais (resolução de SLA, notificações, `status_alterado` com ator, aprovação externa em aberto, e o `workflow_etapa_id` NULL do último intervalo). Desenho: no fim de
 `_avancar_etapa`, se `proxima is None` e nenhuma `aprovacao_externa` aberta, chamar o MESMO caminho de `update_demanda` para `concluida` (um único ponto, com o ator da ação) — o motor de intervalos já o trataria como terminal. Até lá, o último intervalo fica `em_execucao` com etapa NULL.
+
+## Tráfego V2 — Fase 2: camada backend de MÉTRICAS OPERACIONAIS — implementado em branch
+
+> **Estado:** branch `feature/trafego-v2-metricas`, **sem merge e sem deploy**. Só backend, somente leitura, **sem migration** e **sem frontend** (a UI AGORA/GARGALOS vem depois da revisão).
+> Código: `app/api/routes/trafego_operacional.py` → `TrafegoOperacionalService` → `TrafegoOperacionalRepository` (SQL agregado) + `app/schemas/trafego_operacional.py`.
+
+**TEMPO OPERACIONAL ≠ TEMPO PESSOAL.** As duas rotas leem **só** `demanda_status_intervalos`; nenhuma lê `sessoes_trabalho` (há teste que captura o SQL emitido). Nenhum contrato tem `horasTrabalhadas*`, "executor"
+ou métrica por pessoa. "Em execução há 2 h" significa que a **Demanda** está nesse estado há 2 h — não que alguém tenha trabalhado nela. **CARGA não existe aqui** (fica para a 11B.2B).
+
+| Rota | Pergunta | Natureza |
+|---|---|---|
+| `GET /trafego/operacional/agora` | O que está acontecendo e o que precisa de triagem? | estado ATUAL |
+| `GET /trafego/operacional/gargalos` | Onde o tempo vai e onde a fila trava? | histórico por período + fila atual |
+
+**Autorização:** `require_trafego_gerenciar()` — a mesma dependency de `/sessoes-trabalho` (piso `perfil_base ∈ {admin, gestor}` + permissão `trafego.gerenciar`; operador não passa nem com concessão). Nenhuma permissão nova. A
+empresa vem do token; não há parâmetro de empresa, e `empresa_id` está em cada tabela de cada consulta (demandas, intervalos, usuários, departamentos, projetos, clientes — também nas subconsultas).
+
+### AGORA (estado atual + triagem)
+
+Escopo: `planejada`, `em_execucao`, `pausada`, `bloqueada`, `aguardando_cliente`. Rascunho e terminais (`concluida`, `cancelada`, `arquivada`) ficam de fora de todos os KPIs.
+
+| KPI | Definição |
+|---|---|
+| `emExecucao` | status `em_execucao` |
+| `atrasadas` | prazo preenchido e `prazo < agora`. **Prazo** = `Demanda.prazo_etapa_atual` (campo manual da Demanda — a mesma noção de Notificações/Meu Dia/Pauta; não existe prazo por etapa no produto hoje) |
+| `vencemHoje` | prazo dentro do **dia local da empresa** (fuso da `regra_expediente`, `[início do dia, início do seguinte)`; nunca o fuso do container/navegador). Inclui quem já venceu hoje (também em `atrasadas`; a linha traz `atrasada`) |
+| `semPrazo` | prazo nulo |
+| `semResponsavel` | com etapa atual → nenhum **usuário** responsável pela etapa atual; sem etapa atual (sem workflow, ou workflow concluído) → nenhum responsável na Demanda (`demanda_responsaveis`). Departamento sozinho não é responsável |
+| `semEtapaAtual` | Demanda aberta com workflow cujas etapas estão todas concluídas (pendência conhecida; **não** é erro) |
+
+Etapa atual = menor `ordem` com `status != 'concluida'` (a mesma derivação de `_derivar_etapa_atual_id` e do motor de intervalos). Lista "em execução agora" (`limite` padrão 50, máx. 200; `emExecucaoTotal`/`truncado`):
+`demandaId`, `codigoReferencia`, `numeroOperacional`, `identificador`, `titulo`, `projeto`, `cliente`, `etapaAtual` (id, nome, tipo, departamentos responsáveis), `responsaveis` (só id e nome; **atribuição**, nunca executor; vêm da etapa atual
+ou, sem etapa atual, da Demanda — `origemResponsaveis`), `status`, `inicioEstadoAtual`, `idadeEstadoSegundos`, `prazo`, `atrasada`. `idadeEstadoSegundos = agoraServidor − inicio_em` do intervalo **aberto**; sem intervalo aberto devolve `null` (nunca inventa).
+A resposta traz `agoraServidor` (a UI não usa o relógio do navegador como autoridade inicial). Ordem: atrasadas primeiro, depois a mais antiga no estado, depois o maior número operacional.
+
+### GARGALOS (histórico por período + fila atual)
+
+- **Período:** padrão = últimos 30 dias; **máximo 90** (422 acima, com início ≥ fim ou sem timezone). Só `fim` informado → `inicio = fim − 30 d`. `fimEfetivo = min(fim, agora)`.
+- **Recorte (`PERIOD_CLIPPING`):** cada intervalo conta só a parte dentro de `[inicio, fimEfetivo]` (`LEAST/GREATEST` no SQL); `duracao_segundos` integral nunca é usado. Intervalo **aberto** usa `fimEfetivo` — só no cálculo, nada é gravado. Um
+  intervalo que termina no início do período, ou começa no fim, não tem segundo algum dentro dele.
+- **Cobertura:** `medicaoDesde` = menor `inicio_em` de intervalo da empresa (marca da migration 0050); `coberturaParcial = medicaoDesde IS NULL OR inicio < medicaoDesde`. O passado anterior à medição não é estimado.
+- **Identidade da etapa:** a etapa de workflow é snapshot por Demanda (ids não são estáveis entre Demandas), então a **definição** agregável é `lower(btrim(nome))` + `tipo`. `etapaId` é uma etapa materializada representativa; o filtro `workflowEtapaId` aceita qualquer
+  etapa da empresa e se expande para a definição (outra empresa/inexistente = 404). A normalização depende da collation do banco para acentos.
+- **Denominador (`STEP_SAMPLE_DENOMINATOR`):** primeiro soma, por (**Demanda × etapa materializada** × estado), todos os intervalos recortados — vários ciclos execução → pausa → execução da mesma Demanda na mesma etapa viram **uma** ocorrência; duas
+  etapas homônimas da mesma Demanda são duas ocorrências. Depois agrega por definição. `n` = ocorrências com algum tempo medido; cada média = soma ÷ ocorrências com tempo **> 0 naquele estado** (`nExecucao`, `nPausado`, `nBloqueado`, `nAguardandoCliente`).
+  Nunca há média sem `n`. Estados: `em_execucao`, `pausada`, `bloqueada`, `aguardando_cliente`, **sem misturar** (rascunho e planejada não são medidos aqui).
+- **Sem etapa:** intervalos sem `workflow_etapa_id` (sem workflow, ou workflow concluído) saem em `semEtapa` (ocorrência = Demanda).
+- **Filtros** (compõem entre si): `departamentoId` (departamento responsável **da etapa**; intervalos sem etapa ficam de fora), `clienteId`, `projetoId`, `workflowEtapaId`. UUIDs inválidos = 422. Ordenação de `etapas`: maior tempo médio de execução, depois maior `n`, depois nome.
+- **Fila / WIP (`fila`, `atual`, `filaSemEtapa`):** estado **atual**, não depende do período (os filtros de entidade valem). Vem dos intervalos abertos do escopo de triagem; a etapa é a do intervalo aberto (mantida em sincronia com a etapa atual pelo motor).
+  Por definição: `wip`, contagem por estado (inclui `bloqueadas` e `aguardandoCliente`), **idade NA ETAPA** do mais antigo e `idadeEstadoMaisAntigoSegundos`. A idade na etapa é o início da **sequência contínua** de intervalos (um começa onde o outro termina) da
+  **mesma** `workflow_etapa_id` que termina no intervalo aberto; trocar de etapa — inclusive devolver à anterior — ou um buraco (terminal/reabertura) recomeça a contagem. `maisAntigaTruncadaPelaMedicao` indica sequência que começa no intervalo inicial da migration (a idade real
+  pode ser maior). O modelo permite isso **sem ambiguidade**, salvo intervalos de duração zero criados no mesmo instante (desempate por `created_at`). Ordem da fila: maior WIP, depois o mais antigo. `filaSemEtapa` separa `workflowConcluido` (pendência conhecida) de `semWorkflow`.
+- **Bloqueadas / aguardando cliente:** quantidade atual (`atual`) + tempo total, `n`, média e maior no período. Motivo de bloqueio não é exigido nesta fase.
+
+### Fora desta fase (decisões documentadas)
+
+- **Pausa manual × expediente:** não há quebra. `demanda_status_intervalos.origem` descreve como o intervalo **abriu**; uma troca de etapa durante a pausa abre novo intervalo `troca_etapa` e apaga a origem da pausa. Sem ligação histórica estável, não se varre JSON de eventos a cada consulta.
+- **Concluídas por período:** fora — não há `concluida_em` confiável (só `updated_at` e `sla_resolvido_em`, que não é a data de conclusão).
+- **Carga/capacidade, estimado × realizado, horas por pessoa:** não implementados (11B.2B / sessões pessoais).
+
+### Performance (evidência, sem índice novo)
+
+Dataset sintético numa transação desfeita (30 000 Demandas, 363 mil intervalos, 5 % abertas; a produção hoje tem 1 Demanda): `/agora` ≈ 76 ms e `/gargalos` (30 dias) ≈ 0,7 s — 0,54 s do agregado por etapa (varredura paralela da tabela, apropriada porque o período cobre ~metade
+das linhas) e 0,21 s da fila (índice único parcial do intervalo aberto). Pior caso artificial (100 % das Demandas abertas): `/gargalos` ≈ 4 s, dominado pelo histórico da fila. Nenhum plano justificou índice; `medicaoDesde` usa um lookup por status no índice
+`(empresa_id, status, inicio_em)`. Número de consultas: AGORA = 6 de métricas, GARGALOS = 5 (+1 com `workflowEtapaId`), mais autenticação/permissão — **constante**, sem N+1 (teste compara 5 e 155 Demandas). Sem cache.
