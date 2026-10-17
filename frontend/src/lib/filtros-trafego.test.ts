@@ -68,7 +68,7 @@ test("campo desconhecido e filtro sem valores são ignorados", () => {
 });
 
 test("tela de Tráfego: filtros vão ao servidor nas TRÊS consultas (indicadores, carga e agora) e na paginação", () => {
-  const view = ler("components/trafego/TrafegoView.tsx");
+  const view = ler("components/trafego/TrafegoTempoPessoalView.tsx");
   assert.match(view, /getIndicadoresTrafegoSessoes\(\{\s*\.\.\.filtrosApi,/);
   assert.match(view, /getCargaTrafegoSessoes\(\{ \.\.\.filtrosApi, demandaQuery \}\)/);
   assert.equal((view.match(/getAgoraTrafegoSessoes\(\{\s*\.\.\.filtrosApi,/g) ?? []).length, 2); // 1ª página e "carregar mais"
@@ -78,7 +78,7 @@ test("tela de Tráfego: filtros vão ao servidor nas TRÊS consultas (indicadore
 });
 
 test("estado na URL: filtros, período e busca de demanda; período inválido volta ao padrão", () => {
-  const view = ler("components/trafego/TrafegoView.tsx");
+  const view = ler("components/trafego/TrafegoTempoPessoalView.tsx");
   assert.match(view, /useFiltrosNaUrl\(definicoesFiltros, true\)/);
   assert.match(view, /PERIODOS_VALIDOS\.find\(\(periodo\) => periodo === valor\) \?\? PERIODO_PADRAO/);
   assert.match(view, /definirParam\("periodo", proximo === PERIODO_PADRAO \? null : proximo\)/);

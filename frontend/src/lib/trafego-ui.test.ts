@@ -88,7 +88,7 @@ test("o cabeçalho não tem mais os selos 'Dados reais' e 'Motor de horas' (em n
 });
 
 test("'Central de Tráfego' ganha o ícone de informação com tooltip exato, acessível por hover E teclado", () => {
-  assert.equal(TEXTO_INFO_TRAFEGO, "Sessões de trabalho abertas e encerradas via API, calculadas pelo motor de horas do backend.");
+  assert.equal(TEXTO_INFO_TRAFEGO, "Gestão operacional: o que precisa de atenção agora e onde o fluxo trava. Os tempos são do estado das tarefas, não horas trabalhadas por pessoas.");
   const cabecalho = semComentarios(ler("components/trafego/TrafegoHeader.tsx"));
   assert.match(cabecalho, /Central de Tráfego/);
   assert.match(cabecalho, /<Info className=/); // ícone de informação
@@ -105,7 +105,7 @@ test("'Central de Tráfego' ganha o ícone de informação com tooltip exato, ac
 // ── faixa superior compacta ───────────────────────────────────────────────────────────────────────────────────
 
 test("Usuário + Demanda + iniciar + período + busca ficam numa só faixa (um cartão, quebra por largura); filtros avançados logo abaixo", () => {
-  const view = semComentarios(ler("components/trafego/TrafegoView.tsx"));
+  const view = semComentarios(ler("components/trafego/TrafegoTempoPessoalView.tsx"));
   const faixa = view.slice(view.indexOf('<section aria-label="Iniciar sessão e filtros operacionais"'), view.indexOf("</section>"));
   assert.match(faixa, /flex flex-wrap items-end/); // mesma linha quando há largura; quebra sozinha quando não há
   const ordem = ["<TrafegoIniciarSessao", "<TrafegoFilters", "<FiltrosAvancados"].map((marca) => faixa.indexOf(marca));

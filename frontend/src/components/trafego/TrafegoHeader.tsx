@@ -1,9 +1,8 @@
 "use client";
 
 import { useId } from "react";
-import { Activity, Info, RefreshCw } from "lucide-react";
+import { Activity, Info } from "lucide-react";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/Button";
 import { TEXTO_INFO_TRAFEGO } from "@/lib/trafego-ui";
 
 /** Ícone "i" com tooltip discreto (hover E foco de teclado). Não ocupa espaço: o balão é `absolute` e sem eventos de ponteiro. */
@@ -30,7 +29,8 @@ function InfoTooltip({ texto }: { texto: string }) {
   );
 }
 
-export function TrafegoHeader({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
+/** Cabeçalho da Central de Tráfego. A atualização é de cada visão (Agora, Gargalos e Tempo pessoal têm o seu botão), não do cabeçalho. */
+export function TrafegoHeader() {
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -38,24 +38,17 @@ export function TrafegoHeader({ onRefresh, refreshing }: { onRefresh: () => void
       transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
       className="rounded-2xl border border-line bg-surface shadow-sm"
     >
-      <div className="relative flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between lg:px-6">
-        <div className="flex items-center gap-3">
-          <div className="bg-brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm">
-            <Activity className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h2 className="text-2xl font-bold tracking-tight text-fg">Central de Tráfego</h2>
-              <InfoTooltip texto={TEXTO_INFO_TRAFEGO} />
-            </div>
-            <p className="text-sm font-medium text-fg-muted">Tempo operacional em tempo real</p>
-          </div>
+      <div className="relative flex items-center gap-3 p-4 lg:px-6">
+        <div className="bg-brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm">
+          <Activity className="h-5 w-5" />
         </div>
-
-        <Button variant="secondary" onClick={onRefresh} disabled={refreshing}>
-          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
+        <div>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-2xl font-bold tracking-tight text-fg">Central de Tráfego</h2>
+            <InfoTooltip texto={TEXTO_INFO_TRAFEGO} />
+          </div>
+          <p className="text-sm font-medium text-fg-muted">Gestão operacional do fluxo</p>
+        </div>
       </div>
     </motion.div>
   );

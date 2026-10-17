@@ -21,7 +21,7 @@ export function TempoOperacionalCard({ resumo, erro }: { resumo: TrafegoResumo |
         <div>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">Tempo operacional</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">Tempo das sessões</p>
               <h3 className="mt-1 text-base font-semibold text-fg">Estimativa acumulada do período</h3>
             </div>
           </div>
@@ -32,7 +32,7 @@ export function TempoOperacionalCard({ resumo, erro }: { resumo: TrafegoResumo |
             </p>
             <Clock className="mb-2 h-5 w-5 text-fg-subtle" />
           </div>
-          <p className="mt-2 text-sm text-fg-muted">Calculado a partir das sessões de trabalho reais do backend.</p>
+          <p className="mt-2 text-sm text-fg-muted">Tempo pessoal: calculado a partir das sessões de trabalho abertas manualmente.</p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

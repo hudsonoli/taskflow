@@ -223,7 +223,7 @@ test("uma única fonte de verdade: só o AppDataProvider instala o handler; nenh
   const shell = semComentarios(ler("components/layout/AppShell.tsx"));
   assert.match(shell, /hrefLoginExpirado \?\? hrefLogin\(slugUrl\)/);
   // nenhum redirect por 401 espalhado nas telas
-  const espalhado = ["components/dashboard/DashboardView.tsx", "components/pauta/PautaView.tsx", "components/projetos/ProjetosView.tsx", "components/trafego/TrafegoView.tsx", "components/minhas-demandas/MinhasDemandasView.tsx"];
+  const espalhado = ["components/dashboard/DashboardView.tsx", "components/pauta/PautaView.tsx", "components/projetos/ProjetosView.tsx", "components/trafego/TrafegoView.tsx", "components/trafego/TrafegoTempoPessoalView.tsx", "components/trafego/useTrafegoOperacional.ts", "components/minhas-demandas/MinhasDemandasView.tsx"];
   for (const arquivo of espalhado) assert.equal(/=== 401|status\s*===\s*401/.test(semComentarios(ler(arquivo))), false, arquivo);
 });
 

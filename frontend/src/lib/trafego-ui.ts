@@ -1,10 +1,11 @@
 // Tráfego — peças puras da faixa superior (seletor de Demanda, texto do cabeçalho e aviso de sessão já ativa). `npm run test:trafego-ui` (node --test, sem DOM).
 import { CODIGO_SESSAO_ATIVA_EXISTENTE, SessaoTrabalhoErro } from "./sessao-trabalho-erro.ts";
+import { TEXTO_INFO_TRAFEGO_V2 } from "./trafego-operacional.ts";
 
 export const PLACEHOLDER_DEMANDA = "Selecione uma demanda...";
 
 /** Texto explicativo da Central de Tráfego: aparece no tooltip do ícone de informação (não mais como parágrafo fixo). */
-export const TEXTO_INFO_TRAFEGO = "Sessões de trabalho abertas e encerradas via API, calculadas pelo motor de horas do backend.";
+export const TEXTO_INFO_TRAFEGO = TEXTO_INFO_TRAFEGO_V2;
 
 export type OpcaoSelecao = { value: string; label: string; disabled?: boolean };
 

@@ -1,4 +1,6 @@
 import type { TrafegoAgoraPagina, TrafegoCarga, TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
+import type { ParametrosGargalosOperacionais, TrafegoOperacionalAgora, TrafegoOperacionalGargalos } from "@/types/trafego-operacional";
+import { TrafegoOperacionalErro } from "@/lib/trafego-operacional";
 import { parametrosFiltrosTrafego, type FiltrosTrafegoApi } from "@/lib/filtros-trafego";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
 import { SessaoTrabalhoErro } from "@/lib/sessao-trabalho-erro";
@@ -236,6 +238,34 @@ export async function getAgoraTrafegoSessoes(
     throw new Error(typeof detail?.detail === "string" ? detail.detail : "Falha ao carregar as sessões em execução");
   }
   return response.json();
+}
+
+/**
+ * Tráfego V2 — métricas OPERACIONAIS (somente leitura), calculadas no servidor sobre `demanda_status_intervalos`. NÃO são tempo pessoal: nada aqui lê `sessoes-trabalho`.
+ * `AGORA`: 1 requisição (estado atual + triagem). A autoridade de acesso é o backend (`trafego.gerenciar` + admin/gestor); 401 é tratado pelo handler global de sessão expirada.
+ */
+async function getOperacional<T>(caminho: string, parametros: URLSearchParams, mensagemPadrao: string, signal?: AbortSignal): Promise<T> {
+  const consulta = parametros.toString();
+  const response = await fetch(`${API_PROXY}/trafego/operacional/${caminho}${consulta ? `?${consulta}` : ""}`, { cache: "no-store", signal });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new TrafegoOperacionalErro(typeof detail?.detail === "string" ? detail.detail : mensagemPadrao, response.status);
+  }
+  return response.json();
+}
+
+export function getTrafegoOperacionalAgora(limite = 50, signal?: AbortSignal): Promise<TrafegoOperacionalAgora> {
+  return getOperacional("agora", new URLSearchParams({ limite: String(limite) }), "Falha ao carregar o estado operacional do Tráfego", signal);
+}
+
+export function getTrafegoOperacionalGargalos(parametros: ParametrosGargalosOperacionais, signal?: AbortSignal): Promise<TrafegoOperacionalGargalos> {
+  const search = new URLSearchParams({ inicio: parametros.inicio, fim: parametros.fim });
+  if (parametros.departamentoId) search.set("departamentoId", parametros.departamentoId);
+  if (parametros.clienteId) search.set("clienteId", parametros.clienteId);
+  if (parametros.projetoId) search.set("projetoId", parametros.projetoId);
+  if (parametros.workflowEtapaId) search.set("workflowEtapaId", parametros.workflowEtapaId);
+  if (parametros.limite) search.set("limite", String(parametros.limite));
+  return getOperacional("gargalos", search, "Falha ao carregar os gargalos operacionais", signal);
 }
 
 export async function fecharSessaoTrabalho(sessaoId: string, motivoEncerramento: string): Promise<SessaoTrabalho> {
