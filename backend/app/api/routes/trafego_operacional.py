@@ -1,13 +1,14 @@
 """Tráfego V2 — Fase 2: métricas OPERACIONAIS (somente leitura).
 
 `GET /trafego/operacional/agora` e `GET /trafego/operacional/gargalos`. TEMPO OPERACIONAL ≠ TEMPO PESSOAL: as duas rotas leem `demanda_status_intervalos`; nenhuma lê `sessoes_trabalho`.
+`GET /trafego/operacional/carga` (11B.2B-B): carga SEMANAL planejada × capacidade (estimativa + janela planejada × expediente); não lê `sessoes_trabalho` nem `demanda_status_intervalos`.
 
 ## Autorização (sem permissão nova)
 `require_trafego_gerenciar()` — a MESMA dependency que protege `/sessoes-trabalho` (piso `perfil_base ∈ {admin, gestor}` + permissão `trafego.gerenciar`; operador nunca passa, nem com concessão). Tenant:
 a empresa vem SEMPRE do token; nenhum parâmetro de empresa existe nestas rotas.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,7 +18,16 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.permissoes import require_trafego_gerenciar
 from app.models.usuario import Usuario
+from app.schemas.trafego_carga import TrafegoCargaRead
 from app.schemas.trafego_operacional import TrafegoOperacionalAgoraRead, TrafegoOperacionalGargalosRead
+from app.services.carga_operacional_service import (
+    LIMITE_MAXIMO as CARGA_LIMITE_MAXIMO,
+    LIMITE_PADRAO as CARGA_LIMITE_PADRAO,
+    AlvoNaoEncontradoError,
+    CargaOperacionalService,
+    FiltroInvalidoError,
+    SemanaPassadaNaoSuportadaError,
+)
 from app.services.trafego_operacional_service import (
     LIMITE_MAXIMO,
     LIMITE_PADRAO,
@@ -32,6 +42,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user_password_ready)],
 )
 service = TrafegoOperacionalService()
+carga_service = CargaOperacionalService()
 
 
 def _com_timezone(valor: datetime | None, campo: str) -> datetime | None:
@@ -90,4 +101,33 @@ def gargalos_operacionais(
     except PeriodoInvalidoError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except EtapaNaoEncontradaError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/carga", response_model=TrafegoCargaRead, response_model_by_alias=True)
+def carga_operacional(
+    semana: date | None = Query(default=None, description="Qualquer dia da semana desejada (YYYY-MM-DD); normalizado para a segunda-feira no fuso da empresa. Omitido = semana atual."),
+    departamento_id: str | None = Query(default=None, alias="departamentoId"),
+    usuario_id: str | None = Query(default=None, alias="usuarioId"),
+    detalhe: str | None = Query(default=None, description="`usuario` ou `departamento`: devolve as etapas que compõem o número (exige o id correspondente)."),
+    limite: int = Query(default=CARGA_LIMITE_PADRAO, ge=1, le=CARGA_LIMITE_MAXIMO),
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
+) -> TrafegoCargaRead:
+    """Carga SEMANAL planejada × capacidade por pessoa e departamento (v1: semana atual e futuras). Somente leitura; filtros recortam o resultado sem recalcular a divisão."""
+    try:
+        return carga_service.carga(
+            db,
+            empresa_id=current_user.empresa_id,
+            semana=semana,
+            departamento_id=_uuid_opcional(departamento_id, "departamentoId"),
+            usuario_id=_uuid_opcional(usuario_id, "usuarioId"),
+            detalhe=detalhe,
+            limite=limite,
+        )
+    except SemanaPassadaNaoSuportadaError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": exc.codigo, "message": str(exc)}) from exc
+    except FiltroInvalidoError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": exc.codigo, "message": str(exc)}) from exc
+    except AlvoNaoEncontradoError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
