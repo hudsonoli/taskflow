@@ -31,13 +31,13 @@ export function MetricCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.05, ease: "easeOut" }}
-      className="rounded-2xl border border-line bg-surface p-4 shadow-sm"
+      className="rounded-2xl border border-line bg-surface p-4 shadow-sm transition duration-200 hover:border-line-strong hover:shadow-md"
     >
       <div className={clsx("mb-3 flex h-9 w-9 items-center justify-center rounded-xl", toneClassNames[tone])}>
         {icon}
       </div>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">{title}</p>
-      <p className="mt-1.5 text-xl font-semibold tracking-tight text-fg">{value}</p>
+      <p className="num mt-1.5 text-xl font-semibold tracking-tight text-fg">{value}</p>
       <p className="mt-1 text-xs text-fg-subtle">{description}</p>
     </motion.div>
   );

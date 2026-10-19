@@ -113,6 +113,14 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
+  /* Elevação em CAMADAS (sombra de contato + sombra difusa), bem mais suave que o padrão do Tailwind: dá profundidade sem "pesar" a tela.
+     Sobrescreve shadow-xs/sm/md/lg — todos os cards (shadow-sm) e popovers (shadow-lg) herdam sem tocar nas telas. No tema escuro a
+     sombra é só um reforço: quem separa as superfícies é a borda (--line). */
+  --shadow-xs: 0 1px 1px rgb(24 24 27 / 0.04);
+  --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.05), 0 1px 3px rgb(24 24 27 / 0.06);
+  --shadow-md: 0 2px 4px rgb(24 24 27 / 0.04), 0 6px 14px -2px rgb(24 24 27 / 0.08);
+  --shadow-lg: 0 4px 8px rgb(24 24 27 / 0.04), 0 14px 28px -6px rgb(24 24 27 / 0.12);
+
   /* tokens semânticos → utilitários (bg-surface, text-fg-muted, border-field-line, ring-focus…) */
   --color-app: var(--app-bg);
   --color-surface: var(--surface);
@@ -205,6 +213,33 @@ body {
   font-family: var(--font-sans);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Seleção de texto na cor da marca (legível nos dois temas: a tinta é translúcida, o texto segue --fg). */
+::selection {
+  background: color-mix(in srgb, var(--color-indigo-500) 24%, transparent);
+  color: inherit;
+}
+
+/* Números que se alinham em coluna e não "dançam" quando o valor muda (KPIs, tabelas, durações). */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Placeholder de carregamento: brilho suave que respeita prefers-reduced-motion (a regra de movimento reduzido já zera a animação). */
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: 0.5rem;
+  background-color: var(--surface-2);
+  background-image: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--surface) 70%, transparent) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
 }
 
 /* Scrollbars discretas — o padrão do Chrome no Windows é largo demais e rouba a atenção. */

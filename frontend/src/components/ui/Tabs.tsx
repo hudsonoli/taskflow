@@ -44,7 +44,7 @@ export function Tabs({
   };
 
   return (
-    <div role="tablist" className="flex gap-1 overflow-x-auto rounded-xl bg-surface-2 p-1">
+    <div role="tablist" className="flex gap-1 overflow-x-auto rounded-xl bg-surface-2 p-1 ring-1 ring-inset ring-line/70">
       {tabs.map((tab, index) => {
         const isActive = tab.id === activeTab;
         return (
@@ -59,12 +59,12 @@ export function Tabs({
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(tab.id)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className="relative whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-fg-muted transition"
+            className="relative whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-fg-muted transition hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             {isActive && (
               <motion.span
                 layoutId="tabs-active"
-                className="absolute inset-0 rounded-lg bg-surface shadow-sm"
+                className="absolute inset-0 rounded-lg bg-surface shadow-sm ring-1 ring-line"
                 transition={{ type: "spring", stiffness: 400, damping: 32 }}
               />
             )}
