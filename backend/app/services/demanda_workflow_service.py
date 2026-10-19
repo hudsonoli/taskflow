@@ -21,11 +21,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from app.core.planejamento_etapa import JanelaPlanejadaInvalidaError, validar_janela
 from app.core.relogio import agora_utc
 from app.core.workflow_destinatarios import destinatarios_da_etapa
 from app.core.workflow_autoridade import departamentos_head_para_workflow, pode_avancar_etapa
@@ -55,6 +56,10 @@ class AtorExterno:
 Ator = Usuario | AtorExterno
 # executado dentro da transação da progressão, depois da mutação e do evento principal, antes do commit: `(etapa, instante)`
 CallbackDaTransacao = Callable[[DemandaWorkflowEtapa, datetime], None]
+
+
+def _iso(valor: date | None) -> str | None:
+    return valor.isoformat() if valor is not None else None
 
 
 def _usuario_id_do_ator(actor: Ator) -> str | None:
@@ -98,25 +103,73 @@ class DemandaWorkflowConflitoError(RuntimeError):
 
 
 class DemandaWorkflowService:
+    def _etapa_para_ajuste(self, db: Session, demanda: Demanda, *, etapa_id: str, actor: Usuario,
+                           sem_autoridade: str, arquivada: str) -> DemandaWorkflowEtapa:
+        """Prelúdio comum dos ajustes pontuais (esforço e planejamento): empresa, trava da Demanda, etapa da PRÓPRIA Demanda, autoridade da etapa e Demanda não
+        arquivada. Mesma autoridade de `pode_avancar_etapa` — sem permissão nova. Não é uma transição de workflow."""
+        if actor.empresa_id != demanda.empresa_id:
+            raise DemandaWorkflowEtapaNaoEncontradaError("Etapa não encontrada nesta tarefa")
+        self.repository.bloquear_demanda_para_atualizacao(db, demanda)
+        etapas = self.repository.listar_etapas_workflow_travadas(db, demanda.id)
+        etapa = next((e for e in etapas if e.id == etapa_id), None)
+        if etapa is None:
+            raise DemandaWorkflowEtapaNaoEncontradaError("Etapa não encontrada nesta tarefa")
+        usuarios = self.repository.listar_etapa_responsavel_ids_em_lote(db, [etapa.id])
+        departamentos = self.repository.listar_etapa_departamento_ids_em_lote(db, [etapa.id])
+        if not pode_avancar_etapa(actor, usuario_responsavel_ids=usuarios.get(etapa.id, []),
+                                 departamento_responsavel_ids=departamentos.get(etapa.id, []),
+                                 departamentos_head=departamentos_head_para_workflow(db, actor)):
+            raise DemandaWorkflowSemAutoridadeError(sem_autoridade)
+        if demanda.status == STATUS_DEMANDA_ARQUIVADA:
+            raise DemandaWorkflowConflitoError("DEMANDA_ARQUIVADA", arquivada)
+        return etapa
+
+    def ajustar_planejamento(self, db: Session, demanda: Demanda, *, etapa_id: str, campos: dict[str, date | None],
+                             actor: Usuario) -> Demanda:
+        """Ajuste PARCIAL e auditado da janela planejada da etapa (11B.2B-A). `campos` traz só o que foi enviado (`None` limpa). A validação vale para o PAR
+        RESULTANTE (fim sem início e fim < início são recusados com 422). Não muda status, etapa atual, prazo, sessões nem intervalos operacionais; no-op não gera evento."""
+        try:
+            etapa = self._etapa_para_ajuste(
+                db, demanda, etapa_id=etapa_id, actor=actor,
+                sem_autoridade="Você não tem autoridade para ajustar o planejamento desta etapa",
+                arquivada="Restaure a tarefa antes de ajustar o planejamento",
+            )
+            inicio_anterior, fim_anterior = etapa.planejado_inicio, etapa.planejado_fim
+            inicio_novo = campos["planejado_inicio"] if "planejado_inicio" in campos else inicio_anterior
+            fim_novo = campos["planejado_fim"] if "planejado_fim" in campos else fim_anterior
+            try:
+                validar_janela(inicio_novo, fim_novo)
+            except JanelaPlanejadaInvalidaError as exc:
+                raise DemandaWorkflowAcaoInvalidaError(str(exc)) from exc
+            if (inicio_novo, fim_novo) != (inicio_anterior, fim_anterior):
+                now = agora_utc()
+                etapa.planejado_inicio = inicio_novo
+                etapa.planejado_fim = fim_novo
+                etapa.updated_at = now
+                demanda.updated_at = now
+                db.flush()
+                self.demanda_service.publicar_evento_demanda(
+                    db, demanda, DomainEventType.DEMANDA_WORKFLOW_PLANEJAMENTO_ALTERADO, actor.id,
+                    extra_payload={"etapaId": etapa.id, "etapaNome": etapa.nome, "atorUsuarioId": actor.id,
+                                   "inicioAnterior": _iso(inicio_anterior), "inicioNovo": _iso(inicio_novo),
+                                   "fimAnterior": _iso(fim_anterior), "fimNovo": _iso(fim_novo)}, occurred_at=now,
+                )
+            db.commit()
+            db.refresh(demanda)
+            return demanda
+        except Exception:
+            db.rollback()
+            raise
+
     def ajustar_esforco(self, db: Session, demanda: Demanda, *, etapa_id: str,
                         esforco_minutos: int | None, actor: Usuario) -> Demanda:
         """Ajuste pontual auditado; usa autoridade existente, sem progressão ou mudança estrutural."""
         try:
-            if actor.empresa_id != demanda.empresa_id:
-                raise DemandaWorkflowEtapaNaoEncontradaError("Etapa não encontrada nesta tarefa")
-            self.repository.bloquear_demanda_para_atualizacao(db, demanda)
-            etapas = self.repository.listar_etapas_workflow_travadas(db, demanda.id)
-            etapa = next((e for e in etapas if e.id == etapa_id), None)
-            if etapa is None:
-                raise DemandaWorkflowEtapaNaoEncontradaError("Etapa não encontrada nesta tarefa")
-            usuarios = self.repository.listar_etapa_responsavel_ids_em_lote(db, [etapa.id])
-            departamentos = self.repository.listar_etapa_departamento_ids_em_lote(db, [etapa.id])
-            if not pode_avancar_etapa(actor, usuario_responsavel_ids=usuarios.get(etapa.id, []),
-                                     departamento_responsavel_ids=departamentos.get(etapa.id, []),
-                                     departamentos_head=departamentos_head_para_workflow(db, actor)):
-                raise DemandaWorkflowSemAutoridadeError("Você não tem autoridade para ajustar o esforço desta etapa")
-            if demanda.status == STATUS_DEMANDA_ARQUIVADA:
-                raise DemandaWorkflowConflitoError("DEMANDA_ARQUIVADA", "Restaure a tarefa antes de ajustar o esforço")
+            etapa = self._etapa_para_ajuste(
+                db, demanda, etapa_id=etapa_id, actor=actor,
+                sem_autoridade="Você não tem autoridade para ajustar o esforço desta etapa",
+                arquivada="Restaure a tarefa antes de ajustar o esforço",
+            )
             anterior = etapa.esforco_estimado_minutos
             if anterior != esforco_minutos:
                 now = agora_utc()

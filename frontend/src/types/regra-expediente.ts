@@ -60,6 +60,8 @@ export type RegraExpediente = {
   /** IANA, ex.: America/Sao_Paulo */
   timezone: string;
   feriadosAutomaticos: boolean;
+  /** 11B.2B-A — percentual (1..100) do expediente nominal disponível para PLANEJAMENTO de tarefas. Não é produtividade; default 100. Alterá-lo não rearma a pausa automática. */
+  percentualCapacidadeAlocavel: number;
   /** Fase 2: logout automático com horário PRÓPRIO, independente de bloqueio e pausa. */
   logoutAutomaticoAtivo: boolean;
   /** "HH:MM:SS" da API; a tela usa "HH:MM". `null` = sem horário. */
@@ -81,6 +83,7 @@ export type RegraExpedienteUpdateDraft = {
   timezone?: string;
   bloquearForaExpediente?: boolean;
   pausarNoFimPeriodo?: boolean;
+  percentualCapacidadeAlocavel?: number;
   logoutAutomaticoAtivo?: boolean;
   /** "HH:MM"; `null` limpa (só aceito com o logout desligado). */
   logoutHorario?: string | null;

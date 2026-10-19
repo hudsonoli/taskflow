@@ -1,6 +1,7 @@
 "use client";
 
 import { EsforcoEtapa } from "./EsforcoEtapa";
+import { PlanejamentoEtapa } from "./PlanejamentoEtapa";
 
 import { useEffect, useState, type ReactNode } from "react";
 import { ClipboardList, FileText, GitBranch, History, UsersRound } from "lucide-react";
@@ -456,6 +457,7 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
               </div>
               <p className="mt-1.5 text-sm font-semibold text-fg">{etapa.nome}</p>
               <EsforcoEtapa demandaId={demanda.id} etapa={etapa} somenteLeitura={somenteLeitura} onChange={onChange} />
+              <PlanejamentoEtapa demandaId={demanda.id} etapa={etapa} somenteLeitura={somenteLeitura} onChange={onChange} />
               <p className="mt-1 text-xs text-fg-muted">
                 {responsaveis || departamentosNomes
                   ? [responsaveis, departamentosNomes].filter(Boolean).join(" · ")

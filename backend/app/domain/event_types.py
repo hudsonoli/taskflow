@@ -131,6 +131,8 @@ class DomainEventType(StrEnum):
 
     # WorkflowModelo não tem tabela de histórico: estes eventos SÃO o histórico.
     DEMANDA_WORKFLOW_ESFORCO_ALTERADO = "demanda.workflow_esforco_alterado"
+    # 11B.2B-A — janela planejada da etapa (planejamento, não histórico operacional): valores anteriores/novos de início e fim.
+    DEMANDA_WORKFLOW_PLANEJAMENTO_ALTERADO = "demanda.workflow_planejamento_alterado"
 
     WORKFLOW_MODELO_CRIADO = "workflow_modelo.criado"
     WORKFLOW_MODELO_ALTERADO = "workflow_modelo.alterado"

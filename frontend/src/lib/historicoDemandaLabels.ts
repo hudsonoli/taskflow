@@ -1,4 +1,5 @@
 import { formatEsforco } from "./esforco";
+import { formatarDataPlanejada } from "./planejamento-etapa";
 import type { DepartamentoDiretorioItem, UsuarioDiretorioItem } from "@/lib/api-backend";
 import { statusDemandaLabels } from "@/lib/demandas";
 import type { DemandaHistoricoEvento, DemandaStatus } from "@/types/demanda";
@@ -85,6 +86,7 @@ const DESCRITORES: Record<string, (dados: Record<string, unknown>, contexto: Con
   "demanda.workflow_etapa_concluida": (dados) => descreverAvancoDeEtapa("concluída", dados),
   "demanda.workflow_etapa_aprovada": (dados) => descreverAvancoDeEtapa("aprovada", dados),
   "demanda.workflow_esforco_alterado": (dados) => `Esforço de ${dados.etapaNome ?? "etapa"}: ${formatEsforco(typeof dados.valorAnteriorMinutos === "number" ? dados.valorAnteriorMinutos : null)} → ${formatEsforco(typeof dados.valorNovoMinutos === "number" ? dados.valorNovoMinutos : null)}`,
+  "demanda.workflow_planejamento_alterado": (dados) => descreverPlanejamento(dados),
   "demanda.workflow_etapa_rejeitada": (dados) => descreverRejeicaoDeEtapa(dados),
   // Fase 9B — Portal Externo de Aprovação. A decisão do cliente aparece pelos eventos de workflow acima (com o ator externo); estes são do ciclo do link.
   "demanda.aprovacao_externa_criada": (dados) => `Link de aprovação do cliente gerado para "${String(dados.etapaNome ?? "")}"`,
@@ -120,6 +122,17 @@ function descreverAvancoDeEtapa(acao: "concluída" | "aprovada", dados: Record<s
   const proxima = dados.proximaEtapaNome ? ` — avançou para "${String(dados.proximaEtapaNome)}"` : " — workflow concluído";
   const externa = autorExternoDoEvento(dados) ? " externamente" : "";
   return `Etapa "${nome}" ${acao}${externa}${proxima}`;
+}
+
+/** 11B.2B-A: janela PLANEJADA da etapa (planejamento, não prazo). Datas puras formatadas por texto — nunca por `Date`, que deslocaria o dia por fuso. */
+function descreverPlanejamento(dados: Record<string, unknown>): string {
+  const janela = (inicio: unknown, fim: unknown): string => {
+    const i = typeof inicio === "string" ? formatarDataPlanejada(inicio) : null;
+    const f = typeof fim === "string" ? formatarDataPlanejada(fim) : null;
+    if (!i) return "sem planejamento";
+    return f ? `${i} até ${f}` : `a partir de ${i} (incompleto)`;
+  };
+  return `Planejamento de ${String(dados.etapaNome ?? "etapa")}: ${janela(dados.inicioAnterior, dados.fimAnterior)} → ${janela(dados.inicioNovo, dados.fimNovo)}`;
 }
 
 /** Fase 8D: um evento descreve a rejeição E o retorno (etapa reaberta), com o motivo. Os eventos anteriores continuam na timeline (append-only). */

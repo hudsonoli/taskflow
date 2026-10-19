@@ -167,3 +167,9 @@ O **logout automático** (horário próprio, independente) e o **bloqueio** est�
 - **Aviso da pausa automática:** toast discreto "Tarefas pausadas automaticamente." **somente quando houve mudança real** (alguma demanda foi de fato pausada); sem mudança, nenhum aviso.
 - **Origem da pausa:** `pausa_origem = 'expediente'` (já existe a coluna) para distinguir da pausa manual.
 - **Sessão expirada (hotfix 401):** a expiração do token (JWT 30 min) não é o logout automático. O front trata o 401 do tenant de forma central (`lib/sessao-expirada.ts`) e leva ao login do tenant com `?reason=session_expired`; o futuro logout automático pode reutilizar o mesmo caminho.
+
+## Capacidade alocável (11B.2B-A)
+
+`regra_expediente.percentual_capacidade_alocavel` (1..100, default 100) é o percentual do expediente
+**nominal** disponível para planejamento de tarefas — não é produtividade. Editá-lo **não** rearma a pausa
+automática nem altera horários, dias, fuso ou flags. Ver [planejamento-etapa.md](planejamento-etapa.md).

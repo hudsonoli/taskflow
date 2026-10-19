@@ -236,6 +236,8 @@ class RegraExpedienteService:
                 ("antecedencia_acesso_minutos", "antecedenciaAcessoMinutos"),
                 ("timezone", "timezone"),
                 ("feriados_automaticos", "feriadosAutomaticos"),
+                # 11B.2B-A: capacidade alocável NÃO é calendário — não está no conjunto que rearma a pausa automática (ver abaixo).
+                ("percentual_capacidade_alocavel", "percentualCapacidadeAlocavel"),
             )
             for atributo, rotulo in simples:
                 if atributo in updates and updates[atributo] is not None and updates[atributo] != getattr(regra, atributo):
@@ -503,6 +505,7 @@ class RegraExpedienteService:
             antecedenciaAcessoMinutos=regra.antecedencia_acesso_minutos,
             timezone=regra.timezone,
             feriadosAutomaticos=regra.feriados_automaticos,
+            percentualCapacidadeAlocavel=regra.percentual_capacidade_alocavel,
             logoutAutomaticoAtivo=regra.logout_automatico_ativo,
             logoutHorario=regra.logout_horario,
             pausaAutomaticaAtivadaEm=regra.pausa_automatica_ativada_em,

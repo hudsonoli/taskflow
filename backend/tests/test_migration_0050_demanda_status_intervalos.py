@@ -110,5 +110,7 @@ def test_cadeia_linear_cabeca_unica() -> None:
     from alembic.script import ScriptDirectory
 
     diretorio = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert diretorio.get_heads() == [NOVA]
+    # cabeça ÚNICA (migrations posteriores a 0050 — ex.: 0051 — avançam a cabeça; esta fase só exige que a 0050 continue na cadeia, ligada à anterior)
+    assert len(diretorio.get_heads()) == 1
+    assert NOVA in {revisao.revision for revisao in diretorio.walk_revisions()}
     assert diretorio.get_revision(NOVA).down_revision == ANTERIOR

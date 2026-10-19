@@ -37,7 +37,8 @@ from app.repositories.departamento_repository import DepartamentoRepository
 from app.repositories.projeto_repository import ProjetoRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
-from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead
+from app.core.planejamento_etapa import estado_da_janela
+from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead, PlanejamentoEtapaRead
 from app.services.demanda_intervalo_service import (
     ORIGEM_CRIACAO,
     ORIGEM_RESTAURACAO,
@@ -1139,6 +1140,15 @@ class DemandaService:
                         tipo=etapa.tipo,
                         esforcoEstimadoMinutos=etapa.esforco_estimado_minutos,
                         podeEditarEsforco=bool(pode_calcular and usuario is not None and demanda_id not in arquivadas
+                            and pode_avancar_etapa(usuario, usuario_responsavel_ids=usuarios_ids,
+                                departamento_responsavel_ids=departamentos_ids, departamentos_head=departamentos_head)),
+                        planejamento=PlanejamentoEtapaRead(
+                            planejadoInicio=etapa.planejado_inicio,
+                            planejadoFim=etapa.planejado_fim,
+                            estado=estado_da_janela(etapa.planejado_inicio, etapa.planejado_fim),
+                        ),
+                        # 11B.2B-A: a MESMA autoridade do esforço (responsável, admin/gestor do tenant ou Head do departamento da etapa); nada de RBAC novo.
+                        podeEditarPlanejamento=bool(pode_calcular and usuario is not None and demanda_id not in arquivadas
                             and pode_avancar_etapa(usuario, usuario_responsavel_ids=usuarios_ids,
                                 departamento_responsavel_ids=departamentos_ids, departamentos_head=departamentos_head)),
                         quantidadeAntesDeadline=etapa.quantidade_antes_deadline,

@@ -37,6 +37,7 @@ from app.schemas.demanda import (
     DemandaUpdate,
     DemandaWorkflowRejeicao,
     DemandaWorkflowEsforcoUpdate,
+    DemandaWorkflowPlanejamentoUpdate,
 )
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
 from app.services.demanda_historico_service import DemandaHistoricoService
@@ -616,6 +617,29 @@ def ajustar_esforco_etapa(
         demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
         atualizada = workflow_service.ajustar_esforco(
             db, demanda, etapa_id=str(etapa_id), esforco_minutos=payload.esforco_estimado_minutos, actor=current_user,
+        )
+        resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
+        resposta.acesso_apenas_workflow = via_workflow
+        return resposta
+    except Exception as exc:
+        handle_demanda_error(exc)
+
+
+@router.patch("/{demanda_id}/workflow/etapas/{etapa_id}/planejamento", response_model=DemandaRead)
+def ajustar_planejamento_etapa(
+    demanda_id: UUID,
+    etapa_id: UUID,
+    payload: DemandaWorkflowPlanejamentoUpdate,
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Janela PLANEJADA da etapa (11B.2B-A): atualização parcial (só o que foi enviado muda; `null` limpa), validada pelo PAR RESULTANTE. Mesma autoridade e mesmo
+    escopo do ajuste de esforço; não altera status, etapa atual, prazo, sessões nem intervalos."""
+    try:
+        demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
+        campos = {nome: getattr(payload, nome) for nome in ("planejado_inicio", "planejado_fim") if nome in payload.model_fields_set}
+        atualizada = workflow_service.ajustar_planejamento(
+            db, demanda, etapa_id=str(etapa_id), campos=campos, actor=current_user,
         )
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
         resposta.acesso_apenas_workflow = via_workflow

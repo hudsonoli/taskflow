@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -44,6 +44,11 @@ class DemandaWorkflowEtapa(Base):
             "status <> 'concluida' OR concluida_em IS NOT NULL",
             name="ck_demanda_workflow_etapas_concluida_em",
         ),
+        # 11B.2B-A: fim exige início e não pode ser anterior a ele. NULL/NULL, DATE/NULL e DATE/DATE>= são válidos; NULL/DATE nunca é persistido.
+        CheckConstraint(
+            "planejado_fim IS NULL OR (planejado_inicio IS NOT NULL AND planejado_fim >= planejado_inicio)",
+            name="ck_demanda_workflow_etapas_janela_planejada",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -65,6 +70,12 @@ class DemandaWorkflowEtapa(Base):
     concluida_por_usuario_id: Mapped[str | None] = mapped_column(
         ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
     )
+
+    # 11B.2B-A — JANELA PLANEJADA (planejamento, não histórico): datas do calendário da empresa, fim inclusivo, ambas NULL por padrão e SEM backfill. Independente de
+    # `demandas.prazo_etapa_atual`, `data_inicio`/`data_fim_prevista`, sessões e tempo operacional. O estado (nao_planejado/incompleto/planejado) é derivado — ver
+    # `app.core.planejamento_etapa`. O template (`workflow_modelo_etapas`) NÃO tem estes campos: o planejamento é contextual à execução da Demanda.
+    planejado_inicio: Mapped[date | None] = mapped_column(Date, nullable=True)
+    planejado_fim: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

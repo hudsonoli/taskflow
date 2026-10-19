@@ -45,6 +45,10 @@ class RegraExpediente(Base):
             "NOT logout_automatico_ativo OR logout_horario IS NOT NULL",
             name="ck_regra_expediente_logout_exige_horario",
         ),
+        CheckConstraint(
+            "percentual_capacidade_alocavel >= 1 AND percentual_capacidade_alocavel <= 100",
+            name="ck_regra_expediente_percentual_capacidade_alocavel",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -78,6 +82,10 @@ class RegraExpediente(Base):
     # Fase Expediente 3 — instante em que a PAUSA AUTOMÁTICA foi "armada" (flag ligada, controle-mestre religado ou calendário editado com ela ligada). Só cortes
     # POSTERIORES a ele são elegíveis: ligar às 12:15 não pausa retroativamente o corte das 12:00. NULL = nunca armada.
     pausa_automatica_ativada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # 11B.2B-A — percentual do expediente NOMINAL disponível para PLANEJAMENTO de tarefas (1..100). NÃO é produtividade nem eficiência de ninguém. Default 100: empresa que nunca
+    # configurou não tem a capacidade reduzida em silêncio. Alterá-lo NÃO rearma a pausa automática (não é calendário) — ver `RegraExpedienteService.atualizar`.
+    percentual_capacidade_alocavel: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=100, server_default="100")
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

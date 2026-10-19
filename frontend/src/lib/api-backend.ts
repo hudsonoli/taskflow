@@ -59,6 +59,7 @@ import type {
   DemandaStatusEditavel,
   DemandaWorkflowEtapa,
   DemandaWorkflowEtapaStatus,
+  PlanejamentoEtapa,
 } from "@/types/demanda";
 import type {
   WorkflowModelo,
@@ -1499,6 +1500,8 @@ type DemandaWorkflowEtapaReadApi = {
   concluidaPorUsuarioId: string | null;
   concluidaPorExternoNome?: string | null;
   podeEditarEsforco?: boolean;
+  planejamento?: PlanejamentoEtapa;
+  podeEditarPlanejamento?: boolean;
   podeAvancar: boolean;
   podeRejeitar?: boolean;
 };
@@ -1604,6 +1607,9 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       concluidaPorUsuarioId: etapa.concluidaPorUsuarioId ?? null,
       concluidaPorExternoNome: etapa.concluidaPorExternoNome ?? null,
       podeEditarEsforco: etapa.podeEditarEsforco === true,
+      // 11B.2B-A: o servidor sempre manda `planejamento`; o default só protege contra resposta de versão anterior.
+      planejamento: etapa.planejamento ?? { planejadoInicio: null, planejadoFim: null, estado: "nao_planejado" },
+      podeEditarPlanejamento: etapa.podeEditarPlanejamento === true,
       podeAvancar: etapa.podeAvancar === true,
       podeRejeitar: etapa.podeRejeitar === true,
     })),
@@ -3081,6 +3087,18 @@ export async function enviarLogoPersonalizacaoReal(arquivo: File): Promise<Brand
     throw new Error(message ?? `Erro ${response.status}`);
   }
   return normalizarBranding(await response.json());
+}
+
+/** 11B.2B-A — janela PLANEJADA da etapa (planejamento, não prazo). PATCH parcial: o servidor valida o par resultante (fim exige início, fim ≥ início) e reavalia a autoridade. */
+export async function ajustarPlanejamentoEtapaReal(
+  demandaId: string,
+  etapaId: string,
+  corpo: { planejadoInicio?: string | null; planejadoFim?: string | null },
+): Promise<Demanda> {
+  const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/planejamento`, {
+    method: "PATCH", body: JSON.stringify(corpo),
+  });
+  return mapDemandaReadToDemanda(atualizada);
 }
 
 /** Ajusta somente o esforço da etapa materializada; autoridade reavaliada pelo servidor. */

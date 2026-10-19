@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field, model_validator
 
 from app.schemas.esforco import EsforcoMinutos
 from app.schemas.sla_regra import SlaUnidadePrazo
@@ -196,6 +196,50 @@ class DemandaWorkflowEsforcoUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+PlanejamentoEstado = Literal["nao_planejado", "incompleto", "planejado"]
+
+
+class PlanejamentoEtapaRead(BaseModel):
+    """Janela PLANEJADA da etapa (11B.2B-A). Datas do calendário da empresa, fim inclusivo; planejamento ≠ prazo. `estado` é DERIVADO do par (nunca persistido):
+    nao_planejado (NULL/NULL), incompleto (início sem fim — não entra na ocupação) e planejado (início + fim ≥ início). Ver `app.core.planejamento_etapa`."""
+
+    planejado_inicio: date | None = Field(default=None, alias="planejadoInicio")
+    planejado_fim: date | None = Field(default=None, alias="planejadoFim")
+    estado: PlanejamentoEstado
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+def _data_planejada(valor: object) -> object:
+    """`YYYY-MM-DD` ou null. Recusa números, booleanos, listas e datetimes (nada de hora num planejamento por dia)."""
+    if valor is None or isinstance(valor, date) and not isinstance(valor, datetime):
+        return valor
+    if isinstance(valor, str) and len(valor) == 10 and valor[4] == "-" and valor[7] == "-":
+        return valor
+    raise ValueError("Use uma data no formato AAAA-MM-DD ou null")
+
+
+class DemandaWorkflowPlanejamentoUpdate(BaseModel):
+    """PATCH parcial da janela planejada. Só os campos ENVIADOS mudam (`null` explícito limpa o campo); a validação vale para o PAR RESULTANTE no service, não
+    para cada campo isolado. Exige ao menos um dos dois campos."""
+
+    planejado_inicio: date | None = Field(default=None, alias="planejadoInicio")
+    planejado_fim: date | None = Field(default=None, alias="planejadoFim")
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("planejado_inicio", "planejado_fim", mode="before")
+    @classmethod
+    def _formato_da_data(cls, valor: object) -> object:
+        return _data_planejada(valor)
+
+    @model_validator(mode="after")
+    def _exige_algum_campo(self) -> "DemandaWorkflowPlanejamentoUpdate":
+        if not ({"planejado_inicio", "planejado_fim"} & self.model_fields_set):
+            raise ValueError("Informe planejadoInicio e/ou planejadoFim")
+        return self
+
+
 class DemandaWorkflowEtapaRead(BaseModel):
     """Etapa de workflow materializada — snapshot, não referência ao WorkflowModelo (ver
     docstring de app/models/demanda_workflow_etapa.py)."""
@@ -206,6 +250,11 @@ class DemandaWorkflowEtapaRead(BaseModel):
     tipo: WorkflowEtapaTipo
     esforco_estimado_minutos: EsforcoMinutos | None = Field(default=None, alias="esforcoEstimadoMinutos")
     pode_editar_esforco: bool = Field(default=False, alias="podeEditarEsforco")
+    # 11B.2B-A — janela planejada (independente de prazo) e a mesma autoridade de `podeEditarEsforco`, calculada pelo SERVIDOR.
+    planejamento: PlanejamentoEtapaRead = Field(
+        default_factory=lambda: PlanejamentoEtapaRead(planejadoInicio=None, planejadoFim=None, estado="nao_planejado")
+    )
+    pode_editar_planejamento: bool = Field(default=False, alias="podeEditarPlanejamento")
     quantidade_antes_deadline: int = Field(alias="quantidadeAntesDeadline")
     unidade_prazo: WorkflowUnidadePrazo = Field(alias="unidadePrazo")
     status: DemandaWorkflowEtapaStatus

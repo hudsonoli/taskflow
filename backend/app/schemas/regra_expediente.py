@@ -109,6 +109,8 @@ class RegraExpedienteUpdate(BaseModel):
     antecedencia_acesso_minutos: int | None = Field(default=None, alias="antecedenciaAcessoMinutos", ge=0, le=720)
     timezone: str | None = Field(default=None, max_length=64)
     feriados_automaticos: bool | None = Field(default=None, alias="feriadosAutomaticos")
+    # 11B.2B-A: percentual do expediente nominal disponível para PLANEJAMENTO (1..100, inteiro estrito). Não é produtividade e NÃO rearma a pausa automática.
+    percentual_capacidade_alocavel: int | None = Field(default=None, alias="percentualCapacidadeAlocavel", strict=True, ge=1, le=100)
     # Logout automático (Fase 2): horário PRÓPRIO, independente de bloqueio e pausa. `logoutHorario` aceita `null` (limpar); ligar exige horário no estado final.
     logout_automatico_ativo: bool | None = Field(default=None, alias="logoutAutomaticoAtivo")
     logout_horario: time | None = Field(default=None, alias="logoutHorario")
@@ -269,6 +271,7 @@ class RegraExpedienteRead(BaseModel):
     antecedencia_acesso_minutos: int = Field(alias="antecedenciaAcessoMinutos")
     timezone: str
     feriados_automaticos: bool = Field(alias="feriadosAutomaticos")
+    percentual_capacidade_alocavel: int = Field(default=100, alias="percentualCapacidadeAlocavel")
     logout_automatico_ativo: bool = Field(alias="logoutAutomaticoAtivo")
     logout_horario: time | None = Field(default=None, alias="logoutHorario")
     # Fase 3: instante em que a pausa automática foi armada (null = nunca). Informativo; quem decide é o servidor.

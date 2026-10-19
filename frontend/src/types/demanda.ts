@@ -17,6 +17,16 @@ export type DemandaPrioridade = "baixa" | "media" | "alta";
 
 export type DemandaWorkflowEtapaStatus = "pendente" | "em_execucao" | "pausada" | "concluida";
 
+/** Estado DERIVADO da janela planejada de uma etapa (11B.2B-A): nada · só início (não entra na ocupação) · início + fim. `sem_dia_util`/`janela_vencida` são estados de alocação da Fase B, não daqui. */
+export type PlanejamentoEstado = "nao_planejado" | "incompleto" | "planejado";
+
+/** Janela PLANEJADA da etapa — datas de calendário da empresa (`YYYY-MM-DD`, fim inclusivo). Planejamento ≠ prazo. */
+export type PlanejamentoEtapa = {
+  planejadoInicio: string | null;
+  planejadoFim: string | null;
+  estado: PlanejamentoEstado;
+};
+
 /**
  * Etapa de workflow materializada na Demanda (Fase 2E.2) — snapshot aplicado a partir de um
  * `WorkflowModelo` no momento da criação, não uma referência viva a ele. Editar ou arquivar
@@ -45,6 +55,10 @@ export type DemandaWorkflowEtapa = {
   concluidaPorExternoNome?: string | null;
   /** Calculado pelo SERVIDOR para o usuário logado: só na etapa atual, com autoridade real, fora da leitura da Pauta. */
   podeEditarEsforco?: boolean;
+  /** 11B.2B-A — janela planejada da etapa (independente do prazo). Ausente = não planejada. */
+  planejamento?: PlanejamentoEtapa;
+  /** Mesma autoridade do esforço, calculada pelo SERVIDOR. */
+  podeEditarPlanejamento?: boolean;
   podeAvancar: boolean;
   /** Fase 8D — calculado pelo SERVIDOR: etapa atual de APROVAÇÃO com etapa anterior, para quem tem autoridade real, fora da leitura da Pauta. */
   podeRejeitar?: boolean;

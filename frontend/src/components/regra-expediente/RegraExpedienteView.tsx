@@ -11,6 +11,7 @@ import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { atualizarRegraExpedienteReal, getEmAndamentoOperacional, getRegraExpedienteReal } from "@/lib/api-backend";
 import { useEstadoExpediente } from "@/lib/estadoExpediente";
 import { DIAS_ORDEM, diasNormalizados, diasParaEnvio, errosDaSemana, normalizarHora, opcoesDeFuso } from "@/lib/expediente-periodos";
+import { PERCENTUAL_ALOCAVEL_MAX, PERCENTUAL_ALOCAVEL_MIN, PERCENTUAL_ALOCAVEL_PADRAO, TEXTO_AJUDA_CAPACIDADE_ALOCAVEL, lerPercentualAlocavel } from "@/lib/planejamento-etapa";
 import type { DiaEspecial, DiaSemana, PeriodoExpediente, RegraExpediente } from "@/types/regra-expediente";
 import { DiasEspeciaisSection } from "./DiasEspeciaisSection";
 import { PeriodosDoDia } from "./PeriodosDoDia";
@@ -36,6 +37,8 @@ export function RegraExpedienteView() {
   const [salvando, setSalvando] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [salvoEm, setSalvoEm] = useState<string | null>(null);
+  // 11B.2B-A — o que está DIGITADO em "Capacidade alocável" (`null` = mostrar o valor da regra). Texto à parte para o campo poder ficar vazio/inválido sem "corrigir" em silêncio.
+  const [percentualTexto, setPercentualTexto] = useState<string | null>(null);
   // D2-D3A — endpoint dedicado (`GET /demandas/operacional/em-andamento`, admin/gestor), agregado no servidor sobre o universo INTEGRAL. `null` distingue
   // "carregando" de "zero confirmado".
   const [emAndamento, setEmAndamento] = useState<number | null>(null);
@@ -81,7 +84,7 @@ export function RegraExpedienteView() {
     patch: Partial<
       Pick<
         RegraExpediente,
-        "ativo" | "toleranciaRetomadaMinutos" | "antecedenciaAcessoMinutos" | "timezone" | "bloquearForaExpediente" | "pausarNoFimPeriodo" | "logoutAutomaticoAtivo" | "logoutHorario"
+        "ativo" | "toleranciaRetomadaMinutos" | "antecedenciaAcessoMinutos" | "timezone" | "bloquearForaExpediente" | "pausarNoFimPeriodo" | "percentualCapacidadeAlocavel" | "logoutAutomaticoAtivo" | "logoutHorario"
       >
     >,
   ) {
@@ -102,7 +105,8 @@ export function RegraExpedienteView() {
 
   const errosPorDia = errosDaSemana(regra.dias);
   const logoutSemHorario = regra.logoutAutomaticoAtivo && !regra.logoutHorario;
-  const haErros = Object.keys(errosPorDia).length > 0 || logoutSemHorario;
+  const percentualInvalido = percentualTexto !== null && lerPercentualAlocavel(percentualTexto) === null;
+  const haErros = Object.keys(errosPorDia).length > 0 || logoutSemHorario || percentualInvalido;
 
   async function salvar() {
     if (!regra || haErros) return;
@@ -116,11 +120,13 @@ export function RegraExpedienteView() {
         timezone: regra.timezone,
         bloquearForaExpediente: regra.bloquearForaExpediente,
         pausarNoFimPeriodo: regra.pausarNoFimPeriodo,
+        percentualCapacidadeAlocavel: regra.percentualCapacidadeAlocavel ?? PERCENTUAL_ALOCAVEL_PADRAO,
         logoutAutomaticoAtivo: regra.logoutAutomaticoAtivo,
         logoutHorario: regra.logoutHorario ?? null,
         dias: diasParaEnvio(regra.dias),
       });
       setRegra(normalizarRegra(atualizada));
+      setPercentualTexto(null);
       setSalvoEm(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
     } catch (error) {
       setErroSalvar(error instanceof Error && error.message ? error.message : "Não foi possível salvar a regra de expediente.");
@@ -259,6 +265,36 @@ export function RegraExpedienteView() {
             />
             <p className="mt-1.5 text-xs text-fg-muted">Os horários valem neste fuso — nunca no relógio do navegador.</p>
           </div>
+          <div>
+            <div className="flex items-end gap-2">
+              <div className="w-40">
+                <Input
+                  label="Capacidade alocável"
+                  type="number"
+                  inputMode="numeric"
+                  min={PERCENTUAL_ALOCAVEL_MIN}
+                  max={PERCENTUAL_ALOCAVEL_MAX}
+                  step={1}
+                  value={percentualTexto ?? String(regra.percentualCapacidadeAlocavel ?? PERCENTUAL_ALOCAVEL_PADRAO)}
+                  aria-invalid={percentualInvalido}
+                  onChange={(event) => {
+                    const texto = event.target.value;
+                    setPercentualTexto(texto);
+                    const valor = lerPercentualAlocavel(texto);
+                    if (valor !== null) updateRegra({ percentualCapacidadeAlocavel: valor });
+                    else setSalvoEm(null);
+                  }}
+                />
+              </div>
+              <span className="pb-2.5 text-sm text-fg-muted" aria-hidden="true">%</span>
+            </div>
+            <p className="mt-1.5 text-xs text-fg-muted">{TEXTO_AJUDA_CAPACIDADE_ALOCAVEL}</p>
+            {percentualInvalido && (
+              <p role="alert" className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                Informe um número inteiro de {PERCENTUAL_ALOCAVEL_MIN} a {PERCENTUAL_ALOCAVEL_MAX}.
+              </p>
+            )}
+          </div>
         </div>
       </section>
 
@@ -308,7 +344,7 @@ export function RegraExpedienteView() {
               {erroSalvar}
             </p>
           )}
-          {!erroSalvar && haErros && <p className="mr-auto text-xs text-amber-700 dark:text-amber-400">Corrija os períodos destacados para salvar.</p>}
+          {!erroSalvar && haErros && <p className="mr-auto text-xs text-amber-700 dark:text-amber-400">Corrija os campos destacados para salvar.</p>}
           {!erroSalvar && !haErros && salvoEm && (
             <p role="status" className="mr-auto text-xs text-emerald-700 dark:text-emerald-400">
               Salvo às {salvoEm}.
