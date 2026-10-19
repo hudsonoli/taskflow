@@ -120,3 +120,9 @@ O histórico da tarefa descreve o evento ("Planejamento de X: 20/10/2026 até 30
   evento/no-op, efeitos colaterais, autoridade, template, percentual e não-rearme) e
   `tests/test_migration_0051_planejamento.py` (upgrade/downgrade, dados preservados, CHECKs, cabeça única).
 - Frontend: `npm run test:planejamento` (`src/lib/planejamento-etapa.test.ts`).
+
+## Contrato para a Fase B (nota de 2026-10-19)
+
+A matemática de capacidade da 11B.2B-B deve passar por uma função pequena, `obter_capacidade_usuario(usuario, periodo)`:
+na v1 usa a `RegraExpediente` da empresa; no futuro poderá considerar jornada individual e ausências. Jornada individual
+**não** entra na Fase B. Detalhes e backlog em [backlog-produto-benchmark.md](backlog-produto-benchmark.md).
