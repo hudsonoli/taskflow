@@ -102,8 +102,9 @@ Em minutos **inteiros**, pelo **maior resto** (empate pela posição): **Σ sema
 ## Responsáveis e pools
 
 1. **Usuários elegíveis da etapa** recebem a carga em **divisão igual**, ordem estável por `usuario_id`, maior resto
-   (`241` entre 2 → `121 + 120`; `100` entre 3 → `34 + 33 + 33`). A divisão é feita sobre o valor **da semana** da etapa, então
-   Σ pessoas = planejado da etapa na semana.
+   (`241` entre 2 → `121 + 120`; `100` entre 3 → `34 + 33 + 33`). Essa é a **parcela GLOBAL** de cada responsável, e ela vale
+   para a janela inteira: a divisão **não** é refeita semana a semana (isso acumularia o resto no primeiro id: com semanas
+   40/67/67/67, `241` entre 2 viraria `122 + 119`). Veja "Rateio entre responsáveis e semanas".
 2. Se a etapa tem usuários **e** departamentos, a carga vai **só** para os usuários (departamento é contexto/autoridade).
 3. Sem usuário elegível (inclui responsável inativo/sistema): os **departamentos da etapa** viram **POOL_DEPARTAMENTO** (1
    departamento = 100%; vários = divisão igual por id).
@@ -111,6 +112,21 @@ Em minutos **inteiros**, pelo **maior resto** (empate pela posição): **Σ sema
 
 **Departamento:** capacidade = soma da capacidade das pessoas elegíveis dele; `planejadoMin` = carga das pessoas dele **+**
 `planejadoPoolMin` (o pool é um **subconjunto**, não somado de novo).
+
+## Rateio entre responsáveis e semanas (sem viés acumulado)
+
+Para uma etapa `alocada` com `N` alvos (usuários ou pools de departamento), três totais são preservados **ao mesmo tempo**:
+
+- **total da etapa:** Σ alvos = `restanteMin`;
+- **total por alvo:** Σ semanas de cada alvo = sua parcela global (`dividir_igual(restante, N)`; diferença entre alvos ≤ 1 min);
+- **total por semana:** Σ alvos numa semana = `planejadoNaSemanaMin` da etapa.
+
+Algoritmo (`ratear_por_linhas_e_colunas`, em memória, sem dependência): linhas = parcelas globais; colunas = planejado de cada semana
+da janela. Percorre as semanas em ordem e reparte cada uma entre os alvos **proporcionalmente ao que ainda falta a cada alvo**,
+por maior resto (empate pelo menor id). A semana nunca excede a soma do que falta, então nenhum alvo ultrapassa a sua parcela, e
+na última semana cada alvo recebe exatamente o que falta. A matriz usa **todas** as semanas da janela, então o valor de uma semana
+é o mesmo qualquer que seja a semana consultada. Um único alvo não precisa de rateio. Vale igualmente para 2 ou 3 pools de
+departamento; `POOL_SEM_DEPARTAMENTO` é um alvo só.
 
 ## Filtros não recalculam
 

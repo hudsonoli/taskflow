@@ -299,6 +299,36 @@ def test_filtros_nao_recalculam_a_divisao(client_admin, db_session, empresa, reg
     assert por_id(completo["departamentos"], "departamentoId", dep2.id)["planejadoMin"] == 120  # mesmo valor com e sem filtro
 
 
+def test_rateio_multiassignee_em_quatro_semanas_sem_vies_e_filtros_apenas_recortam(client_admin, db_session, empresa, regra) -> None:
+    dep1, dep2 = _departamento(db_session, empresa), _departamento(db_session, empresa)
+    a, b = pessoa(db_session, empresa, dep=dep1), pessoa(db_session, empresa, dep=dep2)
+    menor, maior = sorted([a, b], key=lambda u: u.id)
+    etapa_carga(db_session, empresa, est=241, ini=date(2026, 10, 21), fim=date(2026, 11, 13), users=[a, b])  # semanas da etapa: 40, 67, 67, 67
+    semanas = ["2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09"]
+    completo = {s: carga(client_admin, semana=s).json() for s in semanas}
+    por_semana = {s: {u.id: por_id(completo[s]["pessoas"], "usuarioId", u.id)["planejadoMin"] for u in (a, b)} for s in semanas}
+    assert [sum(v.values()) for v in por_semana.values()] == [40, 67, 67, 67]  # total semanal da etapa preservado
+    assert (sum(v[menor.id] for v in por_semana.values()), sum(v[maior.id] for v in por_semana.values())) == (121, 120)  # sem 122/119
+    for s in semanas:  # filtro por usuário e por departamento só recortam: o valor é o MESMO do resultado completo
+        for u in (a, b):
+            assert carga(client_admin, semana=s, usuarioId=u.id).json()["pessoas"][0]["planejadoMin"] == por_semana[s][u.id]
+        for dep, u in ((dep1, a), (dep2, b)):
+            corpo = carga(client_admin, semana=s, departamentoId=dep.id).json()
+            assert corpo["departamentos"][0]["planejadoMin"] == por_semana[s][u.id] == por_id(corpo["pessoas"], "usuarioId", u.id)["planejadoMin"]
+
+
+def test_rateio_de_pools_de_departamento_em_varias_semanas_sem_vies(client_admin, db_session, empresa, regra) -> None:
+    dep1, dep2 = _departamento(db_session, empresa), _departamento(db_session, empresa)
+    pessoa(db_session, empresa, dep=dep1)
+    etapa_carga(db_session, empresa, est=241, ini=date(2026, 10, 21), fim=date(2026, 11, 13), deps=[dep1, dep2])
+    totais = {dep1.id: 0, dep2.id: 0}
+    for s in ("2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09"):
+        corpo = carga(client_admin, semana=s).json()
+        for dep in (dep1, dep2):
+            totais[dep.id] += por_id(corpo["departamentos"], "departamentoId", dep.id)["planejadoPoolMin"]
+    assert sorted(totais.values()) == [120, 121] and sum(totais.values()) == 241
+
+
 def test_usuario_mais_departamento_a_carga_vai_so_para_o_usuario(client_admin, db_session, empresa, regra) -> None:
     dep = _departamento(db_session, empresa)
     a = pessoa(db_session, empresa, dep=dep)

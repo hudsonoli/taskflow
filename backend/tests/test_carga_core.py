@@ -293,3 +293,123 @@ def test_resultado_e_deterministico_independente_da_ordem_de_entrada() -> None:
     um = calcular(etapas)
     dois = calcular(list(reversed(etapas)))
     assert {k: v.planejado_min for k, v in um.pessoas.items()} == {k: v.planejado_min for k, v in dois.pessoas.items()}
+
+
+# ── rateio entre responsáveis/pools E semanas (sem viés acumulado) ─────────────────────────────────────────────────
+
+from app.core.carga_semanal import ratear_por_linhas_e_colunas  # noqa: E402
+
+PESSOAS3 = [PessoaElegivel("a", "Ana", "dep1"), PessoaElegivel("b", "Bia", "dep1"), PessoaElegivel("c", "Caio", "dep2")]
+
+
+def _por_semana(e: EtapaEntrada, semanas: int, *, pessoas=PESSOAS3, hoje=SEG, extrair) -> list[dict]:
+    """Para cada semana consultada, {alvo: minutos} (usuário `a`,`b`,`c` ou pool `dep1`…), tal como a API devolveria."""
+    saida = []
+    for n in range(semanas):
+        r = calcular([e], semana=SEG + timedelta(days=7 * n), hoje=hoje, pessoas=pessoas)
+        saida.append(extrair(r))
+    return saida
+
+
+def _usuarios(r) -> dict[str, int]:
+    return {u: a.planejado_min for u, a in r.pessoas.items()}
+
+
+def _pools(r) -> dict[str, int]:
+    return {d: a.planejado_min for d, a in r.pools_departamento.items()}
+
+
+def _totais(semanais: list[dict]) -> dict[str, int]:
+    chaves = {k for s in semanais for k in s}
+    return {k: sum(s.get(k, 0) for s in semanais) for k in sorted(chaves)}
+
+
+def test_rateio_matriz_conserva_linhas_e_colunas_em_milhares_de_casos() -> None:
+    import random
+
+    rng = random.Random(11)
+    for _ in range(3000):
+        n_linhas, n_colunas = rng.randint(1, 5), rng.randint(1, 8)
+        colunas = [rng.choice([0, 0, rng.randint(1, 500)]) for _ in range(n_colunas)]
+        total = sum(colunas)
+        linhas = dividir_igual(total, n_linhas)
+        matriz = ratear_por_linhas_e_colunas(linhas, colunas)
+        assert [sum(l) for l in matriz] == linhas
+        assert [sum(matriz[i][j] for i in range(n_linhas)) for j in range(n_colunas)] == colunas
+        assert all(v >= 0 for l in matriz for v in l)
+        assert max(linhas) - min(linhas) <= 1
+
+
+def test_rateio_matriz_recusa_somas_diferentes() -> None:
+    with pytest.raises(ValueError):
+        ratear_por_linhas_e_colunas([1, 2], [5])
+
+
+def test_A_241_entre_2_usuarios_em_1_semana_da_121_e_120() -> None:
+    e = etapa(1, est=241, ini=date(2026, 10, 19), fim=date(2026, 10, 23), users=["a", "b"])
+    [s] = _por_semana(e, 1, extrair=_usuarios)
+    assert (s["a"], s["b"], s["c"]) == (121, 120, 0)
+
+
+def test_B_241_entre_2_usuarios_em_4_semanas_com_semanas_impares_conserva_global_e_semanal() -> None:
+    # qua 21/10 → sex 13/11: semanas de 3, 5, 5 e 5 dias úteis → 40 + 67 + 67 + 67 (três semanas ÍMPARES). A divisão semana a semana daria 122/119.
+    e = etapa(1, est=241, ini=date(2026, 10, 21), fim=date(2026, 11, 13), users=["a", "b"])
+    semanais = _por_semana(e, 4, hoje=SEG, extrair=_usuarios)
+    semana_da_etapa = [calcular([e], semana=SEG + timedelta(days=7 * n)).etapas[0].planejado_semana_min for n in range(4)]
+    assert semana_da_etapa == [40, 67, 67, 67] and sum(semana_da_etapa) == 241
+    assert [s["a"] + s["b"] for s in semanais] == semana_da_etapa  # total semanal da etapa preservado exatamente
+    total = _totais(semanais)
+    assert (total["a"], total["b"]) == (121, 120)  # a parcela global igualitária, sem viés
+    assert all(s["c"] == 0 for s in semanais)
+
+
+def test_C_100_entre_3_usuarios_em_3_semanas_da_34_33_33_e_semanas_exatas() -> None:
+    e = etapa(1, est=100, ini=date(2026, 10, 19), fim=date(2026, 11, 6), users=["a", "b", "c"])
+    semanais = _por_semana(e, 3, extrair=_usuarios)
+    assert _totais(semanais) == {"a": 34, "b": 33, "c": 33}
+    semana_da_etapa = [calcular([e], semana=SEG + timedelta(days=7 * n)).etapas[0].planejado_semana_min for n in range(3)]
+    assert [sum(s.values()) for s in semanais] == semana_da_etapa and sum(semana_da_etapa) == 100
+
+
+def test_D_1_minuto_entre_2_usuarios_em_varias_semanas_so_um_recebe() -> None:
+    e = etapa(1, est=1, ini=date(2026, 10, 19), fim=date(2026, 11, 6), users=["a", "b"])
+    semanais = _por_semana(e, 3, extrair=_usuarios)
+    total = _totais(semanais)
+    assert (total["a"], total["b"]) == (1, 0)  # o menor id recebe o minuto único, uma vez só
+    assert sum(sum(s.values()) for s in semanais) == 1
+
+
+@pytest.mark.parametrize(("deps", "esperado"), [(["dep1", "dep2"], {"dep1": 121, "dep2": 120}), (["dep1", "dep2", "dep3"], {"dep1": 81, "dep2": 80, "dep3": 80})])
+def test_E_pools_de_departamento_tambem_sem_vies_entre_semanas(deps, esperado) -> None:
+    e = etapa(1, est=241, ini=date(2026, 10, 21), fim=date(2026, 11, 13), deps=deps)
+    semanais = _por_semana(e, 4, extrair=_pools)
+    assert _totais(semanais) == esperado
+    semana_da_etapa = [calcular([e], semana=SEG + timedelta(days=7 * n)).etapas[0].planejado_semana_min for n in range(4)]
+    assert [sum(s.values()) for s in semanais] == semana_da_etapa == [40, 67, 67, 67]
+
+
+def test_invariantes_em_etapas_aleatorias_multiassignee_e_pools() -> None:
+    import random
+
+    rng = random.Random(5)
+    for _ in range(300):
+        n = rng.randint(2, 3)
+        est = rng.randint(0, 1500)
+        ini = SEG + timedelta(days=rng.randint(0, 10))
+        fim = ini + timedelta(days=rng.randint(0, 28))
+        usuarios = rng.choice([["a", "b", "c"][:n], []])
+        deps = [] if usuarios else ["dep1", "dep2", "dep3"][:n]
+        e = etapa(1, est=est, ini=ini, fim=fim, users=usuarios, deps=deps)
+        semanais_u = _por_semana(e, 8, extrair=_usuarios)
+        semanais_p = _por_semana(e, 8, extrair=_pools)
+        totais = _totais(semanais_u) if usuarios else _totais(semanais_p)
+        pesos = [calcular([e], semana=SEG + timedelta(days=7 * k)).etapas[0] for k in range(8)]
+        planejados = [x.planejado_semana_min for x in pesos]
+        if planejados[0] is None:  # sem dia útil: nada distribuído
+            continue
+        base = semanais_u if usuarios else semanais_p
+        assert sum(totais.values()) == est == sum(planejados)  # total da etapa conservado
+        assert [sum(s.values()) for s in base] == planejados  # total de cada semana conservado
+        participantes = [totais[t] for t in (usuarios or deps)]
+        assert max(participantes) - min(participantes) <= 1  # divisão igual global: diferença ≤ 1
+        assert sorted(participantes) == sorted(dividir_igual(est, len(participantes)))  # as parcelas globais são exatamente as da divisão igual

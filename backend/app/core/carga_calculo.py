@@ -9,7 +9,8 @@ Saída: a ALOCAÇÃO COMPLETA da semana (por etapa, por pessoa, por departamento
   Janela vencida e janela só em dias sem capacidade viram PENDÊNCIAS (nada é movido de semana). Ver `alocar_janela`.
 - **Responsáveis**: usuários elegíveis da etapa recebem a carga em divisão igual (ordem estável por id; maior resto). Sem usuário elegível: departamentos da etapa viram POOLS (divisão igual entre eles);
   sem departamento: POOL_SEM_DEPARTAMENTO. A carga NUNCA desaparece. Departamento com usuários NÃO recebe carga extra.
-- **Divisão da semana**: a divisão entre responsáveis é feita sobre o valor da SEMANA da etapa, então Σ pessoas/pools == planejado da etapa na semana, exatamente.
+- **Divisão entre responsáveis e semanas**: a parcela GLOBAL de cada responsável/pool vem da divisão igual da estimativa (241 → 121 e 120) e a janela é rateada em matriz responsável × semana
+  (`ratear_por_linhas_e_colunas`): Σ da linha = parcela global do responsável e Σ da coluna = planejado da etapa na semana, exatamente. Sem viés acumulado de arredondamento entre semanas.
 - **Expediente desligado/ausente**: sem denominador confiável → `capacidade_indisponivel`; nenhuma distribuição semanal é feita (planejado e saldo ficam nulos), mas não planejado, sem estimativa e janela vencida
   (que dependem só de datas) continuam informados.
 """
@@ -28,6 +29,7 @@ from app.core.carga_semanal import (
     dividir_igual,
     minutos_nominais_do_dia,
     obter_capacidade_usuario,
+    ratear_por_linhas_e_colunas,
 )
 from app.core.expediente import RegraExpediente
 
@@ -135,6 +137,25 @@ def _alvos_da_etapa(entrada: EtapaEntrada, elegiveis: dict[str, PessoaElegivel])
     return [("pool_sem_departamento", "")], ORIGEM_POOL_SEM_DEPARTAMENTO
 
 
+def _parte_da_semana(estimativa: int, quantidade_alvos: int, por_semana: dict[date, int], semana_inicio: date) -> list[int]:
+    """Parte de CADA alvo na semana consultada, sem viés acumulado entre semanas.
+
+    1. a estimativa inteira é dividida entre os alvos (parcela GLOBAL: 241 entre 2 → 121 e 120);
+    2. a janela inteira é rateada em matriz alvo × semana: cada linha soma a parcela global do alvo e cada coluna soma o planejado da semana da etapa;
+    3. devolve a coluna da semana consultada.
+    A matriz usa SEMPRE todas as semanas da janela, então o resultado de uma semana é o mesmo qualquer que seja a semana pedida. Um único alvo não precisa de rateio.
+    """
+    semana = por_semana.get(semana_inicio, 0)
+    if quantidade_alvos == 1:
+        return [semana]
+    if semana_inicio not in por_semana:
+        return [0] * quantidade_alvos
+    semanas = sorted(por_semana)
+    matriz = ratear_por_linhas_e_colunas(dividir_igual(estimativa, quantidade_alvos), [por_semana[s] for s in semanas])
+    coluna = semanas.index(semana_inicio)
+    return [linha[coluna] for linha in matriz]
+
+
 def calcular_carga(
     *,
     etapas: list[EtapaEntrada],
@@ -188,7 +209,7 @@ def calcular_carga(
                 alocacao_estado = resultado.estado
                 if resultado.estado == ALOCACAO_ALOCADA and estimativa is not None:
                     planejado_semana = resultado.por_semana.get(semana_inicio, 0)
-                    divisao_semana = dividir_igual(planejado_semana, len(alvos))
+                    divisao_semana = _parte_da_semana(estimativa, len(alvos), resultado.por_semana, semana_inicio)
             elif entrada.planejado_fim < hoje:
                 alocacao_estado = ALOCACAO_JANELA_VENCIDA  # só depende de datas; o calendário não é necessário para saber que venceu
 

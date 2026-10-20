@@ -101,6 +101,27 @@ def dividir_igual(total: int, quantidade: int) -> list[int]:
     return distribuir_por_pesos(total, [1] * quantidade)
 
 
+def ratear_por_linhas_e_colunas(linhas: Sequence[int], colunas: Sequence[int]) -> list[list[int]]:
+    """Rateio BIDIMENSIONAL em inteiros: devolve uma matriz `x[i][j]` ≥ 0 com **soma da linha i = linhas[i]** e **soma da coluna j = colunas[j]**, exatamente.
+
+    Usado para repartir uma etapa entre responsáveis (linhas: a parcela GLOBAL de cada um, ex.: 241 → 121 e 120) e entre semanas (colunas: o planejado de cada semana) SEM viés acumulado:
+    o resto de arredondamento de uma semana nunca "engole" a parcela de um responsável nas semanas seguintes.
+
+    Algoritmo (determinístico, sem dependência): percorre as colunas em ordem e reparte cada coluna entre as linhas proporcionalmente ao que ainda FALTA a cada linha, por maior resto
+    (empate pelo menor índice). Como a coluna nunca excede a soma dos restantes, nenhuma linha recebe mais do que falta a ela; na última coluna a soma restante é igual à coluna e cada linha recebe
+    exatamente o que falta. Exige `sum(linhas) == sum(colunas)`.
+    """
+    if sum(linhas) != sum(colunas):
+        raise ValueError("as somas de linhas e colunas devem ser iguais")
+    restante = list(linhas)
+    matriz = [[0] * len(colunas) for _ in linhas]
+    for j, coluna in enumerate(colunas):
+        for i, minutos in enumerate(distribuir_por_pesos(coluna, restante)):
+            matriz[i][j] = minutos
+            restante[i] -= minutos
+    return matriz
+
+
 @dataclass(frozen=True)
 class AlocacaoJanela:
     """Resultado de distribuir UMA janela completa. `estado`: alocada | janela_vencida | sem_dia_util. `por_semana`: segunda-feira → minutos (vazio fora de `alocada` ou sem restante conhecido)."""
