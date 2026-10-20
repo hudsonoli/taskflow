@@ -8,13 +8,14 @@ import { useAppData } from "@/lib/AppDataContext";
 import { podeAcessarCentralTrafego } from "@/lib/escopo-operacional";
 import { VISAO_PADRAO, VISOES_TRAFEGO, visaoDaUrl } from "@/lib/trafego-operacional";
 import { TrafegoAgoraVisao } from "./TrafegoAgoraVisao";
+import { TrafegoCargaView } from "./carga/TrafegoCargaView";
 import { TrafegoGargalosVisao } from "./TrafegoGargalosVisao";
 import { TrafegoHeader } from "./TrafegoHeader";
 import { TrafegoTempoPessoalView } from "./TrafegoTempoPessoalView";
 
 /**
  * Central de Tráfego — Tráfego V2. Gestão OPERACIONAL: [Agora] "o que precisa da atenção do gestor agora?" e [Gargalos] "onde o fluxo está travando?", ambos sobre os intervalos de estado das
- * tarefas (tempo operacional). A antiga tela de sessões manuais continua disponível, rebaixada para a aba secundária [Tempo pessoal] — tempo PESSOAL, que não alimenta as duas primeiras.
+ * tarefas (tempo operacional); [Carga] "quanto da capacidade da semana já está comprometida?" — planejamento (estimativa + janela × expediente), sem tempo trabalhado. A antiga tela de sessões manuais continua disponível, rebaixada para a aba secundária [Tempo pessoal] — tempo PESSOAL, que não alimenta as duas primeiras.
  * A visão vive na URL (`?visao=gargalos`); sem parâmetro, ou com valor desconhecido, abre AGORA. O backend é a autoridade de acesso; aqui só se reaproveita o mesmo gate da tela.
  * A visão é lida do ROUTER (`useSearchParams`) e trocada com `router.replace` — assim as visões filhas, que guardam os próprios filtros na URL (`useFiltrosNaUrl`), já montam vendo `visao` e nunca
  * a apagam ao gravar um filtro.
@@ -67,6 +68,7 @@ export function TrafegoView() {
         />
       )}
       {visao === "gargalos" && <TrafegoGargalosVisao etapa={etapa} onLimparEtapa={() => setEtapa(null)} />}
+      {visao === "carga" && <TrafegoCargaView />}
       {visao === "pessoal" && <TrafegoTempoPessoalView />}
     </div>
   );

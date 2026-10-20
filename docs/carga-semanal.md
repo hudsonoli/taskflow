@@ -164,3 +164,26 @@ filtros, status, sem estimativa, detalhe, somente leitura, sem tempo pessoal/ope
 
 UI de Carga (11B.2B-C), jornada individual, ausências/férias, feriados automáticos, histórico de semanas passadas, cache e
 qualquer mudança nas colunas ou contratos da Fase A.
+
+## UI da Carga (11B.2B-C)
+
+Aba **Carga** da Central de Tráfego (`/trafego?visao=carga`; abas: Agora | Gargalos | Carga | Tempo pessoal). Só frontend; a
+única fonte é `GET /trafego/operacional/carga`. Código: `frontend/src/components/trafego/carga/`, regras puras em
+`frontend/src/lib/trafego-carga.ts` (testes: `npm run test:trafego-carga`).
+
+- **Requisições:** 1 principal por entrada, semana, filtro ou "Atualizar" (sem polling); o drill-down faz +1 só ao abrir
+  (`detalhe=usuario|departamento`, sem cache). O filtro vai para o servidor; o cliente nunca filtra nem recalcula. Pessoa e
+  departamento são recortes excludentes (a pessoa tem precedência no servidor).
+- **Semana:** a API devolve `semana.inicio/fim` e `meta.fusoEmpresa`; o cliente só soma 7 dias ao calendário recebido. "Anterior"
+  fica desabilitado na semana atual (`recorteHoje=true`), então a navegação normal nunca gera 422.
+- **Resumo (sem dupla contagem):** capacidade = Σ `pessoas[].capacidadeAlocavelMin`; planejado = Σ `pessoas[].planejadoMin` +
+  `planejadoPoolMin` dos departamentos **com pessoas**. `departamentos[].planejadoMin` não é somado por cima (já inclui as
+  pessoas). Pool de departamento sem pessoas e `poolSemDepartamento` ficam em "Sem destino de capacidade", fora do denominador.
+- **Leitura honesta:** havendo etapa sem estimativa, sem janela, com janela vencida ou sem dia útil, o rótulo vira "Ocupação
+  conhecida" e um aviso âmbar explica que a ocupação pode estar subestimada. Capacidade indisponível mostra "Capacidade
+  indisponível" (nunca 0) e ocupação "—".
+- **Limites do contrato (não ampliado nesta fase):**
+  1. Não existe contagem **global** única de etapas sem estimativa (as por pessoa/departamento/pool se sobrepõem). Sem filtro a UI
+     mostra um limite inferior provado (e "Pelo menos N" quando não é exato); com filtro de pessoa/departamento o valor é exato.
+  2. `naoPlanejado` (sem janela/incompleta) traz só contagens e minutos; as etapas aparecem no detalhe da pessoa/departamento. As
+     etapas do pool sem departamento não têm lista no contrato (o aviso pede atribuir departamento/responsável na tarefa).

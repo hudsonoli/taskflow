@@ -401,10 +401,12 @@ test("visões: Agora é o padrão; valor desconhecido na URL abre Agora; Tempo p
   assert.equal(visaoDaUrl(null), "agora");
   assert.equal(visaoDaUrl("qualquer"), "agora");
   assert.equal(visaoDaUrl("gargalos"), "gargalos");
+  assert.equal(visaoDaUrl("carga"), "carga");
   assert.equal(visaoDaUrl("pessoal"), "pessoal");
-  assert.deepEqual(VISOES_TRAFEGO.map((v) => v.label), ["Agora", "Gargalos", "Tempo pessoal"]);
+  assert.deepEqual(VISOES_TRAFEGO.map((v) => v.label), ["Agora", "Gargalos", "Carga", "Tempo pessoal"]);
   const shell = semComentarios(ler("components/trafego/TrafegoView.tsx"));
   assert.match(shell, /visao === "agora" && /);
+  assert.match(shell, /visao === "carga" && <TrafegoCargaView \/>/); // a Carga só monta (e só pede dados) na aba dela
   assert.match(shell, /visao === "pessoal" && <TrafegoTempoPessoalView \/>/); // o legado só monta (e só pede dados) na aba dele
   assert.match(shell, /podeAcessarCentralTrafego\(usuarioAtual\)/); // mesmo gate de antes; o backend segue sendo a autoridade
 });

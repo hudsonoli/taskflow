@@ -1,5 +1,7 @@
 import type { TrafegoAgoraPagina, TrafegoCarga, TrafegoIndicadores, TrafegoStatusFiltro } from "@/types/trafego";
 import type { ParametrosGargalosOperacionais, TrafegoOperacionalAgora, TrafegoOperacionalGargalos } from "@/types/trafego-operacional";
+import type { CargaSemanal, ParametrosCarga } from "@/types/trafego-carga";
+import { consultaDaCarga } from "@/lib/trafego-carga";
 import { TrafegoOperacionalErro } from "@/lib/trafego-operacional";
 import { parametrosFiltrosTrafego, type FiltrosTrafegoApi } from "@/lib/filtros-trafego";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
@@ -266,6 +268,14 @@ export function getTrafegoOperacionalGargalos(parametros: ParametrosGargalosOper
   if (parametros.workflowEtapaId) search.set("workflowEtapaId", parametros.workflowEtapaId);
   if (parametros.limite) search.set("limite", String(parametros.limite));
   return getOperacional("gargalos", search, "Falha ao carregar os gargalos operacionais", signal);
+}
+
+/**
+ * Carga SEMANAL (11B.2B-C): capacidade do expediente × carga planejada das etapas. `GET /trafego/operacional/carga` — a ÚNICA fonte da tela; não lê sessões de trabalho nem intervalos.
+ * A consulta principal e o drill-down (`detalhe`) são chamadas distintas; o servidor recorta por departamento/pessoa SEM recalcular a divisão.
+ */
+export function getTrafegoCarga(parametros: ParametrosCarga, signal?: AbortSignal): Promise<CargaSemanal> {
+  return getOperacional("carga", new URLSearchParams(consultaDaCarga(parametros)), "Falha ao carregar a Carga semanal", signal);
 }
 
 export async function fecharSessaoTrabalho(sessaoId: string, motivoEncerramento: string): Promise<SessaoTrabalho> {

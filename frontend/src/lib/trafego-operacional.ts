@@ -14,11 +14,13 @@ import type {
 
 // ── Visões ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export type VisaoTrafego = "agora" | "gargalos" | "pessoal";
+export type VisaoTrafego = "agora" | "gargalos" | "carga" | "pessoal";
 export const VISAO_PADRAO: VisaoTrafego = "agora";
 export const VISOES_TRAFEGO: ReadonlyArray<{ id: VisaoTrafego; label: string }> = [
   { id: "agora", label: "Agora" },
   { id: "gargalos", label: "Gargalos" },
+  // Carga semanal (11B.2B-C): capacidade do expediente × carga planejada das etapas. Planejamento, não tempo trabalhado.
+  { id: "carga", label: "Carga" },
   // Legado: sessões de trabalho abertas manualmente (tempo PESSOAL). Fica numa área secundária e não alimenta nenhuma métrica operacional.
   { id: "pessoal", label: "Tempo pessoal" },
 ];
