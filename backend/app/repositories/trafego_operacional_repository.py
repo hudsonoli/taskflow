@@ -398,3 +398,55 @@ class TrafegoOperacionalRepository:
         """
         linhas = db.execute(text(sql), params).all()
         return [dict(linha._mapping) for linha in linhas]
+
+    # ----------------------------------------------------------------------------------
+    # FLUXO — itens atuais por definição de etapa
+    # ----------------------------------------------------------------------------------
+
+    def itens_do_fluxo(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        filtros: FiltrosOperacionais,
+        agora: datetime,
+        chaves: list[str],
+        limite_itens: int,
+    ) -> list[dict[str, Any]]:
+        """Demandas ABERTAS por definição de etapa — o MESMO universo e a MESMA etapa de `fila_atual` (CTE `abertos`: intervalo aberto, status de triagem na Demanda e no intervalo, mesmos filtros).
+
+        `chaves`: definições selecionadas pelo SERVIDOR, no formato `chavetipodeps` montado a partir das linhas de `fila_atual`/`tempo_por_etapa` (nunca vindas do cliente). `itens_total` = contagem de
+        TODAS as Demandas da definição (janela `count() OVER`), independente do limite; só as `limite_itens` primeiras (atrasadas, depois a mais antiga no estado) voltam. Só Demandas COM etapa
+        (as sem etapa são contadas à parte)."""
+        if not chaves:
+            return []
+        abertos, params = self._abertos_sql(empresa_id, filtros)
+        params.update({"agora": agora, "chaves": chaves, "limite_itens": limite_itens})
+        sql = f"""
+            WITH {abertos},
+            itens AS (
+                SELECT a.demanda_id, a.inicio_em AS inicio_estado, a.deps,
+                       {_CHAVE_ETAPA} AS chave, e.tipo AS tipo, e.id AS etapa_id, e.nome AS etapa_nome,
+                       d.codigo_referencia, d.numero_operacional, d.identificador, d.nome AS titulo, d.status, d.prazo_etapa_atual AS prazo,
+                       p.id AS projeto_id, p.nome AS projeto_nome, c.id AS cliente_id, c.nome AS cliente_nome
+                FROM abertos a
+                JOIN demandas d ON d.id = a.demanda_id AND d.empresa_id = :empresa_id
+                JOIN demanda_workflow_etapas e ON e.id = a.workflow_etapa_id AND e.demanda_id = a.demanda_id
+                LEFT JOIN projetos p ON p.id = d.projeto_id AND p.empresa_id = :empresa_id
+                LEFT JOIN clientes c ON c.id = d.cliente_id AND c.empresa_id = :empresa_id
+                WHERE ({_CHAVE_ETAPA} || chr(31) || e.tipo || chr(31) || a.deps) = ANY(:chaves)
+            ),
+            ranqueados AS (
+                SELECT i.*,
+                       count(*) OVER (PARTITION BY i.chave, i.tipo, i.deps) AS itens_total,
+                       row_number() OVER (
+                           PARTITION BY i.chave, i.tipo, i.deps
+                           ORDER BY COALESCE(i.prazo < :agora, false) DESC, i.inicio_estado ASC NULLS LAST, i.numero_operacional DESC, i.demanda_id ASC
+                       ) AS posicao
+                FROM itens i
+            )
+            SELECT * FROM ranqueados WHERE posicao <= :limite_itens
+            ORDER BY chave ASC, tipo ASC, deps ASC, posicao ASC
+        """
+        linhas = db.execute(text(sql), params).all()
+        return [dict(linha._mapping) for linha in linhas]

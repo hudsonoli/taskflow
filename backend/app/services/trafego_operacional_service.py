@@ -22,6 +22,11 @@ Escopo de triagem = `planejada`, `em_execucao`, `pausada`, `bloqueada`, `aguarda
 - Cobertura: `medicaoDesde` = menor início de intervalo da empresa; `coberturaParcial` quando o período começa antes dele. O passado não é estimado.
 - Fila/WIP: estado ATUAL (ignora o período), pela etapa do intervalo aberto (mantida em sincronia com a etapa atual do workflow pelo motor). Idade NA ETAPA = início da sequência contínua de
   intervalos da mesma etapa; devolução à etapa anterior recomeça a contagem.
+## FLUXO (estado atual por definição de etapa)
+`fluxo()` reaproveita as MESMAS consultas e a MESMA função de identidade (`_definicao`) de Gargalos: `fila_atual` (WIP por definição, universo = intervalo aberto + status de triagem), `tempo_por_etapa` (média em
+execução no período) e, só para os cards, `itens_do_fluxo` (mesma CTE `abertos`: mesma etapa, mesmo universo, mesmos filtros). A etapa de cada item é a do intervalo aberto — a mesma que define o WIP em Gargalos.
+Cada definição devolve `itensTotal` (contagem independente por janela SQL) que deve igualar `metricas.wip`; o limite só corta cards/colunas, nunca os totais. Ordem das colunas: neutra e determinística
+(departamento(s) → nome → tipo → chave) — não existe sequência global entre workflows distintos. Demandas abertas sem etapa atual entram em `semEtapa` (contagem), nunca somem.
 - Quebra da pausa por origem (manual × expediente) NÃO é feita: `origem` do intervalo descreve como o intervalo ABRIU, e uma troca de etapa durante a pausa apaga a origem da pausa.
 """
 
@@ -58,11 +63,24 @@ from app.schemas.trafego_operacional import (
     TrafegoOperacionalAgoraRead,
     TrafegoOperacionalGargalosRead,
 )
+from app.schemas.trafego_fluxo import (
+    FluxoDefinicaoRead,
+    FluxoFiltrosRead,
+    FluxoItemRead,
+    FluxoMetricasRead,
+    TrafegoOperacionalFluxoRead,
+)
 
 PERIODO_PADRAO = timedelta(days=30)
 PERIODO_MAXIMO = timedelta(days=90)
 LIMITE_PADRAO = 50
 LIMITE_MAXIMO = 200
+# FLUXO: limites próprios (definições = colunas; itens = cards por coluna).
+FLUXO_LIMITE_DEFINICOES_PADRAO = 100
+FLUXO_LIMITE_DEFINICOES_MAXIMO = 200
+FLUXO_LIMITE_ITENS_PADRAO = 20
+FLUXO_LIMITE_ITENS_MAXIMO = 100
+FLUXO_PERIODO_DIAS_PADRAO = 30
 
 
 class PeriodoInvalidoError(ValueError):
@@ -335,4 +353,150 @@ class TrafegoOperacionalService:
             filaTotal=len(fila),
             filaSemEtapa=FilaSemEtapaRead(workflowConcluido=concluido, semWorkflow=sem_workflow),
             limite=limite,
+        )
+
+    # ----------------------------------------------------------------------------------
+    # FLUXO
+    # ----------------------------------------------------------------------------------
+
+    def fluxo(
+        self,
+        db: Session,
+        *,
+        empresa_id: str,
+        periodo_dias: int = FLUXO_PERIODO_DIAS_PADRAO,
+        departamento_id: str | None = None,
+        limite_definicoes: int = FLUXO_LIMITE_DEFINICOES_PADRAO,
+        limite_itens: int = FLUXO_LIMITE_ITENS_PADRAO,
+    ) -> TrafegoOperacionalFluxoRead:
+        limite_definicoes = max(1, min(limite_definicoes, FLUXO_LIMITE_DEFINICOES_MAXIMO))
+        limite_itens = max(1, min(limite_itens, FLUXO_LIMITE_ITENS_MAXIMO))
+        periodo = timedelta(days=max(1, min(periodo_dias, PERIODO_MAXIMO.days)))
+        agora = agora_utc()
+        fuso_nome, _fuso = self._fuso(db, empresa_id)
+        inicio, fim_efetivo = agora - periodo, agora
+
+        filtros = FiltrosOperacionais(departamento_id=departamento_id)
+        medicao = self.repository.medicao_desde(db, empresa_id=empresa_id)
+        parcial = medicao is None or inicio < medicao
+
+        tempo_linhas = self.repository.tempo_por_etapa(db, empresa_id=empresa_id, inicio=inicio, fim_efetivo=fim_efetivo, filtros=filtros)
+        fila_linhas = self.repository.fila_atual(db, empresa_id=empresa_id, filtros=filtros)
+        ids_departamento = sorted({i for linha in (*tempo_linhas, *fila_linhas) if linha["chave"] is not None for i in _ids_de_departamentos(linha["deps"])})
+        nomes_departamento = self.repository.departamentos_por_ids(db, empresa_id=empresa_id, departamento_ids=ids_departamento)
+
+        # Totais ATUAIS do escopo (inclui as sem etapa) — a mesma contagem de Gargalos.
+        wip = planejadas = em_execucao = pausadas = bloqueadas = aguardando = concluido = sem_workflow = 0
+        fila_por_definicao: dict[tuple[str, str, str], dict] = {}
+        for linha in fila_linhas:
+            wip += linha["wip"]
+            planejadas += linha["planejadas"]
+            em_execucao += linha["em_execucao"]
+            pausadas += linha["pausadas"]
+            bloqueadas += linha["bloqueadas"]
+            aguardando += linha["aguardando_cliente"]
+            if linha["categoria"] == "workflow_concluido":
+                concluido += linha["wip"]
+            elif linha["categoria"] == "sem_workflow":
+                sem_workflow += linha["wip"]
+            else:
+                fila_por_definicao[(linha["chave"], linha["tipo"], linha["deps"])] = linha
+        tempo_por_definicao = {(linha["chave"], linha["tipo"], linha["deps"]): linha for linha in tempo_linhas if linha["chave"] is not None}
+
+        # Definições = as que têm WIP agora OU tempo medido no período (estas últimas com WIP 0: coluna vazia, mas com histórico).
+        # A DEFINIÇÃO é construída por `_definicao` (a MESMA função de Gargalos); o nome vem da fila quando há WIP, senão do período.
+        definicoes: dict[tuple[str, str, str], DefinicaoEtapaRead] = {}
+        for chave_bruta in (*fila_por_definicao, *(k for k in tempo_por_definicao if k not in fila_por_definicao)):
+            origem = fila_por_definicao.get(chave_bruta) or tempo_por_definicao[chave_bruta]
+            definicoes[chave_bruta] = _definicao(origem, nomes_departamento)
+
+        def ordem(chave_bruta: tuple[str, str, str]) -> tuple:
+            definicao = definicoes[chave_bruta]
+            nomes = "|".join(d.nome.lower() for d in definicao.departamentos)
+            return (0 if definicao.departamentos else 1, nomes, definicao.nome.lower(), definicao.tipo, definicao.chave)
+
+        ordenadas = sorted(definicoes, key=ordem)
+        selecionadas = ordenadas[:limite_definicoes]
+
+        # Itens: só das definições devolvidas, em UMA consulta (sem N+1). As chaves vêm das linhas do servidor, nunca do cliente.
+        itens_linhas = self.repository.itens_do_fluxo(
+            db,
+            empresa_id=empresa_id,
+            filtros=filtros,
+            agora=agora,
+            chaves=[f"{c}\x1f{tipo}\x1f{deps}" for c, tipo, deps in selecionadas if (c, tipo, deps) in fila_por_definicao],
+            limite_itens=limite_itens,
+        )
+        etapa_ids = [linha["etapa_id"] for linha in itens_linhas]
+        responsaveis: dict[str, list[ResponsavelRead]] = defaultdict(list)
+        for etapa_id, usuario_id, nome in self.repository.responsaveis_das_etapas(db, empresa_id=empresa_id, etapa_ids=etapa_ids):
+            responsaveis[etapa_id].append(ResponsavelRead(usuarioId=usuario_id, nome=nome))
+        itens_por_definicao: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+        for linha in itens_linhas:
+            itens_por_definicao[(linha["chave"], linha["tipo"], linha["deps"])].append(linha)
+
+        saida: list[FluxoDefinicaoRead] = []
+        for chave_bruta in selecionadas:
+            definicao = definicoes[chave_bruta]
+            fila = fila_por_definicao.get(chave_bruta)
+            tempo = tempo_por_definicao.get(chave_bruta)
+            linhas_itens = itens_por_definicao.get(chave_bruta, [])
+            itens = [
+                FluxoItemRead(
+                    demandaId=linha["demanda_id"],
+                    codigoReferencia=linha["codigo_referencia"],
+                    numeroOperacional=linha["numero_operacional"],
+                    identificador=linha["identificador"],
+                    titulo=linha["titulo"],
+                    status=linha["status"],
+                    projeto=RefNomeRead(id=linha["projeto_id"], nome=linha["projeto_nome"]) if linha["projeto_id"] else None,
+                    cliente=RefNomeRead(id=linha["cliente_id"], nome=linha["cliente_nome"]) if linha["cliente_id"] else None,
+                    etapaAtual=EtapaAtualRead(id=linha["etapa_id"], nome=linha["etapa_nome"], tipo=linha["tipo"], departamentos=definicao.departamentos),
+                    definicaoChave=definicao.chave,
+                    responsaveis=responsaveis.get(linha["etapa_id"], []),
+                    inicioEstadoAtual=linha["inicio_estado"],
+                    idadeEstadoSegundos=max(0, int((agora - linha["inicio_estado"]).total_seconds())) if linha["inicio_estado"] is not None else None,
+                    prazo=linha["prazo"],
+                    atrasada=linha["prazo"] is not None and linha["prazo"] < agora,
+                )
+                for linha in linhas_itens
+            ]
+            itens_total = linhas_itens[0]["itens_total"] if linhas_itens else 0
+            saida.append(
+                FluxoDefinicaoRead(
+                    definicaoEtapa=definicao,
+                    metricas=FluxoMetricasRead(
+                        wip=fila["wip"] if fila else 0,
+                        planejadas=fila["planejadas"] if fila else 0,
+                        emExecucao=fila["em_execucao"] if fila else 0,
+                        pausadas=fila["pausadas"] if fila else 0,
+                        bloqueadas=fila["bloqueadas"] if fila else 0,
+                        aguardandoCliente=fila["aguardando_cliente"] if fila else 0,
+                        maisAntigaSegundos=max(0, int((agora - fila["mais_antiga_desde"]).total_seconds())) if fila else None,
+                        maisAntigaTruncadaPelaMedicao=bool(fila["mais_antiga_truncada"]) if fila else None,
+                        tempoExecucaoMedioSegundos=_media(tempo["exec_total"], tempo["n_exec"]) if tempo else None,
+                        nExecucao=tempo["n_exec"] if tempo else 0,
+                    ),
+                    itensTotal=itens_total,
+                    itensRetornados=len(itens),
+                    truncado=itens_total > len(itens),
+                    itens=itens,
+                )
+            )
+
+        return TrafegoOperacionalFluxoRead(
+            agoraServidor=agora,
+            fusoEmpresa=fuso_nome,
+            periodo=PeriodoRead(inicio=inicio, fim=agora, fimEfetivo=fim_efetivo),
+            medicaoDesde=medicao,
+            coberturaParcial=parcial,
+            filtros=FluxoFiltrosRead(departamentoId=departamento_id),
+            atual=AtualRead(wip=wip, planejadas=planejadas, emExecucao=em_execucao, pausadas=pausadas, bloqueadas=bloqueadas, aguardandoCliente=aguardando),
+            semEtapa=FilaSemEtapaRead(workflowConcluido=concluido, semWorkflow=sem_workflow),
+            definicoes=saida,
+            definicoesTotal=len(ordenadas),
+            definicoesRetornadas=len(saida),
+            truncado=len(ordenadas) > len(saida),
+            limiteDefinicoes=limite_definicoes,
+            limiteItensPorDefinicao=limite_itens,
         )

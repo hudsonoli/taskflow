@@ -1,6 +1,6 @@
 """Tráfego V2 — Fase 2: métricas OPERACIONAIS (somente leitura).
 
-`GET /trafego/operacional/agora` e `GET /trafego/operacional/gargalos`. TEMPO OPERACIONAL ≠ TEMPO PESSOAL: as duas rotas leem `demanda_status_intervalos`; nenhuma lê `sessoes_trabalho`.
+`GET /trafego/operacional/agora`, `GET /trafego/operacional/gargalos` e `GET /trafego/operacional/fluxo` (estado atual por definição de etapa, com cards). TEMPO OPERACIONAL ≠ TEMPO PESSOAL: as duas rotas leem `demanda_status_intervalos`; nenhuma lê `sessoes_trabalho`.
 `GET /trafego/operacional/carga` (11B.2B-B): carga SEMANAL planejada × capacidade (estimativa + janela planejada × expediente); não lê `sessoes_trabalho` nem `demanda_status_intervalos`.
 
 ## Autorização (sem permissão nova)
@@ -19,6 +19,7 @@ from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.permissoes import require_trafego_gerenciar
 from app.models.usuario import Usuario
 from app.schemas.trafego_carga import TrafegoCargaRead
+from app.schemas.trafego_fluxo import TrafegoOperacionalFluxoRead
 from app.schemas.trafego_operacional import TrafegoOperacionalAgoraRead, TrafegoOperacionalGargalosRead
 from app.services.carga_operacional_service import (
     LIMITE_MAXIMO as CARGA_LIMITE_MAXIMO,
@@ -29,6 +30,11 @@ from app.services.carga_operacional_service import (
     SemanaPassadaNaoSuportadaError,
 )
 from app.services.trafego_operacional_service import (
+    FLUXO_LIMITE_DEFINICOES_MAXIMO,
+    FLUXO_LIMITE_DEFINICOES_PADRAO,
+    FLUXO_LIMITE_ITENS_MAXIMO,
+    FLUXO_LIMITE_ITENS_PADRAO,
+    FLUXO_PERIODO_DIAS_PADRAO,
     LIMITE_MAXIMO,
     LIMITE_PADRAO,
     EtapaNaoEncontradaError,
@@ -71,6 +77,26 @@ def agora_operacional(
 ) -> TrafegoOperacionalAgoraRead:
     """Estado ATUAL + triagem: KPIs do escopo (planejada, em_execucao, pausada, bloqueada, aguardando_cliente) e a lista "em execução agora" (estado da DEMANDA — não é executor)."""
     return service.agora(db, empresa_id=current_user.empresa_id, limite=limite)
+
+
+@router.get("/fluxo", response_model=TrafegoOperacionalFluxoRead, response_model_by_alias=True)
+def fluxo_operacional(
+    periodo_dias: int = Query(default=FLUXO_PERIODO_DIAS_PADRAO, ge=1, le=90, alias="periodoDias", description="Janela (dias, até agora) das métricas de TEMPO. WIP e itens são sempre o estado atual."),
+    departamento_id: str | None = Query(default=None, alias="departamentoId", description="Só definições cujo conjunto de departamentos inclui este; métricas, itens e totais respeitam o mesmo filtro."),
+    limite_definicoes: int = Query(default=FLUXO_LIMITE_DEFINICOES_PADRAO, ge=1, le=FLUXO_LIMITE_DEFINICOES_MAXIMO, alias="limiteDefinicoes"),
+    limite_itens_por_definicao: int = Query(default=FLUXO_LIMITE_ITENS_PADRAO, ge=1, le=FLUXO_LIMITE_ITENS_MAXIMO, alias="limiteItensPorDefinicao"),
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_trafego_gerenciar()),
+) -> TrafegoOperacionalFluxoRead:
+    """Fluxo POR ETAPA: Demandas abertas agrupadas pela DEFINIÇÃO semântica da etapa atual (identidade do servidor, a mesma de Gargalos), com métricas operacionais, totais reais e cards. Somente leitura."""
+    return service.fluxo(
+        db,
+        empresa_id=current_user.empresa_id,
+        periodo_dias=periodo_dias,
+        departamento_id=_uuid_opcional(departamento_id, "departamentoId"),
+        limite_definicoes=limite_definicoes,
+        limite_itens=limite_itens_por_definicao,
+    )
 
 
 @router.get("/gargalos", response_model=TrafegoOperacionalGargalosRead, response_model_by_alias=True)
