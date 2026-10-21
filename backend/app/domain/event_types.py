@@ -34,6 +34,8 @@ class DomainEventType(StrEnum):
     USUARIO_AUSENCIA_ALTERADA = "usuario.ausencia_alterada"
     USUARIO_AUSENCIA_REMOVIDA = "usuario.ausencia_removida"
     USUARIO_PERMISSAO_REMOVIDA = "usuario.permissao_removida"
+    # Hotfix de onboarding: primeiro acesso por senha TEMPORÁRIA emitida na criação ou sob demanda. O payload NUNCA leva a senha.
+    USUARIO_SENHA_TEMPORARIA_GERADA = "usuario.senha_temporaria_gerada"
 
     GRUPO_CLIENTE_CRIADO = "grupo_cliente.criado"
     GRUPO_CLIENTE_ALTERADO = "grupo_cliente.alterado"

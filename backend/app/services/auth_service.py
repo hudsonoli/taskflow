@@ -429,15 +429,23 @@ class AuthService:
             return
         credencial = self.credencial_repository.get_by_usuario_id(db, usuario.id)
         if credencial is None:
+            # Conta real e habilitada, mas SEM senha local (nunca concluiu o onboarding): a resposta pública segue neutra, porém o operador precisa ENXERGAR o motivo
+            # (antes era um `return` mudo e o e-mail "nunca chegava" sem rastro). Só ids internos — nunca e-mail, token ou senha.
+            logger.warning(
+                "event=password_reset.skipped reason=no_credential empresa_id=%s usuario_id=%s", empresa.id, usuario.id
+            )
             return
 
         solicitado_em = self._as_utc(credencial.reset_senha_solicitado_em)
         if solicitado_em is not None and now - solicitado_em < PASSWORD_RESET_COOLDOWN:
+            logger.info("event=password_reset.skipped reason=cooldown empresa_id=%s usuario_id=%s", empresa.id, usuario.id)
             return
 
         base_url = self._url_publica_base()
         if base_url is None:
-            logger.warning("Recuperação de senha sem APP_PUBLIC_URL válida; e-mail não enviado (empresa_id=%s)", empresa.id)
+            logger.warning(
+                "event=password_reset.skipped reason=app_public_url_invalid empresa_id=%s usuario_id=%s", empresa.id, usuario.id
+            )
             return
 
         token = generate_password_reset_token()
@@ -462,15 +470,20 @@ class AuthService:
             )
         except Exception as exc:  # EmailTransacionalError, EmailConteudoInvalidoError ou bug
             logger.warning(
-                "Falha ao enviar e-mail de recuperação de senha (empresa_id=%s, motivo=%s)",
+                "event=email.password_reset.failed provider=smtp empresa_id=%s usuario_id=%s motivo=%s exception_type=%s",
                 usuario.empresa_id,
+                usuario.id,
                 getattr(exc, "motivo", type(exc).__name__),
+                type(exc).__name__,
             )
             credencial.reset_senha_token_hash = None
             credencial.reset_senha_expira_em = None
             credencial.updated_at = datetime.now(timezone.utc)
             self.credencial_repository.update(db, credencial)
             db.commit()
+            return
+        # O servidor SMTP ACEITOU a mensagem (≠ entregue na caixa do destinatário). Sem destinatário, token ou link.
+        logger.info("event=email.password_reset.accepted provider=smtp empresa_id=%s usuario_id=%s", usuario.empresa_id, usuario.id)
 
     def confirmar_redefinicao_senha(
         self,

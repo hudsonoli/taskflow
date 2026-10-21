@@ -1,4 +1,4 @@
-import { CalendarClock, Pencil, Trash2 } from "lucide-react";
+import { CalendarClock, KeyRound, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -15,8 +15,10 @@ export function UsuariosTable({
   podeEditar,
   onVerCapacidade,
   podeExcluir,
+  podeGerarSenha,
   onEdit,
   onExcluir,
+  onGerarSenha,
 }: {
   usuarios: Usuario[];
   departamentos: DepartamentoDiretorioItem[];
@@ -27,8 +29,11 @@ export function UsuariosTable({
   /** Consulta somente leitura da jornada/ausências de quem o ator vê mas não edita. */
   onVerCapacidade: (usuarioId: string) => void;
   podeExcluir: (usuario: Usuario) => boolean;
+  /** Primeiro acesso pendente + autoridade sobre a linha: habilita a emissão de uma senha temporária. */
+  podeGerarSenha: (usuario: Usuario) => boolean;
   onEdit: (usuarioId: string) => void;
   onExcluir: (usuarioId: string) => void;
+  onGerarSenha: (usuarioId: string) => void;
 }) {
   if (usuarios.length === 0) {
     return <EmptyState title="Nenhuma pessoa encontrada" description="Ajuste a busca ou os filtros." />;
@@ -102,7 +107,10 @@ export function UsuariosTable({
                   <Badge tone="blue">{perfilUsuarioLabels[usuario.perfil]}</Badge>
                 </td>
                 <td className="px-4 py-3">
-                  {usuario.ativo ? <Badge tone="green">Ativo</Badge> : <Badge tone="red">Inativo</Badge>}
+                  <div className="flex flex-wrap gap-1.5">
+                    {usuario.ativo ? <Badge tone="green">Ativo</Badge> : <Badge tone="red">Inativo</Badge>}
+                    {usuario.ativo && usuario.primeiroAcessoPendente && <Badge tone="amber">Primeiro acesso pendente</Badge>}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-2">
@@ -116,6 +124,12 @@ export function UsuariosTable({
                       <Button variant="secondary" onClick={() => onVerCapacidade(usuario.id)} className="px-3 py-1.5 text-xs">
                         <CalendarClock className="h-3.5 w-3.5" />
                         Jornada
+                      </Button>
+                    )}
+                    {podeGerarSenha(usuario) && (
+                      <Button variant="secondary" onClick={() => onGerarSenha(usuario.id)} className="px-3 py-1.5 text-xs">
+                        <KeyRound className="h-3.5 w-3.5" />
+                        Senha temporária
                       </Button>
                     )}
                     {podeExcluir(usuario) && (

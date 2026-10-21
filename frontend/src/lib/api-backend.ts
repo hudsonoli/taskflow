@@ -325,7 +325,14 @@ export type UsuarioReadApi = {
   permissoes?: string[] | null;
   // Só em GET /usuarios/me: último login bem-sucedido do próprio usuário.
   ultimoAcesso?: { em: string; ip: string | null } | null;
+  // Só em GET /usuarios (lista): primeiro acesso ainda pendente.
+  primeiroAcessoPendente?: boolean | null;
 };
+
+/** Resposta do POST /usuarios: `senhaTemporaria` existe SÓ aqui (exibição única); null quando a pessoa não tem acesso ao sistema. */
+export type UsuarioCriadoApi = UsuarioReadApi & { senhaTemporaria?: string | null; deveAlterarSenha?: boolean };
+
+export type UsuarioCriado = { usuario: Usuario; senhaTemporaria: string | null };
 
 export function mapUsuarioReadToUsuario(data: UsuarioReadApi): Usuario {
   return {
@@ -357,6 +364,7 @@ export function mapUsuarioReadToUsuario(data: UsuarioReadApi): Usuario {
     updatedAt: data.updatedAt,
     permissoes: data.permissoes ?? undefined,
     ultimoAcesso: data.ultimoAcesso ?? undefined,
+    primeiroAcessoPendente: data.primeiroAcessoPendente ?? undefined,
   };
 }
 
@@ -581,16 +589,26 @@ export async function buscarDiretorioUsuariosPorIds(ids: string[]): Promise<Usua
   return data.map(mapUsuarioDiretorio);
 }
 
-export async function criarUsuarioReal(draft: UsuarioFormDraft, empresaId: string): Promise<Usuario> {
-  const created = await request<UsuarioReadApi>("/usuarios", {
+export async function criarUsuarioReal(draft: UsuarioFormDraft, empresaId: string): Promise<UsuarioCriado> {
+  const { senhaTemporaria, ...created } = await request<UsuarioCriadoApi>("/usuarios", {
     method: "POST",
     body: JSON.stringify({ ...draftParaPayload(draft), empresaId, acessoSistema: true }),
   });
+  const senha = senhaTemporaria ?? null;
   if (!draft.ativo) {
     await request(`/usuarios/${created.id}/inativar`, { method: "POST", body: JSON.stringify({}) });
-    return { ...mapUsuarioReadToUsuario(created), ativo: false };
+    return { usuario: { ...mapUsuarioReadToUsuario(created), ativo: false }, senhaTemporaria: senha };
   }
-  return mapUsuarioReadToUsuario(created);
+  return { usuario: mapUsuarioReadToUsuario(created), senhaTemporaria: senha };
+}
+
+/** Nova senha TEMPORÁRIA de quem ainda não concluiu o primeiro acesso. A senha vem só desta resposta (exibição única); não é guardada em lugar nenhum. */
+export async function gerarSenhaTemporariaUsuarioReal(usuarioId: string): Promise<string> {
+  const resposta = await request<{ senhaTemporaria: string }>(`/usuarios/${encodeURIComponent(usuarioId)}/senha-temporaria`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return resposta.senhaTemporaria;
 }
 
 // `perfilBaseAnterior`: o PATCH só leva `perfilBase` quando o perfil MUDOU. Reenviar o mesmo valor seria inútil e, para

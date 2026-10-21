@@ -156,7 +156,9 @@ export function UsuarioFormModal({
               {editing ? `Editando: ${usuario.nome}` : "Nova pessoa na equipe"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
-              Cadastro real — login com e-mail e senha própria, gravado no banco.
+              {editing
+                ? "Dados cadastrais da pessoa na equipe."
+                : "Ao salvar, é gerada uma senha temporária de primeiro acesso, exibida uma única vez. Nenhum e-mail é enviado."}
             </p>
           </div>
         </div>

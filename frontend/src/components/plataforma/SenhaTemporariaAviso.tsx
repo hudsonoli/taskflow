@@ -13,7 +13,19 @@ type Campo = "endereco" | "usuario" | "senha";
  * Nada vai para storage, URL, console ou rota; fechar a tela (ou recarregar) descarta a senha, e nenhum endpoint posterior a devolve. O servidor persistiu apenas o hash:
  * a senha é uma credencial real e o Gestor é obrigado a trocá-la no primeiro acesso. Não é enviada por e-mail.
  */
-export function SenhaTemporariaAviso({ slug, urlAcesso, email, senha }: { slug: string; urlAcesso?: string; email: string; senha: string }) {
+export function SenhaTemporariaAviso({
+  slug,
+  urlAcesso,
+  email,
+  senha,
+  titulo = "Primeiro acesso do Gestor",
+}: {
+  slug: string;
+  urlAcesso?: string;
+  email: string;
+  senha: string;
+  titulo?: string;
+}) {
   const origem = useOrigem();
   const [copiado, setCopiado] = useState<Campo | null>(null);
   const endereco = urlAcesso && /^https?:\/\//i.test(urlAcesso) ? urlAcesso : urlDeAcessoDaEmpresa(origem, slug);
@@ -36,7 +48,7 @@ export function SenhaTemporariaAviso({ slug, urlAcesso, email, senha }: { slug: 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2 p-3">
       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-        <KeyRound size={12} /> Primeiro acesso do Gestor
+        <KeyRound size={12} /> {titulo}
       </p>
       {linhas.map((linha) => (
         <div key={linha.campo}>

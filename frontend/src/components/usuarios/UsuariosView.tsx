@@ -10,6 +10,7 @@ import {
   atualizarUsuarioReal,
   criarUsuarioReal,
   excluirUsuarioReal,
+  gerarSenhaTemporariaUsuarioReal,
   getResumoUsuarios,
   listUsuariosPagina,
   restaurarUsuarioReal,
@@ -24,6 +25,7 @@ import type { Usuario, UsuarioFormDraft } from "@/types/usuario";
 import { ExcluirUsuarioModal } from "./ExcluirUsuarioModal";
 import { UsuarioCapacidadeModal } from "./capacidade/UsuarioCapacidadeModal";
 import { UsuarioFormModal } from "./UsuarioFormModal";
+import { UsuarioSenhaTemporariaModal } from "./UsuarioSenhaTemporariaModal";
 import { UsuariosStats } from "./UsuariosStats";
 import { UsuariosTable } from "./UsuariosTable";
 import { type UsuarioSituacaoFiltro, UsuariosToolbar } from "./UsuariosToolbar";
@@ -53,6 +55,8 @@ export function UsuariosView() {
   const [salvando, setSalvando] = useState(false);
   const [excluirUsuarioId, setExcluirUsuarioId] = useState<string | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  // Entrega do primeiro acesso: a senha (quando já gerada) vive SÓ aqui, em memória, até a tela ser fechada.
+  const [entregaSenha, setEntregaSenha] = useState<{ usuarioId: string; nome: string; email: string; senha?: string } | null>(null);
 
   const editingUsuario = usuarios.find((usuario) => usuario.id === editingUsuarioId);
   const excluirUsuario = usuarios.find((usuario) => usuario.id === excluirUsuarioId);
@@ -62,6 +66,7 @@ export function UsuariosView() {
   const podeCriar = usuarioAtual ? podeCriarUsuario(usuarioAtual) : false;
   const podeEditar = (alvo: Usuario) => (usuarioAtual ? podeEditarUsuario(usuarioAtual, alvo) : false);
   const podeExcluir = (alvo: Usuario) => (usuarioAtual ? podeSuspenderUsuario(usuarioAtual, alvo) : false);
+  const podeGerarSenha = (alvo: Usuario) => podeEditar(alvo) && alvo.ativo && alvo.primeiroAcessoPendente === true && alvo.id !== usuarioAtual?.id;
 
   // Espelha a chave vigente para descartar respostas de "Carregar mais" de uma consulta anterior.
   const chaveRef = useRef<string | null>(null);
@@ -176,7 +181,8 @@ export function UsuariosView() {
     setSalvando(true);
     try {
       if (!usuarioId) {
-        await criarUsuarioReal(draft, empresaId);
+        const { usuario: criado, senhaTemporaria } = await criarUsuarioReal(draft, empresaId);
+        if (senhaTemporaria) setEntregaSenha({ usuarioId: criado.id, nome: criado.nome, email: criado.email, senha: senhaTemporaria });
       } else {
         const anterior = usuarios.find((usuario) => usuario.id === usuarioId);
         await atualizarUsuarioReal(
@@ -266,6 +272,11 @@ export function UsuariosView() {
               temMais={temMais}
               podeEditar={podeEditar}
               podeExcluir={podeExcluir}
+              podeGerarSenha={podeGerarSenha}
+              onGerarSenha={(usuarioId) => {
+                const alvo = usuarios.find((usuario) => usuario.id === usuarioId);
+                if (alvo) setEntregaSenha({ usuarioId, nome: alvo.nome, email: alvo.email });
+              }}
               onEdit={setEditingUsuarioId}
               onVerCapacidade={setCapacidadeUsuarioId}
               onExcluir={setExcluirUsuarioId}
@@ -304,6 +315,20 @@ export function UsuariosView() {
           salvando={salvando}
           onClose={() => setEditingUsuarioId(null)}
           onSave={handleSave}
+        />
+      )}
+
+      {entregaSenha && (
+        <UsuarioSenhaTemporariaModal
+          key={entregaSenha.usuarioId}
+          nome={entregaSenha.nome}
+          email={entregaSenha.email}
+          senhaInicial={entregaSenha.senha}
+          gerar={() => gerarSenhaTemporariaUsuarioReal(entregaSenha.usuarioId)}
+          onClose={() => {
+            setEntregaSenha(null);
+            reconciliar();
+          }}
         />
       )}
 

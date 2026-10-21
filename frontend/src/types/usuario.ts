@@ -104,6 +104,8 @@ export type Usuario = {
   // Só preenchido para o próprio usuário logado (GET /usuarios/me) — ver
   // UsuarioRead.permissoes no backend. Undefined para qualquer outra pessoa.
   permissoes?: string[];
+  // Só na listagem: ainda não definiu a PRÓPRIA senha (sem credencial ou troca obrigatória pendente) — habilita "Senha temporária".
+  primeiroAcessoPendente?: boolean;
 };
 
 export type UsuarioFormDraft = Omit<Usuario, "id" | "empresaId" | "createdAt" | "updatedAt">;

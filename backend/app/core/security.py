@@ -249,3 +249,20 @@ def _claim_timestamp(value: Any) -> float:
     if isinstance(value, int | float):
         return float(value)
     raise AuthTokenError("Claim exp inválida")
+
+
+# Sem caracteres ambíguos (0/O, 1/l/I): a senha temporária é lida e digitada por uma pessoa. 55 símbolos × 14 posições ≈ 80 bits de entropia.
+_MAIUSCULAS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+_MINUSCULAS = "abcdefghijkmnopqrstuvwxyz"
+_DIGITOS = "23456789"
+_ALFABETO_SENHA = _MAIUSCULAS + _MINUSCULAS + _DIGITOS
+_TAMANHO_SENHA = 14
+
+
+def gerar_senha_temporaria() -> str:
+    """CSPRNG (`secrets`), 14 caracteres de um alfabeto legível, SEMPRE com ao menos uma maiúscula, uma minúscula e um dígito (embaralhado com `SystemRandom`). Nada
+    derivado de nome, slug, documento ou e-mail; nenhuma senha padrão. Nunca é registrada em log nem em evento."""
+    caracteres = [secrets.choice(_MAIUSCULAS), secrets.choice(_MINUSCULAS), secrets.choice(_DIGITOS)]
+    caracteres += [secrets.choice(_ALFABETO_SENHA) for _ in range(_TAMANHO_SENHA - len(caracteres))]
+    secrets.SystemRandom().shuffle(caracteres)
+    return "".join(caracteres)

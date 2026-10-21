@@ -15,6 +15,7 @@ from app.core.referencias import gerar_proxima_referencia
 from app.domain.event_types import DomainEventType
 from app.models.evento import Evento
 from app.models.usuario import Usuario
+from app.models.usuario_credencial import UsuarioCredencial
 from app.repositories.empresa_repository import EmpresaRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.schemas.usuario import UltimoAcessoRead, UsuarioCreate, UsuarioDiretorioRead, UsuarioRead, UsuarioUpdate
@@ -649,7 +650,27 @@ class UsuarioService:
         `permitir_financeiro_proprio`: não existe versão "lista com autovisualização" —
         mesmo a própria linha do `actor`, se estiver na lista, segue a regra normal."""
         pode_ver_financeiro = self._pode_ver_financeiro(db, actor)
-        return [self._construir_leitura(usuario, pode_ver_financeiro=pode_ver_financeiro) for usuario in usuarios]
+        pendentes = self._pendentes_de_primeiro_acesso(db, usuarios)
+        leituras = [self._construir_leitura(usuario, pode_ver_financeiro=pode_ver_financeiro) for usuario in usuarios]
+        for leitura in leituras:
+            leitura.primeiro_acesso_pendente = str(leitura.id) in pendentes
+        return leituras
+
+    @staticmethod
+    def _pendentes_de_primeiro_acesso(db: Session, usuarios: list[Usuario]) -> set[str]:
+        """Usuários com acesso ao sistema que ainda não definiram a PRÓPRIA senha: sem credencial, ou com a troca obrigatória ligada. UMA consulta para a lista
+        inteira (custo constante); só o sinal — nunca senha nem hash."""
+        candidatos = [u.id for u in usuarios if u.acesso_sistema and not u.is_system_account]
+        if not candidatos:
+            return set()
+        definiram = set(
+            db.scalars(
+                select(UsuarioCredencial.usuario_id).where(
+                    UsuarioCredencial.usuario_id.in_(candidatos), UsuarioCredencial.senha_deve_ser_alterada.is_(False)
+                )
+            ).all()
+        )
+        return set(candidatos) - definiram
 
     def _pode_ver_financeiro(self, db: Session, actor: Usuario) -> bool:
         """Única fonte de verdade sobre visibilidade de dado financeiro de Usuario:

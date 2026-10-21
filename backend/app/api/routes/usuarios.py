@@ -16,11 +16,13 @@ from app.models.usuario import Usuario
 from app.schemas.usuario_preferencias import UsuarioPreferenciasRead, UsuarioPreferenciasUpdate
 from app.schemas.usuario import (
     UsuarioCreate,
+    UsuarioCriadoRead,
     UsuarioDiretorioRead,
     UsuarioExcluir,
     UsuarioInativar,
     UsuarioRead,
     UsuarioResumoRead,
+    UsuarioSenhaTemporariaRead,
     UsuarioMeUpdate,
     UsuarioUpdate,
 )
@@ -31,6 +33,7 @@ from app.services.usuario_avatar_service import (
     AvatarNaoEncontradoError,
     UsuarioAvatarService,
 )
+from app.services.usuario_acesso_service import UsuarioAcessoService
 from app.services.usuario_permissao_service import UsuarioPermissaoService
 from app.services.usuario_service import (
     UsuarioArquivadoConflictError,
@@ -50,6 +53,7 @@ from app.services.usuario_service import (
 # ficam abertas a qualquer autenticado (ver docstrings das duas rotas abaixo).
 router = APIRouter(prefix="/usuarios", tags=["usuarios"], dependencies=[Depends(get_current_user_password_ready)])
 usuario_service = UsuarioService()
+usuario_acesso_service = UsuarioAcessoService(usuario_service=usuario_service)
 avatar_service = UsuarioAvatarService()
 # Fase 2G.10A — só usado para preencher UsuarioRead.permissoes em GET /usuarios/me
 # (informativo). Nenhuma outra rota deste arquivo o usa.
@@ -122,17 +126,43 @@ def handle_usuario_error(exc: Exception) -> None:
     raise exc
 
 
-@router.post("", response_model=UsuarioRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UsuarioCriadoRead, status_code=status.HTTP_201_CREATED)
 def create_usuario(
     usuario: UsuarioCreate,
     current_user: Usuario = Depends(require_permissao("usuarios.criar")),
     db: Session = Depends(get_db),
 ):
+    """Cria o usuário e, quando ele tem acesso ao sistema, a credencial de PRIMEIRO ACESSO na mesma transação: senha temporária gerada no servidor (só o hash fica no
+    banco, troca obrigatória no primeiro login), devolvida UMA vez em `senhaTemporaria`. Não envia e-mail; nenhum endpoint posterior devolve a senha."""
     ensure_same_empresa(usuario.empresa_id, current_user)
     try:
-        created = usuario_service.create_usuario(db, usuario, actor_usuario_id=current_user.id, actor=current_user)
-        return usuario_service.to_read(db, created, actor=current_user)
+        created = usuario_service.create_usuario(db, usuario, actor_usuario_id=current_user.id, actor=current_user, commit=False)
+        try:
+            senha = usuario_acesso_service.emitir_para_usuario_novo(db, created, actor_usuario_id=current_user.id)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        db.refresh(created)
+        leitura = usuario_service.to_read(db, created, actor=current_user)
+        return UsuarioCriadoRead(**leitura.model_dump(by_alias=True), senhaTemporaria=senha, deveAlterarSenha=senha is not None)
     except Exception as exc:
+        handle_usuario_error(exc)
+
+
+@router.post("/{usuario_id}/senha-temporaria", response_model=UsuarioSenhaTemporariaRead)
+def gerar_senha_temporaria_usuario(
+    usuario_id: UUID,
+    current_user: Usuario = Depends(require_permissao("usuarios.editar")),
+    db: Session = Depends(get_db),
+):
+    """Nova senha TEMPORÁRIA para quem ainda não concluiu o primeiro acesso (inclui quem foi criado antes do hotfix e não tem credencial). A senha anterior, se
+    existir, deixa de valer na hora; a nova aparece só nesta resposta. Quem já definiu a própria senha recebe 409 (usa "Esqueci minha senha")."""
+    try:
+        alvo, senha = usuario_acesso_service.gerar_para_usuario_existente(db, str(usuario_id), actor=current_user)
+        db.commit()
+        return UsuarioSenhaTemporariaRead(usuarioId=alvo.id, senhaTemporaria=senha, deveAlterarSenha=True)
+    except Exception as exc:  # recusas acontecem ANTES de qualquer escrita; o `get_db` fecha (e desfaz) a sessão se algo falhar depois
         handle_usuario_error(exc)
 
 

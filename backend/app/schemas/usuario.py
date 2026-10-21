@@ -145,6 +145,9 @@ class UsuarioRead(BaseModel):
     # Só preenchido em GET /usuarios/me: o último login bem-sucedido DO PRÓPRIO usuário (hora e IP, do mesmo
     # registro de eventos que alimenta Configurações → Acesso). None em qualquer consulta de outro usuário.
     ultimo_acesso: "UltimoAcessoRead | None" = Field(default=None, alias="ultimoAcesso")
+    # Só na LISTAGEM (GET /usuarios): o usuário ainda não definiu a PRÓPRIA senha (sem credencial ou com a troca obrigatória pendente) — sinal para a UI
+    # oferecer "Senha temporária". `None` nas demais respostas. Nunca expõe senha, hash ou token.
+    primeiro_acesso_pendente: bool | None = Field(default=None, alias="primeiroAcessoPendente")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -152,6 +155,24 @@ class UsuarioRead(BaseModel):
     @classmethod
     def validate_timezone(cls, value: datetime | None) -> datetime | None:
         return ensure_timezone_aware(value)
+
+
+class UsuarioCriadoRead(UsuarioRead):
+    """Resposta do POST /usuarios. `senhaTemporaria` existe SÓ aqui (e na regeneração): é uma credencial real de primeiro acesso, o banco guarda apenas o hash e nenhum
+    endpoint posterior a devolve. `None` quando o usuário não tem acesso ao sistema (nada a entregar)."""
+
+    senha_temporaria: str | None = Field(default=None, alias="senhaTemporaria")
+    deve_alterar_senha: bool = Field(default=False, alias="deveAlterarSenha")
+
+
+class UsuarioSenhaTemporariaRead(BaseModel):
+    """Regeneração da senha temporária (primeiro acesso pendente). Mesma regra: a senha só aparece nesta resposta."""
+
+    usuario_id: UUID = Field(alias="usuarioId")
+    senha_temporaria: str = Field(alias="senhaTemporaria")
+    deve_alterar_senha: bool = Field(default=True, alias="deveAlterarSenha")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class UltimoAcessoRead(BaseModel):

@@ -12,7 +12,6 @@ conseguem entrar. A resolução multiempresa (slug/branding no login, reset, Goo
 
 from __future__ import annotations
 
-import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -20,7 +19,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.security import create_platform_token
+from app.core.security import create_platform_token, gerar_senha_temporaria  # noqa: F401 — re-export: ponto de import histórico
 from app.domain.event_types import DomainEventType
 from app.models.administrador_plataforma import AdministradorPlataforma
 from app.models.empresa import Empresa
@@ -59,23 +58,6 @@ class PlataformaUsuarioNaoEncontradoError(LookupError):
 class PlataformaUsuarioNaoElegivelError(ValueError):
     """O usuário existe nesta empresa, mas não pode ser promovido a Gestor (já é Gestor, é admin legado, está
     inativo/bloqueado ou sem acesso ao sistema)."""
-
-
-# Sem caracteres ambíguos (0/O, 1/l/I): a senha temporária é lida e digitada por uma pessoa. 55 símbolos × 14 posições ≈ 80 bits de entropia.
-_MAIUSCULAS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-_MINUSCULAS = "abcdefghijkmnopqrstuvwxyz"
-_DIGITOS = "23456789"
-_ALFABETO_SENHA = _MAIUSCULAS + _MINUSCULAS + _DIGITOS
-_TAMANHO_SENHA = 14
-
-
-def gerar_senha_temporaria() -> str:
-    """CSPRNG (`secrets`), 14 caracteres de um alfabeto legível, SEMPRE com ao menos uma maiúscula, uma minúscula e um dígito (embaralhado com `SystemRandom`). Nada
-    derivado de nome, slug, documento ou e-mail; nenhuma senha padrão. Nunca é registrada em log nem em evento."""
-    caracteres = [secrets.choice(_MAIUSCULAS), secrets.choice(_MINUSCULAS), secrets.choice(_DIGITOS)]
-    caracteres += [secrets.choice(_ALFABETO_SENHA) for _ in range(_TAMANHO_SENHA - len(caracteres))]
-    secrets.SystemRandom().shuffle(caracteres)
-    return "".join(caracteres)
 
 
 class PlataformaSlugImutavelError(ValueError):
