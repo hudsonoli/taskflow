@@ -57,6 +57,7 @@ Legenda: P1 = próximo ciclo de capacidade/Tráfego; P2 = produtividade da opera
 | `P2_REQUISITOS_ETAPA` | Campos exigidos para avançar de etapa | Sem implementação. |
 | `P2_CARGA_GLOBAL_MISSING_ESTIMATE_EXACT_COUNT` | Contagem global DEDUPLICADA de etapas sem estimativa na Carga | O backend só expõe contagens por pessoa/departamento/pool, que se sobrepõem (somar duplicaria). A UI da Carga usa um limite inferior provado ("Pelo menos N") quando não consegue garantir o valor exato; com filtro de pessoa/departamento o valor é exato. Resolver com um total único no contrato da Carga. |
 | `P2_CARGA_UNPLANNED_DETAIL` | Lista de etapas de `naoPlanejado` e do pool sem departamento | `naoPlanejado` traz só contagens e minutos; o pool sem departamento não tem lista nem drill-down. Hoje essas etapas só são alcançáveis pelo detalhe de pessoa/departamento (quando têm responsável/departamento). Expor itens (com limite e `truncado`) nesses baldes. |
+| `P2_USER_CAPACITY_HISTORY_UI` | Histórico visual de jornada e ausências em Usuários | Os eventos de backend `usuario.jornada_*` e `usuario.ausencia_*` já existem (com antes/depois essenciais, sem a observação livre), mas Usuários ainda não tem um Histórico visual equivalente ao de Demandas nem um mapper de rótulos para eventos `usuario.*`. Não implementado na 11B.2D-B. |
 
 ### Correção de backlog: estimativa histórica
 

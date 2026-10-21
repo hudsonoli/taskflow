@@ -117,3 +117,5 @@ Local: **Configurações → Usuários → editar → aba "Jornada e ausências"
 - **Carga:** a linha da pessoa mostra, em texto secundário, "Jornada personalizada" e/ou "N dias com ausência no período" (`diasAusentes` =
   dias do período consultado cobertos por ausência, **não** "dias descontados"). O cliente nunca recalcula capacidade.
 - Não há "Minha jornada"/"Minhas férias", fator alocável por pessoa, nem edição de feriados aqui.
+
+**Nota de homologação (11B.2D-B):** a UI foi inspecionada visualmente em 1440 e 1024 (modal de largura fixa de 672 px, sem rolagem horizontal); o 1280 dedicado ainda não foi inspecionado. Não bloqueia o deploy. O Histórico visual de usuários está no backlog como `P2_USER_CAPACITY_HISTORY_UI`.
