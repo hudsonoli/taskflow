@@ -22,6 +22,7 @@ import { perfilTecnico, podeCriarUsuario, podeEditarUsuario, podeSuspenderUsuari
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import type { Usuario, UsuarioFormDraft } from "@/types/usuario";
 import { ExcluirUsuarioModal } from "./ExcluirUsuarioModal";
+import { UsuarioCapacidadeModal } from "./capacidade/UsuarioCapacidadeModal";
 import { UsuarioFormModal } from "./UsuarioFormModal";
 import { UsuariosStats } from "./UsuariosStats";
 import { UsuariosTable } from "./UsuariosTable";
@@ -48,12 +49,14 @@ export function UsuariosView() {
   const [refetchTick, setRefetchTick] = useState(0);
   const [creatingUsuario, setCreatingUsuario] = useState(false);
   const [editingUsuarioId, setEditingUsuarioId] = useState<string | null>(null);
+  const [capacidadeUsuarioId, setCapacidadeUsuarioId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [excluirUsuarioId, setExcluirUsuarioId] = useState<string | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
   const editingUsuario = usuarios.find((usuario) => usuario.id === editingUsuarioId);
   const excluirUsuario = usuarios.find((usuario) => usuario.id === excluirUsuarioId);
+  const capacidadeUsuario = usuarios.find((usuario) => usuario.id === capacidadeUsuarioId);
   const empresaId = usuarioAtual?.empresaId;
   // Autoridade do usuário logado (perfil + permissões da sessão): decide o que aparece. A API repete a regra.
   const podeCriar = usuarioAtual ? podeCriarUsuario(usuarioAtual) : false;
@@ -264,6 +267,7 @@ export function UsuariosView() {
               podeEditar={podeEditar}
               podeExcluir={podeExcluir}
               onEdit={setEditingUsuarioId}
+              onVerCapacidade={setCapacidadeUsuarioId}
               onExcluir={setExcluirUsuarioId}
             />
           </div>
@@ -302,6 +306,8 @@ export function UsuariosView() {
           onSave={handleSave}
         />
       )}
+
+      {capacidadeUsuario && <UsuarioCapacidadeModal usuarioId={capacidadeUsuario.id} nome={capacidadeUsuario.nome} onClose={() => setCapacidadeUsuarioId(null)} />}
 
       {excluirUsuario && (
         <ExcluirUsuarioModal

@@ -44,6 +44,7 @@
     "test:trafego-ui": "node --test src/lib/trafego-ui.test.ts",
     "test:trafego-operacional": "node --test src/lib/trafego-operacional.test.ts",
     "test:trafego-carga": "node --test src/lib/trafego-carga.test.ts",
+    "test:usuario-capacidade": "node --test src/lib/usuario-capacidade.test.ts",
     "test:member-selector": "node --test src/lib/member-selector.test.ts",
     "test:projetos-progresso": "node --test src/lib/projetos-progresso.test.ts",
     "test:expediente": "node --test src/lib/expediente-periodos.test.ts",

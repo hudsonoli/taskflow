@@ -98,3 +98,22 @@ A Carga carrega, em **duas consultas fixas** (jornadas+períodos e ausências qu
 
 UI de edição de jornada/férias, ausência por hora/meio período, banco de horas, saldo de férias, aprovação de férias, fator alocável por
 pessoa, importação de feriados por pessoa, cache e qualquer mudança no planejamento (estimativa, janela, rateio, pools).
+
+## UI administrativa (11B.2D-B, só frontend)
+
+Local: **Configurações → Usuários → editar → aba "Jornada e ausências"** (só ao editar; sem tela global). Código:
+`frontend/src/components/usuarios/capacidade/`, regras puras em `frontend/src/lib/usuario-capacidade.ts` (testes: `npm run test:usuario-capacidade`).
+
+- **Jornada de trabalho:** "Usar expediente da empresa" (padrão; só um resumo de leitura, nada é copiado) ou "Jornada personalizada"
+  (grade semanal com 0..n períodos por dia, mesmo componente e mesma validação do Horário de expediente). Escolher "personalizada" só
+  pré-preenche a tela com o expediente atual; **nada é gravado até Salvar** (`PUT` da grade inteira). Voltar ao padrão pede confirmação
+  curta e chama `DELETE`.
+- **Ausências:** lista (tipo traduzido, período, observação; atuais/futuras primeiro, passadas esmaecidas), modal de criar/editar
+  (`POST`/`PATCH` só com o que mudou) e remoção com confirmação. Sobreposição é só um aviso (o backend aceita).
+- **Autoridade:** reaproveita `podeEditarUsuario` (usuarios.editar + hierarquia de alvo) que a lista de Usuários já usa; o backend é a
+  barreira (403 mostra a mensagem da API). Quem pode ver mas não editar um usuário (ex.: gestor vendo outro gestor ou a si mesmo)
+  tem o botão **"Jornada"** na lista, que abre a mesma seção em **somente leitura**.
+- **Requisições:** ao abrir, 1 `GET jornada` + 1 `GET ausências` em paralelo; as mutations usam a resposta da API (sem refetch global).
+- **Carga:** a linha da pessoa mostra, em texto secundário, "Jornada personalizada" e/ou "N dias com ausência no período" (`diasAusentes` =
+  dias do período consultado cobertos por ausência, **não** "dias descontados"). O cliente nunca recalcula capacidade.
+- Não há "Minha jornada"/"Minhas férias", fator alocável por pessoa, nem edição de feriados aqui.

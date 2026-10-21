@@ -339,9 +339,19 @@ function ocupacaoDaLinha(percentual: number | null, planejadoMin: number | null,
   return { texto: semCapacidade ? "Sem capacidade" : formatarPercentual(percentual), percentual, preenchimento: semCapacidade ? 100 : preenchimentoDaBarra(percentual), tom, semCapacidade };
 }
 
+/** "2 dias com ausência no período" — são dias do período consultado COBERTOS por ausência (podem incluir dia que o expediente já fechava), NÃO "dias descontados". */
+export function textoDiasAusentes(dias: number | null | undefined): string | null {
+  if (dias === null || dias === undefined || dias <= 0) return null;
+  return dias === 1 ? "1 dia com ausência no período" : `${dias} dias com ausência no período`;
+}
+
+export const TEXTO_JORNADA_PERSONALIZADA = "Jornada personalizada";
+
 export type LinhaPessoa = {
   usuarioId: string;
   nome: string;
+  /** Informação secundária junto da pessoa (sem coluna nova): "Jornada personalizada" e/ou "N dias com ausência no período". Vazio quando a capacidade vem da empresa e não há ausência. */
+  indicacoes: string[];
   departamento: string | null;
   capacidade: string;
   planejado: string;
@@ -359,6 +369,7 @@ export function linhaDaPessoa(pessoa: PessoaCarga, nomeDoDepartamento: string | 
   return {
     usuarioId: pessoa.usuarioId,
     nome: pessoa.nome,
+    indicacoes: [pessoa.capacidadeOrigem === "individual" ? TEXTO_JORNADA_PERSONALIZADA : null, textoDiasAusentes(pessoa.diasAusentes)].filter((texto): texto is string => texto !== null),
     departamento: nomeDoDepartamento,
     capacidade: formatarMinutos(pessoa.capacidadeAlocavelMin),
     planejado: formatarMinutos(pessoa.planejadoMin),

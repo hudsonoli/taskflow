@@ -32,6 +32,7 @@ import {
   rotuloDaOrigem,
   rotuloSemana,
   semEstimativaDoRecorte,
+  textoDiasAusentes,
   somarDias,
   tomDaOcupacao,
 } from "./trafego-carga.ts";
@@ -344,7 +345,7 @@ test("pessoas: a ordem do servidor é preservada (sem ranking) e as linhas não 
   const nomes = ["Zeca", "Ana", "Bia"];
   const linhas = nomes.map((nome, i) => linhaDaPessoa(pessoa({ usuarioId: `u${i}`, nome, planejadoMin: i * 600, ocupacaoPercentual: i * 31 }), null));
   assert.deepEqual(linhas.map((l) => l.nome), nomes);
-  assert.deepEqual(Object.keys(linhas[0]).sort(), ["aPlanejar", "capacidade", "departamento", "disponivel", "disponivelNegativo", "nome", "ocupacao", "planejado", "semEstimativa", "usuarioId"]);
+  assert.deepEqual(Object.keys(linhas[0]).sort(), ["aPlanejar", "capacidade", "departamento", "disponivel", "disponivelNegativo", "indicacoes", "nome", "ocupacao", "planejado", "semEstimativa", "usuarioId"]);
 });
 
 // ── departamentos e pools ────────────────────────────────────────────────────────────────────────────────────
@@ -609,4 +610,29 @@ test("semântica: os textos visíveis da Carga nunca falam em 'equipe livre', ra
       assert.doesNotMatch(visivel, proibido, `${arquivo}: ${proibido}`);
     }
   }
+});
+
+// ── 11B.2D-B: campos aditivos da Carga (capacidadeOrigem / diasAusentes) ─────────────────────────────────────────
+
+test("campos aditivos: origem 'empresa' e nenhuma ausência não poluem a linha", () => {
+  assert.deepEqual(linhaDaPessoa(pessoa({ capacidadeOrigem: "empresa", diasAusentes: 0 }), "Criação").indicacoes, []);
+  assert.deepEqual(linhaDaPessoa(pessoa(), "Criação").indicacoes, []); // backend antigo: campos ausentes
+  assert.deepEqual(linhaDaPessoa(pessoa({ capacidadeOrigem: null, diasAusentes: null }), "Criação").indicacoes, []); // capacidade indisponível
+});
+
+test("campos aditivos: jornada personalizada e dias com ausência — texto de COBERTURA, nunca 'descontados'", () => {
+  assert.deepEqual(linhaDaPessoa(pessoa({ capacidadeOrigem: "individual", diasAusentes: 0 }), null).indicacoes, ["Jornada personalizada"]);
+  assert.deepEqual(linhaDaPessoa(pessoa({ capacidadeOrigem: "empresa", diasAusentes: 2 }), null).indicacoes, ["2 dias com ausência no período"]);
+  assert.deepEqual(linhaDaPessoa(pessoa({ capacidadeOrigem: "individual", diasAusentes: 1 }), null).indicacoes, ["Jornada personalizada", "1 dia com ausência no período"]);
+  assert.equal(textoDiasAusentes(2), "2 dias com ausência no período");
+  assert.equal(textoDiasAusentes(0), null);
+  assert.doesNotMatch(String(textoDiasAusentes(5)), /descontad/i);
+  const fonte = semComentarios(ler("components/trafego/carga/CargaTabelas.tsx") + ler("lib/trafego-carga.ts"));
+  assert.doesNotMatch(fonte, /descontad/i);
+});
+
+test("campos aditivos não mudam a matemática da linha: capacidade e ocupação vêm do servidor", () => {
+  const com = linhaDaPessoa(pessoa({ capacidadeOrigem: "individual", diasAusentes: 5, capacidadeAlocavelMin: 0, planejadoMin: 0, saldoMin: 0, ocupacaoPercentual: null }), null);
+  assert.equal(com.capacidade, "0h");
+  assert.equal(com.ocupacao.texto, "—");
 });

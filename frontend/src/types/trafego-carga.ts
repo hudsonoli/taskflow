@@ -82,6 +82,9 @@ export type PessoaCarga = {
   naoPlanejadoMin: number;
   pendenciasPlanejamentoMin: number;
   semEstimativaCount: number;
+  /** 11B.2D-A (aditivos): de onde vem a capacidade da pessoa (`empresa` | `individual`) e quantos dias CONSIDERADOS da semana estão cobertos por ausência — inclusive dias que o expediente já fechava. `null`/ausentes com a capacidade indisponível. */
+  capacidadeOrigem?: "empresa" | "individual" | string | null;
+  diasAusentes?: number | null;
 };
 
 export type DepartamentoCarga = {

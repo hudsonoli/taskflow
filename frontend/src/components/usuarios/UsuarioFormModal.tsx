@@ -14,7 +14,9 @@ import { formatCPF } from "@/lib/mascaras";
 import { formatarCep } from "@/lib/brasilApi";
 import { useConsultaCep } from "@/lib/useConsultaCep";
 import { coresIdentificacaoDisponiveis, estiloCorIdentificacao } from "@/lib/cores";
-import { opcoesDePerfil, perfilTecnico, podeAlterarPerfilDe } from "@/lib/autoridadeUsuarios";
+import { opcoesDePerfil, perfilTecnico, podeAlterarPerfilDe, podeEditarUsuario } from "@/lib/autoridadeUsuarios";
+import { TITULO_SECAO } from "@/lib/usuario-capacidade";
+import { UsuarioCapacidadeSection } from "./capacidade/UsuarioCapacidadeSection";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeVerFinanceiroEfetivo } from "@/lib/escopo-operacional";
 import {
@@ -82,6 +84,8 @@ export function UsuarioFormModal({
   const { usuarioAtual } = useAppData();
   const [draft, setDraft] = useState<UsuarioFormDraft>(() => createInitialDraft(usuario));
   const [activeTab, setActiveTab] = useState("dados");
+  // "Jornada e ausências" salva por conta própria (cada ação chama a API); a seção só é montada na primeira visita à aba e FICA montada — assim trocar de aba não perde edição nem refaz os GET.
+  const [jornadaVisitada, setJornadaVisitada] = useState(false);
   // Pré-cadastro (criação): nome e sobrenome em campos separados, só pra facilitar a
   // digitação — concatenados em `nome` (campo único, igual já era) no momento de salvar.
   // Login Google Workspace confirma identidade pelo e-mail pré-cadastrado aqui, nunca cria
@@ -108,12 +112,13 @@ export function UsuarioFormModal({
     { id: "dados", label: "Dados" },
     { id: "endereco", label: "Endereço" },
     { id: "contatos", label: "Contatos" },
+    ...(usuario ? [{ id: "jornada", label: TITULO_SECAO }] : []),
     ...(podeVerFinanceiro ? [{ id: "financeiro", label: "Financeiro" }] : []),
   ];
 
   // Se a permissão mudar (ex.: troca de usuário simulado) enquanto a aba Financeiro está
   // selecionada, cai para Dados em vez de manter uma aba que a pessoa não deveria ver.
-  const effectiveTab = activeTab === "financeiro" && !podeVerFinanceiro ? "dados" : activeTab;
+  const effectiveTab = (activeTab === "financeiro" && !podeVerFinanceiro) || (activeTab === "jornada" && !editing) ? "dados" : activeTab;
 
   function updateDraft(patch: Partial<UsuarioFormDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -166,7 +171,14 @@ export function UsuarioFormModal({
       </div>
 
       <div className="mt-5">
-        <Tabs tabs={tabs} activeTab={effectiveTab} onChange={setActiveTab} />
+        <Tabs
+          tabs={tabs}
+          activeTab={effectiveTab}
+          onChange={(id) => {
+            setActiveTab(id);
+            if (id === "jornada") setJornadaVisitada(true);
+          }}
+        />
       </div>
 
       <div className="mt-5 flex flex-col gap-4">
@@ -391,6 +403,13 @@ export function UsuarioFormModal({
           </>
         )}
 
+        {usuario && jornadaVisitada && (
+          <div hidden={effectiveTab !== "jornada"}>
+            {/* Mesma autoridade da lista (`podeEditarUsuario`: usuarios.editar + hierarquia de alvo). O backend repete a regra e responde 403 se divergir. */}
+            <UsuarioCapacidadeSection usuarioId={usuario.id} somenteLeitura={usuarioAtual ? !podeEditarUsuario(usuarioAtual, usuario) : true} />
+          </div>
+        )}
+
         {effectiveTab === "financeiro" && podeVerFinanceiro && (
           <>
             <div className="grid gap-4 md:grid-cols-2">
@@ -428,18 +447,20 @@ export function UsuarioFormModal({
 
       <div className="mt-6 flex flex-col justify-end gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800 sm:flex-row">
         <Button type="button" variant="secondary" onClick={onClose} disabled={salvando}>
-          Cancelar
+          {effectiveTab === "jornada" ? "Fechar" : "Cancelar"}
         </Button>
-        <Button
-          type="button"
-          disabled={!canSave || salvando}
-          onClick={() => {
-            const nomeFinal = editing ? draft.nome.trim() : `${draft.nome.trim()} ${sobrenome.trim()}`.trim();
-            onSave({ ...draft, nome: nomeFinal }, usuario?.id);
-          }}
-        >
-          {salvando ? "Salvando…" : "Salvar alterações"}
-        </Button>
+        {effectiveTab !== "jornada" && (
+          <Button
+            type="button"
+            disabled={!canSave || salvando}
+            onClick={() => {
+              const nomeFinal = editing ? draft.nome.trim() : `${draft.nome.trim()} ${sobrenome.trim()}`.trim();
+              onSave({ ...draft, nome: nomeFinal }, usuario?.id);
+            }}
+          >
+            {salvando ? "Salvando…" : "Salvar alterações"}
+          </Button>
+        )}
       </div>
     </Modal>
   );

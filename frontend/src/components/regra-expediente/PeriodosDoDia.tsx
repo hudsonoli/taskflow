@@ -14,11 +14,14 @@ export function PeriodosDoDia({
   periodos,
   erro,
   onChange,
+  somenteLeitura = false,
 }: {
   dia: DiaSemana;
   periodos: PeriodoExpediente[];
   erro?: string;
   onChange: (periodos: PeriodoExpediente[]) => void;
+  /** Só consulta (ex.: jornada individual vista por quem não pode editá-la): campos desabilitados e sem ações de escrita. */
+  somenteLeitura?: boolean;
 }) {
   const nome = DIAS_NOME[dia];
   const sugestao = sugerirNovoPeriodo(periodos);
@@ -44,6 +47,7 @@ export function PeriodosDoDia({
               type="time"
               value={periodo.inicio}
               aria-label={`${nome}: início do período ${indice + 1}`}
+              disabled={somenteLeitura}
               onChange={(event) => atualizar(indice, "inicio", event.target.value)}
               onBlur={() => onChange(ordenarPeriodos(periodos))}
               className="field w-28 rounded-xl px-3 py-2 text-sm"
@@ -55,10 +59,12 @@ export function PeriodosDoDia({
               type="time"
               value={periodo.fim}
               aria-label={`${nome}: fim do período ${indice + 1}`}
+              disabled={somenteLeitura}
               onChange={(event) => atualizar(indice, "fim", event.target.value)}
               onBlur={() => onChange(ordenarPeriodos(periodos))}
               className="field w-28 rounded-xl px-3 py-2 text-sm"
             />
+            {!somenteLeitura && (
             <button
               type="button"
               onClick={() => onChange(periodos.filter((_, i) => i !== indice))}
@@ -68,9 +74,11 @@ export function PeriodosDoDia({
             >
               <Trash2 className="h-4 w-4" aria-hidden />
             </button>
+            )}
           </div>
         ))}
 
+        {!somenteLeitura && (
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -95,6 +103,7 @@ export function PeriodosDoDia({
             </button>
           )}
         </div>
+        )}
         </div>
 
         {erro && (

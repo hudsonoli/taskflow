@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { CalendarClock, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -13,6 +13,7 @@ export function UsuariosTable({
   departamentos,
   temMais = false,
   podeEditar,
+  onVerCapacidade,
   podeExcluir,
   onEdit,
   onExcluir,
@@ -23,6 +24,8 @@ export function UsuariosTable({
   temMais?: boolean;
   /** Autoridade do usuário logado SOBRE aquela linha (perfil + permissões da sessão): sem ela, a ação não aparece. */
   podeEditar: (usuario: Usuario) => boolean;
+  /** Consulta somente leitura da jornada/ausências de quem o ator vê mas não edita. */
+  onVerCapacidade: (usuarioId: string) => void;
   podeExcluir: (usuario: Usuario) => boolean;
   onEdit: (usuarioId: string) => void;
   onExcluir: (usuarioId: string) => void;
@@ -107,6 +110,12 @@ export function UsuariosTable({
                       <Button variant="secondary" onClick={() => onEdit(usuario.id)} className="px-3 py-1.5 text-xs">
                         <Pencil className="h-3.5 w-3.5" />
                         Editar
+                      </Button>
+                    )}
+                    {!podeEditar(usuario) && (
+                      <Button variant="secondary" onClick={() => onVerCapacidade(usuario.id)} className="px-3 py-1.5 text-xs">
+                        <CalendarClock className="h-3.5 w-3.5" />
+                        Jornada
                       </Button>
                     )}
                     {podeExcluir(usuario) && (

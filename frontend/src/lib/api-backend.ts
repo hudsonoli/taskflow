@@ -23,6 +23,9 @@ import type {
   SerieBarraEmpilhada,
 } from "@/types/relatorios";
 import type { PermissaoAdminItem, PermissaoOverride } from "@/types/permissao";
+import type { AusenciaDraft, AusenciaPatch, AusenciaUsuario, JornadaUsuario } from "@/types/usuario-capacidade";
+import { corpoDaAusencia, normalizarJornadaDaApi } from "@/lib/usuario-capacidade";
+import type { PeriodoExpediente } from "@/types/regra-expediente";
 import type { GrupoCliente, GrupoClienteStatus } from "@/types/grupo-cliente";
 import type { Departamento, DepartamentoFormDraft, DepartamentoStatus } from "@/types/departamento";
 import type { Equipe, EquipeFormDraft, EquipeStatus } from "@/types/equipe";
@@ -630,6 +633,42 @@ export async function excluirUsuarioReal(usuarioId: string, motivoArquivamento: 
 export async function restaurarUsuarioReal(usuarioId: string): Promise<Usuario> {
   const restored = await request<UsuarioReadApi>(`/usuarios/${usuarioId}/restaurar`, { method: "POST" });
   return mapUsuarioReadToUsuario(restored);
+}
+
+// ---------------------------------------------------------------------------------
+// Capacidade individual — 11B.2D-B. Jornada semanal PRÓPRIA (opcional) e ausências por data de um Usuário. O backend é a autoridade (leitura `usuarios.visualizar`;
+// escrita `usuarios.editar` + regra de alvo): aqui só se chamam os endpoints publicados. DELETE da jornada = "Usar expediente da empresa" (devolve o fallback).
+// ---------------------------------------------------------------------------------
+
+type JornadaApi = Omit<JornadaUsuario, "dias"> & { dias: Array<{ diaSemana: number; periodos: Array<{ inicio: string; fim: string }> }> };
+
+export async function getJornadaUsuario(usuarioId: string): Promise<JornadaUsuario> {
+  return normalizarJornadaDaApi(await request<JornadaApi>(`/usuarios/${usuarioId}/jornada`));
+}
+
+/** Substitui a grade inteira (cria a jornada personalizada se ainda não existe). `dias`: os 7 dias, "HH:MM". */
+export async function salvarJornadaUsuario(usuarioId: string, dias: Array<{ diaSemana: number; periodos: PeriodoExpediente[] }>): Promise<JornadaUsuario> {
+  return normalizarJornadaDaApi(await request<JornadaApi>(`/usuarios/${usuarioId}/jornada`, { method: "PUT", body: JSON.stringify({ dias }) }));
+}
+
+export async function usarExpedienteDaEmpresa(usuarioId: string): Promise<JornadaUsuario> {
+  return normalizarJornadaDaApi(await request<JornadaApi>(`/usuarios/${usuarioId}/jornada`, { method: "DELETE" }));
+}
+
+export async function listarAusenciasUsuario(usuarioId: string): Promise<AusenciaUsuario[]> {
+  return request<AusenciaUsuario[]>(`/usuarios/${usuarioId}/ausencias`);
+}
+
+export async function criarAusenciaUsuario(usuarioId: string, draft: AusenciaDraft): Promise<AusenciaUsuario> {
+  return request<AusenciaUsuario>(`/usuarios/${usuarioId}/ausencias`, { method: "POST", body: JSON.stringify(corpoDaAusencia(draft)) });
+}
+
+export async function atualizarAusenciaUsuario(usuarioId: string, ausenciaId: string, patch: AusenciaPatch): Promise<AusenciaUsuario> {
+  return request<AusenciaUsuario>(`/usuarios/${usuarioId}/ausencias/${ausenciaId}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export async function removerAusenciaUsuario(usuarioId: string, ausenciaId: string): Promise<void> {
+  await request<void>(`/usuarios/${usuarioId}/ausencias/${ausenciaId}`, { method: "DELETE" });
 }
 
 // ---------------------------------------------------------------------------------

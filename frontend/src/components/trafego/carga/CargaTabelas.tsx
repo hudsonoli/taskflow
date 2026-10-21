@@ -60,6 +60,7 @@ export function CargaPeopleTable({ linhas, onAbrir }: { linhas: LinhaPessoa[]; o
                   >
                     {linha.nome}
                   </button>
+                  {linha.indicacoes.length > 0 && <p className="text-[11px] text-fg-subtle">{linha.indicacoes.join(" · ")}</p>}
                 </td>
                 <td className="px-3 py-2.5 align-middle text-fg-muted">{linha.departamento ?? <span className="text-fg-subtle">Sem departamento</span>}</td>
                 <td className={NUM}>{linha.capacidade}</td>
