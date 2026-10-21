@@ -38,7 +38,7 @@ Legenda: P1 = próximo ciclo de capacidade/Tráfego; P2 = produtividade da opera
 
 | ID | Item | Observação |
 | --- | --- | --- |
-| `P1_CAPACIDADE_INDIVIDUAL` | Capacidade por pessoa | Conceito futuro: `RegraExpediente` da empresa como **fallback nominal**; **override opcional de jornada por usuário**; **ausências/férias** como redução individual por período; **dias especiais da empresa** continuam aplicáveis conforme regra a definir. **Não implementar agora**, não entra na 11B.2B-B. Hoje não há modelo de férias no código; exige desenho e migration próprios. |
+| `P1_CAPACIDADE_INDIVIDUAL` | Capacidade por pessoa | Conceito futuro: `RegraExpediente` da empresa como **fallback nominal**; **override opcional de jornada por usuário**; **ausências/férias** como redução individual por período; **dias especiais da empresa** continuam aplicáveis conforme regra a definir. **Não implementar agora**, não entra na 11B.2B-B. Hoje não há modelo de férias no código; exige desenho e migration próprios. **Atualização:** a fundação BACKEND foi feita na 11B.2D-A (ver [capacidade-individual.md](capacidade-individual.md)); a UI administrativa fica para a fase seguinte. |
 | `P1_KANBAN_METRICA_ETAPA` | Métrica da etapa no cabeçalho da coluna do Kanban | Reaproveitar o que o Gargalos já calcula: **WIP** e, se fizer sentido, **tempo médio da etapa**. Sem nova coleta. |
 
 ### P1/P2 barato
@@ -55,6 +55,8 @@ Legenda: P1 = próximo ciclo de capacidade/Tráfego; P2 = produtividade da opera
 | `P2_SEQUENCIA_RESPONSAVEIS` | Passagem de bastão: ao entregar sua parte, a tarefa vai ao próximo responsável | Sem implementação. |
 | `P2_DEPENDENCIAS_TAREFAS` | Tarefas pré-requisito e subsequentes (com possível reajuste de prazo) | Sem implementação. |
 | `P2_REQUISITOS_ETAPA` | Campos exigidos para avançar de etapa | Sem implementação. |
+| `P2_CARGA_GLOBAL_MISSING_ESTIMATE_EXACT_COUNT` | Contagem global DEDUPLICADA de etapas sem estimativa na Carga | O backend só expõe contagens por pessoa/departamento/pool, que se sobrepõem (somar duplicaria). A UI da Carga usa um limite inferior provado ("Pelo menos N") quando não consegue garantir o valor exato; com filtro de pessoa/departamento o valor é exato. Resolver com um total único no contrato da Carga. |
+| `P2_CARGA_UNPLANNED_DETAIL` | Lista de etapas de `naoPlanejado` e do pool sem departamento | `naoPlanejado` traz só contagens e minutos; o pool sem departamento não tem lista nem drill-down. Hoje essas etapas só são alcançáveis pelo detalhe de pessoa/departamento (quando têm responsável/departamento). Expor itens (com limite e `truncado`) nesses baldes. |
 
 ### Correção de backlog: estimativa histórica
 

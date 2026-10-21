@@ -6,6 +6,7 @@ com tenant (demandas, usuarios, departamentos, clientes, projetos), inclusive no
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from sqlalchemy import text
@@ -91,3 +92,37 @@ class CargaOperacionalRepository:
 
     def departamento_existe(self, db: Session, *, empresa_id: str, departamento_id: str) -> bool:
         return db.execute(text("SELECT 1 FROM departamentos WHERE id = :id AND empresa_id = :empresa_id"), {"id": departamento_id, "empresa_id": empresa_id}).first() is not None
+
+    # ── capacidade individual (11B.2D-A) — UMA consulta cada, para TODAS as pessoas elegíveis (sem N+1) ─────────────────────────────────────────────
+
+    def jornadas_dos_elegiveis(self, db: Session, *, empresa_id: str) -> list[tuple[str, int | None, str | None, str | None]]:
+        """(usuario_id, dia_semana, "HH:MM", "HH:MM") das jornadas PRÓPRIAS dos elegíveis. Jornada sem nenhum período (todos os dias fechados) volta como uma linha com dia/horários nulos."""
+        linhas = db.execute(
+            text(
+                f"""
+                SELECT j.usuario_id, p.dia_semana, p.inicio, p.fim
+                FROM usuario_jornadas j
+                JOIN usuarios u ON u.id = j.usuario_id AND u.empresa_id = :empresa_id AND {_USUARIO_ELEGIVEL}
+                LEFT JOIN usuario_jornada_periodos p ON p.jornada_id = j.id
+                WHERE j.empresa_id = :empresa_id
+                ORDER BY j.usuario_id, p.dia_semana, p.ordem
+                """
+            ),
+            {"empresa_id": empresa_id},
+        ).all()
+        return [(l[0], l[1], l[2].strftime("%H:%M") if l[2] is not None else None, l[3].strftime("%H:%M") if l[3] is not None else None) for l in linhas]
+
+    def ausencias_dos_elegiveis(self, db: Session, *, empresa_id: str, inicio: date, fim: date) -> list[tuple[str, date, date]]:
+        """(usuario_id, inicio, fim) das ausências dos elegíveis que TOCAM [inicio, fim] (a semana consultada)."""
+        linhas = db.execute(
+            text(
+                f"""
+                SELECT a.usuario_id, a.inicio, a.fim
+                FROM usuario_ausencias a
+                JOIN usuarios u ON u.id = a.usuario_id AND u.empresa_id = :empresa_id AND {_USUARIO_ELEGIVEL}
+                WHERE a.empresa_id = :empresa_id AND a.fim >= :inicio AND a.inicio <= :fim
+                """
+            ),
+            {"empresa_id": empresa_id, "inicio": inicio, "fim": fim},
+        ).all()
+        return [(l[0], l[1], l[2]) for l in linhas]

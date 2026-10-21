@@ -7,7 +7,7 @@ Fluxo: (1) carrega regra de expediente/fator, pessoas elegíveis, etapas abertas
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,8 @@ from app.core.carga_calculo import (
     ResultadoCarga,
     calcular_carga,
 )
-from app.core.carga_semanal import ALOCACAO_JANELA_VENCIDA, ALOCACAO_SEM_DIA_UTIL, segunda_da_semana
+from app.core.capacidade_individual import ConfiguracaoCapacidade, JornadaIndividual, dias_ausentes_da_semana
+from app.core.carga_semanal import ALOCACAO_JANELA_VENCIDA, ALOCACAO_SEM_DIA_UTIL, dias_da_semana, segunda_da_semana
 from app.core.expediente import RegraExpediente, fuso_da_regra
 from app.core.relogio import agora_utc, fuso_aplicacao
 from app.repositories.carga_operacional_repository import CargaOperacionalRepository
@@ -118,6 +119,26 @@ class CargaOperacionalService:
             for linha in etapas
         ]
 
+    def _configuracoes(self, db: Session, empresa_id: str, segunda: date) -> dict[str, ConfiguracaoCapacidade]:
+        """Jornada própria + ausências da semana de TODOS os elegíveis, em duas consultas fixas (sem N+1). Quem não aparece não tem configuração: usa o expediente da empresa."""
+        dias_jornada: dict[str, dict[int, list[tuple[str, str]]]] = {}
+        for usuario_id, dia, inicio, fim in self.repository.jornadas_dos_elegiveis(db, empresa_id=empresa_id):
+            dias = dias_jornada.setdefault(usuario_id, {})
+            if dia is not None and inicio is not None and fim is not None:
+                dias.setdefault(dia, []).append((inicio, fim))
+        domingo = segunda + timedelta(days=6)
+        intervalos: dict[str, list[tuple[date, date]]] = defaultdict(list)
+        for usuario_id, inicio, fim in self.repository.ausencias_dos_elegiveis(db, empresa_id=empresa_id, inicio=segunda, fim=domingo):
+            intervalos[usuario_id].append((inicio, fim))
+        semana = dias_da_semana(segunda)
+        return {
+            usuario_id: ConfiguracaoCapacidade(
+                jornada=JornadaIndividual({dia: tuple(periodos) for dia, periodos in dias_jornada[usuario_id].items()}) if usuario_id in dias_jornada else None,
+                dias_ausentes=dias_ausentes_da_semana(intervalos.get(usuario_id, ()), semana),
+            )
+            for usuario_id in set(dias_jornada) | set(intervalos)
+        }
+
     # ------------------------------------------------------------------------------------------------------------------
     # Entrada pública
     # ------------------------------------------------------------------------------------------------------------------
@@ -155,6 +176,8 @@ class CargaOperacionalService:
 
         pessoas = [PessoaElegivel(p["id"], p["nome"], p["departamento_id"]) for p in self.repository.pessoas_elegiveis(db, empresa_id=empresa_id)]
         nomes_departamento = self.repository.departamentos(db, empresa_id=empresa_id)
+        # Capacidade individual só existe com o expediente da empresa LIGADO: desligado, nenhuma jornada própria reativa capacidade (nem se consulta).
+        configuracoes = self._configuracoes(db, empresa_id, segunda) if regra is not None and regra.ativo else {}
         resultado = calcular_carga(
             etapas=self._entradas(db, empresa_id),
             pessoas=pessoas,
@@ -162,6 +185,7 @@ class CargaOperacionalService:
             percentual_alocavel=percentual,
             hoje=hoje,
             semana_inicio=segunda,
+            configuracoes=configuracoes,
         )
         return self._montar(
             resultado,
@@ -191,7 +215,12 @@ class CargaOperacionalService:
         limite: int,
     ) -> TrafegoCargaRead:
         disponivel = r.capacidade_indisponivel is None
-        nominal, alocavel = r.capacidade_nominal_pessoa_min, r.capacidade_alocavel_pessoa_min
+
+        def nominal_de(usuario_id: str) -> int | None:
+            return r.capacidades[usuario_id].nominal_min if disponivel else None
+
+        def alocavel_de(usuario_id: str) -> int | None:
+            return r.capacidades[usuario_id].alocavel_min if disponivel else None
 
         def planejado_de(agregado_min: int) -> int | None:
             return agregado_min if disponivel else None
@@ -209,6 +238,8 @@ class CargaOperacionalService:
         for i in ids_pessoas:
             info, agg = r.pessoas_info[i], r.pessoas[i]
             planejado = planejado_de(agg.planejado_min)
+            nominal, alocavel = nominal_de(i), alocavel_de(i)
+            capacidade_pessoa = r.capacidades.get(i)
             pessoas_read.append(
                 PessoaCargaRead(
                     usuarioId=i,
@@ -219,6 +250,8 @@ class CargaOperacionalService:
                     planejadoMin=planejado,
                     saldoMin=saldo_de(alocavel, planejado),
                     ocupacaoPercentual=_ocupacao(planejado, alocavel),
+                    capacidadeOrigem=capacidade_pessoa.origem if capacidade_pessoa else None,
+                    diasAusentes=capacidade_pessoa.dias_ausentes if capacidade_pessoa else None,
                     naoPlanejadoMin=agg.nao_planejado_min,
                     pendenciasPlanejamentoMin=agg.pendencia_min,
                     semEstimativaCount=len(agg.sem_estimativa),
@@ -241,7 +274,9 @@ class CargaOperacionalService:
             pool = r.pools_departamento.get(d, Agregado())
             planejado_total = sum(r.pessoas[i].planejado_min for i in pessoas_do_dep) + pool.planejado_min
             planejado = planejado_de(planejado_total)
-            alocavel_dep = alocavel * len(pessoas_do_dep) if alocavel is not None else None
+            # A capacidade do departamento é a SOMA das capacidades reais das pessoas (podem diferir: jornadas próprias, ausências) — nunca "n × capacidade padrão".
+            nominal_dep = sum(nominal_de(i) or 0 for i in pessoas_do_dep) if disponivel else None
+            alocavel_dep = sum(alocavel_de(i) or 0 for i in pessoas_do_dep) if disponivel else None
             sem_estimativa = set(pool.sem_estimativa)
             for i in pessoas_do_dep:
                 sem_estimativa |= r.pessoas[i].sem_estimativa
@@ -250,7 +285,7 @@ class CargaOperacionalService:
                     departamentoId=d,
                     nome=nomes_departamento.get(d, ""),
                     pessoasCount=len(pessoas_do_dep),
-                    capacidadeNominalMin=nominal * len(pessoas_do_dep) if nominal is not None else None,
+                    capacidadeNominalMin=nominal_dep,
                     capacidadeAlocavelMin=alocavel_dep,
                     planejadoMin=planejado,
                     planejadoPoolMin=planejado_de(pool.planejado_min),

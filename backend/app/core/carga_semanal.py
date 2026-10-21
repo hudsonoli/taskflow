@@ -4,9 +4,9 @@ Sem SQLAlchemy e sem relógio: tudo recebe os dados prontos. O que entra aqui NU
 empresa e carga vem da estimativa + janela planejada da etapa.
 
 ## Capacidade (ponto de extensão)
-`obter_capacidade_usuario(usuario, periodo, ...)` é o ÚNICO lugar que decide quantos minutos uma pessoa pode receber por dia. Na v1 todos os usuários elegíveis usam a `RegraExpediente` da empresa
-(períodos do dia + dias especiais) e o `percentual_capacidade_alocavel`. O argumento `usuario` existe para que jornada individual e ausências/férias possam entrar no futuro SEM mudar quem a chama;
-hoje ele não é lido. Não há hierarquia de classes nem tabela de apoio.
+`obter_capacidade_usuario(usuario, periodo, ...)` é o ÚNICO lugar que decide quantos minutos uma pessoa pode receber por dia. Desde a 11B.2D-A ele consulta a CONFIGURAÇÃO INDIVIDUAL já carregada
+(jornada própria opcional + datas de ausência; ver `app/core/capacidade_individual`): sem configuração, é exatamente a `RegraExpediente` da empresa (períodos do dia + dias especiais). O
+`percentual_capacidade_alocavel` da empresa é aplicado por último, sobre o total nominal da pessoa. Esta função NUNCA acessa o banco: quem chama traz tudo carregado (sem N+1).
 
 ## Inteiros e conservação
 Toda divisão de minutos é inteira, por MAIOR RESTO com desempate pela posição (determinístico): a soma das partes é SEMPRE o total — nenhum minuto some por arredondamento.
@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
+from app.core.capacidade_individual import SEM_CONFIGURACAO, ConfiguracaoCapacidade, minutos_do_usuario_no_dia
 from app.core.expediente import RegraExpediente, periodos_do_dia
 
 DIAS_DA_SEMANA = 7
@@ -49,11 +50,14 @@ def minutos_nominais_do_dia(regra: RegraExpediente, dia: date) -> int:
 
 @dataclass(frozen=True)
 class CapacidadeUsuario:
-    """Capacidade de UMA pessoa em um período: minutos nominais por dia, total nominal e total alocável (nominal × percentual)."""
+    """Capacidade de UMA pessoa em um período: minutos nominais por dia, total nominal e total alocável (nominal × percentual).
+    `origem`: "empresa" (sem jornada própria) | "individual". `dias_ausentes`: dias DO PERÍODO cobertos por ausência (inclusive os que o expediente já fechava)."""
 
     minutos_por_dia: dict[date, int]
     nominal_min: int
     alocavel_min: int
+    origem: str = "empresa"
+    dias_ausentes: int = 0
 
 
 def aplicar_percentual(nominal_min: int, percentual: int) -> int:
@@ -67,14 +71,21 @@ def obter_capacidade_usuario(
     *,
     regra: RegraExpediente,
     percentual_alocavel: int,
+    configuracao: ConfiguracaoCapacidade = SEM_CONFIGURACAO,
 ) -> CapacidadeUsuario:
-    """Capacidade do `usuario` nos dias de `periodo`.
+    """Capacidade do `usuario` nos dias de `periodo`, a partir da regra da empresa + `configuracao` individual (jornada própria e ausências, já carregadas — nenhuma consulta aqui).
 
-    v1: independe do usuário — todos usam o expediente da empresa. FUTURO: override individual de jornada e ausências/férias entram AQUI, olhando `usuario` e `periodo`, sem alterar os chamadores.
+    Sem configuração o resultado é idêntico ao da v1 (expediente da empresa para todos). `usuario` identifica a pessoa para quem chama; o cálculo só precisa da configuração dela.
     """
-    minutos = {dia: minutos_nominais_do_dia(regra, dia) for dia in periodo}
+    minutos = {dia: minutos_do_usuario_no_dia(regra, dia, configuracao) for dia in periodo}
     nominal = sum(minutos.values())
-    return CapacidadeUsuario(minutos_por_dia=minutos, nominal_min=nominal, alocavel_min=aplicar_percentual(nominal, percentual_alocavel))
+    return CapacidadeUsuario(
+        minutos_por_dia=minutos,
+        nominal_min=nominal,
+        alocavel_min=aplicar_percentual(nominal, percentual_alocavel),
+        origem=configuracao.origem,
+        dias_ausentes=sum(1 for dia in periodo if dia in configuracao.dias_ausentes),
+    )
 
 
 def distribuir_por_pesos(total: int, pesos: Sequence[int]) -> list[int]:

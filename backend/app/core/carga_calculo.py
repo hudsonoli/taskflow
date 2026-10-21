@@ -11,19 +11,25 @@ Saída: a ALOCAÇÃO COMPLETA da semana (por etapa, por pessoa, por departamento
   sem departamento: POOL_SEM_DEPARTAMENTO. A carga NUNCA desaparece. Departamento com usuários NÃO recebe carga extra.
 - **Divisão entre responsáveis e semanas**: a parcela GLOBAL de cada responsável/pool vem da divisão igual da estimativa (241 → 121 e 120) e a janela é rateada em matriz responsável × semana
   (`ratear_por_linhas_e_colunas`): Σ da linha = parcela global do responsável e Σ da coluna = planejado da etapa na semana, exatamente. Sem viés acumulado de arredondamento entre semanas.
+- **Capacidade individual (11B.2D-A)**: o denominador de CADA pessoa vem de `obter_capacidade_usuario` com a configuração dela (jornada própria opcional + ausências). A distribuição da estimativa
+  pelas semanas da janela continua usando o calendário da EMPRESA (peso = minutos nominais do dia) — jornada e ausência de alguém NÃO movem carga entre semanas nem alteram o rateio entre responsáveis.
 - **Expediente desligado/ausente**: sem denominador confiável → `capacidade_indisponivel`; nenhuma distribuição semanal é feita (planejado e saldo ficam nulos), mas não planejado, sem estimativa e janela vencida
   (que dependem só de datas) continuam informados.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+
+from app.core.capacidade_individual import SEM_CONFIGURACAO, ConfiguracaoCapacidade
 
 from app.core.carga_semanal import (
     ALOCACAO_ALOCADA,
     ALOCACAO_JANELA_VENCIDA,
     ALOCACAO_SEM_DIA_UTIL,
+    CapacidadeUsuario,
     alocar_janela,
     dias_da_semana,
     dividir_igual,
@@ -118,8 +124,7 @@ class ResultadoCarga:
     dias: list[tuple[date, int | None, bool]]  # (data, minutos nominais | None se indisponivel, considerado)
     capacidade_indisponivel: str | None
     percentual: int
-    capacidade_nominal_pessoa_min: int | None
-    capacidade_alocavel_pessoa_min: int | None
+    capacidades: dict[str, CapacidadeUsuario]  # por usuario_id elegível; vazio quando a capacidade está indisponível
     etapas: list[EtapaCalculada]
     pessoas: dict[str, Agregado]
     pessoas_info: dict[str, PessoaElegivel]
@@ -164,6 +169,7 @@ def calcular_carga(
     percentual_alocavel: int,
     hoje: date,
     semana_inicio: date,
+    configuracoes: Mapping[str, ConfiguracaoCapacidade] | None = None,
 ) -> ResultadoCarga:
     semana_fim = semana_inicio + timedelta(days=6)
     recorte_hoje = semana_inicio <= hoje <= semana_fim
@@ -181,13 +187,14 @@ def calcular_carga(
     dias = [(d, (minutos_do_dia(d) if calendario_ok else None), (d >= hoje if recorte_hoje else True)) for d in todos_os_dias]
     considerados = [d for d, _m, ok in dias if ok]
 
-    nominal_pessoa: int | None = None
-    alocavel_pessoa: int | None = None
-    if calendario_ok and regra is not None:
-        capacidade = obter_capacidade_usuario(None, considerados, regra=regra, percentual_alocavel=percentual_alocavel)
-        nominal_pessoa, alocavel_pessoa = capacidade.nominal_min, capacidade.alocavel_min
-
     elegiveis = {p.usuario_id: p for p in sorted(pessoas, key=lambda p: p.usuario_id)}
+    configuracoes = configuracoes or {}
+    capacidades: dict[str, CapacidadeUsuario] = {}
+    if calendario_ok and regra is not None:
+        for usuario_id in elegiveis:
+            capacidades[usuario_id] = obter_capacidade_usuario(
+                usuario_id, considerados, regra=regra, percentual_alocavel=percentual_alocavel, configuracao=configuracoes.get(usuario_id, SEM_CONFIGURACAO)
+            )
     calculadas: list[EtapaCalculada] = []
 
     for entrada in etapas:
@@ -261,8 +268,7 @@ def calcular_carga(
         dias=dias,
         capacidade_indisponivel=capacidade_indisponivel,
         percentual=percentual_alocavel,
-        capacidade_nominal_pessoa_min=nominal_pessoa,
-        capacidade_alocavel_pessoa_min=alocavel_pessoa,
+        capacidades=capacidades,
         etapas=calculadas,
         pessoas=pessoas_agregadas,
         pessoas_info=elegiveis,

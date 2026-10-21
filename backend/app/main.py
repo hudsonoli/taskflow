@@ -41,6 +41,7 @@ from app.api.routes import (
     sla_regras,
     tipos_tarefa,
     trafego_operacional,
+    usuario_capacidade,
     usuario_permissao,
     usuarios,
     workflow_modelos,
@@ -92,6 +93,7 @@ app.include_router(sessoes_trabalho.router)
 app.include_router(trafego_operacional.router)
 app.include_router(empresas.router)
 app.include_router(usuarios.router)
+app.include_router(usuario_capacidade.router)
 app.include_router(usuario_permissao.router)
 app.include_router(grupos_cliente.router)
 app.include_router(clientes.router)

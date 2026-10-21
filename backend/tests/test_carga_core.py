@@ -93,7 +93,7 @@ def test_percentual_arredonda_meio_para_cima_em_inteiros() -> None:
     assert aplicar_percentual(0, 75) == 0
 
 
-def test_capacidade_nao_depende_do_usuario_na_v1_mas_aceita_o_argumento() -> None:
+def test_sem_configuracao_individual_a_capacidade_nao_depende_do_usuario() -> None:
     dias = [SEG]
     assert obter_capacidade_usuario("qualquer", dias, regra=regra(), percentual_alocavel=100) == obter_capacidade_usuario(None, dias, regra=regra(), percentual_alocavel=100)
 
@@ -183,25 +183,25 @@ def test_semana_atual_recorta_em_hoje_e_semana_futura_e_completa() -> None:
     atual = calcular([], hoje=quarta, semana=SEG)
     assert atual.recorte_hoje is True
     assert [(d.isoformat(), ok) for d, _m, ok in atual.dias][:4] == [("2026-10-19", False), ("2026-10-20", False), ("2026-10-21", True), ("2026-10-22", True)]
-    assert atual.capacidade_nominal_pessoa_min == 3 * 480  # qua, qui, sex (hoje conta inteiro)
+    assert atual.capacidades["a"].nominal_min == 3 * 480  # qua, qui, sex (hoje conta inteiro)
     futura = calcular([], hoje=quarta, semana=SEG2)
-    assert futura.recorte_hoje is False and all(ok for _d, _m, ok in futura.dias) and futura.capacidade_nominal_pessoa_min == 2400
+    assert futura.recorte_hoje is False and all(ok for _d, _m, ok in futura.dias) and futura.capacidades["a"].nominal_min == 2400
 
 
 def test_hoje_conta_como_dia_completo_mesmo_no_fim_da_tarde() -> None:
-    assert calcular([], hoje=SEG, semana=SEG).capacidade_nominal_pessoa_min == 2400
+    assert calcular([], hoje=SEG, semana=SEG).capacidades["a"].nominal_min == 2400
 
 
 def test_fator_75_na_capacidade_da_semana() -> None:
     r = calcular([], pct=75)
-    assert (r.capacidade_nominal_pessoa_min, r.capacidade_alocavel_pessoa_min) == (2400, 1800)
+    assert (r.capacidades["a"].nominal_min, r.capacidades["a"].alocavel_min) == (2400, 1800)
 
 
 def test_expediente_desligado_nao_inventa_capacidade_nem_distribui() -> None:
     e = etapa(1, est=300, ini=date(2026, 10, 20), fim=date(2026, 10, 22), users=["a"])
     r = calcular([e], r=regra(ativo=False))
     assert r.capacidade_indisponivel == CAPACIDADE_EXPEDIENTE_DESLIGADO
-    assert r.capacidade_nominal_pessoa_min is None and r.capacidade_alocavel_pessoa_min is None
+    assert r.capacidades == {}  # nenhuma capacidade inventada
     assert r.pessoas["a"].planejado_min == 0 and r.etapas[0].planejado_semana_min is None and r.etapas[0].alocacao_estado is None
     assert all(m is None for _d, m, _ok in r.dias)
 

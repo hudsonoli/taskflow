@@ -27,6 +27,12 @@ class DomainEventType(StrEnum):
     # banco, não o rótulo de UI.
     USUARIO_PERMISSAO_CONCEDIDA = "usuario.permissao_concedida"
     USUARIO_PERMISSAO_NEGADA = "usuario.permissao_negada"
+    # 11B.2D-A — capacidade individual (jornada semanal própria e ausências por data). Os eventos SÃO o histórico; a observação livre da ausência nunca vai no payload.
+    USUARIO_JORNADA_ALTERADA = "usuario.jornada_alterada"
+    USUARIO_JORNADA_REMOVIDA = "usuario.jornada_removida"
+    USUARIO_AUSENCIA_CRIADA = "usuario.ausencia_criada"
+    USUARIO_AUSENCIA_ALTERADA = "usuario.ausencia_alterada"
+    USUARIO_AUSENCIA_REMOVIDA = "usuario.ausencia_removida"
     USUARIO_PERMISSAO_REMOVIDA = "usuario.permissao_removida"
 
     GRUPO_CLIENTE_CRIADO = "grupo_cliente.criado"

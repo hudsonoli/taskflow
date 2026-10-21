@@ -50,6 +50,7 @@ from app.models import (  # noqa: E402,F401
     sla_regra,
     tipo_tarefa,
     usuario,
+    usuario_capacidade,
     usuario_credencial,
     usuario_permissao,
     workflow_modelo,

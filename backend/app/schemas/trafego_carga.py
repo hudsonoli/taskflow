@@ -86,6 +86,9 @@ class PessoaCargaRead(_Read):
     planejado_min: int | None = Field(alias="planejadoMin")
     saldo_min: int | None = Field(alias="saldoMin")
     ocupacao_percentual: float | None = Field(alias="ocupacaoPercentual")
+    # 11B.2D-A (ADITIVOS): de onde vem a capacidade da pessoa e quantos dias CONSIDERADOS da semana estão cobertos por ausência. `null` quando a capacidade está indisponível (expediente desligado).
+    capacidade_origem: str | None = Field(default=None, alias="capacidadeOrigem")  # empresa | individual
+    dias_ausentes: int | None = Field(default=None, alias="diasAusentes")
     nao_planejado_min: int = Field(alias="naoPlanejadoMin")
     pendencias_planejamento_min: int = Field(alias="pendenciasPlanejamentoMin")
     sem_estimativa_count: int = Field(alias="semEstimativaCount")

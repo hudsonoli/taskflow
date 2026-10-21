@@ -46,7 +46,7 @@ relatório histórico de capacidade).
   `dias[].considerado=false` nos dias anteriores. Semana futura: `recorteHoje=false`, todos os dias.
 - **Ponto de extensão:** `obter_capacidade_usuario(usuario, periodo, regra, percentual_alocavel)` em
   `app/core/carga_semanal.py` é o único lugar que decide a capacidade de uma pessoa. Na v1 todos os usuários elegíveis usam
-  a regra da empresa; jornada individual e ausências/férias entram **aí** no futuro. Não há hierarquia de classes nem tabela.
+  a regra da empresa; **jornada individual e ausências/férias entraram aí na 11B.2D-A** (ver [capacidade-individual.md](capacidade-individual.md)): a capacidade passa a ser por pessoa (denominador), sem tocar a distribuição do planejamento.
 - **Expediente desligado** (`ativo=false`) **ou ausente**: `capacidade.capacidadeIndisponivel = "expediente_desligado"`. Não
   se assume 8 h. **Comportamento escolhido (documentado):** sem calendário confiável não existe distribuição por semana, então
   `capacidadeNominalMin`, `capacidadeAlocavelMin`, **`planejadoMin`**, `saldoMin` e `ocupacaoPercentual` ficam `null`
