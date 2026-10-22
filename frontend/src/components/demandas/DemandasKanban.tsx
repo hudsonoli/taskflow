@@ -31,10 +31,13 @@ export function DemandasKanban({
   demandas,
   onOpenDetails,
   onMoveDemanda,
+  onIniciarTrabalho,
 }: {
   demandas: Demanda[];
   onOpenDetails: (demandaId: string) => void;
   onMoveDemanda: (demandaId: string, novoStatus: DemandaStatusEditavel) => void;
+  /** "Iniciar trabalho": soltar um card em Em execução é o comando de começar a trabalhar (o servidor decide se abre sessão pessoal: só para quem executa a etapa). */
+  onIniciarTrabalho: (demandaId: string) => void;
 }) {
   const { estado } = useEstadoExpediente();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -89,7 +92,9 @@ export function DemandasKanban({
     }
 
     setAvisoBloqueio(null);
-    onMoveDemanda(demanda.id, novoStatus);
+    // Em Em execução NÃO é só mudar o status: é "começar a trabalhar" — comando próprio, sem confirmação, troca de foco fluida. As demais colunas seguem o PATCH de status.
+    if (novoStatus === "em_execucao") onIniciarTrabalho(demanda.id);
+    else onMoveDemanda(demanda.id, novoStatus);
   }
 
   return (
@@ -141,6 +146,8 @@ export function DemandasKanban({
                 onOpenDetails={onOpenDetails}
                 arrastavel={expediente.podeArrastar}
                 motivoBloqueio={expediente.motivoBloqueio}
+                onIniciarTrabalho={onIniciarTrabalho}
+                podeIniciar={expediente.podeIniciar}
               />
             ))}
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Clock } from "lucide-react";
+import { CalendarDays, Clock, Play } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
@@ -52,6 +52,13 @@ function CardContent({ demanda }: { demanda: Demanda }) {
         {resolverProjetoNome(demanda.projetoId, projetos)}
       </p>
 
+      {demanda.trabalhandoAgora && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" aria-hidden />
+          Você está trabalhando nesta
+        </p>
+      )}
+
       <div className="mt-3 flex items-center justify-between gap-2">
         <AvatarStack pessoas={responsaveis} max={3} size="h-6 w-6" emptyLabel="" />
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
@@ -75,9 +82,15 @@ export function DemandaKanbanCard({
   onOpenDetails,
   arrastavel = true,
   motivoBloqueio,
+  onIniciarTrabalho,
+  podeIniciar = true,
 }: {
   demanda: Demanda;
   onOpenDetails: (demandaId: string) => void;
+  /** "Iniciar trabalho" na tarefa que já está em execução mas em que a pessoa ainda não tem sessão (a ação por arraste é a mesma, só que na própria coluna). */
+  onIniciarTrabalho?: (demandaId: string) => void;
+  /** false fora do expediente: iniciar trabalho continua bloqueado (o servidor também recusa). */
+  podeIniciar?: boolean;
   /** false fora do expediente — o card continua clicável (abre detalhes), mas não arrasta. */
   arrastavel?: boolean;
   motivoBloqueio?: string;
@@ -105,6 +118,18 @@ export function DemandaKanbanCard({
       >
         <CardContent demanda={demanda} />
       </button>
+      {onIniciarTrabalho && demanda.status === "em_execucao" && demanda.podeIniciarTrabalho && !demanda.trabalhandoAgora && (
+        <button
+          type="button"
+          onClick={() => onIniciarTrabalho(demanda.id)}
+          disabled={!podeIniciar}
+          title={podeIniciar ? "Começar a trabalhar nesta tarefa (encerra o seu trabalho em outra, se houver)" : motivoBloqueio}
+          className="mt-1.5 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300"
+        >
+          <Play className="h-3.5 w-3.5" aria-hidden />
+          Iniciar trabalho
+        </button>
+      )}
     </motion.div>
   );
 }

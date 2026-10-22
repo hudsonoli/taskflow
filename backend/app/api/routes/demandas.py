@@ -49,6 +49,7 @@ from app.services.demanda_workflow_service import (
     DemandaWorkflowService,
 )
 from app.services.expediente_trabalho import detalhe_409_fora_de_expediente
+from app.services.sessao_trabalho_service import SessaoTrabalhoConflitoError
 from app.services.demanda_service import (
     DemandaClienteForaDoEscopoError,
     DemandaClienteInvalidoError,
@@ -56,6 +57,7 @@ from app.services.demanda_service import (
     DemandaDepartamentoInvalidoError,
     DemandaForaDeExpedienteError,
     DemandaInvalidTransitionError,
+    DemandaTrabalhoSemResponsavelError,
     DemandaMotivoBloqueioObrigatorioError,
     DemandaNotFoundError,
     DemandaProjetoClienteIncompativelError,
@@ -96,6 +98,8 @@ def handle_demanda_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detalhe_409_fora_de_expediente(exc)) from exc
     if isinstance(exc, DemandaInvalidTransitionError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if isinstance(exc, DemandaTrabalhoSemResponsavelError):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     # Progressão de workflow (Fase 8A). 409 estruturado: a interface recarrega o estado e mostra a mensagem do servidor.
     if isinstance(exc, DemandaWorkflowConflitoError):
         raise HTTPException(
@@ -492,6 +496,28 @@ def get_demanda(
         leitura.acesso_apenas_workflow = via_workflow
         leitura.acesso_somente_acompanhamento = so_acompanha
         return leitura
+    except Exception as exc:
+        handle_demanda_error(exc)
+
+
+@router.post("/{demanda_id}/iniciar-trabalho", response_model=DemandaRead)
+def iniciar_trabalho(
+    demanda_id: UUID,
+    current_user: Usuario = Depends(require_permissao("demandas.editar")),
+    db: Session = Depends(get_db),
+):
+    """"Começar a trabalhar nesta tarefa" (arrastar para Em execução no Kanban, ou o botão do card). Comando explícito e transacional: leva a Demanda a `em_execucao`
+    (mesmas regras do PATCH) e, SE o usuário é executor da etapa atual, troca o foco pessoal — encerra a sessão dele em outra demanda e abre a desta. Quem não é executor
+    (gestor organizando o trabalho de outros) só move o status: nenhuma sessão pessoal é criada. Nunca pausa a demanda anterior nem toca nas sessões de outros responsáveis."""
+    try:
+        demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
+        atualizada = demanda_service.iniciar_trabalho(db, demanda, actor=current_user, via_workflow=via_workflow)
+        resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
+        resposta.acesso_apenas_workflow = via_workflow
+        return resposta
+    except SessaoTrabalhoConflitoError as exc:
+        # 409 estruturado, o mesmo contrato de `POST /sessoes-trabalho/abrir` (a transação inteira já foi desfeita, status incluído).
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": exc.codigo, "message": str(exc)}) from exc
     except Exception as exc:
         handle_demanda_error(exc)
 

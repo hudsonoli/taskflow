@@ -38,6 +38,8 @@ from app.repositories.projeto_repository import ProjetoRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.core.planejamento_etapa import estado_da_janela
+from app.core.executor_etapa import STATUS_SEM_TRABALHO, eh_executor_da_demanda
+from app.schemas.evento import EventoCreate
 from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead, PlanejamentoEtapaRead
 from app.services.demanda_intervalo_service import (
     ORIGEM_CRIACAO,
@@ -111,6 +113,10 @@ class DemandaNotFoundError(ValueError):
 
 class DemandaInvalidTransitionError(ValueError):
     pass
+
+
+class DemandaTrabalhoSemResponsavelError(PermissionError):
+    """"Iniciar trabalho" numa Demanda que já está em execução por quem NÃO é executor da etapa atual — não há sessão pessoal a abrir nem transição a fazer."""
 
 
 class DemandaMotivoBloqueioObrigatorioError(ValueError):
@@ -638,8 +644,9 @@ class DemandaService:
         data: DemandaUpdate,
         *,
         actor: Usuario,
+        commit: bool = True,
     ) -> Demanda:
-        """Recebe a Demanda **já resolvida dentro do escopo** pela rota — nunca um id solto."""
+        """Recebe a Demanda **já resolvida dentro do escopo** pela rota — nunca um id solto. `commit=False` (comando "iniciar trabalho"): só `flush`; a transação é de quem chama."""
         actor_usuario_id = actor.id
         updates = data.model_dump(exclude_unset=True)
         campos_alterados: list[str] = []
@@ -865,12 +872,82 @@ class DemandaService:
                         db, demanda, quando=now, origem=ORIGEM_TRANSICAO, ator_usuario_id=actor_usuario_id, evento_id=evento_status_id
                     )
 
+            if commit:
+                db.commit()
+                db.refresh(demanda)
+            else:
+                db.flush()
+            return demanda
+        except Exception:
+            db.rollback()
+            raise
+
+    # ----------------------------------------------------------------------------------
+    # Iniciar trabalho (Kanban / botão) — status + foco pessoal numa transação só
+    # ----------------------------------------------------------------------------------
+
+    def iniciar_trabalho(self, db: Session, demanda: Demanda, *, actor: Usuario, via_workflow: bool = False) -> Demanda:
+        """"Começar a trabalhar nesta tarefa": comando EXPLÍCITO (nunca efeito colateral de qualquer PATCH de status). Numa única transação:
+
+        1. se a Demanda não está em execução, vai para `em_execucao` pela MESMA autoridade/validações do PATCH (lock, expediente, intervalos, eventos);
+        2. se o ator é EXECUTOR da etapa atual (`eh_executor_da_demanda`), a sessão pessoal ativa dele em OUTRA demanda é encerrada (troca de foco) e a sessão nesta abre;
+        3. quem NÃO é executor (gestor/head organizando o trabalho de outros) só move o status — nenhuma sessão pessoal é criada para ele. Não há pausa da Demanda anterior
+           nem efeito sobre outros responsáveis.
+
+        Falha em qualquer passo desfaz TUDO (status incluído). Idempotente: quem já tem sessão ativa nesta Demanda em execução não muda nada. Acesso só pelo escopo derivado
+        do Workflow (`via_workflow`) vale apenas para o executor — para os demais é 404 (o mesmo que o PATCH faria)."""
+        try:
+            self.repository.bloquear_demanda_para_atualizacao(db, demanda)
+            if demanda.status == STATUS_ARQUIVADA:
+                raise DemandaInvalidTransitionError("Demanda arquivada não pode ser editada — restaure-a antes")
+            elegivel = self._eh_executor(db, demanda, actor)
+            if via_workflow and not elegivel:
+                raise DemandaNotFoundError("Demanda não encontrada")
+            ativa = self.sessao_service.repository.get_active_by_usuario(db, empresa_id=demanda.empresa_id, usuario_id=actor.id)
+            if elegivel and ativa is not None and ativa.demanda_id == demanda.id and demanda.status == STATUS_EM_EXECUCAO:
+                return demanda  # já está trabalhando aqui: nada a fazer (sem 409 redundante)
+            if demanda.status == STATUS_EM_EXECUCAO and not elegivel:
+                raise DemandaTrabalhoSemResponsavelError("Você não é responsável pela etapa atual desta tarefa.")
+            if demanda.status != STATUS_EM_EXECUCAO:
+                self.update_demanda(db, demanda, DemandaUpdate.model_validate({"status": STATUS_EM_EXECUCAO}), actor=actor, commit=False)
+            if elegivel:
+                agora = agora_utc()
+                evento = self.sessao_service.evento_service.create_evento(
+                    db,
+                    EventoCreate(
+                        empresaId=demanda.empresa_id,
+                        tipo="sessao_trabalho_iniciada",
+                        entidadeTipo="demanda",
+                        entidadeId=demanda.id,
+                        usuarioId=actor.id,
+                        payload={"demandaId": demanda.id},
+                        occurredAt=agora,
+                    ),
+                    commit=False,
+                )
+                self.sessao_service.abrir(
+                    db,
+                    empresa_id=demanda.empresa_id,
+                    demanda_id=demanda.id,
+                    evento_inicio_id=evento.id,
+                    inicio_em=agora,
+                    usuario_id=actor.id,
+                )
             db.commit()
             db.refresh(demanda)
             return demanda
         except Exception:
             db.rollback()
             raise
+
+    def _eh_executor(self, db: Session, demanda: Demanda, usuario: Usuario) -> bool:
+        etapas = self._etapas_workflow_por_demanda(db, [demanda.id], demandas=[demanda]).get(demanda.id, [])
+        return eh_executor_da_demanda(
+            usuario,
+            etapas=etapas,
+            demanda_usuario_ids=self.repository.listar_responsavel_ids(db, demanda.id),
+            demanda_departamento_ids=self.repository.listar_departamento_ids(db, demanda.id),
+        )
 
     # ----------------------------------------------------------------------------------
     # Arquivamento — ver docs/padrao-arquivamento.md. Nunca há delete físico.
@@ -1036,13 +1113,17 @@ class DemandaService:
             db, [demanda.id], usuario=usuario, somente_leitura=somente_leitura, demandas=[demanda]
         )
         etapas = etapas_por_demanda.get(demanda.id, [])
+        responsaveis = self.repository.listar_responsavel_ids(db, demanda.id)
+        departamentos = self.repository.listar_departamento_ids(db, demanda.id)
+        em_andamento = self._demandas_com_sessao_ativa_do_usuario(db, usuario, somente_leitura)
         return DemandaRead.model_validate(
             {
                 **self._campos_base(demanda),
-                "usuarioResponsavelIds": self.repository.listar_responsavel_ids(db, demanda.id),
-                "departamentoResponsavelIds": self.repository.listar_departamento_ids(db, demanda.id),
+                "usuarioResponsavelIds": responsaveis,
+                "departamentoResponsavelIds": departamentos,
                 "workflowEtapas": etapas,
                 "etapaAtualId": self._derivar_etapa_atual_id(etapas),
+                **self._flags_iniciar_trabalho(demanda, usuario, etapas, responsaveis, departamentos, em_andamento, somente_leitura),
             }
         )
 
@@ -1061,6 +1142,7 @@ class DemandaService:
         etapas_por_demanda = self._etapas_workflow_por_demanda(
             db, ids, usuario=usuario, somente_leitura=somente_leitura, demandas=demandas
         )
+        em_andamento = self._demandas_com_sessao_ativa_do_usuario(db, usuario, somente_leitura)
         return [
             DemandaRead.model_validate(
                 {
@@ -1069,10 +1151,36 @@ class DemandaService:
                     "departamentoResponsavelIds": departamentos.get(demanda.id, []),
                     "workflowEtapas": (etapas := etapas_por_demanda.get(demanda.id, [])),
                     "etapaAtualId": self._derivar_etapa_atual_id(etapas),
+                    **self._flags_iniciar_trabalho(
+                        demanda, usuario, etapas, responsaveis.get(demanda.id, []), departamentos.get(demanda.id, []), em_andamento, somente_leitura
+                    ),
                 }
             )
             for demanda in demandas
         ]
+
+    def _demandas_com_sessao_ativa_do_usuario(self, db: Session, usuario: Usuario | None, somente_leitura: bool) -> frozenset[str]:
+        """Uma consulta por página/detalhe: as Demandas em que o PRÓPRIO usuário trabalha agora (sessão pessoal ativa). Leitura global/acompanhamento não precisa."""
+        if usuario is None or somente_leitura:
+            return frozenset()
+        return frozenset(self.sessao_service.demanda_ids_ativas_do_usuario(db, empresa_id=usuario.empresa_id, usuario_id=usuario.id))
+
+    @staticmethod
+    def _flags_iniciar_trabalho(
+        demanda: Demanda,
+        usuario: Usuario | None,
+        etapas: list,
+        responsaveis: list,
+        departamentos: list,
+        em_andamento: frozenset[str],
+        somente_leitura: bool,
+    ) -> dict:
+        if usuario is None or somente_leitura:
+            return {}
+        pode = demanda.status not in STATUS_SEM_TRABALHO and eh_executor_da_demanda(
+            usuario, etapas=etapas, demanda_usuario_ids=responsaveis, demanda_departamento_ids=departamentos
+        )
+        return {"podeIniciarTrabalho": pode, "trabalhandoAgora": demanda.id in em_andamento}
 
     def _etapas_workflow_por_demanda(
         self,

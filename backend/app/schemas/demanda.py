@@ -462,6 +462,10 @@ class DemandaRead(BaseModel):
     # O acesso a esta demanda veio SÓ da autoria (o usuário a solicitou, mas não é mais responsável nem atua nela): acompanhamento — a interface lê tudo e não
     # oferece edição nem ação de Workflow. Só o detalhe preenche; nas listagens é sempre falso.
     acesso_somente_acompanhamento: bool = Field(default=False, alias="acessoSomenteAcompanhamento")
+    # Calculados pelo SERVIDOR para o usuário da requisição (listagens e detalhe; falsos em leitura global/acompanhamento): `podeIniciarTrabalho` = é executor da etapa
+    # atual (ou da Demanda, sem fluxo) e a Demanda admite trabalho; `trabalhandoAgora` = tem sessão pessoal ATIVA nesta Demanda. A interface só exibe "Iniciar trabalho".
+    pode_iniciar_trabalho: bool = Field(default=False, alias="podeIniciarTrabalho")
+    trabalhando_agora: bool = Field(default=False, alias="trabalhandoAgora")
     # `checklist`/`arquivos` (2E.3) e `comentarios`/`historico` (2E.4) NÃO aparecem mais
     # aqui — todos têm tabela e endpoint dedicado agora (`/demandas/{id}/checklist`,
     # `/arquivos`, `/comentarios`, `/historico`). Embuti-los de novo infligiria em toda

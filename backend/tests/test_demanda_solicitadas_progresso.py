@@ -79,7 +79,16 @@ def cenario(app, db_session: Session, empresa: Empresa, client_admin: TestClient
     ).status_code == 200
     primeira = _por_ordem(demanda)[0]
     assert client_admin.post(_url(demanda["id"], primeira["id"], "concluir")).status_code == 200
-    return {"demanda": demanda, "atendimento": atendimento, "colega": colega, "designer": designer, "criacao": criacao}
+    # criador que NÃO é Atendimento (operador com permissão explícita de criar): o escopo-base nunca o enxerga depois do handoff
+    comum = _operador_comum(db_session, empresa, sufixo="comum")
+    _conceder(db_session, comum, "demandas.criar")
+    db_session.commit()
+    criada = _client_para(app, comum).post("/demandas", json={"nome": "Pedido do criador comum", "workflowModeloId": modelo_id})
+    assert criada.status_code == 201, criada.text
+    demanda_comum = criada.json()
+    assert client_admin.patch(f"/demandas/{demanda_comum['id']}", json={"usuarioResponsavelIds": [designer.id]}).status_code == 200
+    assert client_admin.post(_url(demanda_comum["id"], _por_ordem(demanda_comum)[0]["id"], "concluir")).status_code == 200
+    return {"demanda": demanda, "atendimento": atendimento, "colega": colega, "designer": designer, "criacao": criacao, "comum": comum, "demanda_comum": demanda_comum}
 
 
 def test_criador_continua_lendo_a_demanda_depois_do_handoff_e_so_em_modo_acompanhamento(
@@ -110,10 +119,9 @@ def test_criador_continua_lendo_a_demanda_depois_do_handoff_e_so_em_modo_acompan
         assert cliente.get(f"/demandas/{demanda['id']}/{sub}").status_code == 200, sub
     assert demanda["id"] in _ids(_solicitadas(cliente, empresa))
 
-    # ---- NÃO é gestão: nenhuma escrita funciona (escopo-base não inclui autoria)
+    # ---- NÃO é gestão: nenhuma escrita operacional funciona (escopo-base não inclui autoria); comentar é colaboração e é permitido (teste próprio abaixo)
     assert cliente.patch(f"/demandas/{demanda['id']}", json={"nome": "Mudei"}).status_code in (403, 404)
     assert cliente.patch(f"/demandas/{demanda['id']}", json={"status": "pausada"}).status_code in (403, 404)
-    assert cliente.post(f"/demandas/{demanda['id']}/comentarios", json={"texto": "oi"}).status_code in (403, 404)
     atual = _por_ordem(client_admin.get(f"/demandas/{demanda['id']}").json())[1]
     assert cliente.post(_url(demanda["id"], atual["id"], "concluir")).status_code in (403, 404)
     assert cliente.patch(f"/demandas/{demanda['id']}/workflow/etapas/{atual['id']}/esforco", json={"esforcoEstimadoMinutos": 30}).status_code in (403, 404)
@@ -149,6 +157,55 @@ def test_escopo_acompanhamento_explicito_le_detalhe_e_subrecursos_so_para_o_cria
     outro = _client_para(app, colega)
     assert outro.get(f"/demandas/{demanda['id']}", params={"escopo": "acompanhamento"}).status_code == 404
     assert outro.get(f"/demandas/{demanda['id']}/historico", params={"escopo": "acompanhamento"}).status_code == 404
+
+
+def test_criador_comenta_apos_o_handoff_sem_ganhar_poder_operacional(cenario, app, client_admin: TestClient) -> None:
+    colega, designer, comum = cenario["colega"], cenario["designer"], cenario["comum"]
+    alvo = cenario["demanda_comum"]["id"]
+    criador = _client_para(app, comum)
+    assert criador.get(f"/demandas/{alvo}").json()["acessoSomenteAcompanhamento"] is True  # só acompanha: o escopo-base não a enxerga
+
+    resposta = criador.post(f"/demandas/{alvo}/comentarios", json={"texto": "Podem priorizar? Cliente cobrou."})
+    assert resposta.status_code == 201, resposta.text
+    comentario = resposta.json()
+    assert comentario["autorUsuarioId"] == comum.id and comentario["texto"].startswith("Podem priorizar")
+
+    # aparece na timeline normal (comentários e histórico) com autor e horário reais, e UM evento de domínio
+    lista = client_admin.get(f"/demandas/{alvo}/comentarios").json()
+    assert [c["id"] for c in lista] == [comentario["id"]]
+    assert criador.get(f"/demandas/{alvo}/comentarios", params={"escopo": "acompanhamento"}).status_code == 200
+    eventos = [e for e in client_admin.get(f"/demandas/{alvo}/historico").json() if "comentario" in e["tipo"]]
+    assert len(eventos) == 1
+
+    # o comentário do SOLICITANTE não é a "primeira resposta" da operação ao cliente
+    assert client_admin.get(f"/demandas/{alvo}").json().get("slaPrimeiraRespostaEm") is None
+
+    # edita/exclui o PRÓPRIO comentário; o de outra pessoa continua protegido pelo service
+    assert criador.patch(f"/demandas/{alvo}/comentarios/{comentario['id']}", json={"texto": "Priorizem, por favor."}).status_code == 200
+    do_designer = _client_para(app, designer).post(f"/demandas/{alvo}/comentarios", json={"texto": "Ok, vou ver."})
+    assert do_designer.status_code == 201
+    assert criador.patch(f"/demandas/{alvo}/comentarios/{do_designer.json()['id']}", json={"texto": "x"}).status_code == 403
+    assert criador.delete(f"/demandas/{alvo}/comentarios/{do_designer.json()['id']}").status_code == 403
+    assert criador.delete(f"/demandas/{alvo}/comentarios/{comentario['id']}").status_code == 204
+
+    # comentar NÃO concede gestão
+    assert criador.patch(f"/demandas/{alvo}", json={"nome": "x"}).status_code in (403, 404)
+    assert criador.patch(f"/demandas/{alvo}", json={"usuarioResponsavelIds": []}).status_code in (403, 404)
+    assert criador.patch(f"/demandas/{alvo}", json={"status": "concluida"}).status_code in (403, 404)
+    assert criador.post(f"/demandas/{alvo}/arquivar", json={"motivoArquivamento": "x"}).status_code in (403, 404)
+    etapa = _por_ordem(client_admin.get(f"/demandas/{alvo}").json())[1]
+    assert criador.post(_url(alvo, etapa["id"], "concluir")).status_code in (403, 404)
+    assert criador.patch(f"/demandas/{alvo}/workflow/etapas/{etapa['id']}/esforco", json={"esforcoEstimadoMinutos": 30}).status_code in (403, 404)
+    assert criador.post(f"/demandas/{alvo}/checklist", json={"texto": "x"}).status_code in (403, 404)
+
+    # autoria é individual e de uma empresa só
+    assert _client_para(app, colega).post(f"/demandas/{alvo}/comentarios", json={"texto": "intruso"}).status_code == 404
+
+
+def test_comentario_de_outra_empresa_nao_atravessa(cenario, app, db_session: Session, outra_empresa: Empresa) -> None:
+    estranho = _criar_usuario_com_credencial(db_session, empresa=outra_empresa, perfil_base="operador", email_prefixo="estranho2")
+    resposta = _client_para(app, estranho).post(f"/demandas/{cenario['demanda']['id']}/comentarios", json={"texto": "x"})
+    assert resposta.status_code == 404
 
 
 def test_autoria_e_individual_colega_nao_herda(cenario, app) -> None:

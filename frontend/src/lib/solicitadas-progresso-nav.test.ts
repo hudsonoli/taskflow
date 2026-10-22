@@ -114,3 +114,49 @@ test("Projetos fica imediatamente depois de Tarefas, sem mudar rota, ícone ou g
   // ordem efetiva: Projetos é inserido DEPOIS da Pauta ter sido inserida após Tarefas → Tarefas, Projetos, Pauta
   assert.ok(nav.indexOf('label: "Pauta"') < nav.indexOf('label: "Projetos"'));
 });
+
+// ── Kanban → iniciar trabalho (foco pessoal) ─────────────────────────────────────────────────────────────────────────
+
+test("arrastar para Em execução é o comando 'iniciar trabalho' (server-side, transacional); as demais colunas continuam no PATCH de status", () => {
+  const kanban = semComentarios(ler("components/demandas/DemandasKanban.tsx"));
+  assert.match(kanban, /if \(novoStatus === "em_execucao"\) onIniciarTrabalho\(demanda\.id\);\s*else onMoveDemanda\(demanda\.id, novoStatus\);/);
+  const api = semComentarios(ler("lib/api-backend.ts"));
+  assert.match(api, /export async function iniciarTrabalhoDemandaReal\(demandaId: string\): Promise<Demanda>/);
+  assert.match(api, /\/iniciar-trabalho`, \{ method: "POST"/);
+  // não é duas chamadas no navegador (PATCH + abrir sessão): o comando é UM só
+  const view = semComentarios(ler("components/demandas/DemandasView.tsx"));
+  const corpo = view.slice(view.indexOf("async function iniciarTrabalho"), view.indexOf("function handleMoveDemand"));
+  assert.match(corpo, /iniciarTrabalhoDemandaReal\(demandaId\)/);
+  assert.doesNotMatch(corpo, /patchDemandaReal|abrirSessaoTrabalho/);
+  assert.match(view, /onIniciarTrabalho=\{\(id\) => void iniciarTrabalho\(id\)\}/);
+  // nenhum outro caminho de PATCH de status abre sessão
+  assert.doesNotMatch(semComentarios(ler("lib/api-backend.ts")).slice(api.indexOf("export async function patchDemandaReal")).slice(0, 600), /sessoes-trabalho/);
+});
+
+test("'Iniciar trabalho' no card só aparece em tarefa já em execução, quando o SERVIDOR diz que a pessoa executa e ainda não trabalha nela; respeita o expediente", () => {
+  const card = semComentarios(ler("components/demandas/DemandaKanbanCard.tsx"));
+  assert.match(card, /demanda\.status === "em_execucao" && demanda\.podeIniciarTrabalho && !demanda\.trabalhandoAgora/);
+  assert.match(card, /disabled=\{!podeIniciar\}/);
+  assert.match(card, /Iniciar trabalho/);
+  const tipos = semComentarios(ler("types/demanda.ts"));
+  assert.match(tipos, /podeIniciarTrabalho\?: boolean/);
+  assert.match(tipos, /trabalhandoAgora\?: boolean/);
+  const api = semComentarios(ler("lib/api-backend.ts"));
+  assert.match(api, /podeIniciarTrabalho: data\.podeIniciarTrabalho === true/);
+  assert.match(api, /trabalhandoAgora: data\.trabalhandoAgora === true/);
+});
+
+// ── solicitante pode comentar (e só comentar) ────────────────────────────────────────────────────────────────────────
+
+test("no acompanhamento a aba Atividade fica ativa para comentar; Pauta global e os demais campos seguem somente leitura", () => {
+  const drawer = semComentarios(ler("components/demandas/DemandaDetailsDrawer.tsx"));
+  assert.match(drawer, /<fieldset disabled=\{modoEfetivo === "pauta" \|\| somenteWorkflow\}[^>]*>\s*<AtividadeDemandaSection demanda=\{demanda\} \/>/);
+  const geral = drawer.slice(drawer.indexOf("<fieldset disabled={somenteLeitura || somenteWorkflow}"), drawer.indexOf('activeTab === "atividade"'));
+  assert.doesNotMatch(geral, /AtividadeDemandaSection/); // fora do fieldset geral desabilitado
+  assert.match(drawer, /comentar, mas não editar a tarefa/);
+  const atividade = semComentarios(ler("components/demandas/AtividadeDemandaSection.tsx"));
+  assert.match(atividade, /const somenteLeitura = escopoLeitura === "pauta";/);
+  // dados/briefing/responsáveis/workflow continuam desabilitados no acompanhamento
+  assert.match(drawer, /<fieldset disabled=\{somenteLeitura \|\| somenteWorkflow\}/);
+  assert.match(drawer, /<fieldset disabled=\{somenteLeitura\}/);
+});

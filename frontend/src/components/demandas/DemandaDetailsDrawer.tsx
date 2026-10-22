@@ -93,7 +93,7 @@ export function DemandaDetailsDrawer({
           {somenteLeitura ? (
             <p role="status" className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3.5 py-2.5 text-xs leading-5 text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200">
               {modoEfetivo === "acompanhamento"
-                ? "Você está acompanhando esta solicitação: pode consultar o andamento, o histórico e os arquivos, mas não alterá-la."
+                ? "Você está acompanhando esta solicitação: pode consultar o andamento, o histórico e os arquivos e comentar, mas não editar a tarefa."
                 : "Visualização somente leitura: esta tarefa é de outro departamento. Você pode consultar o detalhe, mas não alterá-la."}
             </p>
           ) : (
@@ -180,9 +180,14 @@ export function DemandaDetailsDrawer({
             {activeTab === "dados" && <DadosDemandaSection demanda={demanda} onChange={onChange} />}
             {activeTab === "briefing" && <BriefingDemandaSection key={demanda.id} demanda={demanda} onChange={onChange} />}
             {activeTab === "responsaveis" && <ResponsaveisDemandaSection demanda={demanda} onChange={onChange} />}
-            {activeTab === "atividade" && <AtividadeDemandaSection demanda={demanda} />}
             {activeTab === "historico" && <HistoricoDemandaSection demanda={demanda} />}
           </fieldset>
+          {/* Comentar é colaboração, não gestão: no modo ACOMPANHAMENTO (solicitante) a aba Atividade fica ativa — só ela. Na Pauta global segue somente leitura. */}
+          {activeTab === "atividade" && (
+            <fieldset disabled={modoEfetivo === "pauta" || somenteWorkflow} className="m-0 min-w-0 border-0 p-0">
+              <AtividadeDemandaSection demanda={demanda} />
+            </fieldset>
+          )}
         </div>
       )}
     </DetailsModal>

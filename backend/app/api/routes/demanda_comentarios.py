@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_leitura, escopo_para_leitura
+from app.core.escopo import resolver_escopo_criador
 from app.core.identidade_sistema import ids_de_contas_de_sistema
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
@@ -57,6 +58,16 @@ def _demanda_no_escopo(
     return demanda_service.get_demanda(db, str(demanda_id), escopo=escopo)
 
 
+def _demanda_para_comentar(demanda_id: UUID, current_user: Usuario, db: Session) -> tuple[Demanda, bool]:
+    """Comentar é COLABORAÇÃO, não gestão: vale o escopo-base e, por último, a AUTORIA — quem solicitou a Demanda acompanha e pode comentar depois de ela passar para outro
+    departamento (mesma empresa, individual). Devolve `(demanda, so_criador)`; `so_criador` verdadeiro quando só a autoria deu acesso. Nenhuma outra escrita (PATCH, workflow,
+    responsáveis, esforço, arquivos…) consulta este escopo."""
+    try:
+        return demanda_service.get_demanda(db, str(demanda_id), escopo=escopo_para_leitura(db, current_user, None)), False
+    except DemandaNotFoundError:
+        return demanda_service.get_demanda(db, str(demanda_id), escopo=resolver_escopo_criador(current_user)), True
+
+
 @router.get("/{demanda_id}/comentarios", response_model=list[DemandaComentarioRead])
 def listar_comentarios(
     demanda_id: UUID,
@@ -90,8 +101,9 @@ def criar_comentario(
     db: Session = Depends(get_db),
 ):
     try:
-        demanda = _demanda_no_escopo(demanda_id, current_user, db)
-        comentario = comentario_service.criar_comentario(db, demanda, payload, autor=current_user)
+        demanda, so_criador = _demanda_para_comentar(demanda_id, current_user, db)
+        # O comentário do SOLICITANTE não é a "primeira resposta" da operação ao cliente: não fixa `sla_primeira_resposta_em`.
+        comentario = comentario_service.criar_comentario(db, demanda, payload, autor=current_user, fixar_primeira_resposta=not so_criador)
         return comentario_service.to_read(comentario)
     except Exception as exc:
         handle_comentario_error(exc)
@@ -106,7 +118,7 @@ def editar_comentario(
     db: Session = Depends(get_db),
 ):
     try:
-        demanda = _demanda_no_escopo(demanda_id, current_user, db)
+        demanda, _ = _demanda_para_comentar(demanda_id, current_user, db)  # a regra "só o autor edita" é do service
         comentario = comentario_service.editar_comentario(
             db, demanda, str(comentario_id), payload, current_user=current_user
         )
@@ -123,7 +135,7 @@ def excluir_comentario(
     db: Session = Depends(get_db),
 ):
     try:
-        demanda = _demanda_no_escopo(demanda_id, current_user, db)
+        demanda, _ = _demanda_para_comentar(demanda_id, current_user, db)  # a regra "autor ou admin/gestor exclui" é do service
         comentario_service.excluir_comentario(db, demanda, str(comentario_id), current_user=current_user)
     except Exception as exc:
         handle_comentario_error(exc)

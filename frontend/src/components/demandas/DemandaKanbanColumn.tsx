@@ -17,6 +17,8 @@ export function DemandaKanbanColumn({
   onOpenDetails,
   arrastavel,
   motivoBloqueio,
+  onIniciarTrabalho,
+  podeIniciar,
 }: {
   id: string;
   title: string;
@@ -27,6 +29,8 @@ export function DemandaKanbanColumn({
   /** false fora do expediente — os cards viram só clicáveis, sem arraste. */
   arrastavel: boolean;
   motivoBloqueio?: string;
+  onIniciarTrabalho?: (demandaId: string) => void;
+  podeIniciar?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
@@ -67,6 +71,8 @@ export function DemandaKanbanColumn({
                 onOpenDetails={onOpenDetails}
                 arrastavel={arrastavel}
                 motivoBloqueio={motivoBloqueio}
+                onIniciarTrabalho={onIniciarTrabalho}
+                podeIniciar={podeIniciar}
               />
             ))}
           </AnimatePresence>

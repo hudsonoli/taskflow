@@ -1587,6 +1587,8 @@ type DemandaReadApi = {
   etapaAtualId: string | null;
   acessoApenasWorkflow?: boolean;
   acessoSomenteAcompanhamento?: boolean;
+  podeIniciarTrabalho?: boolean;
+  trabalhandoAgora?: boolean;
   progresso?: DemandaProgresso | null;
   dataInicio: string | null;
   dataFimPrevista: string | null;
@@ -1676,6 +1678,8 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
     etapaAtualId: data.etapaAtualId,
     acessoApenasWorkflow: data.acessoApenasWorkflow === true,
     acessoSomenteAcompanhamento: data.acessoSomenteAcompanhamento === true,
+    podeIniciarTrabalho: data.podeIniciarTrabalho === true,
+    trabalhandoAgora: data.trabalhandoAgora === true,
     progresso: data.progresso ?? undefined,
   };
 }
@@ -1825,6 +1829,17 @@ export type EscopoLeituraDemanda = "pauta" | "acompanhamento";
 
 function sufixoEscopoLeitura(escopo?: EscopoLeituraDemanda): string {
   return escopo ? `?escopo=${escopo}` : "";
+}
+
+/**
+ * "Começar a trabalhar nesta tarefa" — comando explícito e transacional do servidor (arrastar para Em execução no Kanban, ou o botão do card). O servidor leva a tarefa a
+ * Em execução e, se o usuário é executor da etapa atual, troca o foco pessoal (encerra a sessão dele em outra tarefa e abre esta). Quem não é executor só move o status.
+ * Nenhum PATCH de status abre sessão: só este comando. Erros (409 de expediente, 403 sem responsabilidade, 409 de etapa indisponível) chegam com a mensagem do servidor.
+ */
+export async function iniciarTrabalhoDemandaReal(demandaId: string): Promise<Demanda> {
+  return mapDemandaReadToDemanda(
+    await request<DemandaReadApi>(`/demandas/${encodeURIComponent(demandaId)}/iniciar-trabalho`, { method: "POST", body: JSON.stringify({}) }),
+  );
 }
 
 export async function getDemandaReal(demandaId: string, escopo?: EscopoLeituraDemanda): Promise<Demanda> {

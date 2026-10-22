@@ -11,6 +11,7 @@ import {
   criarDemandaReal,
   ForaDeExpedienteError,
   getDemandaReal,
+  iniciarTrabalhoDemandaReal,
   listDemandasReais,
   patchDemandaReal,
 } from "@/lib/api-backend";
@@ -304,6 +305,20 @@ export function DemandasView() {
     }
   }
 
+  // Arrastar para Em execução / "Iniciar trabalho": comando transacional do servidor (status + troca de foco pessoal, quando a pessoa é executora). O que a tela mostra vem da
+  // resposta e do refetch — nada de otimismo sobre sessão.
+  async function iniciarTrabalho(demandaId: string) {
+    setErro(null);
+    try {
+      const atualizada = await iniciarTrabalhoDemandaReal(demandaId);
+      setDemandas((current) => current.map((demanda) => (demanda.id === demandaId ? atualizada : demanda)));
+      setRefetchTick((tick) => tick + 1);
+      setEstatisticasTick((tick) => tick + 1);
+    } catch (error) {
+      setErro(mensagemDeErro(error));
+    }
+  }
+
   function handleMoveDemand(demandaId: string, novoStatus: DemandaStatusEditavel) {
     // Bloquear exige motivo — pedir antes evita um 422 previsível.
     if (novoStatus === "bloqueada") {
@@ -391,7 +406,7 @@ export function DemandasView() {
           {contexto === "solicitadas" ? (
             <DemandasSolicitadasTable demandas={demandasPagina} onOpenDetails={setSelectedDemandId} />
           ) : viewMode === "kanban" ? (
-            <DemandasKanban demandas={demandasPagina} onOpenDetails={setSelectedDemandId} onMoveDemanda={handleMoveDemand} />
+            <DemandasKanban demandas={demandasPagina} onOpenDetails={setSelectedDemandId} onMoveDemanda={handleMoveDemand} onIniciarTrabalho={(id) => void iniciarTrabalho(id)} />
           ) : (
             <DemandasTable demandas={demandasPagina} onOpenDetails={setSelectedDemandId} onEdit={openEdit} />
           )}

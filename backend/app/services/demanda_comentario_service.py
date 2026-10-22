@@ -67,7 +67,7 @@ class DemandaComentarioService:
         return comentario
 
     def criar_comentario(
-        self, db: Session, demanda: Demanda, data: DemandaComentarioCreate, *, autor: Usuario
+        self, db: Session, demanda: Demanda, data: DemandaComentarioCreate, *, autor: Usuario, fixar_primeira_resposta: bool = True
     ) -> DemandaComentario:
         """Primeiro comentário da Demanda também fixa `sla_primeira_resposta_em` — definição
         V1 aprovada no relatório da Fase 2G.6D2A (ver docstring de app/models/demanda.py,
@@ -88,7 +88,7 @@ class DemandaComentarioService:
             )
             self.repository.create(db, comentario)
 
-            fixou_primeira_resposta = self.demanda_repository.fixar_primeira_resposta_se_vazia(
+            fixou_primeira_resposta = fixar_primeira_resposta and self.demanda_repository.fixar_primeira_resposta_se_vazia(
                 db, demanda_id=demanda.id, empresa_id=demanda.empresa_id, timestamp=now
             )
             if fixou_primeira_resposta:

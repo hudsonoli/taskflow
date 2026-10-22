@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { Check, CircleDot } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { estadoDoProgresso, resumoDoProgresso, segmentosDoProgresso, type EstadoSegmento } from "@/lib/progresso-demanda";
@@ -11,11 +12,19 @@ const CLASSE_SEGMENTO: Record<EstadoSegmento, string> = {
   futura: "bg-zinc-200 dark:bg-zinc-700",
 };
 
+const LARGURA_DICA = 224; // w-56
+const ALTURA_DICA_APROX = 220;
+
 /**
  * Progresso compacto da tarefa (acompanhamento): barra segmentada (um segmento por etapa) + percentual textual + estado. Os números vêm do servidor
  * (`Demanda.progresso`); aqui só se desenha. Acessível: `role="progressbar"` com texto, e a lista de etapas aparece no foco/hover (sem depender de cor).
+ * A dica usa `position: fixed` calculada do próprio elemento: não é cortada pela rolagem da tabela (nenhuma biblioteca nem portal novo). Sem ela, barra, % e rótulo
+ * continuam legíveis.
  */
 export function ProgressoDemanda({ demanda }: { demanda: Demanda }) {
+  const ancora = useRef<HTMLDivElement>(null);
+  const [posicao, setPosicao] = useState<{ top: number; left: number } | null>(null);
+
   const estado = estadoDoProgresso(demanda);
   const progresso = demanda.progresso;
 
@@ -27,12 +36,32 @@ export function ProgressoDemanda({ demanda }: { demanda: Demanda }) {
     );
   }
 
+  function abrirDica() {
+    const caixa = ancora.current?.getBoundingClientRect();
+    if (!caixa) return;
+    // Abre para baixo; sem espaço (últimas linhas da tela), abre para cima. Alinha à direita da âncora sem sair da janela.
+    const cabeAbaixo = caixa.bottom + 6 + ALTURA_DICA_APROX <= window.innerHeight;
+    const top = cabeAbaixo ? caixa.bottom + 6 : Math.max(8, caixa.top - 6 - ALTURA_DICA_APROX);
+    const left = Math.min(Math.max(8, caixa.right - LARGURA_DICA), window.innerWidth - LARGURA_DICA - 8);
+    setPosicao({ top, left });
+  }
+
   const segmentos = segmentosDoProgresso(demanda);
   const resumo = resumoDoProgresso(progresso);
   const descricao = `${progresso.percentual}% — ${resumo}${progresso.etapaAtualNome ? `. Etapa atual: ${progresso.etapaAtualNome}` : ""}`;
 
   return (
-    <div data-testid="progresso-demanda" className="group relative min-w-[120px] max-w-[170px]" tabIndex={0} aria-label={descricao}>
+    <div
+      ref={ancora}
+      data-testid="progresso-demanda"
+      className="relative min-w-[120px] max-w-[170px]"
+      tabIndex={0}
+      aria-label={descricao}
+      onMouseEnter={abrirDica}
+      onMouseLeave={() => setPosicao(null)}
+      onFocus={abrirDica}
+      onBlur={() => setPosicao(null)}
+    >
       <div className="flex items-center gap-2">
         <div
           role="progressbar"
@@ -53,30 +82,33 @@ export function ProgressoDemanda({ demanda }: { demanda: Demanda }) {
           <Badge tone="amber">{estado.rotulo}</Badge>
         </div>
       )}
-      <div
-        role="tooltip"
-        className="pointer-events-none invisible absolute right-0 top-full z-20 mt-1.5 w-56 rounded-xl border border-line bg-surface p-3 text-xs opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100"
-      >
-        <p className="font-semibold text-fg">{resumo}</p>
-        {progresso.etapaAtualNome && <p className="mt-0.5 text-fg-muted">Etapa atual: {progresso.etapaAtualNome}</p>}
-        <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-          {segmentos.map((segmento) => (
-            <li key={segmento.id} className="flex items-center gap-1.5 text-fg-muted">
-              {segmento.estado === "concluida" ? (
-                <Check className="h-3 w-3 shrink-0 text-indigo-600 dark:text-indigo-400" aria-label="concluída" />
-              ) : segmento.estado === "atual" ? (
-                <CircleDot className="h-3 w-3 shrink-0 text-indigo-600 dark:text-indigo-400" aria-label="etapa atual" />
-              ) : (
-                <span className="h-3 w-3 shrink-0" aria-hidden />
-              )}
-              <span className={`truncate ${segmento.estado === "atual" ? "font-semibold text-fg" : ""}`}>
-                {segmento.nome}
-                {segmento.estado === "atual" ? " · atual" : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {posicao && (
+        <div
+          role="tooltip"
+          style={{ position: "fixed", top: posicao.top, left: posicao.left, width: LARGURA_DICA }}
+          className="pointer-events-none z-50 rounded-xl border border-line bg-surface p-3 text-xs shadow-lg"
+        >
+          <p className="font-semibold text-fg">{resumo}</p>
+          {progresso.etapaAtualNome && <p className="mt-0.5 text-fg-muted">Etapa atual: {progresso.etapaAtualNome}</p>}
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+            {segmentos.map((segmento) => (
+              <li key={segmento.id} className="flex items-center gap-1.5 text-fg-muted">
+                {segmento.estado === "concluida" ? (
+                  <Check className="h-3 w-3 shrink-0 text-indigo-600 dark:text-indigo-400" aria-label="concluída" />
+                ) : segmento.estado === "atual" ? (
+                  <CircleDot className="h-3 w-3 shrink-0 text-indigo-600 dark:text-indigo-400" aria-label="etapa atual" />
+                ) : (
+                  <span className="h-3 w-3 shrink-0" aria-hidden />
+                )}
+                <span className={`truncate ${segmento.estado === "atual" ? "font-semibold text-fg" : ""}`}>
+                  {segmento.nome}
+                  {segmento.estado === "atual" ? " · atual" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

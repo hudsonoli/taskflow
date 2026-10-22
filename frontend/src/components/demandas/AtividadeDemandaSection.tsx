@@ -46,9 +46,10 @@ function formatarDataHora(iso: string): string {
  */
 export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
   const { usuarioAtual } = useAppData();
-  // Leitura pela Pauta global: só consulta (com `escopo=pauta`); sem comentar, editar nem excluir.
+  // Leitura pela Pauta global: só consulta (com `escopo=pauta`); sem comentar, editar nem excluir. No ACOMPANHAMENTO (o solicitante) lê com `escopo=acompanhamento` e PODE
+  // comentar — e editar/excluir o próprio comentário; o servidor decide (autor-só edita) e nada além de comentar é liberado.
   const escopoLeitura = useEscopoLeituraDemanda();
-  const somenteLeitura = escopoLeitura !== undefined;
+  const somenteLeitura = escopoLeitura === "pauta";
   const [comentarios, setComentarios] = useState<DemandaComentario[]>([]);
   const { usuarios, resolvendo } = useUsuariosComIds(comentarios.map((comentario) => comentario.autorUsuarioId));
   const [carregando, setCarregando] = useState(true);

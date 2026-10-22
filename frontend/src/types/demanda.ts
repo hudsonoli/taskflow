@@ -230,6 +230,10 @@ export type Demanda = {
   acessoApenasWorkflow?: boolean;
   /** O acesso veio SÓ da autoria (a pessoa solicitou a tarefa mas não atua mais nela): acompanhamento em modo leitura. Preenchido só no detalhe. */
   acessoSomenteAcompanhamento?: boolean;
+  /** Calculado pelo SERVIDOR: o usuário logado é executor da etapa atual (ou da tarefa, sem fluxo) e a tarefa admite trabalho. Habilita "Iniciar trabalho". */
+  podeIniciarTrabalho?: boolean;
+  /** Calculado pelo SERVIDOR: o usuário logado tem sessão pessoal ATIVA nesta tarefa agora. */
+  trabalhandoAgora?: boolean;
   /** Progresso AUTORITATIVO calculado pelo servidor (etapas concluídas ÷ etapas do fluxo). A interface só exibe — nunca recalcula. */
   progresso?: DemandaProgresso;
 };
