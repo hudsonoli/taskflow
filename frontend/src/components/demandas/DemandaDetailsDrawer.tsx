@@ -61,7 +61,10 @@ export function DemandaDetailsDrawer({
    */
   modoLeitura?: EscopoLeituraDemanda;
 }) {
-  const somenteLeitura = modoLeitura !== undefined;
+  // Autoria: quem SOLICITOU a tarefa e não atua mais nela só acompanha. O servidor sinaliza (`acessoSomenteAcompanhamento`) quando o acesso veio só da autoria; a visão
+  // "Solicitadas por mim" também pede o modo explicitamente. Em ambos, leitura com `escopo=acompanhamento` e nenhum controle de escrita.
+  const modoEfetivo: EscopoLeituraDemanda | undefined = modoLeitura ?? (demanda?.acessoSomenteAcompanhamento === true ? "acompanhamento" : undefined);
+  const somenteLeitura = modoEfetivo !== undefined;
   // Fase 8C.1: acesso só pela etapa atual do Workflow — lê tudo e age no Workflow, mas sem edição geral (o servidor também recusa).
   const somenteWorkflow = demanda?.acessoApenasWorkflow === true;
   const [activeTab, setActiveTab] = useState(initialTab ?? "dados");
@@ -69,7 +72,7 @@ export function DemandaDetailsDrawer({
   const { projetos } = useDiretorioProjetos();
 
   return (
-    <LeituraDemandaProvider value={modoLeitura}>
+    <LeituraDemandaProvider value={modoEfetivo}>
     <DetailsModal
       open={demanda !== undefined}
       onClose={onClose}
@@ -89,7 +92,9 @@ export function DemandaDetailsDrawer({
         <div className="space-y-5">
           {somenteLeitura ? (
             <p role="status" className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3.5 py-2.5 text-xs leading-5 text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200">
-              Visualização somente leitura: esta tarefa é de outro departamento. Você pode consultar o detalhe, mas não alterá-la.
+              {modoEfetivo === "acompanhamento"
+                ? "Você está acompanhando esta solicitação: pode consultar o andamento, o histórico e os arquivos, mas não alterá-la."
+                : "Visualização somente leitura: esta tarefa é de outro departamento. Você pode consultar o detalhe, mas não alterá-la."}
             </p>
           ) : (
             <DemandaConclusaoBanner demanda={demanda} onChange={onChange} />

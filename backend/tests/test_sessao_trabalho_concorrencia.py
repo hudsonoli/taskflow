@@ -282,8 +282,10 @@ def test_duas_aberturas_concorrentes_por_usuario_uma_vence_a_outra_e_conflito_e_
 
         # nenhum 500: toda falha é o conflito de domínio, e há exatamente uma por empresa
         assert all(isinstance(e, SessaoTrabalhoConflitoError) and e.codigo == CODIGO_SESSAO_ATIVA_EXISTENTE for e in erros.values()), erros
-        assert len(erros) == 2 and len(resultados) == 2
-        assert {i for i in resultados if i < 2} and {i for i in resultados if i >= 2}  # um vencedor em cada empresa
+        # Com a troca de foco, a perdedora da corrida OU leva o conflito (viu a vencedora só no INSERT) OU assume o foco e encerra a vencedora já commitada: as duas
+        # saídas são válidas — o que nunca pode existir é um empresa/pessoa com duas ativas (conferido abaixo) nem uma empresa sem nenhum vencedor.
+        assert len(erros) + len(resultados) == 4
+        assert {i for i in resultados if i < 2} and {i for i in resultados if i >= 2}  # ao menos um vencedor em cada empresa
 
         with SessionRaw(bind=test_engine) as verificacao:
             for empresa_id, usuario_id in ((empresa_a_id, usuario_a_id), (empresa_b_id, usuario_b_id)):
@@ -373,7 +375,6 @@ def test_savepoint_preserva_evento_da_transacao_externa_apos_colisao(test_engine
         setup.commit()
 
     demanda_id = str(uuid.uuid4())
-    outra_demanda_id = str(uuid.uuid4())
 
     try:
         with SessionRaw(bind=test_engine) as vencedor_sessao:
@@ -399,18 +400,18 @@ def test_savepoint_preserva_evento_da_transacao_externa_apos_colisao(test_engine
 
         with SessionRaw(bind=test_engine) as nossa_sessao:
             evento_id = _criar_evento_sessao(
-                nossa_sessao, empresa_id=empresa_id, demanda_id=outra_demanda_id, usuario_id=usuario_id
+                nossa_sessao, empresa_id=empresa_id, demanda_id=demanda_id, usuario_id=usuario_id
             )
             with patch.object(real_repo, "get_active_by_usuario", side_effect=cego_na_primeira):
                 with pytest.raises(SessaoTrabalhoConflitoError) as erro:
                     SessaoTrabalhoService(repository=real_repo).open_session(
-                        nossa_sessao, empresa_id=empresa_id, demanda_id=outra_demanda_id,
+                        nossa_sessao, empresa_id=empresa_id, demanda_id=demanda_id,
                         evento_inicio_id=evento_id, inicio_em=datetime.now(timezone.utc), usuario_id=usuario_id,
                     )
             assert erro.value.codigo == CODIGO_SESSAO_ATIVA_EXISTENTE
             nossa_sessao.commit()  # o que a rota NÃO faria no erro; aqui serve para provar que o Evento pendente não foi desfeito pelo SAVEPOINT
 
-        assert chamadas["n"] == 2, "1a verificação cega, colisão no banco, 2a verificação enxerga a vencedora"
+        assert chamadas["n"] == 3, "1a verificação cega, 2a (troca de foco, mesma demanda: nada a trocar), colisão no banco, 3a verificação enxerga a vencedora"
         assert _evento_existe(test_engine, evento_id)
         assert _status_sessao(test_engine, vencedor_id) == STATUS_ATIVA
         with SessionRaw(bind=test_engine) as verificacao:

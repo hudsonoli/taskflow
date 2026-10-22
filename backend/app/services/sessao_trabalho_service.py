@@ -246,8 +246,10 @@ class SessaoTrabalhoService:
         # Fase 11B.2A — UMA sessão ativa por pessoa, em qualquer demanda. Segunda abertura = 409 SESSAO_ATIVA_EXISTENTE; a anterior NUNCA é encerrada em
         # silêncio (antes, abrir de novo na MESMA demanda substituía a sessão). Só vale para sessão de PESSOA: a puramente departamental (sem usuário) mantém
         # a semântica anterior (reabrir o mesmo departamento na mesma demanda substitui) e nunca é multiplicada pelos membros.
+        # Troca de FOCO: a pessoa trabalha em UMA coisa por vez. Sessão ativa em OUTRA demanda é encerrada (motivo `substituicao_sessao_ativa`) na MESMA transação
+        # da abertura da nova; na MESMA demanda continua sendo 409 (não há troca a fazer).
         if usuario_id:
-            self._ensure_sem_sessao_ativa(db, empresa_id, usuario_id)
+            self._ensure_sem_sessao_ativa_na_demanda(db, empresa_id, usuario_id, demanda_id)
 
         # Corrida (duas aberturas concorrentes): o índice parcial único (empresa_id, usuario_id) WHERE status='ativa' (e os de demanda) é a barreira real; o par
         # SELECT + INSERT não é atômico. A tentativa roda num SAVEPOINT (nunca um rollback da Session inteira: a rota já adicionou o Evento da abertura, não
@@ -255,6 +257,10 @@ class SessaoTrabalhoService:
         for tentativa in (1, 2):
             try:
                 with db.begin_nested():
+                    if usuario_id:
+                        self._encerrar_sessao_de_outro_foco(
+                            db, empresa_id=empresa_id, usuario_id=usuario_id, nova_demanda_id=demanda_id, fim_em=inicio_em
+                        )
                     if not usuario_id:
                         active = self.repository.get_active_equivalent(
                             db,
@@ -301,6 +307,43 @@ class SessaoTrabalhoService:
                 if tentativa == 2:
                     raise
         raise AssertionError("inalcançável — o loop sempre retorna ou levanta antes daqui")
+
+    def _ensure_sem_sessao_ativa_na_demanda(self, db: Session, empresa_id: str, usuario_id: str, demanda_id: str) -> None:
+        ativa = self.repository.get_active_by_usuario(db, empresa_id=empresa_id, usuario_id=usuario_id)
+        if ativa is not None and ativa.demanda_id == demanda_id:
+            raise SessaoTrabalhoConflitoError(CODIGO_SESSAO_ATIVA_EXISTENTE, "Você já possui uma atividade em execução nesta tarefa.")
+
+    def _encerrar_sessao_de_outro_foco(
+        self, db: Session, *, empresa_id: str, usuario_id: str, nova_demanda_id: str, fim_em: datetime
+    ) -> SessaoTrabalho | None:
+        """Encerra a sessão ativa da PESSOA em outra demanda (troca de foco). Só a sessão DELA: a Demanda anterior, o status dela, os outros responsáveis e as
+        sessões deles não são tocados. O Evento `sessao_trabalho_encerrada` é o mesmo do encerramento automático (`automatico`), com o motivo
+        `substituicao_sessao_ativa` e a demanda que assumiu o foco. Sem commit: a transação é da abertura."""
+        anterior = self.repository.get_active_by_usuario(db, empresa_id=empresa_id, usuario_id=usuario_id, for_update=True)
+        if anterior is None or anterior.demanda_id == nova_demanda_id:
+            return None
+        evento = self.evento_service.create_evento(
+            db,
+            EventoCreate(
+                empresaId=anterior.empresa_id,
+                agenciaId=anterior.agencia_id,
+                tipo="sessao_trabalho_encerrada",
+                entidadeTipo="demanda",
+                entidadeId=anterior.demanda_id,
+                usuarioId=anterior.usuario_id,
+                payload={
+                    "demandaId": anterior.demanda_id,
+                    "motivoEncerramento": MOTIVO_SUBSTITUICAO_SESSAO_ATIVA,
+                    "automatico": True,
+                    "substituidaPorDemandaId": nova_demanda_id,
+                },
+                occurredAt=fim_em,
+            ),
+            commit=False,
+        )
+        return self.close_session(
+            db, anterior, evento_fim_id=evento.id, fim_em=fim_em, motivo_encerramento=MOTIVO_SUBSTITUICAO_SESSAO_ATIVA
+        )
 
     def _ensure_sem_sessao_ativa(self, db: Session, empresa_id: str, usuario_id: str) -> None:
         if self.repository.get_active_by_usuario(db, empresa_id=empresa_id, usuario_id=usuario_id) is not None:

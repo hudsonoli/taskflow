@@ -79,11 +79,10 @@ function buildNavItems(usuarioAtual: Usuario | undefined, departamentos: Departa
   // Projetos, Relatórios e Configurações dependem de rotas que devolvem 403 para operador
   // (`/projetos`, `/clientes`, `/usuarios`, …). Enquanto for assim, não entram no menu.
   if (podeAcessarAreaAdministrativa(usuarioAtual)) {
-    items.push(
-      { label: "Projetos", href: "/projetos", icon: Kanban },
-      { label: "Relatórios", href: "/relatorios", icon: BarChart3 },
-      { label: "Configurações", href: "/configuracoes", icon: Settings },
-    );
+    // Projetos fica logo depois de Tarefas (mesma lista alimenta desktop e mobile); só a ORDEM mudou — rota, ícone e gate são os mesmos.
+    const indiceTarefas = items.findIndex((item) => item.href === "/tarefas");
+    items.splice(indiceTarefas + 1, 0, { label: "Projetos", href: "/projetos", icon: Kanban });
+    items.push({ label: "Relatórios", href: "/relatorios", icon: BarChart3 }, { label: "Configurações", href: "/configuracoes", icon: Settings });
   }
   return items;
 }

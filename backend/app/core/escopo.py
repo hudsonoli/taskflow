@@ -58,6 +58,9 @@ class EscopoSolicitado(StrEnum):
     ATENDIMENTO = "atendimento"
     # Fase 7C: Pauta GLOBAL — visão operacional da empresa inteira (do tenant do token), só para Atendimento, Head e Gestor/Admin.
     PAUTA = "pauta"
+    # "Solicitadas por mim": as Demandas que EU criei, em qualquer etapa/responsável/departamento. Sempre permitido e derivado do usuário autenticado — nunca recebe um
+    # `usuarioId` do cliente. É escopo de ACOMPANHAMENTO (leitura): não existe caminho de escrita que o use.
+    SOLICITADAS = "solicitadas"
 
 
 class EscopoNaoAutorizadoError(PermissionError):
@@ -238,6 +241,9 @@ def resolver_escopo_demanda(
             incluir_criadas_por_usuario=True,
         )
 
+    if solicitado is EscopoSolicitado.SOLICITADAS:
+        return resolver_escopo_criador(usuario)
+
     if solicitado is EscopoSolicitado.MEUS:
         # Sempre permitido: qualquer pessoa pode ver as próprias demandas. Fase 8C.1: inclui também as demandas em que a ETAPA ATUAL do
         # Workflow está atribuída ao usuário INDIVIDUALMENTE (trabalho atribuído a ele); liderança de departamento NÃO entra no Meu Dia.
@@ -266,6 +272,20 @@ def resolver_escopo_demanda(
         departamento_ids=tuple(departamentos),
         cliente_ids=tuple(clientes_sob_responsabilidade(db, usuario)) if atendimento else (),
         incluir_criadas_por_usuario=atendimento,
+    )
+
+
+def resolver_escopo_criador(usuario: Usuario) -> EscopoDemanda:
+    """Escopo de ACOMPANHAMENTO do criador: só as Demandas cuja autoria (`criado_por_usuario_id`) é do próprio usuário, na empresa do token.
+
+    Autoria concede LEITURA durante todo o ciclo — também depois que a Demanda passa para outra etapa/departamento e o criador deixa de ser responsável. Não concede
+    gestão: edição, responsável, workflow, aprovação, esforço, planejamento e status seguem as regras normais (o escopo-base, que NÃO inclui autoria, continua sendo o
+    único usado nas escritas). Individual: colegas do criador não herdam nada."""
+    return EscopoDemanda(
+        empresa_id=usuario.empresa_id,
+        usuario_id=usuario.id,
+        visao_total=False,
+        incluir_criadas_por_usuario=True,
     )
 
 

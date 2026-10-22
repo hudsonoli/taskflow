@@ -13,7 +13,7 @@ from app.core.escopo import (
 )
 from app.core.filtros_lista import parse_csv_enum, parse_csv_uuids
 from app.db.session import get_db
-from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_workflow
+from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_leitura, demanda_com_acesso_de_workflow
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import require_admin_or_gestor
 from app.dependencies.permissoes import require_demandas_criar, require_permissao
@@ -486,9 +486,11 @@ def get_demanda(
     try:
         # Escopo-base (ou Pauta) e, se a demanda não estiver nele, o escopo DERIVADO da etapa atual do Workflow (Fase 8C.1): quem é responsável
         # pela etapa atual (ou Head do departamento dela) abre a demanda para ler e agir no Workflow — sem virar `DemandaResponsavel`.
-        demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service, escopo_leitura)
-        leitura = demanda_service.to_read(db, demanda, usuario=current_user, somente_leitura=escopo_leitura == "pauta")
+        # Por último, a AUTORIA: quem solicitou a demanda continua podendo acompanhá-la (só leitura) depois de ela passar para outra etapa/departamento.
+        demanda, via_workflow, so_acompanha = demanda_com_acesso_de_leitura(db, current_user, str(demanda_id), demanda_service, escopo_leitura)
+        leitura = demanda_service.to_read(db, demanda, usuario=current_user, somente_leitura=escopo_leitura is not None or so_acompanha)
         leitura.acesso_apenas_workflow = via_workflow
+        leitura.acesso_somente_acompanhamento = so_acompanha
         return leitura
     except Exception as exc:
         handle_demanda_error(exc)

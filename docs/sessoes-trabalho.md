@@ -18,7 +18,8 @@ O servidor valida tudo; nada que o cliente manda é confiável. Ordem: responsá
 | demanda com workflow mas **sem etapa atual executável** (workflow todo concluído, etapa atual `pausada`, workflow sem etapas materializadas) | 409 `ETAPA_ATUAL_INDISPONIVEL` — nunca abre sessão sem etapa |
 | demanda **sem workflow** | `workflow_etapa_id` fica NULL (nenhuma etapa fictícia) |
 | usuário/departamento de outra empresa ou inválido | 422 |
-| a pessoa já tem uma sessão ativa (qualquer demanda) | 409 `SESSAO_ATIVA_EXISTENTE` — a anterior **não** é encerrada |
+| a pessoa já tem uma sessão ativa em **outra** demanda | **troca de foco**: a anterior é encerrada (`motivo_encerramento=substituicao_sessao_ativa`, Evento `sessao_trabalho_encerrada` com `automatico` e `substituidaPorDemandaId`, fim = início da nova) e a nova abre — mesma transação, sem 409. Só a sessão **dela**: o status da Demanda anterior e as sessões dos outros responsáveis não mudam |
+| a pessoa já tem uma sessão ativa na **mesma** demanda | 409 `SESSAO_ATIVA_EXISTENTE` (nada a trocar) |
 
 O 409 vem como `detail: { code, message }`; a UI não depende do texto. Não expõe a outra sessão nem dados de outra empresa.
 Sessão de trabalho representa **execução ativa**: só `em_execucao` aceita abertura. A abertura trava a Demanda (`FOR UPDATE`, o mesmo lock do avanço de etapa e do UPDATE de
@@ -244,3 +245,7 @@ a faixa reflete a carga da máquina de desenvolvimento, não a consulta: **medid
 (varredura paralela da tabela de intervalos, adequada porque o período cobre ~metade das linhas); o conjunto de departamentos é uma subconsulta pela PK, calculada uma vez por ocorrência de etapa (a primeira tentativa, com `JOIN` de CTE, o
 planejador estimou mal e fez nested loop — 2,6 s a 52 s —, e foi descartada). Pior caso artificial (100 % das Demandas abertas): `/gargalos` ≈ 4 s, dominado pelo histórico da fila. Nenhum plano justificou índice; `medicaoDesde` usa um lookup por status no índice
 `(empresa_id, status, inicio_em)`. Número de consultas: AGORA = 6 de métricas, GARGALOS = 4 (+1 com `workflowEtapaId`), mais autenticação/permissão — **constante**, sem N+1 (teste compara 5 e 155 Demandas). Sem cache.
+
+## Foco único por pessoa (troca de foco)
+
+Regra de produto: **uma pessoa nunca trabalha ativamente em duas tarefas ao mesmo tempo** — regra POR USUÁRIO (índice único parcial `uq_sessoes_trabalho_ativa_empresa_usuario` + checagem no serviço). Não limita a empresa a uma Demanda em execução. Mover um card no Kanban para `em_execucao` (`PATCH /demandas/{id}`) só muda o **status** da Demanda; abrir/fechar sessão pessoal é `POST /sessoes-trabalho/abrir` — por isso trocar o foco não pausa a Demanda anterior (**`AUTO_PAUSE_PREVIOUS_DEMAND_SAFE=NÃO`**: com vários responsáveis, workflow, intervalos operacionais, Tráfego e a pausa automática de expediente, o status da Demanda é separado do foco pessoal). Corrida entre duas trocas: `FOR UPDATE` na sessão anterior + o índice único como barreira final (a perdedora recebe 409; nunca duas ativas).

@@ -228,6 +228,20 @@ export type Demanda = {
    * lê tudo e age no Workflow, sem edição geral. Preenchido só no detalhe e nas ações do Workflow.
    */
   acessoApenasWorkflow?: boolean;
+  /** O acesso veio SÓ da autoria (a pessoa solicitou a tarefa mas não atua mais nela): acompanhamento em modo leitura. Preenchido só no detalhe. */
+  acessoSomenteAcompanhamento?: boolean;
+  /** Progresso AUTORITATIVO calculado pelo servidor (etapas concluídas ÷ etapas do fluxo). A interface só exibe — nunca recalcula. */
+  progresso?: DemandaProgresso;
+};
+
+export type DemandaProgresso = {
+  etapasTotal: number;
+  etapasConcluidas: number;
+  /** `null` = sem fluxo (a tarefa não tem etapas): exibir "Sem fluxo", nunca 0%. */
+  percentual: number | null;
+  semFluxo: boolean;
+  etapaAtualId: string | null;
+  etapaAtualNome: string | null;
 };
 
 /** Forma enxuta para seletores (`TrafegoIniciarSessao`) — também escopada no servidor. */

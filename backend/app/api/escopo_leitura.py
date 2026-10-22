@@ -19,6 +19,7 @@ from app.core.escopo import (
     EscopoDemanda,
     EscopoNaoAutorizadoError,
     EscopoSolicitado,
+    resolver_escopo_criador,
     resolver_escopo_demanda,
     resolver_escopo_workflow_atual,
 )
@@ -26,13 +27,16 @@ from app.models.demanda import Demanda
 from app.models.usuario import Usuario
 from app.services.demanda_service import DemandaNotFoundError, DemandaService
 
-# Único valor aceito além de "sem parâmetro": outros recortes (meus, atendimento…) não fazem sentido para ler UMA demanda.
-EscopoLeitura = Literal["pauta"]
+# Valores aceitos além de "sem parâmetro": outros recortes (meus, atendimento…) não fazem sentido para ler UMA demanda. `acompanhamento` = leitura pela AUTORIA (o criador
+# acompanha a solicitação); sempre permitido, derivado do usuário autenticado e só dentro da empresa do token.
+EscopoLeitura = Literal["pauta", "acompanhamento"]
 
 
 def escopo_para_leitura(db: Session, usuario: Usuario, escopo_leitura: EscopoLeitura | None) -> EscopoDemanda:
     if escopo_leitura is None:
         return resolver_escopo_demanda(db, usuario)
+    if escopo_leitura == "acompanhamento":
+        return resolver_escopo_criador(usuario)
     try:
         return resolver_escopo_demanda(db, usuario, EscopoSolicitado.PAUTA)
     except EscopoNaoAutorizadoError as exc:
@@ -55,3 +59,21 @@ def demanda_com_acesso_de_workflow(
         if escopo_leitura is not None:
             raise
     return demanda_service.get_demanda(db, demanda_id, escopo=resolver_escopo_workflow_atual(db, usuario)), True
+
+
+def demanda_com_acesso_de_leitura(
+    db: Session, usuario: Usuario, demanda_id: str, demanda_service: DemandaService, escopo_leitura: EscopoLeitura | None = None
+) -> tuple[Demanda, bool, bool]:
+    """LEITURA do detalhe/subrecursos com acompanhamento do criador: tudo de `demanda_com_acesso_de_workflow` e, por último, a AUTORIA da Demanda
+    (`resolver_escopo_criador`). Devolve `(demanda, via_workflow, somente_acompanhamento)`; `somente_acompanhamento` é verdadeiro quando SÓ a autoria deu acesso —
+    a interface então não oferece edição nem ação de Workflow (e o servidor também recusa: escritas nunca consultam este escopo). Pedido com `?escopo=pauta` não tem
+    o fallback. Fora de todos → 404, sem confirmar existência; outra empresa nunca casa (a autoria é consultada dentro da empresa do token)."""
+    if escopo_leitura == "acompanhamento":  # pedido explícito da interface: só a autoria, sempre em modo leitura
+        return demanda_service.get_demanda(db, demanda_id, escopo=resolver_escopo_criador(usuario)), False, True
+    try:
+        demanda, via_workflow = demanda_com_acesso_de_workflow(db, usuario, demanda_id, demanda_service, escopo_leitura)
+        return demanda, via_workflow, False
+    except DemandaNotFoundError:
+        if escopo_leitura is not None:
+            raise
+    return demanda_service.get_demanda(db, demanda_id, escopo=resolver_escopo_criador(usuario)), False, True

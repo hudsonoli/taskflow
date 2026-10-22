@@ -262,22 +262,28 @@ def test_segunda_sessao_da_mesma_pessoa_na_mesma_demanda_e_409(db_session: Sessi
     primeira = _abrir_ok(client_admin, demanda["id"], usuario_operador.id)
     resposta = _abrir(client_admin, demanda["id"], usuario_operador.id)
     assert resposta.status_code == 409
-    assert resposta.json()["detail"] == {"code": "SESSAO_ATIVA_EXISTENTE", "message": "Você já possui uma atividade em execução."}
+    assert resposta.json()["detail"] == {"code": "SESSAO_ATIVA_EXISTENTE", "message": "Você já possui uma atividade em execução nesta tarefa."}
     anterior = _sessao(db_session, primeira["id"])
     assert anterior.status == "ativa" and anterior.fim_em is None  # NUNCA encerrada em silêncio
     assert len(_sessoes(db_session, demanda["id"])) == 1
 
 
-def test_segunda_sessao_da_mesma_pessoa_em_outra_demanda_e_409_sem_vazar_a_primeira(
-    db_session: Session, client_admin: TestClient, usuario_operador: Usuario
-) -> None:
+def test_abrir_em_outra_demanda_e_troca_de_foco_atomica(db_session: Session, client_admin: TestClient, usuario_operador: Usuario) -> None:
+    """Foco único por PESSOA: abrir em Y encerra a sessão dela em X (motivo `substituicao_sessao_ativa`, Evento automático) e abre a de Y — sem 409 e sem duas ativas."""
     x, y = _demanda(client_admin), _demanda(client_admin)
     primeira = _abrir_ok(client_admin, x["id"], usuario_operador.id)
     resposta = _abrir(client_admin, y["id"], usuario_operador.id)
-    assert resposta.status_code == 409 and resposta.json()["detail"]["code"] == "SESSAO_ATIVA_EXISTENTE"
-    assert x["id"] not in resposta.text and primeira["id"] not in resposta.text  # sem dados da outra sessão na resposta
-    assert _sessoes(db_session, y["id"]) == []
-    assert _sessao(db_session, primeira["id"]).status == "ativa"
+    assert resposta.status_code == 201, resposta.text
+    anterior = _sessao(db_session, primeira["id"])
+    assert anterior.status == "encerrada" and anterior.motivo_encerramento == "substituicao_sessao_ativa"
+    assert anterior.fim_em is not None and anterior.duracao_segundos is not None and anterior.evento_fim_id is not None
+    (nova,) = _sessoes(db_session, y["id"])
+    assert nova.status == "ativa" and nova.fim_em is None
+    assert anterior.fim_em == nova.inicio_em  # sem lacuna nem sobreposição entre as duas sessões
+    ativas = db_session.execute(
+        text("SELECT count(*) FROM sessoes_trabalho WHERE usuario_id = :u AND status = 'ativa'"), {"u": usuario_operador.id}
+    ).scalar_one()
+    assert ativas == 1
 
 
 def test_pessoas_diferentes_trabalham_ao_mesmo_tempo(db_session: Session, client_admin: TestClient, operadores: list[Usuario]) -> None:

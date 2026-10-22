@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Tabs } from "@/components/ui/Tabs";
 import {
   atualizarDemandaReal,
   criarDemandaReal,
@@ -22,6 +23,7 @@ import { podeCriarDemanda } from "@/types/usuario";
 import type { Demanda, DemandaFormDraft, DemandaStatusEditavel } from "@/types/demanda";
 import { DemandaDetailsDrawer } from "./DemandaDetailsDrawer";
 import { DemandasKanban } from "./DemandasKanban";
+import { DemandasSolicitadasTable } from "./DemandasSolicitadasTable";
 import { DemandasStats } from "./DemandasStats";
 import { DemandasTable } from "./DemandasTable";
 import { type DemandasViewMode, type DemandaStatusFiltro, DemandasToolbar } from "./DemandasToolbar";
@@ -35,6 +37,14 @@ import { NovaDemandaModal } from "./NovaDemandaModal";
 // saiu dele: os cards vêm de GET /demandas/estatisticas (universo integral do escopo).
 const TAMANHO_PAGINA = 50;
 const DEBOUNCE_BUSCA_MS = 300;
+
+/** Contexto da página: "todas" é a fila de sempre (escopo-base); "solicitadas" = as que EU criei, em qualquer etapa (acompanhamento). Meu Dia e Meu Departamento seguem em
+ * páginas próprias — as três relações não se misturam. */
+type ContextoTarefas = "todas" | "solicitadas";
+const ABAS_CONTEXTO = [
+  { id: "todas", label: "Todas" },
+  { id: "solicitadas", label: "Solicitadas por mim" },
+];
 
 /**
  * Erro de expediente chega estruturado do servidor, com a janela vigente — a interface
@@ -75,6 +85,7 @@ export function DemandasView() {
   const [statusFilter, setStatusFilter] = useState<DemandaStatusFiltro>("todos");
   const [offset, setOffset] = useState(0);
   const [viewMode, setViewMode] = useState<DemandasViewMode>("kanban");
+  const [contexto, setContexto] = useState<ContextoTarefas>("todas");
   const [creatingDemand, setCreatingDemand] = useState(false);
   const [editingDemandId, setEditingDemandId] = useState<string | null>(null);
   const [selectedDemandId, setSelectedDemandId] = useState<string | null>(null);
@@ -106,6 +117,11 @@ export function DemandasView() {
     return () => clearTimeout(timeout);
   }, [query]);
 
+  function alterarContexto(valor: string) {
+    setContexto(valor === "solicitadas" ? "solicitadas" : "todas");
+    setOffset(0); // cada contexto é outra lista: volta para a primeira página
+  }
+
   function alterarStatusFilter(valor: DemandaStatusFiltro) {
     setStatusFilter(valor);
     setOffset(0); // troca de status também volta pra primeira página
@@ -116,7 +132,7 @@ export function DemandasView() {
   // o padrão que react-hooks/set-state-in-effect rejeita neste projeto — ver
   // lib/useAjustesProjeto.ts, mesma técnica endossada pelo próprio React pra "ajustar estado
   // quando algo muda" sem cascata de renders.
-  const chaveBusca = `${debouncedQuery}\u0000${statusFilter}\u0000${offset}\u0000${refetchTick}`;
+  const chaveBusca = `${contexto}\u0000${debouncedQuery}\u0000${statusFilter}\u0000${offset}\u0000${refetchTick}`;
   const [chaveConsultada, setChaveConsultada] = useState<string | null>(null);
   if (chaveBusca !== chaveConsultada) {
     setChaveConsultada(chaveBusca);
@@ -129,6 +145,8 @@ export function DemandasView() {
     listDemandasReais({
       search: debouncedQuery || undefined,
       status: statusParaBackend(statusFilter),
+      // Server-side: o servidor deriva a autoria do usuário autenticado (nada de id de criador vindo do navegador).
+      ...(contexto === "solicitadas" ? { escopo: "solicitadas" as const } : {}),
       limit: TAMANHO_PAGINA,
       offset,
     })
@@ -157,7 +175,7 @@ export function DemandasView() {
     return () => {
       cancelado = true;
     };
-  }, [debouncedQuery, statusFilter, offset, refetchTick]);
+  }, [contexto, debouncedQuery, statusFilter, offset, refetchTick]);
 
   useEffect(() => {
     if (!demandaParaAbrir) return;
@@ -341,7 +359,9 @@ export function DemandasView() {
         </div>
       )}
 
-      <DemandasStats estatisticas={estatisticas} carregando={carregandoEstatisticas} erro={erroEstatisticas} />
+      <Tabs tabs={ABAS_CONTEXTO} activeTab={contexto} onChange={alterarContexto} />
+
+      {contexto === "todas" && <DemandasStats estatisticas={estatisticas} carregando={carregandoEstatisticas} erro={erroEstatisticas} />}
 
       <DemandasToolbar
         query={query}
@@ -352,6 +372,7 @@ export function DemandasView() {
         onViewModeChange={setViewMode}
         onNewDemand={() => setCreatingDemand(true)}
         podeCriar={podeCriar}
+        ocultarModos={contexto === "solicitadas"}
       />
 
       {carregandoInicial ? (
@@ -367,7 +388,9 @@ export function DemandasView() {
         />
       ) : (
         <div className={buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}>
-          {viewMode === "kanban" ? (
+          {contexto === "solicitadas" ? (
+            <DemandasSolicitadasTable demandas={demandasPagina} onOpenDetails={setSelectedDemandId} />
+          ) : viewMode === "kanban" ? (
             <DemandasKanban demandas={demandasPagina} onOpenDetails={setSelectedDemandId} onMoveDemanda={handleMoveDemand} />
           ) : (
             <DemandasTable demandas={demandasPagina} onOpenDetails={setSelectedDemandId} onEdit={openEdit} />
@@ -428,6 +451,7 @@ export function DemandasView() {
         onClose={() => setSelectedDemandId(null)}
         onEdit={openEdit}
         onChange={handleDemandChange}
+        modoLeitura={contexto === "solicitadas" ? "acompanhamento" : undefined}
       />
 
       <MotivoBloqueioModal

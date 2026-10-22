@@ -146,7 +146,7 @@ test("demanda SEM PRAZO aparece na Pauta: na Lista em 'Sem prazo definido' e no 
 
 test("o cliente de API só envia ?escopo=pauta nas LEITURAS do detalhe; nenhuma escrita carrega o parâmetro", () => {
   const api = semComentarios(ler("lib/api-backend.ts"));
-  assert.match(api, /export type EscopoLeituraDemanda = "pauta";/);
+  assert.match(api, /export type EscopoLeituraDemanda = "pauta" \| "acompanhamento";/); // acompanhamento: leitura pela AUTORIA (Solicitadas por mim)
   for (const fn of ["getDemandaReal", "listChecklistDemanda", "listArquivosDemanda", "listComentariosDemanda", "listHistoricoDemanda"]) {
     assert.match(api, new RegExp(`export async function ${fn}\\(demandaId: string, escopo\\?: EscopoLeituraDemanda\\)`), fn);
   }
@@ -165,7 +165,7 @@ test("drawer aberto pela Pauta: modo leitura (fieldset desabilitado, sem Editar,
   assert.match(drawer, /modoLeitura\?: EscopoLeituraDemanda/);
   assert.match(drawer, /onEdit=\{demanda && !somenteLeitura && !somenteWorkflow \? \(\) => onEdit\(demanda\.id\) : undefined\}/); // sem "Editar tarefa"
   assert.match(drawer, /<fieldset disabled=\{somenteLeitura( \|\| somenteWorkflow)?\}/); // Pauta: continua desabilitado (8C.1 só acrescenta o acesso por Workflow)
-  assert.match(drawer, /<LeituraDemandaProvider value=\{modoLeitura\}>/);
+  assert.match(drawer, /<LeituraDemandaProvider value=\{modoEfetivo\}>/); // modoEfetivo = modoLeitura (Pauta) ou o sinal de autoria do servidor
   assert.match(drawer, /Visualização somente leitura/);
   assert.match(drawer, /somenteLeitura \? \([\s\S]*?\) : \(\s*<DemandaConclusaoBanner/); // sem ação de conclusão por e-mail
   const atividade = semComentarios(ler("components/demandas/AtividadeDemandaSection.tsx"));

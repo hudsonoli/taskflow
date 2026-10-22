@@ -295,15 +295,17 @@ class SessaoTrabalhoRepository:
             .execution_options(populate_existing=True)
         )
 
-    def get_active_by_usuario(self, db: Session, *, empresa_id: str, usuario_id: str) -> SessaoTrabalho | None:
-        """A sessão ATIVA da pessoa, em qualquer demanda (regra: uma sessão ativa por pessoa)."""
-        return db.scalar(
-            select(SessaoTrabalho).where(
-                SessaoTrabalho.empresa_id == empresa_id,
-                SessaoTrabalho.usuario_id == usuario_id,
-                SessaoTrabalho.status == "ativa",
-            )
+    def get_active_by_usuario(
+        self, db: Session, *, empresa_id: str, usuario_id: str, for_update: bool = False
+    ) -> SessaoTrabalho | None:
+        """A sessão ATIVA da pessoa, em qualquer demanda (regra: uma sessão ativa por pessoa). `for_update` trava a linha: a troca de foco serializa com outra
+        troca/fechamento concorrente da mesma sessão (o Postgres reavalia o `status` depois da espera)."""
+        consulta = select(SessaoTrabalho).where(
+            SessaoTrabalho.empresa_id == empresa_id,
+            SessaoTrabalho.usuario_id == usuario_id,
+            SessaoTrabalho.status == "ativa",
         )
+        return db.scalar(consulta.with_for_update() if for_update else consulta)
 
     def listar_ativas_para_encerramento(
         self,

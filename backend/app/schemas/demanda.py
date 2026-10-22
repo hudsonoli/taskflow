@@ -279,6 +279,21 @@ class DemandaWorkflowEtapaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
+class DemandaProgressoRead(BaseModel):
+    """Progresso AUTORITATIVO da Demanda (acompanhamento), derivado SÓ do workflow materializado: etapas concluídas ÷ etapas do fluxo. A etapa em andamento NÃO ganha
+    fração (2 de 5 concluídas = 40% mesmo com a 3ª em execução). Não usa tempo, sessão, estimativa, prazo nem intervalo. O frontend só exibe — nunca recalcula."""
+
+    etapas_total: int = Field(alias="etapasTotal")
+    etapas_concluidas: int = Field(alias="etapasConcluidas")
+    # `None` = sem fluxo (a Demanda não tem etapas): a interface mostra "Sem fluxo", nunca 0%.
+    percentual: int | None = None
+    sem_fluxo: bool = Field(alias="semFluxo")
+    etapa_atual_id: UUID | None = Field(default=None, alias="etapaAtualId")
+    etapa_atual_nome: str | None = Field(default=None, alias="etapaAtualNome")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class DemandaDiretorioRead(BaseModel):
     """Forma enxuta para seletores — `TrafegoIniciarSessao` escolhe uma demanda, e as telas de
     sessão resolvem `demandaId` → nome.
@@ -417,9 +432,36 @@ class DemandaRead(BaseModel):
         return bool(self.workflow_etapas) and self.etapas_sem_estimativa == 0
 
     etapa_atual_id: UUID | None = Field(default=None, alias="etapaAtualId")
+
+    @computed_field(alias="progresso")
+    @property
+    def progresso(self) -> DemandaProgressoRead:
+        """Regras: Concluída = 100%; sem etapas (e não concluída) = sem fluxo (percentual nulo); caso contrário concluídas/total×100 arredondado. Cancelada/bloqueada/pausada/
+        aguardando cliente preservam o percentual histórico — o rótulo do estado é da interface. Etapa reaberta/rejeitada deixa de estar `concluida` no workflow e, portanto, de contar."""
+        total = len(self.workflow_etapas)
+        concluidas = sum(etapa.status == "concluida" for etapa in self.workflow_etapas)
+        atual = next((etapa for etapa in self.workflow_etapas if self.etapa_atual_id is not None and etapa.id == self.etapa_atual_id), None)
+        if self.status == "concluida":
+            percentual: int | None = 100
+        elif total == 0:
+            percentual = None
+        else:
+            percentual = (concluidas * 200 + total) // (2 * total)  # arredonda metade para cima (round() do Python arredonda 12,5 para 12)
+        return DemandaProgressoRead(
+            etapasTotal=total,
+            etapasConcluidas=concluidas,
+            percentual=percentual,
+            semFluxo=total == 0 and self.status != "concluida",
+            etapaAtualId=atual.id if atual else None,
+            etapaAtualNome=atual.nome if atual else None,
+        )
+
     # Fase 8C.1 — o acesso a esta demanda veio SÓ do escopo derivado da etapa atual do Workflow (não é do escopo-base): a interface lê tudo e age no
     # Workflow, mas não oferece edição geral (o servidor também recusa). Só o detalhe e as ações do Workflow preenchem; nas listagens é sempre falso.
     acesso_apenas_workflow: bool = Field(default=False, alias="acessoApenasWorkflow")
+    # O acesso a esta demanda veio SÓ da autoria (o usuário a solicitou, mas não é mais responsável nem atua nela): acompanhamento — a interface lê tudo e não
+    # oferece edição nem ação de Workflow. Só o detalhe preenche; nas listagens é sempre falso.
+    acesso_somente_acompanhamento: bool = Field(default=False, alias="acessoSomenteAcompanhamento")
     # `checklist`/`arquivos` (2E.3) e `comentarios`/`historico` (2E.4) NÃO aparecem mais
     # aqui — todos têm tabela e endpoint dedicado agora (`/demandas/{id}/checklist`,
     # `/arquivos`, `/comentarios`, `/historico`). Embuti-los de novo infligiria em toda

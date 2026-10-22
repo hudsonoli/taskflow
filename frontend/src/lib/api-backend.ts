@@ -58,6 +58,7 @@ import type {
   DemandaFormDraft,
   DemandaHistoricoEvento,
   DemandaPrioridade,
+  DemandaProgresso,
   DemandaStatus,
   DemandaStatusEditavel,
   DemandaWorkflowEtapa,
@@ -1539,7 +1540,7 @@ export async function restaurarProjetoReal(projetoId: string): Promise<Projeto> 
 // existe conflito de duplicidade aqui — nenhum `DemandaArquivadaConflictError`.
 // =====================================================================================
 
-export type DemandaEscopo = "meus" | "meu-departamento" | "atendimento" | "pauta";
+export type DemandaEscopo = "meus" | "meu-departamento" | "atendimento" | "pauta" | "solicitadas";
 
 type DemandaWorkflowEtapaReadApi = {
   id: string;
@@ -1585,6 +1586,8 @@ type DemandaReadApi = {
   workflowEtapas: DemandaWorkflowEtapaReadApi[];
   etapaAtualId: string | null;
   acessoApenasWorkflow?: boolean;
+  acessoSomenteAcompanhamento?: boolean;
+  progresso?: DemandaProgresso | null;
   dataInicio: string | null;
   dataFimPrevista: string | null;
   prazoEtapaAtual: string | null;
@@ -1672,6 +1675,8 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
     })),
     etapaAtualId: data.etapaAtualId,
     acessoApenasWorkflow: data.acessoApenasWorkflow === true,
+    acessoSomenteAcompanhamento: data.acessoSomenteAcompanhamento === true,
+    progresso: data.progresso ?? undefined,
   };
 }
 
@@ -1816,7 +1821,7 @@ export async function listarDemandasEmExecucaoNaPauta(): Promise<string[]> {
  * demandas de toda a empresa); o servidor valida (403 para os demais) e restringe ao tenant do token. SOMENTE LEITURA: só as
  * funções de listagem/leitura abaixo aceitam; nenhuma escrita (PATCH/POST/DELETE) envia este parâmetro.
  */
-export type EscopoLeituraDemanda = "pauta";
+export type EscopoLeituraDemanda = "pauta" | "acompanhamento";
 
 function sufixoEscopoLeitura(escopo?: EscopoLeituraDemanda): string {
   return escopo ? `?escopo=${escopo}` : "";

@@ -18,7 +18,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_workflow
+from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_leitura
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.models.usuario import Usuario
@@ -43,7 +43,7 @@ def listar_historico(
     db: Session = Depends(get_db),
 ):
     try:
-        demanda, _ = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service, escopo_leitura)
+        demanda, _, _ = demanda_com_acesso_de_leitura(db, current_user, str(demanda_id), demanda_service, escopo_leitura)
     except DemandaNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 

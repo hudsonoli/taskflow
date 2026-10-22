@@ -17,6 +17,7 @@ export function DemandasToolbar({
   onViewModeChange,
   onNewDemand,
   podeCriar,
+  ocultarModos = false,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
@@ -26,6 +27,8 @@ export function DemandasToolbar({
   onViewModeChange: (value: DemandasViewMode) => void;
   onNewDemand: () => void;
   podeCriar: boolean;
+  /** "Solicitadas por mim" é sempre uma lista de acompanhamento: sem alternância Lista/Kanban. */
+  ocultarModos?: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
@@ -60,6 +63,7 @@ export function DemandasToolbar({
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {!ocultarModos && (
           <div className="inline-flex rounded-xl border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-800">
             {[
               { value: "lista" as const, label: "Lista", icon: List },
@@ -84,6 +88,7 @@ export function DemandasToolbar({
               );
             })}
           </div>
+          )}
 
           <Button
             onClick={onNewDemand}

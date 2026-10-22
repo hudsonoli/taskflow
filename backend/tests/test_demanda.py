@@ -558,33 +558,27 @@ def test_operador_sem_vinculo_recebe_lista_vazia_e_nao_erro(client_operador: Tes
     assert resposta.json() == []
 
 
-def test_operador_criador_sem_vinculo_perde_a_demanda_de_vista(
+def test_operador_criador_sem_vinculo_acompanha_a_demanda_so_em_leitura(
     client_operador: TestClient, db_session: Session, empresa, usuario_operador: Usuario
 ) -> None:
-    """DESVIO CONHECIDO, fixado aqui de propósito para ficar visível.
+    """DESVIO ANTIGO RESOLVIDO (hotfix "Solicitadas por mim"): antes, quem criava uma demanda **sem se atribuir** recebia 201 e, no instante seguinte, 404 no mesmo id.
 
-    A tabela de escopo aprovada define `operador` como *responsável OU departamento*;
-    `criado_por` entra apenas no escopo de Atendimento. A consequência é que quem cria uma
-    demanda **sem se atribuir** recebe 201 e, no instante seguinte, 404 no mesmo id — mesmo
-    sendo Head de um departamento, porque a demanda não ficou vinculada a nenhum departamento
-    (`departamentoResponsavelIds` não foi enviado).
+    A tabela de escopo aprovada define `operador` como *responsável OU departamento*; o escopo-base (listagem padrão, Meu Dia, escritas) continua assim — `criado_por` só entra no
+    escopo-base do Atendimento. O que mudou é a LEITURA: a autoria concede ACOMPANHAMENTO (detalhe, subrecursos e a visão `escopo=solicitadas`), nunca gestão — a escrita segue 404.
 
-    Isto é o que a regra aprovada diz — não um bug de implementação. Está pinado para que
-    qualquer mudança de comportamento seja deliberada, e para alimentar a decisão da 2E.5
-    sobre incluir `criado_por` no escopo-base de todo mundo.
-
-    Ator precisa ser Head (Fase 2G.10B, D1.1): operador comum sem relação não passa mais em
-    `require_demandas_criar()` — ver test_d1_criacao_demandas.py para a política de criação.
-    Ser Head aqui só serve para chegar ao 201; o desvio testado é sobre ESCOPO pós-criação,
-    inalterado por D1.1.
+    Ator precisa ser Head (Fase 2G.10B, D1.1) só para chegar ao 201 (ver test_d1_criacao_demandas.py para a política de criação).
     """
     _departamento(db_session, empresa, responsavel_usuario_id=usuario_operador.id)
 
     criada = client_operador.post("/demandas", json={"nome": "Criada pelo operador"})
     assert criada.status_code == 201
+    demanda_id = criada.json()["id"]
 
-    assert client_operador.get("/demandas").json() == []
-    assert client_operador.get(f"/demandas/{criada.json()['id']}").status_code == 404
+    assert client_operador.get("/demandas").json() == []  # escopo-base inalterado: não entra na fila padrão
+    detalhe = client_operador.get(f"/demandas/{demanda_id}")
+    assert detalhe.status_code == 200 and detalhe.json()["acessoSomenteAcompanhamento"] is True  # acompanha
+    assert [d["id"] for d in client_operador.get("/demandas", params={"escopo": "solicitadas"}).json()] == [demanda_id]
+    assert client_operador.patch(f"/demandas/{demanda_id}", json={"nome": "Mudei"}).status_code == 404  # gestão continua negada
 
 
 def test_escopo_meus_e_sempre_permitido(
