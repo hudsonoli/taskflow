@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import ColumnElement, and_, case, exists, func, or_, select
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
@@ -1248,6 +1249,41 @@ class DemandaRepository:
             .execution_options(populate_existing=True)
         )
         return list(db.scalars(statement).all())
+
+    def aplicar_responsaveis_da_etapa(
+        self,
+        db: Session,
+        *,
+        etapa_id: str,
+        usuarios_adicionar: list[str],
+        usuarios_remover: list[str],
+        departamentos_adicionar: list[str],
+        departamentos_remover: list[str],
+        quando: datetime,
+    ) -> None:
+        """Aplica o DIFF dos vínculos EXPLÍCITOS da etapa (sem tocar nos que não mudaram). Sem commit."""
+        if usuarios_remover:
+            db.execute(
+                sa_delete(DemandaWorkflowEtapaResponsavel).where(
+                    DemandaWorkflowEtapaResponsavel.demanda_workflow_etapa_id == etapa_id,
+                    DemandaWorkflowEtapaResponsavel.usuario_id.in_(usuarios_remover),
+                )
+            )
+        if departamentos_remover:
+            db.execute(
+                sa_delete(DemandaWorkflowEtapaDepartamentoResponsavel).where(
+                    DemandaWorkflowEtapaDepartamentoResponsavel.demanda_workflow_etapa_id == etapa_id,
+                    DemandaWorkflowEtapaDepartamentoResponsavel.departamento_id.in_(departamentos_remover),
+                )
+            )
+        db.add_all(
+            [DemandaWorkflowEtapaResponsavel(demanda_workflow_etapa_id=etapa_id, usuario_id=uid, created_at=quando) for uid in usuarios_adicionar]
+            + [
+                DemandaWorkflowEtapaDepartamentoResponsavel(demanda_workflow_etapa_id=etapa_id, departamento_id=did, created_at=quando)
+                for did in departamentos_adicionar
+            ]
+        )
+        db.flush()
 
     def listar_etapa_responsavel_ids_em_lote(self, db: Session, etapa_ids: list[str]) -> dict[str, list[str]]:
         resultado: dict[str, list[str]] = {etapa_id: [] for etapa_id in etapa_ids}

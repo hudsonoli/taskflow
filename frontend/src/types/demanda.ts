@@ -35,6 +35,13 @@ export type PlanejamentoEtapa = {
  * `status` nunca é escrito diretamente pela interface: a progressão (Fase 8A) passa pelas ações
  * `concluir`/`aprovar` do servidor (ver `lib/workflow-demanda.ts` e `WorkflowDemandaSection`).
  */
+/** Quem é responsável pela etapa AGORA e de onde vem (calculado pelo servidor): `etapa` = vínculo explícito; `tarefa` = herdado do responsável geral da tarefa (nunca copiado); `nenhuma`. */
+export type ResponsabilidadeEfetiva = {
+  origem: "etapa" | "tarefa" | "nenhuma";
+  usuarioIds: string[];
+  departamentoIds: string[];
+};
+
 export type DemandaWorkflowEtapa = {
   id: string;
   nome: string;
@@ -43,8 +50,10 @@ export type DemandaWorkflowEtapa = {
   esforcoEstimadoMinutos?: number | null;
   quantidadeAntesDeadline: number;
   unidadePrazo: "dias_corridos" | "dias_uteis" | "horas";
+  /** Vínculos EXPLÍCITOS da etapa ("configurados"); a responsabilidade efetiva, com a herança da tarefa, está em `responsabilidadeEfetiva`. */
   usuarioResponsavelIds: string[];
   departamentoResponsavelIds: string[];
+  responsabilidadeEfetiva?: ResponsabilidadeEfetiva;
   status: DemandaWorkflowEtapaStatus;
   /** Fase 8A — quando passou a ser a atual (`null` = início histórico desconhecido, nunca preenchido com valor fictício). */
   iniciadaEm: string | null;
@@ -285,6 +294,8 @@ export type DemandaFormDraft = {
   /** Só tem efeito na criação (materializa as etapas do template). Editar depois não
    * reaplica nem troca o workflow já materializado nesta fase. */
   workflowModeloId?: string | null;
+  /** Só na criação, com `workflowModeloId`: responsáveis EXPLÍCITOS por etapa, pelo id da etapa do MODELO. Omitido/vazio = a criação de sempre (responsáveis copiados do modelo). */
+  workflowEtapasResponsaveis?: { modeloEtapaId: string; usuarioResponsavelIds: string[]; departamentoResponsavelIds: string[] }[];
 };
 
 /** Cards de `DemandasStats` — `GET /demandas/estatisticas` (camelCase direto do schema Pydantic). */

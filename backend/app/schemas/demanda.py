@@ -109,6 +109,28 @@ class _DemandaCamposComuns(BaseModel):
 #
 # O segundo grupo é o que impede a falha silenciosa que este desenho existe para evitar: o
 # formulário montava etapas de workflow e elas sumiriam sem aviso.
+class DemandaCreateEtapaResponsaveis(BaseModel):
+    """Responsáveis EXPLÍCITOS de UMA etapa do workflow aplicado, definidos já na criação da Demanda (substituem, para essa etapa, o que o modelo trazia). A etapa é
+    identificada pelo id da etapa do MODELO (`modeloEtapaId`) — inequívoco entre a tela, o modelo e a etapa materializada. Listas vazias = sem responsabilidade explícita
+    (a etapa herda os responsáveis gerais da tarefa)."""
+
+    modelo_etapa_id: UUID = Field(alias="modeloEtapaId")
+    usuario_responsavel_ids: list[UUID] = Field(default_factory=list, alias="usuarioResponsavelIds")
+    departamento_responsavel_ids: list[UUID] = Field(default_factory=list, alias="departamentoResponsavelIds")
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class DemandaWorkflowResponsaveisUpdate(BaseModel):
+    """Substituição COMPLETA dos responsáveis EXPLÍCITOS de uma etapa (o editor apresenta o estado inteiro). Os dois campos são obrigatórios; `[]` + `[]` remove a
+    responsabilidade explícita e a etapa volta a herdar os responsáveis gerais da tarefa (nunca "sem responsável forçado")."""
+
+    usuario_responsavel_ids: list[UUID] = Field(alias="usuarioResponsavelIds")
+    departamento_responsavel_ids: list[UUID] = Field(alias="departamentoResponsavelIds")
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
 class DemandaCreate(_DemandaCamposComuns):
     nome: str = Field(min_length=1, max_length=255)
     status: DemandaStatusEditavel = "rascunho"
@@ -119,8 +141,20 @@ class DemandaCreate(_DemandaCamposComuns):
     # aceito na criação; não existe endpoint pra trocar o workflow de uma Demanda já criada
     # nesta fase.
     workflow_modelo_id: UUID | None = Field(default=None, alias="workflowModeloId")
+    # Opcional: responsáveis por etapa já na criação (só com `workflowModeloId`). Omitido = a criação segue idêntica à legada (responsáveis copiados do modelo).
+    workflow_etapas_responsaveis: list[DemandaCreateEtapaResponsaveis] | None = Field(default=None, alias="workflowEtapasResponsaveis")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def _etapas_responsaveis_exigem_modelo(self) -> "DemandaCreate":
+        if self.workflow_etapas_responsaveis:
+            if self.workflow_modelo_id is None:
+                raise ValueError("workflowEtapasResponsaveis exige workflowModeloId")
+            ids = [item.modelo_etapa_id for item in self.workflow_etapas_responsaveis]
+            if len(ids) != len(set(ids)):
+                raise ValueError("workflowEtapasResponsaveis repete a mesma etapa")
+        return self
 
     @field_validator("motivo_bloqueio")
     @classmethod
@@ -240,6 +274,17 @@ class DemandaWorkflowPlanejamentoUpdate(BaseModel):
         return self
 
 
+class ResponsabilidadeEfetivaRead(BaseModel):
+    """Quem é responsável pela etapa AGORA e DE ONDE vem: `etapa` (há vínculo explícito de usuário/departamento na própria etapa), `tarefa` (etapa sem vínculo explícito:
+    vale o responsável geral da Demanda, resolvido em leitura — nada é copiado) ou `nenhuma`. Calculado pelo servidor; a interface não compara listas para descobrir a origem."""
+
+    origem: Literal["etapa", "tarefa", "nenhuma"]
+    usuario_ids: list[UUID] = Field(default_factory=list, alias="usuarioIds")
+    departamento_ids: list[UUID] = Field(default_factory=list, alias="departamentoIds")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class DemandaWorkflowEtapaRead(BaseModel):
     """Etapa de workflow materializada — snapshot, não referência ao WorkflowModelo (ver
     docstring de app/models/demanda_workflow_etapa.py)."""
@@ -258,8 +303,11 @@ class DemandaWorkflowEtapaRead(BaseModel):
     quantidade_antes_deadline: int = Field(alias="quantidadeAntesDeadline")
     unidade_prazo: WorkflowUnidadePrazo = Field(alias="unidadePrazo")
     status: DemandaWorkflowEtapaStatus
+    # Vínculos EXPLÍCITOS da etapa ("responsáveis configurados"): o que está gravado nas relações da própria etapa. A responsabilidade EFETIVA (com a herança da tarefa)
+    # está em `responsabilidadeEfetiva`.
     usuario_responsavel_ids: list[UUID] = Field(alias="usuarioResponsavelIds")
     departamento_responsavel_ids: list[UUID] = Field(alias="departamentoResponsavelIds")
+    responsabilidade_efetiva: ResponsabilidadeEfetivaRead | None = Field(default=None, alias="responsabilidadeEfetiva")
     # Fase 8A — progressão. `iniciadaEm` NULL = início histórico desconhecido (snapshot anterior à 8A).
     iniciada_em: datetime | None = Field(default=None, alias="iniciadaEm")
     concluida_em: datetime | None = Field(default=None, alias="concluidaEm")

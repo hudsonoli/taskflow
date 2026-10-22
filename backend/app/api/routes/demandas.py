@@ -38,6 +38,7 @@ from app.schemas.demanda import (
     DemandaWorkflowRejeicao,
     DemandaWorkflowEsforcoUpdate,
     DemandaWorkflowPlanejamentoUpdate,
+    DemandaWorkflowResponsaveisUpdate,
 )
 from app.schemas.demanda_historico import DemandaHistoricoEventoRead
 from app.services.demanda_historico_service import DemandaHistoricoService
@@ -649,6 +650,32 @@ def ajustar_esforco_etapa(
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
         resposta.acesso_apenas_workflow = via_workflow
         return resposta
+    except Exception as exc:
+        handle_demanda_error(exc)
+
+
+@router.put("/{demanda_id}/workflow/etapas/{etapa_id}/responsaveis", response_model=DemandaRead)
+def alterar_responsaveis_etapa(
+    demanda_id: UUID,
+    etapa_id: UUID,
+    payload: DemandaWorkflowResponsaveisUpdate,
+    current_user: Usuario = Depends(require_permissao("demandas.editar")),
+    db: Session = Depends(get_db),
+):
+    """Substitui os responsáveis EXPLÍCITOS (usuários e departamentos) de UMA etapa da Demanda — atual ou futura; etapa concluída é somente leitura (409). `[]` + `[]` volta a
+    herdar os responsáveis gerais da tarefa. Mesma autoridade de alterar os responsáveis da Demanda: `demandas.editar` + escopo-base (fora dele, 404) + as regras de quem
+    o ator pode atribuir. Nunca altera o modelo de workflow."""
+    try:
+        demanda = demanda_service.get_demanda(db, str(demanda_id), escopo=_escopo(db, current_user))
+        atualizada = demanda_service.alterar_responsaveis_etapa(
+            db,
+            demanda,
+            etapa_id=str(etapa_id),
+            usuario_ids=[str(uid) for uid in payload.usuario_responsavel_ids],
+            departamento_ids=[str(did) for did in payload.departamento_responsavel_ids],
+            actor=current_user,
+        )
+        return demanda_service.to_read(db, atualizada, usuario=current_user)
     except Exception as exc:
         handle_demanda_error(exc)
 

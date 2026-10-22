@@ -1553,6 +1553,7 @@ type DemandaWorkflowEtapaReadApi = {
   status: DemandaWorkflowEtapaStatus;
   usuarioResponsavelIds: string[];
   departamentoResponsavelIds: string[];
+  responsabilidadeEfetiva?: DemandaWorkflowEtapa["responsabilidadeEfetiva"] | null;
   iniciadaEm: string | null;
   concluidaEm: string | null;
   concluidaPorUsuarioId: string | null;
@@ -1664,6 +1665,7 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
       status: etapa.status,
       usuarioResponsavelIds: etapa.usuarioResponsavelIds,
       departamentoResponsavelIds: etapa.departamentoResponsavelIds,
+      responsabilidadeEfetiva: etapa.responsabilidadeEfetiva ?? undefined,
       iniciadaEm: etapa.iniciadaEm ?? null,
       concluidaEm: etapa.concluidaEm ?? null,
       concluidaPorUsuarioId: etapa.concluidaPorUsuarioId ?? null,
@@ -1978,6 +1980,10 @@ export async function criarDemandaReal(draft: DemandaFormDraft): Promise<Demanda
   const payload = {
     ...demandaDraftParaPayload(draft),
     ...(draft.workflowModeloId ? { workflowModeloId: draft.workflowModeloId } : {}),
+    // Responsáveis por etapa só viajam com o modelo e quando o usuário ajustou alguma etapa: a criação de sempre não muda.
+    ...(draft.workflowModeloId && draft.workflowEtapasResponsaveis && draft.workflowEtapasResponsaveis.length > 0
+      ? { workflowEtapasResponsaveis: draft.workflowEtapasResponsaveis }
+      : {}),
   };
   const criada = await request<DemandaReadApi>("/demandas", {
     method: "POST",
@@ -3174,6 +3180,21 @@ export async function ajustarPlanejamentoEtapaReal(
 ): Promise<Demanda> {
   const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/planejamento`, {
     method: "PATCH", body: JSON.stringify(corpo),
+  });
+  return mapDemandaReadToDemanda(atualizada);
+}
+
+/**
+ * SUBSTITUI os responsáveis EXPLÍCITOS (pessoas e departamentos) de UMA etapa da tarefa — atual ou futura; etapa concluída é somente leitura. As duas listas vazias removem a
+ * responsabilidade da etapa: ela volta a herdar os responsáveis gerais da tarefa (nunca "sem responsável forçado"). O modelo de workflow não muda; a autoridade é do servidor.
+ */
+export async function alterarResponsaveisEtapaReal(
+  demandaId: string,
+  etapaId: string,
+  corpo: { usuarioResponsavelIds: string[]; departamentoResponsavelIds: string[] },
+): Promise<Demanda> {
+  const atualizada = await request<DemandaReadApi>(`/demandas/${demandaId}/workflow/etapas/${etapaId}/responsaveis`, {
+    method: "PUT", body: JSON.stringify(corpo),
   });
   return mapDemandaReadToDemanda(atualizada);
 }

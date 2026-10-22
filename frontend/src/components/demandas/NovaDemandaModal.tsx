@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { ClipboardPlus, GitBranch, X } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Combobox } from "@/components/ui/Combobox";
 import { Input } from "@/components/ui/Input";
@@ -22,10 +21,10 @@ import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { dataDoInputLocal, isoParaInputLocal } from "@/lib/prazo-operacional";
 import { useResponsaveisSelector } from "@/lib/useResponsaveisSelector";
 import { useDiretorioWorkflowModelos } from "@/lib/diretorioWorkflowModelos";
-import { workflowEtapaTipoLabels } from "@/types/workflow-modelo";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
 import type { Demanda, DemandaFormDraft, DemandaPrioridade, DemandaStatusEditavel } from "@/types/demanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { EtapasDoWorkflowNaCriacao } from "./EtapasDoWorkflowNaCriacao";
 
 function createInitialDraft(demanda?: Demanda): DemandaFormDraft {
   return {
@@ -266,35 +265,20 @@ export function NovaDemandaModal({
           <Combobox
             label="Modelo de workflow"
             value={draft.workflowModeloId ?? ""}
-            onChange={(workflowModeloId) => updateDraft({ workflowModeloId: workflowModeloId || null })}
+            // trocar de modelo descarta os ajustes por etapa (eles pertencem às etapas do modelo anterior)
+            onChange={(workflowModeloId) => updateDraft({ workflowModeloId: workflowModeloId || null, workflowEtapasResponsaveis: [] })}
             options={workflowModelos.map((modelo) => ({ value: modelo.id, label: modelo.nome }))}
             placeholder="Buscar workflow…"
             emptyLabel="Nenhum workflow ativo encontrado"
           />
           {draft.workflowModeloId && (
-            <div className="mt-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3.5 dark:border-indigo-500/20 dark:bg-indigo-500/5">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
-                <GitBranch className="h-3.5 w-3.5" />
-                Etapas aplicadas ao criar
-              </div>
-              {carregandoWorkflow ? (
-                <p className="mt-2 text-xs text-fg-muted">Carregando etapas…</p>
-              ) : (
-                <ol className="mt-2 flex flex-col gap-1.5">
-                  {previewAtual?.etapas.map((etapa, index) => (
-                    <li key={etapa.id} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-bold text-primary-fg">
-                        {index + 1}
-                      </span>
-                      <span className="truncate">{etapa.nome}</span>
-                      <Badge tone={etapa.tipo === "aprovacao" ? "amber" : "blue"}>
-                        {workflowEtapaTipoLabels[etapa.tipo]}
-                      </Badge>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
+            <EtapasDoWorkflowNaCriacao
+              modelo={previewAtual}
+              carregando={carregandoWorkflow}
+              gerais={{ usuarioIds: draft.usuarioResponsavelIds, departamentoIds: draft.departamentoResponsavelIds }}
+              ajustes={draft.workflowEtapasResponsaveis ?? []}
+              onChange={(ajustes) => updateDraft({ workflowEtapasResponsaveis: ajustes })}
+            />
           )}
         </div>
       ) : demanda.workflowEtapas.length > 0 ? (

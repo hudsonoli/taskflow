@@ -38,9 +38,16 @@ from app.repositories.projeto_repository import ProjetoRepository
 from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.core.planejamento_etapa import estado_da_janela
-from app.core.executor_etapa import STATUS_SEM_TRABALHO, eh_executor_da_demanda
+from app.core.executor_etapa import STATUS_SEM_TRABALHO, eh_executor_da_demanda, resolver_responsabilidade_etapa
 from app.schemas.evento import EventoCreate
-from app.schemas.demanda import DemandaCreate, DemandaRead, DemandaUpdate, DemandaWorkflowEtapaRead, PlanejamentoEtapaRead
+from app.schemas.demanda import (
+    DemandaCreate,
+    DemandaRead,
+    DemandaUpdate,
+    DemandaWorkflowEtapaRead,
+    PlanejamentoEtapaRead,
+    ResponsabilidadeEfetivaRead,
+)
 from app.services.demanda_intervalo_service import (
     ORIGEM_CRIACAO,
     ORIGEM_RESTAURACAO,
@@ -261,6 +268,7 @@ class DemandaService:
 
             if workflow_modelo_id is not None:
                 self._ensure_workflow_modelo_valido(db, empresa_id, workflow_modelo_id)
+            overrides_etapas = self._validar_responsaveis_por_etapa_na_criacao(db, actor, empresa_id, workflow_modelo_id, data)
             for usuario_id in responsavel_ids:
                 self._ensure_usuario_valido(db, empresa_id, usuario_id)
             self._ensure_responsaveis_permitidos_para_operador_comum(db, actor, responsavel_ids)
@@ -324,7 +332,7 @@ class DemandaService:
 
             if workflow_modelo_id is not None:
                 self._materializar_workflow(
-                    db, demanda, workflow_modelo_id=workflow_modelo_id, empresa_id=empresa_id, now=now
+                    db, demanda, workflow_modelo_id=workflow_modelo_id, empresa_id=empresa_id, now=now, overrides=overrides_etapas
                 )
 
             for usuario_id in responsavel_ids:
@@ -950,6 +958,156 @@ class DemandaService:
         )
 
     # ----------------------------------------------------------------------------------
+    # Responsáveis EXPLÍCITOS por etapa (usuários e departamentos) — sobre o snapshot materializado da Demanda
+    # ----------------------------------------------------------------------------------
+
+    def _validar_responsaveis_por_etapa_na_criacao(
+        self, db: Session, actor: Usuario, empresa_id: str, workflow_modelo_id: str | None, data: DemandaCreate
+    ) -> dict[str, tuple[list[str], list[str]]] | None:
+        """Responsáveis por etapa enviados no POST: a etapa tem de ser do MODELO escolhido (id inequívoco), os usuários/departamentos válidos NA empresa e permitidos para o
+        ator pelas MESMAS regras dos responsáveis gerais (Head/Atendimento/operador comum). Tudo antes de qualquer escrita; omitido → `None` (criação legada)."""
+        itens = data.workflow_etapas_responsaveis
+        if not itens or workflow_modelo_id is None:
+            return None
+        etapas_modelo = {etapa.id for etapa in self.workflow_modelo_repository.list_etapas(db, workflow_modelo_id)}
+        resultado: dict[str, tuple[list[str], list[str]]] = {}
+        todos_usuarios: list[str] = []
+        todos_departamentos: list[str] = []
+        for item in itens:
+            modelo_etapa_id = str(item.modelo_etapa_id)
+            if modelo_etapa_id not in etapas_modelo:
+                raise DemandaWorkflowModeloInvalidoError("Etapa não pertence ao modelo de workflow escolhido")
+            usuarios = sorted({str(uid) for uid in item.usuario_responsavel_ids})
+            departamentos = sorted({str(did) for did in item.departamento_responsavel_ids})
+            resultado[modelo_etapa_id] = (usuarios, departamentos)
+            todos_usuarios += usuarios
+            todos_departamentos += departamentos
+        for usuario_id in todos_usuarios:
+            self._ensure_usuario_valido(db, empresa_id, usuario_id)
+        self._ensure_responsaveis_permitidos_para_operador_comum(db, actor, todos_usuarios)
+        for departamento_id in todos_departamentos:
+            self._ensure_departamento_valido(db, empresa_id, departamento_id)
+        self._ensure_departamentos_permitidos_para_head(db, actor, todos_departamentos)
+        self._ensure_departamentos_permitidos_para_operador_comum(db, actor, todos_departamentos)
+        return resultado
+
+    def alterar_responsaveis_etapa(
+        self,
+        db: Session,
+        demanda: Demanda,
+        *,
+        etapa_id: str,
+        usuario_ids: list[str],
+        departamento_ids: list[str],
+        actor: Usuario,
+    ) -> Demanda:
+        """SUBSTITUI os vínculos EXPLÍCITOS (usuários e departamentos) de UMA etapa da Demanda — etapa atual ou futura. `[]` + `[]` remove a responsabilidade explícita e a etapa
+        volta a herdar os responsáveis gerais da tarefa (o fallback é dinâmico; nada é copiado para a etapa).
+
+        - Autoridade: a MESMA de alterar os responsáveis da Demanda (a rota exige `demandas.editar` + escopo-base; aqui valem as regras de Head/Atendimento/operador comum
+          sobre quem pode ser atribuído). Sem permissão nova.
+        - Etapa CONCLUÍDA é somente leitura (409): reescrever quem era responsável depois de concluída alteraria o histórico operacional.
+        - Não toca em status, ordem, esforço, planejamento nem no modelo de workflow (o snapshot é da Demanda).
+        - Quem deixa de ser responsável EFETIVO da etapa tem a sessão pessoal nela encerrada (`troca_responsavel`) pela regra já existente de encerramento automático.
+        - No-op não publica evento. Mutação + evento + encerramento de sessões: uma transação."""
+        try:
+            if actor.empresa_id != demanda.empresa_id:
+                raise DemandaNotFoundError("Etapa não encontrada nesta tarefa")
+            self.repository.bloquear_demanda_para_atualizacao(db, demanda)
+            if demanda.status == STATUS_ARQUIVADA:
+                raise DemandaInvalidTransitionError("Demanda arquivada não pode ser editada — restaure-a antes")
+            etapas = self.repository.listar_etapas_workflow_travadas(db, demanda.id)
+            etapa = next((e for e in etapas if e.id == etapa_id), None)
+            if etapa is None:
+                raise DemandaNotFoundError("Etapa não encontrada nesta tarefa")
+            if etapa.status == STATUS_ETAPA_WORKFLOW_CONCLUIDA:
+                raise DemandaInvalidTransitionError("Etapa concluída: os responsáveis ficam somente para consulta")
+
+            desejados_u = sorted({str(uid) for uid in usuario_ids})
+            desejados_d = sorted({str(did) for did in departamento_ids})
+            antes_u = sorted(self.repository.listar_etapa_responsavel_ids_em_lote(db, [etapa.id]).get(etapa.id, []))
+            antes_d = sorted(self.repository.listar_etapa_departamento_ids_em_lote(db, [etapa.id]).get(etapa.id, []))
+            adicionar_u, remover_u = sorted(set(desejados_u) - set(antes_u)), sorted(set(antes_u) - set(desejados_u))
+            adicionar_d, remover_d = sorted(set(desejados_d) - set(antes_d)), sorted(set(antes_d) - set(desejados_d))
+
+            # Só o que ENTRA precisa ser válido (vínculo histórico com alguém depois inativado é preservado); a regra de QUEM o ator pode atribuir vale para a lista toda,
+            # exatamente como no PATCH da Demanda.
+            for usuario_id in adicionar_u:
+                self._ensure_usuario_valido(db, demanda.empresa_id, usuario_id)
+            self._ensure_responsaveis_permitidos_para_operador_comum(db, actor, desejados_u)
+            for departamento_id in adicionar_d:
+                self._ensure_departamento_valido(db, demanda.empresa_id, departamento_id)
+            self._ensure_departamentos_permitidos_para_head(db, actor, desejados_d)
+            self._ensure_departamentos_permitidos_para_operador_comum(db, actor, desejados_d)
+
+            if adicionar_u or remover_u or adicionar_d or remover_d:
+                now = agora_utc()
+                self.repository.aplicar_responsaveis_da_etapa(
+                    db,
+                    etapa_id=etapa.id,
+                    usuarios_adicionar=adicionar_u,
+                    usuarios_remover=remover_u,
+                    departamentos_adicionar=adicionar_d,
+                    departamentos_remover=remover_d,
+                    quando=now,
+                )
+                etapa.updated_at = now
+                demanda.updated_at = now
+                db.flush()
+                self.publicar_evento_demanda(
+                    db, demanda, DomainEventType.DEMANDA_WORKFLOW_RESPONSAVEIS_ALTERADOS, actor.id,
+                    extra_payload={
+                        "etapaId": etapa.id, "etapaNome": etapa.nome, "etapaOrdem": etapa.ordem, "atorUsuarioId": actor.id,
+                        "usuariosAntes": antes_u, "usuariosDepois": desejados_u,
+                        "departamentosAntes": antes_d, "departamentosDepois": desejados_d,
+                    },
+                    occurred_at=now,
+                )
+                self._encerrar_sessoes_de_quem_deixou_a_etapa(db, demanda, etapa.id, desejados_u, desejados_d, now)
+            db.commit()
+            db.refresh(demanda)
+            return demanda
+        except Exception:
+            db.rollback()
+            raise
+
+    def _encerrar_sessoes_de_quem_deixou_a_etapa(
+        self, db: Session, demanda: Demanda, etapa_id: str, explicitos_u: list[str], explicitos_d: list[str], quando: datetime
+    ) -> None:
+        """Sessões ATIVAS ligadas a esta etapa de quem deixou de ser responsável EFETIVO (nova responsabilidade = explícita da etapa ou, sem ela, a geral da tarefa) são
+        encerradas pela regra existente (`troca_responsavel`); não é uma segunda implementação, é a mesma chamada com o filtro de etapa."""
+        _, efetivos_u, efetivos_d = resolver_responsabilidade_etapa(
+            etapa_usuario_ids=explicitos_u,
+            etapa_departamento_ids=explicitos_d,
+            demanda_usuario_ids=self.repository.listar_responsavel_ids(db, demanda.id),
+            demanda_departamento_ids=self.repository.listar_departamento_ids(db, demanda.id),
+        )
+        ativas = self.sessao_service.repository.listar_ativas_para_encerramento(
+            db, empresa_id=demanda.empresa_id, demanda_id=demanda.id, workflow_etapa_id=etapa_id
+        )
+        usuarios_a_encerrar: list[str] = []
+        departamentos_a_encerrar: list[str] = []
+        for sessao in ativas:
+            if sessao.usuario_id:
+                pessoa = self.usuario_repository.get_by_id(db, sessao.usuario_id)
+                continua = sessao.usuario_id in efetivos_u or (pessoa is not None and pessoa.departamento_id is not None and pessoa.departamento_id in efetivos_d)
+                if not continua:
+                    usuarios_a_encerrar.append(sessao.usuario_id)
+            elif sessao.departamento_id not in efetivos_d:
+                departamentos_a_encerrar.append(sessao.departamento_id)
+        if usuarios_a_encerrar or departamentos_a_encerrar:
+            self.sessao_service.encerrar_ativas_da_demanda(
+                db,
+                empresa_id=demanda.empresa_id,
+                demanda_id=demanda.id,
+                motivo_encerramento=MOTIVO_TROCA_RESPONSAVEL,
+                fim_em=quando,
+                usuario_ids=usuarios_a_encerrar,
+                departamento_ids=departamentos_a_encerrar,
+                workflow_etapa_id=etapa_id,
+            )
+
+    # ----------------------------------------------------------------------------------
     # Arquivamento — ver docs/padrao-arquivamento.md. Nunca há delete físico.
     # ----------------------------------------------------------------------------------
 
@@ -1115,6 +1273,7 @@ class DemandaService:
         etapas = etapas_por_demanda.get(demanda.id, [])
         responsaveis = self.repository.listar_responsavel_ids(db, demanda.id)
         departamentos = self.repository.listar_departamento_ids(db, demanda.id)
+        self._aplicar_responsabilidade_efetiva(etapas, responsaveis, departamentos)
         em_andamento = self._demandas_com_sessao_ativa_do_usuario(db, usuario, somente_leitura)
         return DemandaRead.model_validate(
             {
@@ -1143,6 +1302,8 @@ class DemandaService:
             db, ids, usuario=usuario, somente_leitura=somente_leitura, demandas=demandas
         )
         em_andamento = self._demandas_com_sessao_ativa_do_usuario(db, usuario, somente_leitura)
+        for demanda_id_lote, etapas_do_lote in etapas_por_demanda.items():
+            self._aplicar_responsabilidade_efetiva(etapas_do_lote, responsaveis.get(demanda_id_lote, []), departamentos.get(demanda_id_lote, []))
         return [
             DemandaRead.model_validate(
                 {
@@ -1158,6 +1319,19 @@ class DemandaService:
             )
             for demanda in demandas
         ]
+
+    @staticmethod
+    def _aplicar_responsabilidade_efetiva(etapas: list[DemandaWorkflowEtapaRead], demanda_usuarios: list[str], demanda_departamentos: list[str]) -> None:
+        """Preenche `responsabilidadeEfetiva` de cada etapa pela regra ÚNICA (`resolver_responsabilidade_etapa`): vínculo explícito da etapa; senão, o responsável geral da tarefa
+        (resolvido aqui, em leitura — nunca persistido na etapa); senão, ninguém. Sem consulta extra: tudo já foi carregado em lote."""
+        for etapa in etapas:
+            origem, usuarios, departamentos = resolver_responsabilidade_etapa(
+                etapa_usuario_ids=etapa.usuario_responsavel_ids,
+                etapa_departamento_ids=etapa.departamento_responsavel_ids,
+                demanda_usuario_ids=demanda_usuarios,
+                demanda_departamento_ids=demanda_departamentos,
+            )
+            etapa.responsabilidade_efetiva = ResponsabilidadeEfetivaRead(origem=origem, usuarioIds=usuarios, departamentoIds=departamentos)
 
     def _demandas_com_sessao_ativa_do_usuario(self, db: Session, usuario: Usuario | None, somente_leitura: bool) -> frozenset[str]:
         """Uma consulta por página/detalhe: as Demandas em que o PRÓPRIO usuário trabalha agora (sessão pessoal ativa). Leitura global/acompanhamento não precisa."""
@@ -1462,8 +1636,12 @@ class DemandaService:
         workflow_modelo_id: str,
         empresa_id: str,
         now: datetime,
+        overrides: dict[str, tuple[list[str], list[str]]] | None = None,
     ) -> None:
-        """Copia as etapas (e responsáveis) do WorkflowModelo pra Demanda — snapshot, não
+        """`overrides` (opcional, `modeloEtapaId → (usuários, departamentos)`): para as etapas listadas, os responsáveis EXPLÍCITOS enviados na criação substituem os do
+        modelo; as demais seguem copiando o modelo. Sem `overrides` o comportamento é o legado.
+
+        Copia as etapas (e responsáveis) do WorkflowModelo pra Demanda — snapshot, não
         referência viva. Roda dentro da MESMA transação de `create_demanda`: qualquer erro
         aqui (ex.: responsável do template que ficou inválido nesse meio-tempo) sobe e o
         rollback do método chamador desfaz a Demanda inteira junto — nenhuma etapa órfã.
@@ -1506,14 +1684,19 @@ class DemandaService:
         responsavel_rows: list[DemandaWorkflowEtapaResponsavel] = []
         departamento_responsavel_rows: list[DemandaWorkflowEtapaDepartamentoResponsavel] = []
         for etapa_modelo, etapa_objeto in zip(etapas_modelo, etapas_objetos):
-            for usuario_id in usuarios_por_etapa.get(etapa_modelo.id, []):
+            if overrides and etapa_modelo.id in overrides:
+                usuarios_da_etapa, departamentos_da_etapa = overrides[etapa_modelo.id]
+            else:
+                usuarios_da_etapa = usuarios_por_etapa.get(etapa_modelo.id, [])
+                departamentos_da_etapa = departamentos_por_etapa.get(etapa_modelo.id, [])
+            for usuario_id in usuarios_da_etapa:
                 self._ensure_usuario_valido(db, empresa_id, usuario_id)
                 responsavel_rows.append(
                     DemandaWorkflowEtapaResponsavel(
                         demanda_workflow_etapa_id=etapa_objeto.id, usuario_id=usuario_id, created_at=now
                     )
                 )
-            for departamento_id in departamentos_por_etapa.get(etapa_modelo.id, []):
+            for departamento_id in departamentos_da_etapa:
                 self._ensure_departamento_valido(db, empresa_id, departamento_id)
                 departamento_responsavel_rows.append(
                     DemandaWorkflowEtapaDepartamentoResponsavel(

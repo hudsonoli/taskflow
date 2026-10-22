@@ -2,9 +2,11 @@
 
 import { EsforcoEtapa } from "./EsforcoEtapa";
 import { PlanejamentoEtapa } from "./PlanejamentoEtapa";
+import { EditarResponsaveisEtapaModal } from "./EditarResponsaveisEtapaModal";
+import { ResponsabilidadeEtapa } from "./ResponsabilidadeEtapa";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ClipboardList, FileText, GitBranch, History, UsersRound } from "lucide-react";
+import { ClipboardList, FileText, GitBranch, History, Pencil, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -15,6 +17,7 @@ import { MemberSelector } from "@/components/ui/MemberSelector";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
 import {
+  alterarResponsaveisEtapaReal,
   avancarEtapaWorkflowReal,
   getDemandaReal,
   rejeitarEtapaWorkflowReal,
@@ -31,6 +34,7 @@ import {
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { useResponsaveisSelector, useUsuariosPorIds } from "@/lib/useResponsaveisSelector";
+import { podeEditarResponsaveisDaEtapa, responsabilidadeDaEtapa } from "@/lib/responsabilidade-etapa";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import { autorExternoDoEvento, corDoEventoHistorico, descreverEventoHistorico } from "@/lib/historicoDemandaLabels";
 import {
@@ -343,9 +347,10 @@ const workflowEstadoClasses = {
 export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProps) {
   const somenteLeitura = useEscopoLeituraDemanda() !== undefined;
   const { usuarios, resolvendo } = useUsuariosComIds(
-    demanda.workflowEtapas.flatMap((etapa) => [...etapa.usuarioResponsavelIds, etapa.concluidaPorUsuarioId]),
+    demanda.workflowEtapas.flatMap((etapa) => [...etapa.usuarioResponsavelIds, ...(etapa.responsabilidadeEfetiva?.usuarioIds ?? []), etapa.concluidaPorUsuarioId]),
   );
   const { departamentos } = useDiretorioDepartamentos();
+  const [editandoResponsaveis, setEditandoResponsaveis] = useState<DemandaWorkflowEtapa | null>(null);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [avancando, setAvancando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -366,6 +371,7 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
 
   const nomeDoUsuario = (id: string) =>
     usuarios.find((usuario) => usuario.id === id)?.nome ?? (resolvendo ? "Carregando…" : "Usuário removido");
+  const nomeDoDepartamento = (id: string) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id;
 
   async function confirmarAvanco(etapa: DemandaWorkflowEtapa) {
     if (avancando) return;
@@ -439,10 +445,6 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
         )}
         {etapasOrdenadas(demanda).map((etapa) => {
           const estado = estadoDaEtapa(etapa, demanda.etapaAtualId);
-          const responsaveis = etapa.usuarioResponsavelIds.map(nomeDoUsuario).join(", ");
-          const departamentosNomes = etapa.departamentoResponsavelIds
-            .map((id) => departamentos.find((departamento) => departamento.id === id)?.nome ?? id)
-            .join(", ");
           const exibirAcao = podeExibirAcao(etapa, demanda.etapaAtualId, somenteLeitura);
           const confirmando = confirmandoId === etapa.id;
 
@@ -459,11 +461,18 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
               <p className="mt-1.5 text-sm font-semibold text-fg">{etapa.nome}</p>
               <EsforcoEtapa demandaId={demanda.id} etapa={etapa} somenteLeitura={somenteLeitura} onChange={onChange} />
               <PlanejamentoEtapa demandaId={demanda.id} etapa={etapa} somenteLeitura={somenteLeitura} onChange={onChange} />
-              <p className="mt-1 text-xs text-fg-muted">
-                {responsaveis || departamentosNomes
-                  ? [responsaveis, departamentosNomes].filter(Boolean).join(" · ")
-                  : "Sem responsável definido"}
-              </p>
+              <ResponsabilidadeEtapa
+                responsabilidade={responsabilidadeDaEtapa(etapa)}
+                nomeDoUsuario={nomeDoUsuario}
+                nomeDoDepartamento={nomeDoDepartamento}
+              />
+              {podeEditarResponsaveisDaEtapa(demanda, etapa, somenteLeitura) && (
+                <div className="mt-2">
+                  <Button type="button" variant="secondary" className="px-2.5 py-1 text-xs" onClick={() => setEditandoResponsaveis(etapa)}>
+                    <Pencil className="h-3 w-3" /> Editar responsáveis
+                  </Button>
+                </div>
+              )}
               {estado === "concluida" && etapa.concluidaEm && (
                 <p className="mt-1 text-xs text-fg-muted">
                   {etapa.concluidaPorUsuarioId
@@ -507,6 +516,24 @@ export function WorkflowDemandaSection({ demanda, onChange }: DemandaSectionProp
           );
         })}
       </div>
+      {editandoResponsaveis && (
+        <EditarResponsaveisEtapaModal
+          key={editandoResponsaveis.id}
+          etapaNome={editandoResponsaveis.nome}
+          usuarioIds={editandoResponsaveis.usuarioResponsavelIds}
+          departamentoIds={editandoResponsaveis.departamentoResponsavelIds}
+          onClose={() => setEditandoResponsaveis(null)}
+          onSalvar={async (usuarioIds, departamentoIds) => {
+            // O servidor devolve a tarefa inteira (com a responsabilidade efetiva já resolvida): a tela só adota o que veio.
+            const atualizada = await alterarResponsaveisEtapaReal(demanda.id, editandoResponsaveis.id, {
+              usuarioResponsavelIds: usuarioIds,
+              departamentoResponsavelIds: departamentoIds,
+            });
+            onChange(atualizada);
+            setEditandoResponsaveis(null);
+          }}
+        />
+      )}
       <Modal open={rejeitando !== null} onClose={() => (avancando ? undefined : setRejeitando(null))} maxWidthClassName="max-w-md">
         {rejeitando && (
           <div className="flex flex-col gap-3" role="dialog" aria-label="Rejeitar etapa">
