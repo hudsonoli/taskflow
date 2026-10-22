@@ -1707,7 +1707,7 @@ function demandaDraftParaPayload(draft: DemandaFormDraft) {
 
 // "fila_pessoal" (Meu Dia): sessão ativa do próprio usuário, atrasadas, vencem hoje, prazo futuro, sem prazo — exige `agora`,
 // `hojeInicio` e `hojeFim` (fuso local do cliente), como o resumo pessoal.
-export type DemandaSort = "numero_operacional_desc" | "prazo_asc" | "sinalizada_desc" | "fila_pessoal";
+export type DemandaSort = "numero_operacional_desc" | "prazo_asc" | "sinalizada_desc" | "fila_pessoal" | "operacional";
 
 // D2-B5: mesmo par de `OrigemDemanda` (lib/escopo-operacional.ts) — definido aqui de novo
 // (não importado de lá) porque escopo-operacional.ts já importa DESTE arquivo; importar na

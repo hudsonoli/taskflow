@@ -5,19 +5,14 @@ import { AvatarStack } from "@/components/ui/AvatarStack";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
+import { formatPrazo, normalizarUsuarioId, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
-import type { Demanda, DemandaPrioridade } from "@/types/demanda";
+import type { Demanda } from "@/types/demanda";
+import { PrioridadeTag } from "./PrioridadeTag";
 
-
-const prioridadeClassName: Record<DemandaPrioridade, string> = {
-  alta: "border-zinc-300 bg-zinc-50 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200",
-  media: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-400",
-  baixa: "border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-400",
-};
 
 export function DemandasTable({
   demandas,
@@ -80,9 +75,7 @@ export function DemandasTable({
                   <td className="px-4 py-3 font-mono text-xs text-fg-muted">{demanda.pit ?? "—"}</td>
                   <td className="px-4 py-3 text-fg-muted">{resolverProjetoNome(demanda.projetoId, projetos)}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${prioridadeClassName[demanda.prioridade]}`}>
-                      {prioridadeDemandaLabels[demanda.prioridade]}
-                    </span>
+                    <PrioridadeTag prioridade={demanda.prioridade} />
                   </td>
                   <td className="px-4 py-3">
                     <AvatarStack

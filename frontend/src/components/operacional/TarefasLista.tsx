@@ -7,7 +7,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import {
   formatPrazo,
   normalizarUsuarioId,
-  prioridadeDemandaLabels,
   statusDemandaLabels,
   statusDemandaTone,
 } from "@/lib/demandas";
@@ -19,12 +18,7 @@ import type { ClienteDiretorioItem } from "@/lib/api-backend";
 import { rotuloDemanda } from "@/lib/referencias";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Demanda } from "@/types/demanda";
-
-const prioridadeClassName: Record<Demanda["prioridade"], string> = {
-  alta: "border-zinc-300 bg-zinc-50 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200",
-  media: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-400",
-  baixa: "border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-400",
-};
+import { PrioridadeTag } from "@/components/demandas/PrioridadeTag";
 
 /** Lista compacta de tarefas reutilizável entre Meu Departamento e Minhas Demandas. */
 export function TarefasLista({
@@ -86,9 +80,7 @@ export function TarefasLista({
                     {resolverProjetoNome(demanda.projetoId, projetos)}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${prioridadeClassName[demanda.prioridade]}`}>
-                      {prioridadeDemandaLabels[demanda.prioridade]}
-                    </span>
+                    <PrioridadeTag prioridade={demanda.prioridade} />
                   </td>
                   <td className="px-4 py-3">
                     <AvatarStack pessoas={responsaveis} max={3} size="h-7 w-7" />

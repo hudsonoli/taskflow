@@ -33,6 +33,10 @@ STATUS_ARQUIVADO = "arquivada"
 DIAS_UTEIS_SEMANA = 5
 
 
+# Status que ENCERRAM o trabalho — só para a ordem operacional (rascunho/planejada NÃO são terminais: ainda vão ser trabalhadas).
+STATUS_TERMINAIS_PARA_ORDEM = ("concluida", "cancelada", "arquivada")
+
+
 class SortDemandas(StrEnum):
     """Ordenação de `list()` — D2-B3. Default preserva o comportamento de todo caller
     existente (DemandasView, ProjetoDemandasSection); `PRAZO_ASC` é usado pela Pauta.
@@ -42,6 +46,10 @@ class SortDemandas(StrEnum):
 
     NUMERO_OPERACIONAL_DESC = "numero_operacional_desc"
     PRAZO_ASC = "prazo_asc"
+    # Ordem OPERACIONAL das Tarefas (lista, Kanban, Solicitadas por mim): trabalho NÃO terminal primeiro, por prazo (atrasadas → hoje → próximas → distantes → sem prazo),
+    # desempate por prioridade (alta, média, baixa) e número; depois o bloco terminal (concluída/cancelada/arquivada), mais recentemente atualizada primeiro. `PRAZO_ASC` segue com a
+    # semântica literal (a Pauta depende dela) — esta é outra ordem, com outro nome.
+    OPERACIONAL = "operacional"
     SINALIZADA_DESC = "sinalizada_desc"
     # Fase 7B (Meu Dia): fila operacional PESSOAL — sessão ativa do próprio usuário, atrasadas, vencem hoje, prazo mais
     # próximo, sem prazo; dentro de cada faixa: sinalizada, prazo, prioridade, número. Exige `agora`/`hoje_inicio`/`hoje_fim`.
@@ -518,7 +526,9 @@ class DemandaRepository:
             alternativas.append(func.lower(Demanda.identificador) == termo.texto.lower())
             statement = statement.where(or_(*alternativas))
 
-        if sort == SortDemandas.PRAZO_ASC:
+        if sort == SortDemandas.OPERACIONAL:
+            statement = statement.order_by(*self._ordem_operacional())
+        elif sort == SortDemandas.PRAZO_ASC:
             # Tiebreaker por numero_operacional DESC: sem ele, duas demandas com o mesmo prazo
             # (ou ambas sem prazo) teriam ordem não-determinística entre requests — quebrando
             # paginação por offset (a mesma linha poderia aparecer em duas páginas, ou nenhuma).
@@ -539,6 +549,25 @@ class DemandaRepository:
 
         statement = statement.limit(limit).offset(offset)
         return list(db.scalars(statement).all())
+
+    @staticmethod
+    def _ordem_operacional():
+        """Ordem das Tarefas (`sort=operacional`). Tudo no SERVIDOR: a tela é paginada por offset, então uma ordem aplicada só à página carregada não seria a ordem global — e
+        concluídas/canceladas antigas (prazo vencido há meses) dominariam as primeiras páginas.
+
+        1. bloco: NÃO terminal (inclui rascunho, planejada, em execução, pausada, bloqueada, aguardando cliente) antes de terminal (concluida, cancelada, arquivada);
+        2. não terminal: `prazo_etapa_atual` ASC, SEM prazo por último (NULLS LAST explícito, não o padrão do banco); terminal: sem prazo na chave (o prazo de algo encerrado não ordena);
+        3. terminal: mais recentemente atualizada primeiro (`updated_at` DESC);
+        4. desempate: prioridade (alta → média → baixa) e, por fim, `numero_operacional` DESC — único por empresa, então a ordem é total e estável entre páginas."""
+        terminal = Demanda.status.in_(STATUS_TERMINAIS_PARA_ORDEM)
+        prioridade = case((Demanda.prioridade == "alta", 0), (Demanda.prioridade == "media", 1), else_=2)
+        return (
+            terminal.asc(),
+            case((terminal, None), else_=Demanda.prazo_etapa_atual).asc().nulls_last(),
+            case((terminal, Demanda.updated_at), else_=None).desc().nulls_last(),
+            prioridade.asc(),
+            Demanda.numero_operacional.desc(),
+        )
 
     @staticmethod
     def _ordem_fila_pessoal(escopo: EscopoDemanda, agora: datetime, hoje_inicio: datetime, hoje_fim: datetime):

@@ -5,25 +5,14 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
 import { AvatarStack } from "@/components/ui/AvatarStack";
-import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels } from "@/lib/demandas";
+import { formatPrazo, normalizarUsuarioId } from "@/lib/demandas";
+import { prioridadeBordaClasse } from "@/lib/prioridade-demanda";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
-import type { Demanda, DemandaPrioridade } from "@/types/demanda";
-
-// Esquema pedido pelo time: alta = azul marinho, média = azul céu, baixa = azul bebê.
-const prioridadeClassNames: Record<DemandaPrioridade, string> = {
-  alta: "border-blue-900 bg-blue-900/5 text-blue-900 dark:border-blue-300 dark:bg-blue-400/10 dark:text-blue-200",
-  media: "border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-400/60 dark:bg-sky-500/10 dark:text-sky-300",
-  baixa: "border-sky-200 bg-sky-50/60 text-sky-700 dark:border-sky-200/40 dark:bg-sky-500/5 dark:text-sky-300",
-};
-
-const prioridadeBorderClassNames: Record<DemandaPrioridade, string> = {
-  alta: "border-l-blue-900 dark:border-l-blue-300",
-  media: "border-l-sky-400 dark:border-l-sky-400",
-  baixa: "border-l-sky-200 dark:border-l-sky-300",
-};
+import type { Demanda } from "@/types/demanda";
+import { PrioridadeTag } from "./PrioridadeTag";
 
 function CardContent({ demanda }: { demanda: Demanda }) {
   const { usuarios } = useUsuariosComIds(demanda.usuarioResponsavelIds);
@@ -43,9 +32,7 @@ function CardContent({ demanda }: { demanda: Demanda }) {
             {demanda.nome}
           </h3>
         </div>
-        <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-semibold ${prioridadeClassNames[demanda.prioridade]}`}>
-          {prioridadeDemandaLabels[demanda.prioridade]}
-        </span>
+        <PrioridadeTag prioridade={demanda.prioridade} />
       </div>
 
       <p className="mt-2 truncate text-xs font-medium text-fg-muted">
@@ -114,7 +101,7 @@ export function DemandaKanbanCard({
         title={arrastavel ? undefined : motivoBloqueio}
         className={`group w-full touch-none rounded-2xl border border-l-4 border-zinc-100 bg-white p-3.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900 ${
           arrastavel ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
-        } ${prioridadeBorderClassNames[demanda.prioridade]} ${isDragging ? "opacity-30" : ""}`}
+        } ${prioridadeBordaClasse[demanda.prioridade]} ${isDragging ? "opacity-30" : ""}`}
       >
         <CardContent demanda={demanda} />
       </button>
@@ -137,7 +124,7 @@ export function DemandaKanbanCard({
 export function DemandaKanbanCardOverlay({ demanda }: { demanda: Demanda }) {
   return (
     <div
-      className={`w-[260px] rotate-2 cursor-grabbing rounded-2xl border border-l-4 border-zinc-100 bg-surface p-3.5 text-left shadow-2xl dark:border-zinc-800 ${prioridadeBorderClassNames[demanda.prioridade]}`}
+      className={`w-[260px] rotate-2 cursor-grabbing rounded-2xl border border-l-4 border-zinc-100 bg-surface p-3.5 text-left shadow-2xl dark:border-zinc-800 ${prioridadeBordaClasse[demanda.prioridade]}`}
     >
       <CardContent demanda={demanda} />
     </div>

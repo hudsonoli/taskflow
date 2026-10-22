@@ -3,17 +3,18 @@
 import { useState } from "react";
 import { CalendarDays, ClipboardList, FolderKanban } from "lucide-react";
 import { AvatarStack } from "@/components/ui/AvatarStack";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DetailsModal } from "@/components/ui/DetailsModal";
 import { Tabs } from "@/components/ui/Tabs";
 import { type EscopoLeituraDemanda } from "@/lib/api-backend";
-import { formatPrazo, normalizarUsuarioId, prioridadeDemandaLabels, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
+import { formatPrazo, normalizarUsuarioId, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
 import { rotuloDemanda } from "@/lib/referencias";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
-import type { Demanda, DemandaPrioridade } from "@/types/demanda";
+import type { Demanda } from "@/types/demanda";
+import { PrioridadeTag } from "./PrioridadeTag";
 import { AtividadeDemandaSection } from "./AtividadeDemandaSection";
 import { DemandaConclusaoBanner } from "./DemandaConclusaoBanner";
 import {
@@ -34,12 +35,6 @@ const tabs = [
   { id: "historico", label: "Histórico" },
 ];
 
-
-const prioridadeTone: Record<DemandaPrioridade, BadgeTone> = {
-  alta: "blue",
-  media: "blue",
-  baixa: "neutral",
-};
 
 export function DemandaDetailsDrawer({
   demanda,
@@ -117,7 +112,7 @@ export function DemandaDetailsDrawer({
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge tone={statusDemandaTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
-                <Badge tone={prioridadeTone[demanda.prioridade]}>{prioridadeDemandaLabels[demanda.prioridade]}</Badge>
+                <PrioridadeTag prioridade={demanda.prioridade} />
               </div>
             </div>
 

@@ -20,6 +20,7 @@
     "test:gestao-onboarding": "node --test src/lib/gestao-onboarding.test.ts",
     "test:usuario-senha": "node --test src/lib/usuario-senha-temporaria.test.ts",
     "test:solicitadas": "node --test src/lib/solicitadas-progresso-nav.test.ts",
+    "test:prioridade-prazo": "node --test src/lib/prioridade-prazo.test.ts",
     "test:primeiro-acesso": "node --test src/lib/primeiro-acesso.test.ts",
     "test:tenant-branding": "node --test src/lib/tenant-branding.test.ts",
     "test:nome-produto": "node --test src/lib/nome-produto.test.ts",

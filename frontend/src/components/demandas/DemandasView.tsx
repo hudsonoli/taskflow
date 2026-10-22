@@ -146,6 +146,9 @@ export function DemandasView() {
     listDemandasReais({
       search: debouncedQuery || undefined,
       status: statusParaBackend(statusFilter),
+      // Ordem OPERACIONAL decidida pelo servidor (a tela é paginada): não terminais por prazo (sem prazo por último), prioridade como desempate, terminais por último. A lista e o
+      // Kanban só PRESERVAM a ordem recebida; a mesma ordem vale em "Solicitadas por mim". Não há ordenação explícita do usuário nesta tela.
+      sort: "operacional" as const,
       // Server-side: o servidor deriva a autoria do usuário autenticado (nada de id de criador vindo do navegador).
       ...(contexto === "solicitadas" ? { escopo: "solicitadas" as const } : {}),
       limit: TAMANHO_PAGINA,

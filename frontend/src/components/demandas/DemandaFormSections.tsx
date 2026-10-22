@@ -67,6 +67,7 @@ import { DemandaChecklistCard } from "./DemandaChecklistCard";
 import { EnvioClienteCard } from "./EnvioClienteCard";
 import { RegistrarAjusteCard } from "./RegistrarAjusteCard";
 import { useEscopoLeituraDemanda } from "./leituraDemanda";
+import { PrioridadeTag } from "./PrioridadeTag";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { rotuloDemanda } from "@/lib/referencias";
 import { inputLocalParaIso, isoParaInputLocal } from "@/lib/prazo-operacional";
@@ -204,7 +205,7 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
   return (
     <SectionShell title="Dados principais" description="Dados principais da tarefa e prazo da etapa atual." icon={<ClipboardList className="h-5 w-5" />}>
       <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="blue">{prioridadeDemandaLabels[demanda.prioridade]}</Badge>
+        <PrioridadeTag prioridade={demanda.prioridade} />
         <Badge tone="green">{statusDemandaLabels[demanda.status]}</Badge>
       </div>
 
