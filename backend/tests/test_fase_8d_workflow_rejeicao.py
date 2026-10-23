@@ -356,7 +356,8 @@ def test_pode_rejeitar_calculado_no_servidor(app, db_session: Session, empresa: 
     d2 = _demanda_com_workflow(client_admin, [_etapa("X"), _etapa("Aprovar", "aprovacao")], usuarioResponsavelIds=[alheio.id])
     db_session.commit()
     assert client_admin.post(_url(d2["id"], _por_ordem(d2)[0]["id"], "concluir")).status_code == 200
-    assert not any(e["podeRejeitar"] for e in _estado(_client_para(app, alheio), d2["id"])["workflowEtapas"])  # sem autoridade: nada
+    # `alheio` é só responsável GERAL e as etapas não têm vínculo próprio: pela responsabilidade EFETIVA ele herda a autoridade operacional da etapa atual (a aprovação, com etapa anterior)
+    assert [e["podeRejeitar"] for e in sorted(_estado(_client_para(app, alheio), d2["id"])["workflowEtapas"], key=lambda x: x["ordem"])] == [False, True]
     pauta = client_admin.get(f"/demandas/{demanda['id']}", params={"escopo": "pauta"}).json()
     assert not any(e["podeRejeitar"] or e["podeAvancar"] for e in pauta["workflowEtapas"])  # leitura da Pauta: nenhuma ação
     # aprovação como PRIMEIRA etapa: sem etapa anterior → sem botão

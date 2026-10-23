@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.busca import interpretar_termo_busca
 from app.core.escopo import EscopoDemanda
+from app.core.executor_etapa import resolver_responsabilidade_etapa
 from app.core.relogio import agora_utc
 from app.models.cliente import Cliente
 from app.models.demanda import Demanda
@@ -1249,6 +1250,18 @@ class DemandaRepository:
             .execution_options(populate_existing=True)
         )
         return list(db.scalars(statement).all())
+
+    def responsabilidade_efetiva_da_etapa(self, db: Session, *, etapa_id: str, demanda_id: str) -> tuple[str, list[str], list[str]]:
+        """`(origem, usuario_ids, departamento_ids)` EFETIVOS de uma etapa pela regra ÚNICA (`app/core/executor_etapa.py`): vínculo explícito da etapa; senão, os responsáveis gerais da
+        Demanda (em leitura, nunca copiados); senão, ninguém. Quem decide "quem executa/avança esta etapa" chama isto, não as tabelas da etapa."""
+        usuarios = self.listar_etapa_responsavel_ids_em_lote(db, [etapa_id]).get(etapa_id, [])
+        departamentos = self.listar_etapa_departamento_ids_em_lote(db, [etapa_id]).get(etapa_id, [])
+        return resolver_responsabilidade_etapa(
+            etapa_usuario_ids=usuarios,
+            etapa_departamento_ids=departamentos,
+            demanda_usuario_ids=self.listar_responsavel_ids(db, demanda_id),
+            demanda_departamento_ids=self.listar_departamento_ids(db, demanda_id),
+        )
 
     def aplicar_responsaveis_da_etapa(
         self,

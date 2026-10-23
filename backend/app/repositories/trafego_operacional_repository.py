@@ -138,7 +138,11 @@ class TrafegoOperacionalRepository:
                     count(*) FILTER (WHERE s.prazo IS NULL) AS sem_prazo,
                     count(*) FILTER (WHERE
                         (a.etapa_id IS NOT NULL AND NOT EXISTS (
-                            SELECT 1 FROM demanda_workflow_etapa_responsaveis r WHERE r.demanda_workflow_etapa_id = a.etapa_id))
+                            SELECT 1 FROM demanda_workflow_etapa_responsaveis r WHERE r.demanda_workflow_etapa_id = a.etapa_id)
+                          -- responsabilidade EFETIVA: a etapa SEM nenhum vínculo explícito herda os responsáveis gerais da Demanda
+                          AND NOT (
+                            NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_departamentos_responsaveis dd WHERE dd.demanda_workflow_etapa_id = a.etapa_id)
+                            AND EXISTS (SELECT 1 FROM demanda_responsaveis gr WHERE gr.demanda_id = s.id)))
                         OR (a.etapa_id IS NULL AND NOT EXISTS (
                             SELECT 1 FROM demanda_responsaveis r WHERE r.demanda_id = s.id))
                     ) AS sem_responsavel,
@@ -182,14 +186,20 @@ class TrafegoOperacionalRepository:
         return [dict(linha._mapping) for linha in linhas]
 
     def responsaveis_das_etapas(self, db: Session, *, empresa_id: str, etapa_ids: list[str]) -> list[tuple[str, str, str]]:
-        """(etapa_id, usuario_id, nome) dos responsáveis das etapas dadas (só usuários da empresa)."""
+        """(etapa_id, usuario_id, nome) dos responsáveis EFETIVOS das etapas dadas (só usuários da empresa): os explícitos da etapa; e, nas etapas SEM nenhum vínculo explícito, os responsáveis gerais."""
         if not etapa_ids:
             return []
         linhas = db.execute(
             text(
-                "SELECT r.demanda_workflow_etapa_id, u.id, u.nome FROM demanda_workflow_etapa_responsaveis r "
-                "JOIN usuarios u ON u.id = r.usuario_id AND u.empresa_id = :empresa_id "
-                "WHERE r.demanda_workflow_etapa_id = ANY(:etapa_ids) ORDER BY u.nome, u.id"
+                "SELECT x.etapa_id, u.id, u.nome FROM ("
+                "  SELECT r.demanda_workflow_etapa_id AS etapa_id, r.usuario_id FROM demanda_workflow_etapa_responsaveis r WHERE r.demanda_workflow_etapa_id = ANY(:etapa_ids)"
+                "  UNION"
+                "  SELECT e.id, gr.usuario_id FROM demanda_workflow_etapas e JOIN demanda_responsaveis gr ON gr.demanda_id = e.demanda_id"
+                "   WHERE e.id = ANY(:etapa_ids)"
+                "     AND NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_responsaveis a WHERE a.demanda_workflow_etapa_id = e.id)"
+                "     AND NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_departamentos_responsaveis b WHERE b.demanda_workflow_etapa_id = e.id)"
+                ") x JOIN usuarios u ON u.id = x.usuario_id AND u.empresa_id = :empresa_id "
+                "ORDER BY u.nome, u.id"
             ),
             {"empresa_id": empresa_id, "etapa_ids": etapa_ids},
         ).all()
@@ -211,14 +221,20 @@ class TrafegoOperacionalRepository:
         return [(linha[0], linha[1], linha[2]) for linha in linhas]
 
     def departamentos_das_etapas(self, db: Session, *, empresa_id: str, etapa_ids: list[str]) -> list[tuple[str, str, str]]:
-        """(etapa_id, departamento_id, nome) dos departamentos responsáveis das etapas dadas."""
+        """(etapa_id, departamento_id, nome) dos departamentos responsáveis EFETIVOS das etapas dadas: os explícitos da etapa; e, nas etapas SEM nenhum vínculo explícito, os departamentos gerais."""
         if not etapa_ids:
             return []
         linhas = db.execute(
             text(
-                "SELECT dr.demanda_workflow_etapa_id, dep.id, dep.nome FROM demanda_workflow_etapa_departamentos_responsaveis dr "
-                "JOIN departamentos dep ON dep.id = dr.departamento_id AND dep.empresa_id = :empresa_id "
-                "WHERE dr.demanda_workflow_etapa_id = ANY(:etapa_ids) ORDER BY dep.nome, dep.id"
+                "SELECT x.etapa_id, dep.id, dep.nome FROM ("
+                "  SELECT dr.demanda_workflow_etapa_id AS etapa_id, dr.departamento_id FROM demanda_workflow_etapa_departamentos_responsaveis dr WHERE dr.demanda_workflow_etapa_id = ANY(:etapa_ids)"
+                "  UNION"
+                "  SELECT e.id, gd.departamento_id FROM demanda_workflow_etapas e JOIN demanda_departamentos gd ON gd.demanda_id = e.demanda_id"
+                "   WHERE e.id = ANY(:etapa_ids)"
+                "     AND NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_responsaveis a WHERE a.demanda_workflow_etapa_id = e.id)"
+                "     AND NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_departamentos_responsaveis b WHERE b.demanda_workflow_etapa_id = e.id)"
+                ") x JOIN departamentos dep ON dep.id = x.departamento_id AND dep.empresa_id = :empresa_id "
+                "ORDER BY dep.nome, dep.id"
             ),
             {"empresa_id": empresa_id, "etapa_ids": etapa_ids},
         ).all()

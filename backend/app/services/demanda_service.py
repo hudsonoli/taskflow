@@ -816,6 +816,12 @@ class DemandaService:
                 # ação dedicada em vez de detecção por diff, ver registrar_conclusao_email).
                 eventos.append((DomainEventType.DEMANDA_RETORNO_CLIENTE_REGISTRADO, {}))
 
+            # Responsáveis GERAIS antes da mudança: a etapa atual sem vínculo próprio os herda, então trocar o geral muda a responsabilidade EFETIVA dela (ver `_encerrar_sessoes_por_troca_geral`).
+            geral_antes = (
+                (self.repository.listar_responsavel_ids(db, demanda.id), self.repository.listar_departamento_ids(db, demanda.id))
+                if ("responsavel_ids" in updates or "departamento_responsavel_ids" in updates)
+                else None
+            )
             if "responsavel_ids" in updates:
                 responsaveis_desejados = [
                     str(uid) for uid in (updates["responsavel_ids"] or [])
@@ -874,6 +880,8 @@ class DemandaService:
                 self._encerrar_sessoes_por_transicao(
                     db, demanda, status_anterior=status_anterior, status_final=status_final, eventos=eventos, quando=now
                 )
+                if geral_antes is not None and status_final == STATUS_EM_EXECUCAO:
+                    self._encerrar_sessoes_por_troca_geral(db, demanda, eventos, geral_antes, now)
                 # Linha do tempo operacional: fecha o intervalo do estado anterior e abre o do novo (ou só fecha, se terminal) — mesma transação, instante da operação.
                 if "status" in campos_alterados:
                     self.intervalo_service.sincronizar(
@@ -1063,7 +1071,14 @@ class DemandaService:
                     },
                     occurred_at=now,
                 )
-                self._encerrar_sessoes_de_quem_deixou_a_etapa(db, demanda, etapa.id, desejados_u, desejados_d, now)
+                geral_u = self.repository.listar_responsavel_ids(db, demanda.id)
+                geral_d = self.repository.listar_departamento_ids(db, demanda.id)
+                self._encerrar_sessoes_de_quem_deixou_a_etapa(
+                    db, demanda, etapa.id,
+                    antes=resolver_responsabilidade_etapa(etapa_usuario_ids=antes_u, etapa_departamento_ids=antes_d, demanda_usuario_ids=geral_u, demanda_departamento_ids=geral_d),
+                    depois=resolver_responsabilidade_etapa(etapa_usuario_ids=desejados_u, etapa_departamento_ids=desejados_d, demanda_usuario_ids=geral_u, demanda_departamento_ids=geral_d),
+                    quando=now,
+                )
             db.commit()
             db.refresh(demanda)
             return demanda
@@ -1071,17 +1086,43 @@ class DemandaService:
             db.rollback()
             raise
 
-    def _encerrar_sessoes_de_quem_deixou_a_etapa(
-        self, db: Session, demanda: Demanda, etapa_id: str, explicitos_u: list[str], explicitos_d: list[str], quando: datetime
+    def _encerrar_sessoes_por_troca_geral(
+        self, db: Session, demanda: Demanda, eventos: list[tuple[DomainEventType, dict]], geral_antes: tuple[list[str], list[str]], quando: datetime
     ) -> None:
-        """Sessões ATIVAS ligadas a esta etapa de quem deixou de ser responsável EFETIVO (nova responsabilidade = explícita da etapa ou, sem ela, a geral da tarefa) são
-        encerradas pela regra existente (`troca_responsavel`); não é uma segunda implementação, é a mesma chamada com o filtro de etapa."""
-        _, efetivos_u, efetivos_d = resolver_responsabilidade_etapa(
-            etapa_usuario_ids=explicitos_u,
-            etapa_departamento_ids=explicitos_d,
-            demanda_usuario_ids=self.repository.listar_responsavel_ids(db, demanda.id),
-            demanda_departamento_ids=self.repository.listar_departamento_ids(db, demanda.id),
+        """Trocar os responsáveis GERAIS da Demanda muda a responsabilidade EFETIVA da etapa atual quando ela não tem vínculo próprio (herda). Quem herdava e deixou de ser responsável efetivo
+        perde a sessão pela MESMA política de perda de elegibilidade — inclusive o membro de um departamento geral removido, que a regra por pessoa não alcançava."""
+        mudou = any(
+            tipo in (DomainEventType.DEMANDA_RESPONSAVEL_ADICIONADO, DomainEventType.DEMANDA_RESPONSAVEL_REMOVIDO, DomainEventType.DEMANDA_DEPARTAMENTO_ADICIONADO, DomainEventType.DEMANDA_DEPARTAMENTO_REMOVIDO)
+            for tipo, _ in eventos
         )
+        atual = self.sessao_service.repository.get_etapa_atual(db, demanda.id)
+        if not mudou or atual is None:
+            return
+        explicitos_u = self.repository.listar_etapa_responsavel_ids_em_lote(db, [atual.id]).get(atual.id, [])
+        explicitos_d = self.repository.listar_etapa_departamento_ids_em_lote(db, [atual.id]).get(atual.id, [])
+        depois_u, depois_d = self.repository.listar_responsavel_ids(db, demanda.id), self.repository.listar_departamento_ids(db, demanda.id)
+        self._encerrar_sessoes_de_quem_deixou_a_etapa(
+            db, demanda, atual.id,
+            antes=resolver_responsabilidade_etapa(etapa_usuario_ids=explicitos_u, etapa_departamento_ids=explicitos_d, demanda_usuario_ids=geral_antes[0], demanda_departamento_ids=geral_antes[1]),
+            depois=resolver_responsabilidade_etapa(etapa_usuario_ids=explicitos_u, etapa_departamento_ids=explicitos_d, demanda_usuario_ids=depois_u, demanda_departamento_ids=depois_d),
+            quando=quando,
+        )
+
+    def _encerrar_sessoes_de_quem_deixou_a_etapa(
+        self,
+        db: Session,
+        demanda: Demanda,
+        etapa_id: str,
+        *,
+        antes: tuple[str, list[str], list[str]],
+        depois: tuple[str, list[str], list[str]],
+        quando: datetime,
+    ) -> None:
+        """Perda de ELEGIBILIDADE: sessões ATIVAS desta etapa de quem ERA responsável efetivo (`antes`) e DEIXOU de ser (`depois`) — pessoa ou membro de departamento — são encerradas pela
+        regra existente (`troca_responsavel`); não é uma segunda implementação, é a mesma chamada com o filtro de etapa. Quem nunca foi responsável efetivo (ex.: sessão aberta por um gestor
+        para outra pessoa) não é tocado, e quem passa a ser responsável não ganha sessão. Serve tanto à edição de responsáveis da etapa quanto à troca dos responsáveis GERAIS da Demanda."""
+        _, antes_u, antes_d = antes
+        _, depois_u, depois_d = depois
         ativas = self.sessao_service.repository.listar_ativas_para_encerramento(
             db, empresa_id=demanda.empresa_id, demanda_id=demanda.id, workflow_etapa_id=etapa_id
         )
@@ -1090,10 +1131,12 @@ class DemandaService:
         for sessao in ativas:
             if sessao.usuario_id:
                 pessoa = self.usuario_repository.get_by_id(db, sessao.usuario_id)
-                continua = sessao.usuario_id in efetivos_u or (pessoa is not None and pessoa.departamento_id is not None and pessoa.departamento_id in efetivos_d)
-                if not continua:
+                depto = pessoa.departamento_id if pessoa is not None else None
+                era = sessao.usuario_id in antes_u or (depto is not None and depto in antes_d)
+                continua = sessao.usuario_id in depois_u or (depto is not None and depto in depois_d)
+                if era and not continua:
                     usuarios_a_encerrar.append(sessao.usuario_id)
-            elif sessao.departamento_id not in efetivos_d:
+            elif sessao.departamento_id in antes_d and sessao.departamento_id not in depois_d:
                 departamentos_a_encerrar.append(sessao.departamento_id)
         if usuarios_a_encerrar or departamentos_a_encerrar:
             self.sessao_service.encerrar_ativas_da_demanda(
@@ -1267,12 +1310,13 @@ class DemandaService:
     ) -> DemandaRead:
         """`usuario` habilita o `podeAvancar` da etapa atual (calculado no servidor). `somente_leitura` (Pauta global) o zera:
         ver a Demanda ali não concede ação."""
-        etapas_por_demanda = self._etapas_workflow_por_demanda(
-            db, [demanda.id], usuario=usuario, somente_leitura=somente_leitura, demandas=[demanda]
-        )
-        etapas = etapas_por_demanda.get(demanda.id, [])
         responsaveis = self.repository.listar_responsavel_ids(db, demanda.id)
         departamentos = self.repository.listar_departamento_ids(db, demanda.id)
+        etapas_por_demanda = self._etapas_workflow_por_demanda(
+            db, [demanda.id], usuario=usuario, somente_leitura=somente_leitura, demandas=[demanda],
+            responsaveis_gerais={demanda.id: responsaveis}, departamentos_gerais={demanda.id: departamentos},
+        )
+        etapas = etapas_por_demanda.get(demanda.id, [])
         self._aplicar_responsabilidade_efetiva(etapas, responsaveis, departamentos)
         em_andamento = self._demandas_com_sessao_ativa_do_usuario(db, usuario, somente_leitura)
         return DemandaRead.model_validate(
@@ -1299,7 +1343,8 @@ class DemandaService:
         responsaveis = self.repository.listar_responsavel_ids_em_lote(db, ids)
         departamentos = self.repository.listar_departamento_ids_em_lote(db, ids)
         etapas_por_demanda = self._etapas_workflow_por_demanda(
-            db, ids, usuario=usuario, somente_leitura=somente_leitura, demandas=demandas
+            db, ids, usuario=usuario, somente_leitura=somente_leitura, demandas=demandas,
+            responsaveis_gerais=responsaveis, departamentos_gerais=departamentos,
         )
         em_andamento = self._demandas_com_sessao_ativa_do_usuario(db, usuario, somente_leitura)
         for demanda_id_lote, etapas_do_lote in etapas_por_demanda.items():
@@ -1364,6 +1409,8 @@ class DemandaService:
         usuario: Usuario | None = None,
         somente_leitura: bool = False,
         demandas: list[Demanda] | None = None,
+        responsaveis_gerais: dict[str, list[str]] | None = None,
+        departamentos_gerais: dict[str, list[str]] | None = None,
     ) -> dict[str, list[DemandaWorkflowEtapaRead]]:
         """Materializa `DemandaWorkflowEtapaRead` em lote — etapas + responsáveis (usuário e
         departamento) de todas as Demandas pedidas, em poucas queries. `podeAvancar` (Fase 8A) sai da MESMA
@@ -1385,6 +1432,12 @@ class DemandaService:
 
         arquivadas = {d.id for d in (demandas or []) if d.status == STATUS_ARQUIVADA}
         pode_calcular = usuario is not None and not somente_leitura and bool(etapa_ids)
+        # `podeAvancar`/`podeRejeitar` usam a responsabilidade EFETIVA (a mesma que o endpoint de avanço): sem vínculo explícito na etapa, valem os responsáveis gerais da Demanda.
+        # Vêm em lote do chamador quando ele já os carregou; senão, uma consulta por tipo (nunca por etapa).
+        if pode_calcular and responsaveis_gerais is None:
+            responsaveis_gerais = self.repository.listar_responsavel_ids_em_lote(db, demanda_ids)
+        if pode_calcular and departamentos_gerais is None:
+            departamentos_gerais = self.repository.listar_departamento_ids_em_lote(db, demanda_ids)
         departamentos_head: frozenset[str] = (
             departamentos_head_para_workflow(db, usuario) if pode_calcular and usuario is not None else frozenset()
         )
@@ -1396,6 +1449,15 @@ class DemandaService:
             for etapa in etapas:
                 usuarios_ids = usuarios_por_etapa.get(etapa.id, [])
                 departamentos_ids = departamentos_por_etapa.get(etapa.id, [])
+                if pode_calcular:
+                    _, efetivos_u, efetivos_d = resolver_responsabilidade_etapa(
+                        etapa_usuario_ids=usuarios_ids,
+                        etapa_departamento_ids=departamentos_ids,
+                        demanda_usuario_ids=(responsaveis_gerais or {}).get(demanda_id, []),
+                        demanda_departamento_ids=(departamentos_gerais or {}).get(demanda_id, []),
+                    )
+                else:
+                    efetivos_u, efetivos_d = usuarios_ids, departamentos_ids
                 pode_avancar = bool(
                     pode_calcular
                     and usuario is not None
@@ -1405,8 +1467,8 @@ class DemandaService:
                     and demanda_id not in arquivadas
                     and pode_avancar_etapa(
                         usuario,
-                        usuario_responsavel_ids=usuarios_ids,
-                        departamento_responsavel_ids=departamentos_ids,
+                        usuario_responsavel_ids=efetivos_u,
+                        departamento_responsavel_ids=efetivos_d,
                         departamentos_head=departamentos_head,
                     )
                 )

@@ -370,12 +370,12 @@ class DemandaWorkflowService:
             rotulo = "aprovada" if etapa.tipo == "aprovacao" else "concluída"
             raise DemandaWorkflowAcaoInvalidaError(f"Esta etapa deve ser {rotulo}, não usar a ação '{acao}'")
         if isinstance(actor, Usuario):  # ator externo: a autoridade é a capability (token), validada por quem chama antes de entrar aqui
-            usuarios_por_etapa = self.repository.listar_etapa_responsavel_ids_em_lote(db, [etapa.id])
-            departamentos_por_etapa = self.repository.listar_etapa_departamento_ids_em_lote(db, [etapa.id])
+            # Autoridade OPERACIONAL da etapa = responsabilidade EFETIVA (vínculo explícito da etapa; sem ele, os responsáveis gerais da Demanda). Não concede nada de gestão.
+            _, efetivos_u, efetivos_d = self.repository.responsabilidade_efetiva_da_etapa(db, etapa_id=etapa.id, demanda_id=demanda.id)
             if not pode_avancar_etapa(
                 actor,
-                usuario_responsavel_ids=usuarios_por_etapa.get(etapa.id, []),
-                departamento_responsavel_ids=departamentos_por_etapa.get(etapa.id, []),
+                usuario_responsavel_ids=efetivos_u,
+                departamento_responsavel_ids=efetivos_d,
                 departamentos_head=departamentos_head_para_workflow(db, actor),
             ):
                 raise DemandaWorkflowSemAutoridadeError("Você não tem autoridade para avançar esta etapa")
@@ -478,8 +478,8 @@ class DemandaWorkflowService:
     def _notificar_proxima_etapa(
         self, db: Session, demanda: Demanda, proxima: DemandaWorkflowEtapa, actor: Ator, now, *, devolvida: bool = False
     ) -> None:
-        usuarios = self.repository.listar_etapa_responsavel_ids_em_lote(db, [proxima.id]).get(proxima.id, [])
-        departamentos = self.repository.listar_etapa_departamento_ids_em_lote(db, [proxima.id]).get(proxima.id, [])
+        # quem herda a responsabilidade (etapa sem vínculo próprio) recebe o mesmo aviso operacional de quem foi atribuído à etapa
+        _, usuarios, departamentos = self.repository.responsabilidade_efetiva_da_etapa(db, etapa_id=proxima.id, demanda_id=demanda.id)
         destinatarios = destinatarios_da_etapa(
             db,
             empresa_id=demanda.empresa_id,  # da Demanda (tenant do token), nunca de dado do cliente

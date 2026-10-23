@@ -374,13 +374,21 @@ def test_atendimento_que_e_responsavel_explicito_pode(app, db_session: Session, 
     assert _client_para(app, ana).post(_url(demanda["id"], _por_ordem(demanda)[0]["id"], "concluir")).status_code == 200
 
 
-def test_etapa_sem_responsavel_so_admin_gestor(app, db_session: Session, empresa: Empresa, client_admin: TestClient, client_gestor: TestClient) -> None:
+def test_etapa_sem_vinculo_herda_o_responsavel_geral_e_alem_dele_so_admin_gestor(app, db_session: Session, empresa: Empresa, client_admin: TestClient, client_gestor: TestClient) -> None:
+    """Responsabilidade EFETIVA (P1_STAGE_ASSIGNEES): a etapa SEM vínculo explícito herda, em leitura, o responsável geral da Demanda — que passa a ter a autoridade OPERACIONAL de avançá-la.
+    Quem não é responsável de nada continua sem autoridade; admin/gestor seguem com a autoridade de gestão. (Antes, só os vínculos explícitos contavam: o responsável geral recebia 403.)"""
     op = _operador_comum(db_session, empresa, sufixo="wf-sem-resp")
-    demanda = _demanda_com_workflow(client_admin, [_etapa("A"), _etapa("B")], usuarioResponsavelIds=[op.id])
-    e1, e2 = _por_ordem(demanda)
-    assert _client_para(app, op).post(_url(demanda["id"], e1["id"], "concluir")).status_code == 403
-    assert client_gestor.post(_url(demanda["id"], e1["id"], "concluir")).status_code == 200
-    assert client_admin.post(_url(demanda["id"], e2["id"], "concluir")).status_code == 200
+    de_fora = _operador_comum(db_session, empresa, sufixo="wf-de-fora")
+    demanda = _demanda_com_workflow(client_admin, [_etapa("A"), _etapa("B"), _etapa("C")], usuarioResponsavelIds=[op.id, de_fora.id])
+    e1, e2, e3 = _por_ordem(demanda)
+    assert _client_para(app, op).post(_url(demanda["id"], e1["id"], "concluir")).status_code == 200  # herdou: responsável geral
+    assert client_gestor.post(_url(demanda["id"], e2["id"], "concluir")).status_code == 200
+    assert client_admin.post(_url(demanda["id"], e3["id"], "concluir")).status_code == 200
+    # etapa com responsável EXPLÍCITO bloqueia o fallback: o responsável geral NÃO avança a etapa de outra pessoa
+    outro = _operador_comum(db_session, empresa, sufixo="wf-explicito")
+    d2 = _demanda_com_workflow(client_admin, [_etapa("X", usuarios=[outro.id])], usuarioResponsavelIds=[op.id])
+    assert _client_para(app, op).post(_url(d2["id"], _por_ordem(d2)[0]["id"], "concluir")).status_code == 403
+    assert _client_para(app, outro).post(_url(d2["id"], _por_ordem(d2)[0]["id"], "concluir")).status_code == 200
 
 
 def test_etapa_com_responsavel_e_departamento_autoridade_aditiva(app, db_session: Session, empresa: Empresa, client_admin: TestClient) -> None:

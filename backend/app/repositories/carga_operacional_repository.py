@@ -44,7 +44,8 @@ class CargaOperacionalRepository:
         return [dict(linha._mapping) for linha in linhas]
 
     def usuarios_das_etapas(self, db: Session, *, empresa_id: str) -> list[tuple[str, str]]:
-        """(etapa_id, usuario_id) das etapas abertas elegíveis. A elegibilidade do usuário é decidida depois, contra a lista de pessoas."""
+        """(etapa_id, usuario_id) das etapas abertas elegíveis, pela responsabilidade EFETIVA: os usuários explícitos da etapa; e, SÓ nas etapas sem NENHUM vínculo explícito (nem usuário nem
+        departamento), os responsáveis gerais da Demanda (fallback em leitura, nunca copiado). A elegibilidade do usuário é decidida depois, contra a lista de pessoas."""
         linhas = db.execute(
             text(
                 f"""
@@ -52,6 +53,14 @@ class CargaOperacionalRepository:
                 FROM demanda_workflow_etapa_responsaveis r
                 JOIN demanda_workflow_etapas e ON e.id = r.demanda_workflow_etapa_id AND e.status <> 'concluida'
                 JOIN demandas d ON d.id = e.demanda_id AND d.empresa_id = :empresa_id AND d.status IN ({_STATUS_SQL})
+                UNION
+                SELECT e.id, gr.usuario_id
+                FROM demanda_workflow_etapas e
+                JOIN demandas d ON d.id = e.demanda_id AND d.empresa_id = :empresa_id AND d.status IN ({_STATUS_SQL})
+                JOIN demanda_responsaveis gr ON gr.demanda_id = d.id
+                WHERE e.status <> 'concluida'
+                  AND NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_responsaveis x WHERE x.demanda_workflow_etapa_id = e.id)
+                  AND NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_departamentos_responsaveis y WHERE y.demanda_workflow_etapa_id = e.id)
                 """
             ),
             {"empresa_id": empresa_id},
@@ -59,6 +68,7 @@ class CargaOperacionalRepository:
         return [(linha[0], linha[1]) for linha in linhas]
 
     def departamentos_das_etapas(self, db: Session, *, empresa_id: str) -> list[tuple[str, str]]:
+        """(etapa_id, departamento_id) pela responsabilidade EFETIVA: departamentos explícitos da etapa; e, só nas etapas SEM nenhum vínculo explícito, os departamentos gerais da Demanda."""
         linhas = db.execute(
             text(
                 f"""
@@ -67,6 +77,15 @@ class CargaOperacionalRepository:
                 JOIN demanda_workflow_etapas e ON e.id = r.demanda_workflow_etapa_id AND e.status <> 'concluida'
                 JOIN demandas d ON d.id = e.demanda_id AND d.empresa_id = :empresa_id AND d.status IN ({_STATUS_SQL})
                 JOIN departamentos dep ON dep.id = r.departamento_id AND dep.empresa_id = :empresa_id
+                UNION
+                SELECT e.id, gd.departamento_id
+                FROM demanda_workflow_etapas e
+                JOIN demandas d ON d.id = e.demanda_id AND d.empresa_id = :empresa_id AND d.status IN ({_STATUS_SQL})
+                JOIN demanda_departamentos gd ON gd.demanda_id = d.id
+                JOIN departamentos dep ON dep.id = gd.departamento_id AND dep.empresa_id = :empresa_id
+                WHERE e.status <> 'concluida'
+                  AND NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_responsaveis x WHERE x.demanda_workflow_etapa_id = e.id)
+                  AND NOT EXISTS (SELECT 1 FROM demanda_workflow_etapa_departamentos_responsaveis y WHERE y.demanda_workflow_etapa_id = e.id)
                 """
             ),
             {"empresa_id": empresa_id},

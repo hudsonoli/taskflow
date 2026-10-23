@@ -10,7 +10,28 @@ Eles pertencem ao **snapshot da Demanda**: editar não altera o modelo de workfl
 3. senão, ninguém (`origem = "nenhuma"`).
 
 Leitura: cada etapa traz `usuarioResponsavelIds` / `departamentoResponsavelIds` (os vínculos **explícitos**, "configurados") e `responsabilidadeEfetiva { origem, usuarioIds, departamentoIds }`
-(calculada pelo servidor; a interface não compara listas). "Iniciar trabalho" (`eh_executor_da_demanda`) consome a mesma resolução.
+(calculada pelo servidor; a interface não compara listas).
+
+### Consumidores da responsabilidade efetiva
+
+Todo consumidor operacional usa a MESMA resolução (`resolver_responsabilidade_etapa`; no banco, `DemandaRepository.responsabilidade_efetiva_da_etapa` e, em SQL agregado, a UNION "vínculos explícitos
++ geral só para etapa sem nenhum vínculo"). Não existe resolvedor por consumidor.
+
+| Consumidor | Usa |
+|---|---|
+| Leitura da Demanda (`responsabilidadeEfetiva`, `podeAvancar`, `podeRejeitar`) | efetiva |
+| Autoridade de concluir / aprovar / rejeitar (`_preparar_etapa_atual`) | efetiva (admin/gestor seguem com a autoridade de gestão; Head só do que lidera) |
+| Iniciar trabalho / sessão pessoal (`eh_executor_da_demanda`) | efetiva |
+| Carga semanal (`usuarios_das_etapas`, `departamentos_das_etapas`) | efetiva (a matemática de planejamento não mudou) |
+| Tráfego: KPI "sem responsável", responsáveis/departamentos exibidos | efetiva |
+| Notificação da próxima etapa (`destinatarios_da_etapa`) | efetiva |
+| Encerramento de sessões ao trocar responsáveis (da etapa **ou** gerais) | efetiva, antes × depois |
+| Meu Dia / Meu Departamento | escopo da DEMANDA (`demanda_responsaveis` / `demanda_departamentos`), que já contém o fallback |
+| Edição de responsáveis da etapa, "Restaurar padrão do modelo", template/materialização | **explícita** (configuração) |
+| Esforço e planejamento da etapa (`_etapa_para_ajuste`) | **explícita**: o fallback NÃO concede ajuste de esforço/planejamento nem gestão da Demanda |
+| Relatórios de participação, histórico e auditoria | vínculos reais/históricos (inalterados) |
+
+Quem tem apenas o fallback avança a etapa e inicia trabalho, mas não ganha `demandas.editar`, gestão de workflow, esforço, planejamento nem troca de responsáveis.
 
 ## Edição — `PUT /demandas/{id}/workflow/etapas/{etapaId}/responsaveis`
 
@@ -22,7 +43,8 @@ Substitui as duas coleções de uma vez (`usuarioResponsavelIds`, `departamentoR
 - Etapa atual **ou futura**; etapa **concluída é somente leitura** (409) — reescrever quem era responsável depois de concluída alteraria o histórico. Tarefa arquivada: 409.
 - IDs de outra empresa → 422 (sem vazar existência); etapa de outra Demanda → 404.
 - Evento `demanda.workflow_responsaveis_alterados` (etapa, ator, ids antes/depois); no-op não publica; mutação + evento + encerramento de sessões na mesma transação.
-- Quem deixa de ser responsável **efetivo** da etapa tem a sessão pessoal nela encerrada (`troca_responsavel`) pela regra já existente de encerramento automático.
+- Quem deixa de ser responsável **efetivo** da etapa tem a sessão pessoal nela encerrada (`troca_responsavel`): vale para a troca dos responsáveis da etapa **e** para a troca dos responsáveis/departamentos
+  GERAIS da Demanda enquanto a etapa atual herda (quem era executor efetivo antes e não é depois). Nunca se cria sessão automaticamente para o novo responsável.
 
 ## Criação — `workflowEtapasResponsaveis` (opcional) em `POST /demandas`
 
@@ -32,5 +54,6 @@ escrita e gravado na mesma transação da Demanda (falha = nenhuma Demanda parci
 
 ## Não coberto (de propósito)
 
-- **Carga** lê só os vínculos explícitos da etapa (sem o fallback da tarefa) e não foi alterada; **autoridade de avançar etapa** (`pode_avancar_etapa`) também usa só os explícitos.
 - **Pauta por colaborador**: fase seguinte, sobre esta mesma resolução.
+- Esforço/planejamento continuam exigindo vínculo explícito (ou gestão); estender o fallback a eles é decisão de produto.
+- Rótulo "Usuário indisponível" para responsável inativo/removido: P2 (`P2_STAGE_ASSIGNEE_UNAVAILABLE_USER_LABEL`).
