@@ -22,7 +22,8 @@ Somente leitura; sem migration.
   Colaborador/departamento filtram a responsabilidade **efetiva** (não o responsável geral bruto nem o departamento cadastral da pessoa).
 - **Geometria** = só `planejado_inicio`/`planejado_fim`. Janela completa que cruza o período → barra. `incompleto` (início sem fim) → seção "Planejamento incompleto" (entra se o início não passa do fim do período).
   `nao_planejado` (NULL/NULL) → seção "Não planejadas" (entra sempre). NULL/DATE (inválido, nunca existe por CHECK) é tratado como não planejado e marcado em `invalido`.
-- **Universo**: etapas não concluídas de Demandas fora de `concluida`/`cancelada`/`arquivada` (`rascunho` continua visível, como na Pauta anterior). Etapa atual **e** futuras.
+- **Universo**: etapas não concluídas de Demandas em `planejada`, `em_execucao`, `pausada`, `bloqueada` ou `aguardando_cliente` (a Pauta é agenda: `rascunho` ainda não é compromisso e fica fora, junto com
+  `concluida`/`cancelada`/`arquivada`). A regra vale para os três baldes (planejadas, incompletas, não planejadas) e para todas as contagens; quando a Demanda sai do rascunho, as etapas passam a aparecer. Etapa atual **e** futuras.
 - **Período**: cada balde (planejadas / incompletas / não planejadas) tem teto de 1000 itens e informa `{ total, devolvidos, truncado }`; a interface avisa quando há mais do que o devolvido.
   `planejadasAntes`/`planejadasDepois` contam janelas completas fora do período.
 - Consultas: 11, constantes (não dependem do número de etapas); nenhum N+1.

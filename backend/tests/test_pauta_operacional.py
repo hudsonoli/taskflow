@@ -211,8 +211,6 @@ def test_status_terminais_e_etapa_concluida_ficam_fora_e_etapas_futuras_entram(c
     for status in ("concluida", "cancelada", "arquivada"):
         _, fora = nova(db_session, empresa, status=status)
         assert fora.id not in ids_das_etapas(pauta(client_admin).json()), status
-    _, rascunho = nova(db_session, empresa, status="rascunho")
-    assert rascunho.id in ids_das_etapas(pauta(client_admin).json())  # a Pauta anterior já mostrava rascunho
     d, e1 = nova(db_session, empresa)
     e1.status, e1.concluida_em = "concluida", datetime.now(timezone.utc)
     e2 = _etapa(db_session, d, 2, "Etapa 2")
@@ -223,6 +221,52 @@ def test_status_terminais_e_etapa_concluida_ficam_fora_e_etapas_futuras_entram(c
     corpo = pauta(client_admin).json()
     assert e1.id not in ids_das_etapas(corpo)
     assert (item_da_etapa(corpo, e2.id)["etapaAtual"], item_da_etapa(corpo, e3.id)["etapaAtual"]) == (True, False)  # a atual e as futuras planejadas
+
+
+@pytest.mark.parametrize("ini,fim,balde", [(D(22), D(25), "planejadas"), (D(22), None, "incompletas"), (None, None, "naoPlanejadas")])
+def test_rascunho_nao_entra_em_nenhum_balde_nem_nas_contagens(client_admin, db_session, empresa, ini, fim, balde) -> None:
+    milenna = pessoa(db_session, empresa, nome="Milenna")
+    d, e = nova(db_session, empresa, ini=ini, fim=fim, status="rascunho", geral=[milenna])
+    corpo = pauta(client_admin).json()
+    assert e.id not in ids_das_etapas(corpo) and corpo["itens"] == []
+    assert corpo["totais"][balde] == {"total": 0, "devolvidos": 0, "truncado": False}  # nem escondido nas contagens
+    assert ids_das_etapas(pauta(client_admin, usuarioIds=milenna.id).json()) == set()  # nem por filtro
+    assert ids_das_etapas(pauta(client_admin, busca=d.nome).json()) == set()  # nem por busca
+    assert corpo["pessoas"] == []
+
+
+def test_rascunho_fora_das_contagens_antes_e_depois_do_periodo(client_admin, db_session, empresa) -> None:
+    nova(db_session, empresa, ini=D(1), fim=D(5), status="rascunho")  # antes do período
+    nova(db_session, empresa, ini=date(2026, 12, 1), fim=date(2026, 12, 3), status="rascunho")  # depois
+    totais = pauta(client_admin, inicio="2026-10-19", fim="2026-11-15").json()["totais"]
+    assert (totais["planejadasAntes"], totais["planejadasDepois"]) == (0, 0)
+    nova(db_session, empresa, ini=D(1), fim=D(5), status="planejada")
+    assert pauta(client_admin, inicio="2026-10-19", fim="2026-11-15").json()["totais"]["planejadasAntes"] == 1
+
+
+def test_demanda_que_sai_do_rascunho_passa_a_aparecer_nos_tres_baldes(client_admin, db_session, empresa) -> None:
+    milenna = pessoa(db_session, empresa, nome="Milenna")
+    casos = [nova(db_session, empresa, ini=ini, fim=fim, status="rascunho", geral=[milenna]) for ini, fim in ((D(22), D(25)), (D(22), None), (None, None))]
+    assert pauta(client_admin).json()["itens"] == []
+    for demanda, _ in casos:
+        demanda.status = "planejada"
+    db_session.flush()
+    corpo = pauta(client_admin).json()
+    assert ids_das_etapas(corpo) == {etapa.id for _, etapa in casos}
+    assert [corpo["totais"][b]["total"] for b in ("planejadas", "incompletas", "naoPlanejadas")] == [1, 1, 1]
+    assert all(i["responsabilidadeEfetiva"]["usuarioIds"] == [milenna.id] for i in corpo["itens"])  # a responsabilidade não mudou com o status
+
+
+@pytest.mark.parametrize("status", ["planejada", "em_execucao", "pausada", "bloqueada", "aguardando_cliente"])
+def test_estados_operacionais_entram_e_terminais_e_rascunho_saem(client_admin, db_session, empresa, status) -> None:
+    _, dentro = nova(db_session, empresa, status=status)
+    assert dentro.id in ids_das_etapas(pauta(client_admin).json())
+
+
+@pytest.mark.parametrize("status", ["rascunho", "concluida", "cancelada", "arquivada"])
+def test_estados_fora_da_pauta(client_admin, db_session, empresa, status) -> None:
+    _, fora = nova(db_session, empresa, status=status)
+    assert fora.id not in ids_das_etapas(pauta(client_admin).json())
 
 
 def test_filtros_cliente_projeto_prioridade_e_busca(client_admin, db_session, empresa) -> None:

@@ -1,6 +1,6 @@
 """Pauta operacional por ETAPA (P1_PAUTA_COLABORADOR): leituras somente leitura, poucas consultas em conjunto, sem N+1.
 
-Universo: etapas NÃO concluídas de Demandas abertas da empresa (fora `concluida`, `cancelada` e `arquivada`; `rascunho` fica, como na Pauta anterior). `empresa_id` entra em CADA tabela com tenant.
+Universo: etapas NÃO concluídas de Demandas com compromisso de agenda (planejada, em_execucao, pausada, bloqueada, aguardando_cliente); `rascunho`, `concluida`, `cancelada` e `arquivada` ficam fora. `empresa_id` entra em CADA tabela com tenant.
 Os filtros por colaborador/departamento aplicam a RESPONSABILIDADE EFETIVA (a mesma regra de `app.core.executor_etapa`, reproduzida em SQL e coberta por teste de equivalência): a etapa com algum vínculo
 explícito (usuário OU departamento) vale só por ela; sem nenhum, valem os responsáveis/departamentos gerais da Demanda. Todo SQL usa parâmetros ligados; os fragmentos são fixos.
 """
@@ -13,8 +13,10 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-STATUS_FORA_DA_PAUTA = ("concluida", "cancelada", "arquivada")
-_FORA_SQL = ", ".join(f"'{status}'" for status in STATUS_FORA_DA_PAUTA)
+# A Pauta é AGENDA operacional: só Demandas com compromisso confirmado. `rascunho` (ainda não é compromisso) e os estados terminais ficam FORA — em TODOS os baldes e nas contagens.
+STATUS_NA_PAUTA = ("planejada", "em_execucao", "pausada", "bloqueada", "aguardando_cliente")
+STATUS_FORA_DA_PAUTA = ("rascunho", "concluida", "cancelada", "arquivada")
+_NA_PAUTA_SQL = ", ".join(f"'{status}'" for status in STATUS_NA_PAUTA)
 
 _TEM_EXPLICITO = (
     "(EXISTS (SELECT 1 FROM demanda_workflow_etapa_responsaveis xr WHERE xr.demanda_workflow_etapa_id = e.id)"
@@ -61,7 +63,7 @@ class PautaOperacionalRepository:
         busca: str | None,
     ) -> tuple[str, dict[str, Any]]:
         """FROM + WHERE comuns aos três baldes e aos totais (sem a janela)."""
-        clausulas = ["d.empresa_id = :empresa_id", f"d.status NOT IN ({_FORA_SQL})", "e.status <> 'concluida'"]
+        clausulas = ["d.empresa_id = :empresa_id", f"d.status IN ({_NA_PAUTA_SQL})", "e.status <> 'concluida'"]
         parametros: dict[str, Any] = {"empresa_id": empresa_id}
         if usuario_ids:
             clausulas.append(
