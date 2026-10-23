@@ -1,66 +1,57 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTenantPath } from "@/lib/useTenantPath";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FiltrosAvancados } from "@/components/filtros/FiltrosAvancados";
 import { AcessoNegado } from "@/components/operacional/AcessoNegado";
-import { type EscopoLeituraDemanda, getDemandaReal, listDemandasReais, listarDemandasEmExecucaoNaPauta } from "@/lib/api-backend";
+import { type EscopoLeituraDemanda, getDemandaReal, listarDemandasEmExecucaoNaPauta } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
-import { useDiretorioEquipes } from "@/lib/diretorioEquipes";
 import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
 import { podeAcessarPautaGlobal } from "@/lib/escopo-operacional";
 import { filtrosPautaParaApi } from "@/lib/filtros-pauta";
+import {
+  adicionarDias,
+  agruparPorColaborador,
+  agruparPorProjeto,
+  dataValida,
+  manterColaboradoresFiltrados,
+  MODOS_PAUTA,
+  PASSO_PERIODO_PAUTA_DIAS,
+  PERIODO_PAUTA_DIAS,
+  VISOES_PAUTA,
+  type ModoPauta,
+  type VisaoPauta,
+} from "@/lib/pauta-operacional";
+import { resolverClienteNome, resolverProjetoNome } from "@/lib/referencias";
 import { useFiltrosNaUrl } from "@/lib/useFiltrosNaUrl";
 import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer";
 import type { Demanda } from "@/types/demanda";
+import type { ParametrosPautaOperacional } from "@/types/pauta-operacional";
 import { PautaGantt } from "./PautaGantt";
 import { PautaLista } from "./PautaLista";
-import { type PautaPeriodoFiltro, type PautaViewMode, PautaToolbar } from "./PautaToolbar";
+import { PautaToolbar } from "./PautaToolbar";
+import type { PautaContexto } from "./pautaContexto";
 import { useDefinicoesFiltrosPauta } from "./useDefinicoesFiltrosPauta";
+import { usePautaOperacional } from "./usePautaOperacional";
 
-// D2-B3: mesma razão do D2-B1/D2-B2 — AppDataContext.demandas vem limitado a 200 itens
-// carregados uma única vez no login. A Pauta filtrava esse array localmente (busca,
-// departamentos, período); uma tarefa fora dessa janela simplesmente não aparecia, sem
-// nenhum aviso. A Pauta passa a buscar do servidor com search/departamentos/prazo/ordenação
-// reais — ver diagnóstico D2-B3. AppDataContext continua alimentando mutations (patch) e
-// outras telas ainda não migradas.
+// Pauta OPERACIONAL por ETAPA (P1_PAUTA_COLABORADOR). Uma fonte: `GET /pauta/operacional` devolve ITENS neutros (etapa + responsabilidade efetiva + janela planejada);
+// Colaborador (padrão) e Projeto só reagrupam o MESMO conjunto — nenhuma regra de domínio aqui. A barra usa só o planejamento da etapa; prazo nunca é geometria.
 //
-// Fase 7C.1 — a Pauta é a visão operacional GLOBAL da empresa, só para Atendimento, Heads e Gestão (protegida no servidor: `escopo=pauta`
-// devolve 403 a quem não pode). Operador comum NÃO tem Pauta — o trabalho dele é o Meu Dia — e quem chega pela URL vê "acesso negado".
-// O universo é TODA demanda em aberto da empresa (do tenant do token), com ou sem prazo e com as atrasadas incluídas; concluída,
-// cancelada e arquivada ficam fora (o servidor garante). O período (Hoje / 7 dias / 30 dias) é só um FILTRO OPCIONAL de prazo: o padrão
-// é "Todas". Prazo nunca decide se uma demanda pertence à operação.
-const TAMANHO_PAGINA = 50;
+// Fase 7C.1 — a Pauta é a visão operacional GLOBAL da empresa, só para Atendimento, Heads e Gestão (protegida no servidor: 403 a quem não pode). Operador comum NÃO tem Pauta
+// — o trabalho dele é o Meu Dia — e quem chega pela URL vê "acesso negado". Concluída, cancelada e arquivada ficam fora (o servidor garante), e etapas concluídas também.
 const DEBOUNCE_BUSCA_MS = 300;
-const PERIODOS_VALIDOS: ReadonlyArray<PautaPeriodoFiltro> = ["todas", "hoje", "7d", "30d"];
-const MODOS_VALIDOS: ReadonlyArray<PautaViewMode> = ["lista", "gantt"];
-
-// Janela exibida no Gantt (e teto de prazo quando o filtro de período está ativo). "todas" não filtra nada; o Gantt mostra 30 dias.
-function periodoParaIntervalo(periodo: PautaPeriodoFiltro): { inicio: Date; fim: Date } {
-  const inicio = new Date();
-  inicio.setHours(0, 0, 0, 0);
-
-  const dias = periodo === "hoje" ? 0 : periodo === "7d" ? 6 : 29;
-  const fim = new Date(inicio);
-  fim.setDate(fim.getDate() + dias);
-  fim.setHours(23, 59, 59, 999);
-
-  return { inicio, fim };
-}
 
 export function PautaView() {
   const router = useRouter();
   const tp = useTenantPath();
   const { demandas, setDemandas, usuarioAtual, setDemandaParaAbrir } = useAppData();
   const { departamentos, carregando: carregandoDepartamentos } = useDiretorioDepartamentos();
-  const { equipes, carregando: carregandoEquipes } = useDiretorioEquipes();
   const { clientes, carregando: carregandoClientes } = useDiretorioClientes();
   const { projetos, carregando: carregandoProjetos } = useDiretorioProjetos();
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -73,141 +64,83 @@ export function PautaView() {
 
   const definicoesFiltros = useDefinicoesFiltrosPauta({
     departamentos,
-    equipes,
     clientes,
     projetos,
-    diretoriosProntos: !carregandoDepartamentos && !carregandoEquipes && !carregandoClientes && !carregandoProjetos,
+    diretoriosProntos: !carregandoDepartamentos && !carregandoClientes && !carregandoProjetos,
   });
-  // Estado da Pauta na URL (filtros, busca, período, modo de exibição): ids/códigos estáveis, refresh preserva, inválido ignorado.
+  // Estado da Pauta na URL (filtros, busca, agrupamento, apresentação, início do período): ids/datas estáveis, refresh preserva, inválido ignorado.
   const { filtros, definirFiltros, param, definirParam } = useFiltrosNaUrl(definicoesFiltros, podeAcessar);
   const query = param("q") ?? "";
-  const periodo: PautaPeriodoFiltro = PERIODOS_VALIDOS.find((valor) => valor === param("periodo")) ?? "todas";
-  const viewMode: PautaViewMode = MODOS_VALIDOS.find((valor) => valor === param("modo")) ?? "gantt";
+  const visao: VisaoPauta = VISOES_PAUTA.find((valor) => valor === param("visao")) ?? "colaborador";
+  const modo: ModoPauta = MODOS_PAUTA.find((valor) => valor === param("modo")) ?? "gantt";
+  const inicioDaUrl = dataValida(param("inicio")) ? (param("inicio") as string) : null;
   const setQuery = (texto: string) => definirParam("q", texto);
-  const setPeriodo = (valor: PautaPeriodoFiltro) => definirParam("periodo", valor === "todas" ? null : valor);
-  const setViewMode = (valor: PautaViewMode) => definirParam("modo", valor === "gantt" ? null : valor);
-  const parametrosFiltros = useMemo(() => filtrosPautaParaApi(filtros, new Date()), [filtros]);
-
-  const { inicio: periodoInicio, fim: periodoFim } = useMemo(() => periodoParaIntervalo(periodo === "todas" ? "30d" : periodo), [periodo]);
-  const chaveFiltros = JSON.stringify(parametrosFiltros);
-
-  // Parâmetros da consulta (a primeira página e o "carregar mais" usam EXATAMENTE os mesmos): escopo=pauta + só o que está em aberto
-  // + filtros avançados. O prazo só entra se o período for escolhido (teto, sem piso: atrasadas continuam); "todas" não o envia, e
-  // as sem prazo pertencem à Pauta.
-  function parametrosDaConsulta(offset: number) {
-    const base = { search: debouncedQuery || undefined, sort: "prazo_asc" as const, limit: TAMANHO_PAGINA, offset };
-    const prazoDoPeriodo = periodo === "todas" ? {} : { prazoFim: periodoFim.toISOString() };
-    return { ...base, escopo: "pauta" as const, naoFinalizada: true, ...prazoDoPeriodo, ...parametrosFiltros };
-  }
-  // Demandas com sessão ativa agora (selo discreto); falha não derruba a lista.
-  const [emExecucaoIds, setEmExecucaoIds] = useState<ReadonlySet<string>>(new Set());
-
-  // Página acumulada, vinda do servidor — fonte autoritativa da lista exibida (lista e
-  // gantt compartilham o mesmo array; trocar de modo não refaz a consulta).
-  const [demandasPauta, setDemandasPauta] = useState<Demanda[]>([]);
-  // `carregandoInicial` só é true até a PRIMEIRA resposta (sucesso ou erro) da sessão —
-  // nunca mais volta a ser true depois disso. `buscandoPagina` cobre toda busca seguinte
-  // (filtro novo ou refetch pós-mutation): esmaece a lista já exibida em vez de apagá-la —
-  // mesmo padrão de DemandasView.tsx (D2-B1), pra não "piscar vazio" a cada tecla digitada
-  // ou a cada mutation bem-sucedida.
-  const [carregandoInicial, setCarregandoInicial] = useState(true);
-  const [buscandoPagina, setBuscandoPagina] = useState(true);
-  const [carregandoMais, setCarregandoMais] = useState(false);
-  const [temMais, setTemMais] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  // Incrementado após mutation bem-sucedida pra forçar refetch mesmo quando filtros não
-  // mudaram — ver handleDemandChange.
-  const [refetchTick, setRefetchTick] = useState(0);
+  const setVisao = (valor: VisaoPauta) => definirParam("visao", valor === "colaborador" ? null : valor);
+  const setModo = (valor: ModoPauta) => definirParam("modo", valor === "gantt" ? null : valor);
+  const parametrosFiltros = useMemo(() => filtrosPautaParaApi(filtros), [filtros]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedQuery(query.trim()), DEBOUNCE_BUSCA_MS);
     return () => clearTimeout(timeout);
   }, [query]);
 
-  // Chave da combinação atual de filtros — muda a cada busca/departamentos/período/refetch
-  // explícito. Comparada durante o RENDER (não dentro do efeito): setState síncrono no corpo
-  // do efeito é o padrão que react-hooks/set-state-in-effect rejeita neste projeto — mesma
-  // técnica de DemandasView.tsx/ProjetoDemandasSection.tsx.
-  const chaveBusca = `${chaveFiltros}\u0000${debouncedQuery}\u0000${periodo}\u0000${refetchTick}`;
-  const [chaveConsultada, setChaveConsultada] = useState<string | null>(null);
-  if (chaveBusca !== chaveConsultada) {
-    setChaveConsultada(chaveBusca);
-    setBuscandoPagina(true);
-    setErro(null);
-    // Sem isto, um "carregar mais" em voo de uma geração anterior (filtro velho, ou
-    // pré-mutation) nunca teria seu `carregandoMais` liberado — o guard de `chaveAtualRef`
-    // recusa (corretamente) tocar o estado da geração nova a partir da promise antiga, então
-    // ninguém mais reseta esse flag pra geração atual. Resultado sem isto: botão preso em
-    // "Carregando…" desabilitado para sempre. `temMais` também reseta aqui — senão ficaria
-    // com o valor da geração anterior até a resposta nova chegar.
-    setCarregandoMais(false);
-    setTemMais(false);
-  }
+  // Incrementado após mutation bem-sucedida no detalhe: força a releitura mesmo com filtros iguais (a etapa/planejamento pode ter mudado).
+  const [versao, setVersao] = useState(0);
+  const parametros = useMemo<ParametrosPautaOperacional | null>(
+    () =>
+      pronto
+        ? { ...(inicioDaUrl ? { inicio: inicioDaUrl, fim: adicionarDias(inicioDaUrl, PERIODO_PAUTA_DIAS - 1) } : {}), ...parametrosFiltros, busca: debouncedQuery || undefined }
+        : null,
+    [pronto, inicioDaUrl, parametrosFiltros, debouncedQuery],
+  );
+  const pauta = usePautaOperacional(parametros, versao);
+  const dados = pauta.dados;
 
-  // Múltiplos filtros compõem a chave (não só um id, como no D2-B2) — ref sempre atualizada
-  // via efeito guarda "carregar mais" contra resposta de uma combinação de filtros anterior.
-  const chaveAtualRef = useRef(chaveBusca);
-  useEffect(() => {
-    chaveAtualRef.current = chaveBusca;
-  }, [chaveBusca]);
-
+  // Demandas com sessão ativa agora (selo discreto); falha não derruba a pauta. Refeito só após mutação, nunca por tecla digitada.
+  const [emExecucaoIds, setEmExecucaoIds] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     if (!pronto) return;
     let cancelado = false;
-    const consulta = listDemandasReais(parametrosDaConsulta(0));
-    const sessoes = listarDemandasEmExecucaoNaPauta().catch(() => [] as string[]);
-    Promise.all([consulta, sessoes])
-      .then(([resultado, ativas]) => {
-        if (cancelado) return; // combinação de filtros obsoleta — outra busca já foi disparada
-        setDemandasPauta(resultado);
-        setEmExecucaoIds(new Set(ativas));
-        setTemMais(resultado.length === TAMANHO_PAGINA);
-        setErro(null);
-        setBuscandoPagina(false);
-        setCarregandoInicial(false);
-      })
-      .catch((error) => {
-        if (cancelado) return;
-        setErro(error instanceof Error ? error.message : "Não foi possível carregar a pauta.");
-        setBuscandoPagina(false);
-        setCarregandoInicial(false);
+    listarDemandasEmExecucaoNaPauta()
+      .catch(() => [] as string[])
+      .then((ativas) => {
+        if (!cancelado) setEmExecucaoIds(new Set(ativas));
       });
     return () => {
       cancelado = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `parametrosDaConsulta` é função de render; a lista abaixo resume tudo que ela lê
-  }, [pronto, chaveFiltros, debouncedQuery, periodo, periodoFim, refetchTick]);
+  }, [pronto, versao]);
 
-  function carregarMais() {
-    const chaveDoClique = chaveBusca;
-    setCarregandoMais(true);
-    listDemandasReais(parametrosDaConsulta(demandasPauta.length))
-      .then((resultado) => {
-        if (chaveAtualRef.current !== chaveDoClique) return; // filtros mudaram enquanto carregava
-        setDemandasPauta((atual) => [...atual, ...resultado]);
-        setTemMais(resultado.length === TAMANHO_PAGINA);
-        setErro(null);
-      })
-      .catch((error) => {
-        if (chaveAtualRef.current !== chaveDoClique) return;
-        // Não corrompe a lista já exibida — mantém o que já veio, com o erro sinalizado.
-        setErro(error instanceof Error ? error.message : "Não foi possível carregar mais tarefas.");
-      })
-      .finally(() => {
-        if (chaveAtualRef.current === chaveDoClique) setCarregandoMais(false);
-      });
+  const contexto = useMemo<PautaContexto>(() => {
+    const nomesPessoas = new Map((dados?.pessoas ?? []).map((pessoa) => [pessoa.id, pessoa.nome]));
+    return {
+      visao,
+      nomeCliente: (clienteId) => (clienteId ? resolverClienteNome(clienteId, clientes) : null),
+      nomeProjeto: (projetoId) => (projetoId ? resolverProjetoNome(projetoId, projetos) : null),
+      nomeDepartamento: (departamentoId) => departamentos.find((departamento) => departamento.id === departamentoId)?.nome ?? "Departamento indisponível",
+      nomePessoa: (usuarioId) => nomesPessoas.get(usuarioId) ?? "Usuário indisponível",
+      emExecucaoIds,
+      onOpenDetails: setSelectedDemandId,
+    };
+  }, [visao, dados, clientes, projetos, departamentos, emExecucaoIds]);
+
+  const grupos = useMemo(() => {
+    if (!dados) return [];
+    return visao === "colaborador"
+      ? manterColaboradoresFiltrados(agruparPorColaborador(dados.itens, dados.pessoas), parametrosFiltros.usuarioIds)
+      : agruparPorProjeto(dados.itens, (projetoId) => resolverProjetoNome(projetoId, projetos));
+  }, [dados, visao, projetos, parametrosFiltros.usuarioIds]);
+
+  function deslocarPeriodo(dias: number) {
+    const base = inicioDaUrl ?? dados?.meta.inicio;
+    if (base) definirParam("inicio", adicionarDias(base, dias));
   }
 
-  // D2-C — mesmo padrão de DemandasView.tsx: só busca individual (GET /demandas/{id}) se o
-  // id não estiver nem na página atual nem no contexto. `cancelado` protege troca de seleção
-  // antes da resposta chegar.
+  // D2-C — mesmo padrão de DemandasView.tsx: GET /demandas/{id} só se o id não está no contexto (a Pauta não carrega Demandas inteiras). `cancelado` protege troca de seleção.
   const [fallbackDemand, setFallbackDemand] = useState<Demanda | null>(null);
   useEffect(() => {
     if (!selectedDemandId) return;
-    const jaResolvido =
-      demandasPauta.some((demanda) => demanda.id === selectedDemandId) ||
-      demandas.some((demanda) => demanda.id === selectedDemandId);
-    if (jaResolvido) return;
+    if (demandas.some((demanda) => demanda.id === selectedDemandId)) return;
     let cancelado = false;
     getDemandaReal(selectedDemandId, "pauta")
       .then((demanda) => {
@@ -219,7 +152,7 @@ export function PautaView() {
     return () => {
       cancelado = true;
     };
-  }, [selectedDemandId, demandasPauta, demandas]);
+  }, [selectedDemandId, demandas, versao]);
 
   // Fase 7C.1 — o detalhe aberto pela Pauta é SOMENTE LEITURA por padrão (ler pela Pauta global não dá escrita). Só vira editável se a
   // demanda também está no escopo-BASE de quem olha (a consulta sem `escopo` devolve 200; fora dele, 404): é a mesma autoridade do
@@ -242,21 +175,14 @@ export function PautaView() {
   const modoLeitura: EscopoLeituraDemanda | undefined =
     acessoEscrita?.demandaId === selectedDemandId && acessoEscrita.editavel ? undefined : "pauta";
 
-  // Página do servidor é a fonte de verdade; contexto cobre o intervalo entre o patch
-  // síncrono de uma mutation e o refetch assíncrono terminar; o fallback acima só entra se
-  // nenhum dos dois resolveu.
-  const selectedDemand =
-    demandasPauta.find((demanda) => demanda.id === selectedDemandId) ??
-    demandas.find((demanda) => demanda.id === selectedDemandId) ??
-    (fallbackDemand?.id === selectedDemandId ? fallbackDemand : undefined);
+  // O contexto cobre o intervalo entre o patch síncrono de uma mutation e o refetch; o fallback só entra se o contexto não resolveu.
+  const selectedDemand = demandas.find((demanda) => demanda.id === selectedDemandId) ?? (fallbackDemand?.id === selectedDemandId ? fallbackDemand : undefined);
 
   function handleDemandChange(nextDemand: Demanda) {
-    // Só patch de contexto (outras telas ainda dependem dele) + refetch — NUNCA patch local
-    // de demandasPauta: a mutation pode mudar prazo/departamento/nome/projeto e fazer a
-    // demanda entrar, sair ou mudar de posição na pauta atual: só um refetch sabe decidir isso
-    // corretamente.
+    // Só patch de contexto (outras telas ainda dependem dele) + releitura da Pauta: a mutação pode mudar etapa, responsável ou planejamento e mover a etapa de grupo/posição —
+    // só o servidor sabe decidir isso corretamente.
     setDemandas((current) => current.map((demanda) => (demanda.id === nextDemand.id ? nextDemand : demanda)));
-    setRefetchTick((tick) => tick + 1);
+    setVersao((tick) => tick + 1);
   }
 
   // Pauta não duplica o modal de edição — "Editar" leva para Tarefas com a tarefa já aberta.
@@ -281,6 +207,8 @@ export function PautaView() {
     );
   }
 
+  const truncadas = dados ? [dados.totais.planejadas, dados.totais.incompletas, dados.totais.naoPlanejadas].filter((balde) => balde.truncado) : [];
+
   return (
     <div className="flex flex-col gap-6">
       <motion.div
@@ -297,8 +225,8 @@ export function PautaView() {
             <div className="min-w-0">
               <h1 className="text-lg font-semibold tracking-tight text-fg">Pauta</h1>
               <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
-                Visão operacional da agência: todas as demandas em aberto de todos os departamentos, com ou sem prazo (atrasadas incluídas).
-                O período é um filtro opcional.
+                Agenda operacional por etapa: quem está responsável, quando e em qual cliente/projeto. A barra mostra o planejamento da etapa (não o prazo); etapa sem planejamento, planejamento
+                incompleto e trabalho sem pessoa definida continuam visíveis.
               </p>
             </div>
           </div>
@@ -308,36 +236,45 @@ export function PautaView() {
       <PautaToolbar
         query={query}
         onQueryChange={setQuery}
-        periodo={periodo}
-        onPeriodoChange={setPeriodo}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        visao={visao}
+        onVisaoChange={setVisao}
+        modo={modo}
+        onModoChange={setModo}
+        periodoInicio={dados?.meta.inicio ?? null}
+        periodoFim={dados?.meta.fim ?? null}
+        onPeriodoAnterior={() => deslocarPeriodo(-PASSO_PERIODO_PAUTA_DIAS)}
+        onPeriodoSeguinte={() => deslocarPeriodo(PASSO_PERIODO_PAUTA_DIAS)}
+        onPeriodoHoje={() => definirParam("inicio", null)}
         filtrosAvancados={<FiltrosAvancados definicoes={definicoesFiltros} filtros={filtros} onChange={definirFiltros} />}
       />
 
-      {carregandoInicial ? (
+      {pauta.carregando && !dados ? (
         <p className="text-sm text-fg-subtle">Carregando pauta…</p>
-      ) : erro && demandasPauta.length === 0 ? (
-        <EmptyState title="Não foi possível carregar a pauta" description={erro} icon={<CalendarClock size={16} />} />
-      ) : (
-        <div className={buscandoPagina ? "opacity-60 transition-opacity" : "transition-opacity"}>
-          {viewMode === "lista" ? (
-            <PautaLista demandas={demandasPauta} onOpenDetails={setSelectedDemandId} emExecucaoIds={emExecucaoIds} />
+      ) : pauta.erro && !dados ? (
+        <EmptyState title="Não foi possível carregar a pauta" description={pauta.erro} icon={<CalendarClock size={16} />} />
+      ) : dados ? (
+        <div className={pauta.atualizando ? "flex flex-col gap-3 opacity-60 transition-opacity" : "flex flex-col gap-3 transition-opacity"}>
+          {(dados.totais.planejadasAntes > 0 || dados.totais.planejadasDepois > 0) && (
+            <p className="text-xs text-fg-subtle">
+              {dados.totais.planejadasAntes > 0 && `${dados.totais.planejadasAntes} ${dados.totais.planejadasAntes === 1 ? "etapa planejada" : "etapas planejadas"} antes deste período`}
+              {dados.totais.planejadasAntes > 0 && dados.totais.planejadasDepois > 0 && " · "}
+              {dados.totais.planejadasDepois > 0 && `${dados.totais.planejadasDepois} ${dados.totais.planejadasDepois === 1 ? "etapa planejada" : "etapas planejadas"} depois`}
+            </p>
+          )}
+          {truncadas.length > 0 && (
+            <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+              Há mais etapas do que cabem nesta tela ({truncadas.map((balde) => `${balde.devolvidos} de ${balde.total}`).join(", ")}). Refine os filtros ou o período para ver todas.
+            </p>
+          )}
+          {modo === "lista" ? (
+            <PautaLista grupos={grupos} contexto={contexto} />
           ) : (
-            <PautaGantt demandas={demandasPauta} periodoInicio={periodoInicio} periodoFim={periodoFim} onOpenDetails={setSelectedDemandId} emExecucaoIds={emExecucaoIds} />
+            <PautaGantt grupos={grupos} periodoInicio={dados.meta.inicio} periodoFim={dados.meta.fim} hoje={dados.meta.hoje} contexto={contexto} />
           )}
         </div>
-      )}
+      ) : null}
 
-      {erro && demandasPauta.length > 0 && <p className="text-xs text-red-600">{erro}</p>}
-
-      {!carregandoInicial && temMais && (
-        <div className="flex justify-center">
-          <Button type="button" variant="secondary" onClick={carregarMais} disabled={carregandoMais || buscandoPagina}>
-            {carregandoMais ? "Carregando…" : "Carregar mais"}
-          </Button>
-        </div>
-      )}
+      {pauta.erro && dados && <p className="text-xs text-red-600">{pauta.erro}</p>}
 
       <DemandaDetailsDrawer
         key={selectedDemand?.id}

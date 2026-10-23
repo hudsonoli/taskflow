@@ -134,7 +134,6 @@ test("nenhuma superfície monta `#<número>` por conta própria: todas passam po
     "components/demandas/DemandaKanbanCard.tsx",
     "components/demandas/DemandasTable.tsx",
     "components/demandas/DemandaDetailsDrawer.tsx",
-    "components/pauta/PautaLista.tsx",
     "components/operacional/TarefasLista.tsx",
     "components/minhas-demandas/MinhasDemandasView.tsx",
     "components/layout/NotificationBell.tsx",

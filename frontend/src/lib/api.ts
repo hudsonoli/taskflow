@@ -2,6 +2,8 @@ import type { TrafegoAgoraPagina, TrafegoCarga, TrafegoIndicadores, TrafegoStatu
 import type { ParametrosGargalosOperacionais, TrafegoOperacionalAgora, TrafegoOperacionalGargalos } from "@/types/trafego-operacional";
 import type { CargaSemanal, ParametrosCarga } from "@/types/trafego-carga";
 import { consultaDaCarga } from "@/lib/trafego-carga";
+import { consultaDaPauta } from "@/lib/pauta-operacional";
+import type { ParametrosPautaOperacional, PautaOperacional } from "@/types/pauta-operacional";
 import { TrafegoOperacionalErro } from "@/lib/trafego-operacional";
 import { parametrosFiltrosTrafego, type FiltrosTrafegoApi } from "@/lib/filtros-trafego";
 import type { SessaoTrabalho } from "@/types/sessao-trabalho";
@@ -276,6 +278,29 @@ export function getTrafegoOperacionalGargalos(parametros: ParametrosGargalosOper
  */
 export function getTrafegoCarga(parametros: ParametrosCarga, signal?: AbortSignal): Promise<CargaSemanal> {
   return getOperacional("carga", new URLSearchParams(consultaDaCarga(parametros)), "Falha ao carregar a Carga semanal", signal);
+}
+
+/**
+ * Pauta operacional por ETAPA: `GET /pauta/operacional` — UMA requisição por período/filtros (itens neutros; a interface agrupa por colaborador ou projeto). Não usa a Carga nem a lista de Demandas.
+ * Autorização = a da Pauta global (Atendimento, Head ou Gestão); 403 para os demais.
+ */
+export class PautaOperacionalErro extends Error {
+  readonly status: number;
+  constructor(mensagem: string, status: number) {
+    super(mensagem);
+    this.name = "PautaOperacionalErro";
+    this.status = status;
+  }
+}
+
+export async function getPautaOperacional(parametros: ParametrosPautaOperacional, signal?: AbortSignal): Promise<PautaOperacional> {
+  const consulta = new URLSearchParams(consultaDaPauta(parametros)).toString();
+  const response = await fetch(`${API_PROXY}/pauta/operacional${consulta ? `?${consulta}` : ""}`, { cache: "no-store", signal });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new PautaOperacionalErro(typeof detail?.detail === "string" ? detail.detail : "Falha ao carregar a Pauta", response.status);
+  }
+  return response.json();
 }
 
 export async function fecharSessaoTrabalho(sessaoId: string, motivoEncerramento: string): Promise<SessaoTrabalho> {

@@ -10,53 +10,41 @@ const ler = (caminho: string) => readFileSync(new URL(`../${caminho}`, import.me
 const semComentarios = (texto: string) => texto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 const A = "0b8f7e0e-4c2d-4f0a-9d37-1f2e3a4b5c6d";
 const B = "7a1c2d3e-4f50-4617-8899-aabbccddeeff";
-const AGORA = new Date(2026, 9, 15, 14, 0);
 
 // ── filtros da Pauta global ─────────────────────────────────────────────────────────────────────────────────────
 
-test("Pauta global: Departamento É filtro (é / é um de, OR) e os demais campos mapeiam como no Meu Departamento", () => {
-  assert.deepEqual(filtrosPautaParaApi([{ campo: "departamento", operador: "is", valores: [A] }]), { departamentoId: A });
-  assert.deepEqual(filtrosPautaParaApi([{ campo: "departamento", operador: "in", valores: [A, B] }]), { departamentoId: `${A},${B}` });
-  const combinado = filtrosPautaParaApi(
-    [
-      { campo: "departamento", operador: "in", valores: [A, B] },
-      { campo: "responsavel", operador: "is", valores: [A] },
-      { campo: "equipe", operador: "is_not", valores: [B] },
-      { campo: "cliente", operador: "in", valores: [A, B] },
-      { campo: "status", operador: "in", valores: ["em_execucao", "pausada"] },
-      { campo: "prioridade", operador: "is", valores: ["alta"] },
-      { campo: "origem", operador: "is", valores: ["cliente"] },
-    ],
-    AGORA,
-  );
-  assert.deepEqual(combinado, {
-    departamentoId: `${A},${B}`,
-    responsavelId: A,
-    equipeIdExcluir: B,
-    clienteId: `${A},${B}`,
-    status: "em_execucao,pausada",
-    prioridade: "alta",
-    origem: "cliente",
-  });
+test("Pauta por etapa: Colaborador, Departamento, Cliente, Projeto e Prioridade mapeiam para os parâmetros do servidor (só 'é'/'é um de')", () => {
+  assert.deepEqual(filtrosPautaParaApi([{ campo: "departamento", operador: "is", valores: [A] }]), { departamentoIds: [A] });
+  assert.deepEqual(filtrosPautaParaApi([{ campo: "departamento", operador: "in", valores: [A, B] }]), { departamentoIds: [A, B] });
+  const combinado = filtrosPautaParaApi([
+    { campo: "departamento", operador: "in", valores: [A, B] },
+    { campo: "responsavel", operador: "is", valores: [A] },
+    { campo: "cliente", operador: "in", valores: [A, B] },
+    { campo: "projeto", operador: "is", valores: [B] },
+    { campo: "prioridade", operador: "is", valores: ["alta"] },
+  ]);
+  assert.deepEqual(combinado, { departamentoIds: [A, B], usuarioIds: [A], clienteIds: [A, B], projetoIds: [B], prioridades: ["alta"] });
+  const rota = semComentarios(ler("app/e/[slug]/pauta/page.tsx"));
+  assert.match(rota, /<PautaView \/>/); // a rota só delega: a regra está na view
 });
 
-test("departamento 'não é' não vira parâmetro (o servidor não executa); prazo reaproveita a tradução do Meu Departamento", () => {
+test("'não é', filtro vazio e campos que a Pauta não tem NÃO viram parâmetro (o servidor não os executa)", () => {
   assert.deepEqual(filtrosPautaParaApi([{ campo: "departamento", operador: "is_not", valores: [A] }]), {});
   assert.deepEqual(filtrosPautaParaApi([{ campo: "departamento", operador: "is", valores: [] }]), {});
-  assert.deepEqual(filtrosPautaParaApi([{ campo: "prazo", operador: "is", valores: ["atrasado"] }], AGORA), { atrasada: true });
-  const antes = filtrosPautaParaApi([{ campo: "prazo", operador: "before", valores: ["2026-10-20"] }], AGORA);
-  assert.equal(new Date(antes.prazoFim!).getTime(), new Date(2026, 9, 20).getTime() - 1);
+  assert.deepEqual(filtrosPautaParaApi([{ campo: "prazo", operador: "is", valores: ["atrasado"] }]), {}); // prazo não é filtro da Pauta por etapa
+  assert.deepEqual(filtrosPautaParaApi([{ campo: "status", operador: "in", valores: ["em_execucao"] }]), {});
   assert.deepEqual(filtrosPautaParaApi([]), {});
 });
 
-test("o Meu Departamento NÃO ganhou Departamento como filtro; a Pauta ganhou", () => {
+test("o Meu Departamento NÃO ganhou Departamento como filtro; a Pauta tem Colaborador e Departamento sobre a responsabilidade EFETIVA", () => {
   assert.equal("departamento" in CAMPO_MEU_DEPARTAMENTO, false);
   assert.equal(CAMPO_PAUTA.departamento, "departamento");
   assert.doesNotMatch(ler("components/meu-departamento/useDefinicoesFiltrosMeuDepartamento.ts"), /label: "Departamento"/);
   const defs = ler("components/pauta/useDefinicoesFiltrosPauta.ts");
   for (const campo of Object.keys(CAMPO_PAUTA)) assert.ok(defs.includes(`CAMPO_PAUTA.${campo}`), campo);
-  assert.match(defs, /STATUS_DA_FILA/); // a Pauta mostra o que está em andamento
+  assert.match(defs, /label: "Colaborador"/);
   assert.match(defs, /permiteExcluir: false/);
+  assert.doesNotMatch(defs, /STATUS_DA_FILA|CAMPO_PAUTA\.(prazo|origem|status|equipe)/); // a Pauta não é um relatório genérico
 });
 
 // ── Pauta: modos, autorização e consulta ────────────────────────────────────────────────────────────────────────
@@ -69,27 +57,23 @@ test("autorização da Pauta global no cliente espelha a do servidor: admin/gest
   assert.doesNotMatch(corpo, /operador|@|\.com|empresaId/i); // nada hardcoded por e-mail, nome ou tenant
 });
 
-test("Pauta: universo = TODA demanda em aberto (escopo=pauta + naoFinalizada); prazo NÃO é condição, só filtro opcional de período", () => {
-  const view = ler("components/pauta/PautaView.tsx");
-  const codigo = semComentarios(view);
-  assert.match(codigo, /const prazoDoPeriodo = periodo === "todas" \? \{\} : \{ prazoFim: periodoFim\.toISOString\(\) \};/); // "Todas" não envia prazo
-  assert.match(codigo, /escopo: "pauta" as const, naoFinalizada: true, \.\.\.prazoDoPeriodo, \.\.\.parametrosFiltros/);
-  assert.doesNotMatch(codigo, /prazoInicio/); // sem piso: atrasadas continuam; sem prazo não é excluída por padrão
-  assert.match(codigo, /PERIODOS_VALIDOS\.find\(\(valor\) => valor === param\("periodo"\)\) \?\? "todas"/); // padrão = todas as demandas em aberto
-  assert.doesNotMatch(codigo, /\?\? "7d"/);
-  assert.match(codigo, /listDemandasReais\(parametrosDaConsulta\(0\)\)/);
-  assert.match(codigo, /listDemandasReais\(parametrosDaConsulta\(demandasPauta\.length\)\)/); // "carregar mais" = mesmos filtros
-  assert.doesNotMatch(codigo, /demandasPauta\.filter\(/); // nunca filtra só o que foi carregado
-  assert.match(codigo, /if \(!pronto\) return;/); // espera papel/departamentos: não busca antes de saber quem é
-  const toolbar = semComentarios(ler("components/pauta/PautaToolbar.tsx"));
-  assert.match(toolbar, /export type PautaPeriodoFiltro = "todas" \| "hoje" \| "7d" \| "30d"/);
-  assert.match(toolbar, /\{ value: "todas" as const, label: "Todas" \}/);
+test("Pauta: UMA consulta ao endpoint por etapa (sem lista de Demandas, sem prazo como condição); acesso espera papel/departamentos", () => {
+  const codigo = semComentarios(ler("components/pauta/PautaView.tsx"));
+  assert.match(codigo, /usePautaOperacional\(parametros, versao\)/);
+  assert.doesNotMatch(codigo, /listDemandasReais|prazoFim|prazoInicio|naoFinalizada|carregarMais|Carregar mais/); // sem a lista paginada de Demandas
+  assert.match(codigo, /pronto\s*\? \{/); // negado/indeciso nunca consulta
+  assert.match(codigo, /const pronto = Boolean\(usuarioAtual\) && !carregandoDepartamentos && podeAcessar;/);
+  const api = semComentarios(ler("lib/api.ts"));
+  assert.match(api, /`\$\{API_PROXY\}\/pauta\/operacional/);
+  assert.doesNotMatch(semComentarios(ler("components/pauta/usePautaOperacional.ts")), /getTrafegoCarga|operacional\/carga/); // a Pauta não reconstrói agenda a partir da Carga
 });
 
-test("não existe mais a Pauta legada: sem seletor simples de departamentos, sem consulta por departamento/prazo-janela do operador", () => {
+test("não existe mais a Pauta legada: sem seletor simples de departamentos, sem Gantt por Demanda com datas da Demanda", () => {
   const view = semComentarios(ler("components/pauta/PautaView.tsx"));
-  assert.doesNotMatch(view, /modoGlobal|departamentoIds|departamentoIdsParam|setDepartamentoIds/);
-  assert.doesNotMatch(view, /prazoInicio: periodoInicio/);
+  assert.doesNotMatch(view, /modoGlobal|departamentoIds: |setDepartamentoIds/);
+  for (const arquivo of ["PautaGantt", "PautaLista", "pautaContexto"]) {
+    assert.doesNotMatch(semComentarios(ler(`components/pauta/${arquivo}.tsx`.replace("pautaContexto.tsx", "pautaContexto.ts"))), /dataFimPrevista|dataInicio\b|prazoEtapaAtual\)|new Date\(/, arquivo);
+  }
   const toolbar = semComentarios(ler("components/pauta/PautaToolbar.tsx"));
   assert.doesNotMatch(toolbar, /MultiSelect|useDiretorioDepartamentos/);
   assert.match(toolbar, /filtrosAvancados: ReactNode/); // obrigatório: a Pauta sempre tem os filtros avançados
@@ -117,29 +101,34 @@ test("Meu Dia segue para todos e Meu Departamento só para o Head (sem regressã
   assert.match(nav, /\{ label: "Meu dia", href: "\/meu-dia"/);
 });
 
-test("estado da Pauta na URL: filtros, busca (q), período e modo; inválido volta ao padrão", () => {
+test("estado da Pauta na URL: filtros, busca (q), agrupamento, apresentação e início do período; inválido volta ao padrão", () => {
   const view = ler("components/pauta/PautaView.tsx");
   assert.match(view, /useFiltrosNaUrl\(definicoesFiltros, podeAcessar\)/); // só persiste para quem tem a Pauta
-  assert.match(view, /MODOS_VALIDOS\.find\(\(valor\) => valor === param\("modo"\)\) \?\? "gantt"/);
+  assert.match(view, /VISOES_PAUTA\.find\(\(valor\) => valor === param\("visao"\)\) \?\? "colaborador"/); // padrão = Colaborador
+  assert.match(view, /MODOS_PAUTA\.find\(\(valor\) => valor === param\("modo"\)\) \?\? "gantt"/);
+  assert.match(view, /dataValida\(param\("inicio"\)\)/); // data inválida na URL é ignorada
   assert.match(view, /definirParam\("q", texto\)/);
-  assert.match(view, /definirParam\("periodo", valor === "todas" \? null : valor\)/); // padrão não suja a URL
+  assert.match(view, /definirParam\("visao", valor === "colaborador" \? null : valor\)/); // padrão não suja a URL
 });
 
-test("selo 'em execução agora' na Pauta: só ids de demanda (sem pessoa nem tempo); falha não derruba a lista", () => {
+test("selo 'em execução agora' na Pauta: só ids de demanda (sem pessoa nem tempo); falha não derruba a pauta", () => {
   const view = ler("components/pauta/PautaView.tsx");
-  assert.match(view, /listarDemandasEmExecucaoNaPauta\(\)\.catch\(\(\) => \[\] as string\[\]\)/);
-  assert.match(ler("components/pauta/PautaLista.tsx"), /emExecucaoIds\?\.has\(demanda\.id\) && <Badge tone="green">Em execução agora<\/Badge>/);
+  assert.match(view, /listarDemandasEmExecucaoNaPauta\(\)\s*\.catch\(\(\) => \[\] as string\[\]\)/);
+  assert.match(ler("components/pauta/PautaLista.tsx"), /contexto\.emExecucaoIds\.has\(item\.demandaId\) && <Badge tone="green">Em execução agora<\/Badge>/);
   assert.match(ler("components/pauta/PautaGantt.tsx"), /aria-label="Em execução agora"/);
   const api = ler("lib/api-backend.ts");
   assert.match(api, /"\/sessoes-trabalho\/pauta\/em-execucao"/);
 });
 
-test("demanda SEM PRAZO aparece na Pauta: na Lista em 'Sem prazo definido' e no Gantt como aviso (sem barra enganosa)", () => {
-  assert.match(ler("components/pauta/PautaLista.tsx"), /Sem prazo definido/);
+test("etapa sem planejamento / com planejamento incompleto aparece na Pauta, sem barra enganosa e sem usar prazo", () => {
   const gantt = semComentarios(ler("components/pauta/PautaGantt.tsx"));
-  assert.match(gantt, /const semPrazo = !fimValido;/);
-  assert.match(gantt, /semPrazo \? \(/);
-  assert.match(gantt, /Sem prazo definido/);
+  assert.match(gantt, /Planejamento incompleto \(\$\{incompletas\.length\}\)/);
+  assert.match(gantt, /Não planejadas \(\$\{naoPlanejadas\.length\}\)/);
+  assert.match(gantt, /Início: \{formatarDiaMes\(planejamento\.inicio\)\} · Fim: não definido/);
+  assert.match(gantt, /Sem janela planejada/);
+  assert.match(gantt, /posicaoDaJanela\(planejamento\.inicio, planejamento\.fim, periodoInicio, periodoFim\)/); // geometria = só o planejamento
+  assert.doesNotMatch(gantt, /prazo/i); // prazo nunca posiciona nada
+  assert.match(semComentarios(ler("components/pauta/PautaLista.tsx")), /fim não definido/);
 });
 
 // ── Detalhe SOMENTE LEITURA pela Pauta global ───────────────────────────────────────────────────────────────────

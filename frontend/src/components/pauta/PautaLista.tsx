@@ -1,123 +1,75 @@
 "use client";
 
-import { Eye } from "lucide-react";
-import { AvatarStack } from "@/components/ui/AvatarStack";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { useDiretorioProjetos } from "@/lib/diretorioProjetos";
-import { resolverProjetoNome, resolverUsuarioPorReferencia } from "@/lib/referencias";
-import { rotuloDemanda } from "@/lib/referencias";
-import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
-import { normalizarUsuarioId, statusDemandaLabels, statusDemandaTone } from "@/lib/demandas";
-import type { Demanda } from "@/types/demanda";
+import { PrioridadeTag } from "@/components/demandas/PrioridadeTag";
+import { statusDemandaLabels } from "@/lib/demandas";
+import { formatarDiaMes, separarPorPlanejamento, type GrupoPauta } from "@/lib/pauta-operacional";
+import type { DemandaStatus } from "@/types/demanda";
+import type { PautaItem } from "@/types/pauta-operacional";
+import { contextoDoItem, rotuloDeOrigem, rotuloDeResponsaveis, type PautaContexto } from "./pautaContexto";
 
-const formatHora = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
-const formatDiaGrupo = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
-
-function chaveDoDia(demanda: Demanda): string {
-  const prazo = new Date(demanda.prazoEtapaAtual ?? "");
-  if (Number.isNaN(prazo.getTime())) return "sem-prazo";
-  return prazo.toISOString().slice(0, 10);
+function janelaDoItem(item: PautaItem): string {
+  const { estado, inicio, fim } = item.planejamento;
+  if (estado === "planejado") return `${formatarDiaMes(inicio)} → ${formatarDiaMes(fim)}`;
+  if (estado === "incompleto") return `Início ${formatarDiaMes(inicio)} · fim não definido`;
+  return "Sem janela planejada";
 }
 
-function tituloDoGrupo(chave: string): string {
-  if (chave === "sem-prazo") return "Sem prazo definido";
-  const data = new Date(`${chave}T00:00:00`);
-  const titulo = formatDiaGrupo.format(data);
-  return titulo.charAt(0).toUpperCase() + titulo.slice(1);
-}
-
-export function PautaLista({
-  demandas,
-  onOpenDetails,
-  emExecucaoIds,
-}: {
-  demandas: Demanda[];
-  onOpenDetails: (demandaId: string) => void;
-  /** Pauta global: demandas com sessão de trabalho ativa agora (selo discreto; sem pessoa nem tempo). */
-  emExecucaoIds?: ReadonlySet<string>;
-}) {
-  const { usuarios } = useUsuariosComIds(demandas.flatMap((demanda) => demanda.usuarioResponsavelIds));
-  const { projetos } = useDiretorioProjetos();
-
-  if (demandas.length === 0) {
-    return <EmptyState title="Nenhuma tarefa na pauta" description="Ajuste a busca ou os filtros para visualizar as tarefas do período." />;
+/** Lista da Pauta: as MESMAS etapas e os mesmos grupos do Gantt (colaborador ou projeto), em linhas — sem outra fonte de dados nem outra ordem. */
+export function PautaLista({ grupos, contexto }: { grupos: GrupoPauta[]; contexto: PautaContexto }) {
+  if (grupos.length === 0) {
+    return <EmptyState title="Nenhuma etapa na pauta" description="Ajuste a busca ou os filtros para visualizar as etapas em aberto." />;
   }
-
-  // Ordem já vem do servidor (sort=prazo_asc, ver PautaView) — agrupar por dia é
-  // apresentação, não filtro; seguro sobre o array acumulado já ordenado corretamente.
-  const grupos = new Map<string, Demanda[]>();
-  for (const demanda of demandas) {
-    const chave = chaveDoDia(demanda);
-    const grupo = grupos.get(chave);
-    if (grupo) grupo.push(demanda);
-    else grupos.set(chave, [demanda]);
-  }
-
   return (
     <div className="flex flex-col gap-5">
-      {[...grupos.entries()].map(([chave, demandasDoDia]) => (
-        <div key={chave} className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-            <h2 className="text-sm font-semibold text-fg">{tituloDoGrupo(chave)}</h2>
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-fg-subtle">
-              {demandasDoDia.length} tarefa(s)
-            </span>
-          </div>
-
-          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {demandasDoDia.map((demanda) => {
-              const prazo = new Date(demanda.prazoEtapaAtual ?? "");
-              const hora = Number.isNaN(prazo.getTime()) ? "—" : formatHora.format(prazo);
-              const responsaveis = demanda.usuarioResponsavelIds
-                .map((id) => resolverUsuarioPorReferencia(normalizarUsuarioId(id), usuarios))
-                .filter((usuario): usuario is (typeof usuarios)[number] => Boolean(usuario));
-
-              return (
-                <li key={demanda.id} className="flex flex-wrap items-center gap-4 px-4 py-3 transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5">
-                  <span className="w-14 shrink-0 text-sm font-semibold tabular-nums text-fg-muted">{hora}</span>
-
-                  <button
-                    type="button"
-                    onClick={() => onOpenDetails(demanda.id)}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <span className="block truncate font-semibold text-fg transition hover:text-indigo-600 dark:hover:text-indigo-400">
-                      {demanda.nome}
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs text-fg-subtle">
-                      {rotuloDemanda(demanda)} · {resolverProjetoNome(demanda.projetoId, projetos)}
-                    </span>
-                  </button>
-
-                  <AvatarStack
-                    pessoas={responsaveis.map((usuario) => ({
-                      id: usuario.id,
-                      nome: usuario.nome,
-                      corIdentificacao: usuario.corIdentificacao,
-                      fotoUrl: usuario.fotoUrl,
-                    }))}
-                    max={3}
-                    size="h-7 w-7"
-                  />
-
-                  {emExecucaoIds?.has(demanda.id) && <Badge tone="green">Em execução agora</Badge>}
-                  <Badge tone={statusDemandaTone[demanda.status]}>{statusDemandaLabels[demanda.status]}</Badge>
-
-                  <button
-                    type="button"
-                    onClick={() => onOpenDetails(demanda.id)}
-                    aria-label={`Ver detalhes de ${demanda.nome}`}
-                    className="rounded-full p-2 text-fg-subtle transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+      {grupos.map((grupo) => {
+        const { planejadas, incompletas, naoPlanejadas } = separarPorPlanejamento(grupo.itens);
+        const usuarioDoGrupo = grupo.tipo === "colaborador" ? grupo.chave : undefined;
+        return (
+          <section key={grupo.chave} aria-label={grupo.titulo} className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
+            <div className="flex items-baseline gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-800/50">
+              <h2 className="text-sm font-semibold text-fg">{grupo.titulo}</h2>
+              <span className="text-xs text-fg-subtle">
+                {grupo.itens.length} {grupo.itens.length === 1 ? "etapa" : "etapas"}
+              </span>
+            </div>
+            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {[...planejadas, ...incompletas, ...naoPlanejadas].map((item) => {
+                const responsaveis = rotuloDeResponsaveis(item, contexto, usuarioDoGrupo);
+                const origem = rotuloDeOrigem(item);
+                return (
+                  <li key={item.etapaId}>
+                    <button type="button" onClick={() => contexto.onOpenDetails(item.demandaId)} className="grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 md:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_11rem_4.5rem]">
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-2">
+                          <span className="min-w-0 truncate text-sm font-semibold text-fg">
+                            <span className="mr-1 font-normal text-fg-subtle">{item.demandaIdentificador}</span>
+                            {item.demandaNome}
+                          </span>
+                          {contexto.emExecucaoIds.has(item.demandaId) && <Badge tone="green">Em execução agora</Badge>}
+                        </span>
+                        <span className="block truncate text-xs text-fg-subtle">
+                          {item.etapaNome}
+                          {item.etapaAtual ? " · etapa atual" : ""} · tarefa {(statusDemandaLabels[item.demandaStatus as DemandaStatus] ?? item.demandaStatus).toLowerCase()}
+                        </span>
+                      </span>
+                      <span className="hidden min-w-0 md:block">
+                        <span className="block truncate text-xs text-fg-muted">{contextoDoItem(item, contexto) || "Sem cliente / projeto"}</span>
+                        <span className="block truncate text-xs text-fg-subtle" title={origem ?? undefined}>
+                          {responsaveis ?? origem ?? ""}
+                        </span>
+                      </span>
+                      <span className={item.planejamento.estado === "planejado" ? "text-xs font-medium text-fg" : "text-xs text-amber-700 dark:text-amber-400"}>{janelaDoItem(item)}</span>
+                      <span className="justify-self-end"><PrioridadeTag prioridade={item.prioridade} /></span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
     </div>
   );
 }

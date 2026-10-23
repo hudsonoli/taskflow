@@ -31,6 +31,7 @@ from app.api.routes import (
     grupos_cliente,
     health,
     modelos_campanha,
+    pauta_operacional,
     pecas,
     projeto_modelo_campanha,
     projetos,
@@ -91,6 +92,7 @@ app.include_router(modelos_campanha.router)
 app.include_router(eventos.router)
 app.include_router(sessoes_trabalho.router)
 app.include_router(trafego_operacional.router)
+app.include_router(pauta_operacional.router)
 app.include_router(empresas.router)
 app.include_router(usuarios.router)
 app.include_router(usuario_capacidade.router)

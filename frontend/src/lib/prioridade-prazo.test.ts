@@ -62,8 +62,7 @@ test("a ordem é do SERVIDOR: a tela pede sort=operacional e lista/Kanban/Solici
   assert.match(kanban, /demandas\.filter\(\(demanda\) => \(column\.statuses as DemandaStatus\[\]\)\.includes\(demanda\.status\)\)/);
 });
 
-test("Pauta e Meu Dia mantêm os seus sorts (prazo_asc literal e fila_pessoal); o novo é só das Tarefas", () => {
-  assert.match(semComentarios(ler("components/pauta/PautaView.tsx")), /sort: "prazo_asc" as const/);
-  assert.doesNotMatch(semComentarios(ler("components/pauta/PautaView.tsx")), /"operacional"/);
+test("Meu Dia mantém o sort fila_pessoal; a Pauta por etapa tem endpoint próprio (sem sort de Demandas); o novo sort é só das Tarefas", () => {
+  assert.doesNotMatch(semComentarios(ler("components/pauta/PautaView.tsx")), /"operacional"|sort:/);
   assert.match(semComentarios(ler("lib/api-backend.ts")), /"fila_pessoal"/);
 });

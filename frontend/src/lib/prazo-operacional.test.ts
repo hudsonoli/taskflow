@@ -89,7 +89,6 @@ test("as telas mostram prazoEtapaAtual com data + horário (formatPrazo exibe a 
   ]) {
     assert.match(ler(tela), /formatPrazo\(demanda\.prazoEtapaAtual\)/, tela);
   }
-  assert.match(ler("components/pauta/PautaLista.tsx"), /formatHora\.format\(prazo\)/); // Pauta: hora na linha do dia
 });
 
 test("o seletor de responsáveis e o de departamentos oferecem a empresa toda (o backend decide a regra)", () => {
