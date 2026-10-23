@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.cor_hex import normalizar_cor_hex
 from app.schemas.esforco import EsforcoMinutos
 
 WorkflowModeloStatus = Literal["ativo", "inativo", "arquivado"]
@@ -40,16 +41,30 @@ class WorkflowModeloCreate(BaseModel):
     # Full-replace: o form sempre edita o array inteiro de etapas de uma vez — não existem
     # endpoints incrementais de adicionar/remover etapa.
     etapas: list[WorkflowModeloEtapaWrite] = Field(min_length=1)
+    # Identidade visual (opcional e aditiva): `#RRGGBB` ou omitido/`null` = sem cor personalizada.
+    cor: str | None = None
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("cor", mode="before")
+    @classmethod
+    def validar_cor(cls, valor: object) -> str | None:
+        return normalizar_cor_hex(valor)
 
 
 class WorkflowModeloUpdate(BaseModel):
     nome: str | None = Field(default=None, min_length=1, max_length=255)
     etapas: list[WorkflowModeloEtapaWrite] | None = Field(default=None, min_length=1)
     status: Literal["ativo", "inativo"] | None = None
+    # Omitido = não muda; `null` = REMOVE a cor (volta ao neutro); `#RRGGBB` = define.
+    cor: str | None = None
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("cor", mode="before")
+    @classmethod
+    def validar_cor(cls, valor: object) -> str | None:
+        return normalizar_cor_hex(valor)
 
 
 class WorkflowModeloArquivar(BaseModel):
@@ -81,6 +96,7 @@ class WorkflowModeloRead(BaseModel):
     sequencial_referencia: int = Field(alias="sequencialReferencia")
     nome: str
     status: WorkflowModeloStatus
+    cor: str | None = None
     etapas: list[WorkflowModeloEtapaRead]
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
@@ -108,5 +124,6 @@ class WorkflowModeloDiretorioRead(BaseModel):
     id: UUID
     codigo_referencia: str = Field(alias="codigoReferencia")
     nome: str
+    cor: str | None = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)

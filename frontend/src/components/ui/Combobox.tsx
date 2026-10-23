@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Check, Search, X } from "lucide-react";
 import clsx from "clsx";
 
 interface ComboboxOption {
   value: string;
   label: string;
+  /** Marcador visual opcional antes do texto (ex.: a cor do workflow). O texto da opção continua sendo o rótulo. */
+  leading?: ReactNode;
 }
 
 export function Combobox({
@@ -50,7 +52,11 @@ export function Combobox({
       <label className="block text-sm">
         <span className="mb-1 block font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
         <span className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
+          {!open && selected?.leading ? (
+            <span className="pointer-events-none absolute left-3 top-1/2 flex -translate-y-1/2 items-center">{selected.leading}</span>
+          ) : (
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
+          )}
           <input
             value={open ? query : (selected?.label ?? "")}
             onChange={(event) => {
@@ -102,7 +108,10 @@ export function Combobox({
                     : "text-zinc-700 dark:text-zinc-200",
                 )}
               >
-                {option.label}
+                <span className="flex min-w-0 items-center gap-2">
+                  {option.leading}
+                  <span className="min-w-0 truncate">{option.label}</span>
+                </span>
                 {option.value === value && <Check className="h-3.5 w-3.5" />}
               </button>
             ))

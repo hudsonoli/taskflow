@@ -104,6 +104,7 @@ class WorkflowModeloService:
             db,
             nome=data.nome,
             etapas_data=data.etapas,
+            cor=data.cor,
             empresa_id=empresa_id,
             codigo_interno=codigo_interno,
             actor_usuario_id=actor_usuario_id,
@@ -115,6 +116,7 @@ class WorkflowModeloService:
         *,
         nome: str,
         etapas_data: list[WorkflowModeloEtapaWrite],
+        cor: str | None = None,
         empresa_id: str,
         codigo_interno: str,
         actor_usuario_id: str,
@@ -145,6 +147,7 @@ class WorkflowModeloService:
                 nome=nome,
                 nome_normalizado=nome_normalizado,
                 status=STATUS_ATIVO,
+                cor=cor,
                 created_at=now,
                 updated_at=now,
             )
@@ -228,6 +231,10 @@ class WorkflowModeloService:
                 workflow_modelo.nome = updates["nome"]
                 workflow_modelo.nome_normalizado = nome_normalizado
                 changed_fields.append("nome")
+
+            if "cor" in updates and updates["cor"] != workflow_modelo.cor:
+                workflow_modelo.cor = updates["cor"]  # None remove a cor; a cor é identidade visual, não entra no snapshot das Demandas
+                changed_fields.append("cor")
 
             if updates.get("etapas") is not None:
                 usuario_ids = {str(uid) for etapa in data.etapas for uid in etapa.usuario_responsavel_ids}
@@ -368,6 +375,7 @@ class WorkflowModeloService:
             sequencialReferencia=workflow_modelo.sequencial_referencia,
             nome=workflow_modelo.nome,
             status=workflow_modelo.status,
+            cor=workflow_modelo.cor,
             etapas=etapas_read,
             createdAt=workflow_modelo.created_at,
             updatedAt=workflow_modelo.updated_at,
@@ -384,6 +392,7 @@ class WorkflowModeloService:
             id=workflow_modelo.id,
             codigoReferencia=workflow_modelo.codigo_referencia,
             nome=workflow_modelo.nome,
+            cor=workflow_modelo.cor,
         )
 
     # ----------------------------------------------------------------------------------

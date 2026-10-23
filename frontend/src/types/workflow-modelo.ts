@@ -32,6 +32,8 @@ export type WorkflowModeloDiretorioItem = {
   id: string;
   codigoReferencia: string;
   nome: string;
+  /** Identidade visual: `#RRGGBB` ou `null` (sem cor personalizada → neutro). */
+  cor: string | null;
 };
 
 export type WorkflowModelo = {
@@ -46,6 +48,8 @@ export type WorkflowModelo = {
   sequencialReferencia: number;
   nome: string;
   status: WorkflowModeloStatus;
+  /** Identidade visual do modelo: `#RRGGBB` ou `null` (sem cor personalizada → neutro). Não faz parte do snapshot da Demanda. */
+  cor: string | null;
   etapas: WorkflowModeloEtapa[];
   createdAt: string;
   updatedAt: string;
@@ -55,5 +59,6 @@ export type WorkflowModelo = {
 export type WorkflowModeloFormDraft = {
   nome: string;
   status: Exclude<WorkflowModeloStatus, "arquivado">;
+  cor: string | null;
   etapas: WorkflowModeloEtapa[];
 };

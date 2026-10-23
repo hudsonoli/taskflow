@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { contarEtapasPorTipo } from "@/lib/workflow-modelo";
+import { WorkflowNomeComCor } from "./WorkflowCor";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
 
 export function WorkflowsGrid({
@@ -32,7 +33,9 @@ export function WorkflowsGrid({
                   <WorkflowIcon className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
-                  <p className="font-semibold text-fg">{modelo.nome}</p>
+                  <p className="font-semibold text-fg">
+                    <WorkflowNomeComCor nome={modelo.nome} cor={modelo.cor} />
+                  </p>
                   <p className="mt-0.5 text-xs text-fg-muted">{modelo.etapas.length} etapa(s)</p>
                 </div>
               </div>

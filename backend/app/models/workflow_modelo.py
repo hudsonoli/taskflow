@@ -23,8 +23,8 @@ class WorkflowModelo(Base):
     importação — Workflow está na lista de domínios com importação XLSX planejada (ver
     docs/pendencias-arquiteturais.md, item 4).
 
-    Sem `descricao`/`cor_identificacao`: o mock nunca teve esses campos, e a interface atual
-    (WorkflowsGrid) não exibe nada além de nome, contagem de etapas e badge de ativo/inativo.
+    Sem `descricao`. `cor` (P1_WORKFLOW_COLOR) é a IDENTIDADE VISUAL do modelo: HEX canônico `#RRGGBB` em maiúsculas ou NULL ("sem cor personalizada" — a interface usa o neutro). Não faz parte
+    do snapshot materializado da Demanda (alterar a cor do modelo muda como ele é exibido, não o histórico operacional) e não comunica erro, sucesso, urgência nem estado.
     """
 
     __tablename__ = "workflow_modelos"
@@ -33,6 +33,7 @@ class WorkflowModelo(Base):
             "status IN ('ativo', 'inativo', 'arquivado')",
             name="ck_workflow_modelos_status",
         ),
+        CheckConstraint("cor IS NULL OR cor ~ '^#[0-9A-F]{6}$'", name="ck_workflow_modelos_cor"),
         UniqueConstraint("empresa_id", "codigo_interno", name="uq_workflow_modelos_empresa_codigo_interno"),
         UniqueConstraint("empresa_id", "codigo_referencia", name="uq_workflow_modelos_empresa_codigo_referencia"),
         UniqueConstraint(
@@ -61,6 +62,7 @@ class WorkflowModelo(Base):
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
     nome_normalizado: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    cor: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

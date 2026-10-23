@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { generateId } from "@/lib/ids";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
+import { WorkflowCorField } from "./WorkflowCor";
 import { useUsuariosSelector } from "@/lib/useResponsaveisSelector";
 import {
   workflowEtapaTipoLabels,
@@ -40,6 +41,7 @@ function createInitialDraft(modelo?: WorkflowModelo): WorkflowModeloFormDraft {
   return {
     nome: modelo?.nome ?? "",
     status: modelo?.status === "inativo" ? "inativo" : "ativo",
+    cor: modelo?.cor ?? null,
     etapas: modelo?.etapas ?? [createEtapa()],
   };
 }
@@ -151,6 +153,8 @@ export function WorkflowModeloFormModal({
 
       <div className="mt-6 flex flex-col gap-4">
         <Input label="Nome do modelo de workflow" value={draft.nome} onChange={(event) => updateDraft({ nome: event.target.value })} />
+
+        <WorkflowCorField valor={draft.cor} onChange={(cor) => updateDraft({ cor })} nomePreview={draft.nome} />
 
         <div className="rounded-xl border border-zinc-200 bg-surface px-3.5 py-2.5 dark:border-zinc-700">
           <Switch

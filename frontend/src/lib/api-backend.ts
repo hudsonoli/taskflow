@@ -4,6 +4,7 @@ import { PERFIL_PARA_PERFIL_BASE, type Usuario, type UsuarioFormDraft, type Usua
 export { PERFIL_PARA_PERFIL_BASE };
 export type { UsuarioPerfilBaseApi };
 import { inputLocalParaIso } from "@/lib/prazo-operacional";
+import { corParaPayload } from "@/lib/workflow-cor";
 import { CODIGOS_CONFLITO_WORKFLOW, WorkflowEtapaConflitoError, type AcaoEtapa } from "@/lib/workflow-demanda";
 import { nomeDoDownload, type CorpoSelecaoLote } from "@/lib/selecao-arquivos";
 import type { ArquivoCentral, ArquivosCentralFiltros } from "@/types/arquivo";
@@ -2461,6 +2462,7 @@ type WorkflowModeloReadApi = {
   sequencialReferencia: number;
   nome: string;
   status: WorkflowModeloStatus;
+  cor?: string | null;
   etapas: WorkflowModeloEtapaReadApi[];
   createdAt: string;
   updatedAt: string;
@@ -2476,6 +2478,7 @@ function mapWorkflowModeloReadToWorkflowModelo(data: WorkflowModeloReadApi): Wor
     sequencialReferencia: data.sequencialReferencia,
     nome: data.nome,
     status: data.status,
+    cor: data.cor ?? null,
     etapas: data.etapas.map((etapa) => ({
       id: etapa.id,
       nome: etapa.nome,
@@ -2494,6 +2497,8 @@ function mapWorkflowModeloReadToWorkflowModelo(data: WorkflowModeloReadApi): Wor
 function workflowModeloDraftParaPayload(draft: WorkflowModeloFormDraft) {
   return {
     nome: draft.nome,
+    // sempre enviada: HEX válido define/troca, `null` REMOVE (no PATCH, omitir não mexeria na cor)
+    cor: corParaPayload(draft.cor),
     etapas: draft.etapas.map((etapa) => ({
       nome: etapa.nome,
       tipo: etapa.tipo,
@@ -2511,10 +2516,12 @@ type WorkflowModeloDiretorioApi = {
   id: string;
   codigoReferencia: string;
   nome: string;
+  cor?: string | null;
 };
 
 export async function listDiretorioWorkflowModelos(): Promise<WorkflowModeloDiretorioItem[]> {
-  return request<WorkflowModeloDiretorioApi[]>("/workflow-modelos/diretorio");
+  const itens = await request<WorkflowModeloDiretorioApi[]>("/workflow-modelos/diretorio");
+  return itens.map((item) => ({ ...item, cor: item.cor ?? null }));
 }
 
 /** Projeção mínima pra seleção operacional — ver TipoTarefaDiretorioItem. */

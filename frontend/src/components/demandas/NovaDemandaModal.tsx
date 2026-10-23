@@ -24,6 +24,7 @@ import { useDiretorioWorkflowModelos } from "@/lib/diretorioWorkflowModelos";
 import type { WorkflowModelo } from "@/types/workflow-modelo";
 import type { Demanda, DemandaFormDraft, DemandaPrioridade, DemandaStatusEditavel } from "@/types/demanda";
 import { useDiretorioClientes } from "@/lib/diretorioClientes";
+import { WorkflowCorPonto } from "@/components/workflows/WorkflowCor";
 import { EtapasDoWorkflowNaCriacao } from "./EtapasDoWorkflowNaCriacao";
 
 function createInitialDraft(demanda?: Demanda): DemandaFormDraft {
@@ -267,7 +268,7 @@ export function NovaDemandaModal({
             value={draft.workflowModeloId ?? ""}
             // trocar de modelo descarta os ajustes por etapa (eles pertencem às etapas do modelo anterior)
             onChange={(workflowModeloId) => updateDraft({ workflowModeloId: workflowModeloId || null, workflowEtapasResponsaveis: [] })}
-            options={workflowModelos.map((modelo) => ({ value: modelo.id, label: modelo.nome }))}
+            options={workflowModelos.map((modelo) => ({ value: modelo.id, label: modelo.nome, leading: <WorkflowCorPonto cor={modelo.cor} /> }))}
             placeholder="Buscar workflow…"
             emptyLabel="Nenhum workflow ativo encontrado"
           />
