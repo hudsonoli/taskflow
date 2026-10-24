@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, Clock, Send } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { DateTimeField } from "@/components/ui/DateTimeField";
 import { patchDemandaReal } from "@/lib/api-backend";
 import { formatPrazo } from "@/lib/demandas";
 import type { Demanda } from "@/types/demanda";
@@ -104,13 +104,7 @@ export function EnvioClienteCard({ demanda, onChange }: { demanda: Demanda; onCh
           <p className="text-xs text-fg-muted">Marca o prazo de retorno para alteração/aprovação.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <Input
-            label="Retorno até"
-            type="datetime-local"
-            value={prazoRetorno}
-            onChange={(event) => setPrazoRetorno(event.target.value)}
-            className="w-56"
-          />
+          <DateTimeField label="Retorno até" value={prazoRetorno} onChange={setPrazoRetorno} anulavel={false} className="w-72" />
           <Button type="button" onClick={() => void enviarParaCliente()} disabled={processando} className="px-3 py-2.5 text-xs">
             <Send className="h-3.5 w-3.5" />
             Enviar

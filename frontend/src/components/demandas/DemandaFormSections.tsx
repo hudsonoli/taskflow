@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 import { Combobox } from "@/components/ui/Combobox";
+import { DateTimeField } from "@/components/ui/DateTimeField";
 import { Input } from "@/components/ui/Input";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -199,10 +200,10 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
     if (!ok) setPit(demanda.pit ?? "");
   }
 
-  async function salvarPrazo() {
-    if (prazo === isoParaInputLocal(demanda.prazoEtapaAtual)) return;
-    // O campo é `datetime-local` (relógio local, sem fuso): vira o instante ISO com fuso antes de ir à API.
-    const ok = await salvarCampo(demanda, { prazoEtapaAtual: inputLocalParaIso(prazo) }, onChange, setErro);
+  async function salvarPrazo(valor: string) {
+    if (valor === isoParaInputLocal(demanda.prazoEtapaAtual)) return;
+    // O DateTimeField entrega o mesmo valor do antigo `datetime-local` (relógio local, sem fuso): vira o instante ISO com fuso antes de ir à API.
+    const ok = await salvarCampo(demanda, { prazoEtapaAtual: inputLocalParaIso(valor) }, onChange, setErro);
     if (!ok) setPrazo(isoParaInputLocal(demanda.prazoEtapaAtual));
   }
 
@@ -256,12 +257,11 @@ export function DadosDemandaSection({ demanda, onChange }: DemandaSectionProps) 
           placeholder="Buscar cliente…"
           emptyLabel="Nenhum cliente encontrado"
         />
-        <Input
+        <DateTimeField
           label="Prazo atual (data e horário)"
-          type="datetime-local"
           value={prazo}
-          onChange={(event) => setPrazo(event.target.value)}
-          onBlur={() => void salvarPrazo()}
+          onChange={setPrazo}
+          onCommit={(valor) => void salvarPrazo(valor)}
         />
         <Select
           label="Prioridade"

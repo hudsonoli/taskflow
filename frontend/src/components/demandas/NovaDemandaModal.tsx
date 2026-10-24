@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ClipboardPlus, GitBranch, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Combobox } from "@/components/ui/Combobox";
+import { DateTimeField } from "@/components/ui/DateTimeField";
 import { Input } from "@/components/ui/Input";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Modal } from "@/components/ui/Modal";
@@ -205,12 +206,10 @@ export function NovaDemandaModal({
         />
         {/* Prazo operacional: DATA + HORÁRIO (relógio local). Grava `prazoEtapaAtual` (instante, o que as listas mostram) e o dia
             escolhido em `dataFimPrevista` (planejamento). Limpar o campo não apaga a data planejada já existente. */}
-        <Input
+        <DateTimeField
           label="Prazo (data e horário)"
-          type="datetime-local"
           value={draft.prazoEtapaAtual ?? ""}
-          onChange={(event) => {
-            const valor = event.target.value;
+          onChange={(valor) => {
             updateDraft({
               prazoEtapaAtual: valor,
               ...(valor ? { dataFimPrevista: dataDoInputLocal(valor) } : {}),
