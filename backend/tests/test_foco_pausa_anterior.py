@@ -28,7 +28,7 @@ from tests.test_d1_criacao_demandas import _client_para
 from tests.test_demanda import _regra_todos_os_dias, dentro_do_expediente  # noqa: F401  (fixture)
 from tests.test_demanda_workflow import _departamento
 from tests.test_iniciar_trabalho import _ativas, _iniciar, _rascunho, _responsaveis, _status
-from tests.test_sessao_trabalho_integridade import _abrir_ok, _demanda, _sessao, _sessoes, operadores  # noqa: F401  (fixture `operadores`)
+from tests.test_sessao_trabalho_integridade import _abrir_ok, _demanda, _patch, _sessao, _sessoes, operadores  # noqa: F401  (fixture `operadores`)
 
 
 @pytest.fixture(autouse=True)
@@ -186,22 +186,37 @@ def test_sessao_departamental_ativa_em_a_tambem_impede_a_pausa(
 # --------------------------------------------------------------------------------------
 
 
-def test_sessao_antiga_em_a_aguardando_cliente_fecha_sem_forcar_pausada(
-    app, db_session: Session, client_admin: TestClient, operadores: list[Usuario]
+@pytest.mark.parametrize(
+    "ajuste",
+    [
+        "status = 'aguardando_cliente'",
+        "status = 'pausada', pausa_origem = 'manual', pausada_em = now()",
+        "status = 'bloqueada', motivo_bloqueio = 'teste de foco'",
+    ],
+)
+def test_sessao_antiga_em_a_que_nao_esta_em_execucao_fecha_sem_forcar_pausada(
+    app, db_session: Session, client_admin: TestClient, operadores: list[Usuario], ajuste: str
 ) -> None:
     op = operadores[0]
     a, (sessao_a,) = _em_execucao_com_sessao(client_admin, op)
     # estado "velho": a Demanda saiu de execução por fora, deixando a sessão ativa para trás
-    db_session.execute(text("UPDATE demandas SET status = 'aguardando_cliente' WHERE id = :d"), {"d": a["id"]})
+    status_antes_do_ajuste = _status(db_session, a["id"])
+    db_session.execute(text(f"UPDATE demandas SET {ajuste} WHERE id = :d"), {"d": a["id"]})
     db_session.flush()
+    status_de_a = _status(db_session, a["id"])
+    assert status_de_a != status_antes_do_ajuste
+    eventos_status_a = len(_eventos(db_session, a["id"], "demanda.status_alterado"))
     b = _rascunho(client_admin, op)
 
     assert _iniciar(_client_para(app, op), b["id"]).status_code == 200
 
-    assert _status(db_session, a["id"]) == "aguardando_cliente"
-    assert _sessao(db_session, sessao_a["id"]).status == "encerrada"
+    assert _status(db_session, a["id"]) == status_de_a  # NUNCA forçado a `pausada` (nem reescrito)
+    assert _sessao(db_session, sessao_a["id"]).status == "encerrada"  # a sessão fecha pela política existente
+    assert len(_eventos(db_session, a["id"], "demanda.status_alterado")) == eventos_status_a  # nenhum evento de status novo em A
     assert _pausas_da_troca(db_session, a["id"]) == []
     assert _status(db_session, b["id"]) == "em_execucao"
+    (ativa,) = _ativas(db_session, op.id)
+    assert ativa.demanda_id == b["id"]
 
 
 # --------------------------------------------------------------------------------------
@@ -275,6 +290,59 @@ def test_falha_inesperada_depois_da_pausa_desfaz_a_pausa_de_a(
     assert _status(db_session, a["id"]) == "em_execucao" and _status(db_session, b["id"]) == "rascunho"
     assert _pausas_da_troca(db_session, a["id"]) == []
     _linha_do_tempo_coerente(db_session, a["id"])
+
+
+# --------------------------------------------------------------------------------------
+# Responsabilidade EFETIVA por departamento continua valendo para B
+# --------------------------------------------------------------------------------------
+
+
+def _demanda_com_etapa_do_departamento(client_admin: TestClient, departamento_id: str) -> dict:
+    from tests.test_fase_8a_workflow_progressao import _etapa
+    from tests.test_sessao_trabalho_integridade import _demanda_com_workflow
+
+    demanda = _demanda_com_workflow(client_admin, [_etapa("Criação"), _etapa("Revisão")], departamentoResponsavelIds=[departamento_id])  # escopo de acesso do departamento
+    etapa_atual = next(e for e in demanda["workflowEtapas"] if e["ordem"] == 1)
+    resposta = client_admin.put(
+        f"/demandas/{demanda['id']}/workflow/etapas/{etapa_atual['id']}/responsaveis",
+        json={"usuarioResponsavelIds": [], "departamentoResponsavelIds": [departamento_id]},
+    )
+    assert resposta.status_code == 200, resposta.text
+    return demanda
+
+
+def test_membro_do_departamento_da_etapa_de_b_troca_o_foco_e_pausa_a(
+    app, db_session: Session, client_admin: TestClient, operadores: list[Usuario]
+) -> None:
+    op = operadores[0]
+    departamento = _departamento(db_session, db_session.get(Empresa, op.empresa_id))
+    op.departamento_id = departamento.id  # pelo ORM: a mesma Session atende a requisição
+    db_session.flush()
+    a, _ = _em_execucao_com_sessao(client_admin, op)
+    b = _demanda_com_etapa_do_departamento(client_admin, departamento.id)
+
+    assert _iniciar(_client_para(app, op), b["id"]).status_code == 200
+
+    assert _status(db_session, a["id"]) == "pausada" and _status(db_session, b["id"]) == "em_execucao"
+    (ativa,) = _ativas(db_session, op.id)
+    assert ativa.demanda_id == b["id"] and ativa.workflow_etapa_id is not None  # a sessão nasce ligada à etapa do departamento
+
+
+def test_quem_nao_e_do_departamento_da_etapa_de_b_nao_troca_o_foco_e_a_fica_intacta(
+    app, db_session: Session, client_admin: TestClient, operadores: list[Usuario]
+) -> None:
+    op = operadores[0]
+    departamento = _departamento(db_session, db_session.get(Empresa, op.empresa_id))  # o operador NÃO pertence a ele
+    a, (sessao_a,) = _em_execucao_com_sessao(client_admin, op)
+    b = _demanda_com_etapa_do_departamento(client_admin, departamento.id)
+    _patch(client_admin, b["id"], status="em_execucao")  # já em execução: quem não é executor leva 403 (sem no-op silencioso)
+    antes = _estado_de_a(db_session, a["id"], sessao_a["id"])
+
+    resposta = _iniciar(_client_para(app, op), b["id"])
+    assert resposta.status_code in (403, 404), resposta.text
+
+    assert _estado_de_a(db_session, a["id"], sessao_a["id"]) == antes
+    assert [s.demanda_id for s in _ativas(db_session, op.id)] == [a["id"]]
 
 
 # --------------------------------------------------------------------------------------
