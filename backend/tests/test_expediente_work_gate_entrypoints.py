@@ -268,10 +268,10 @@ def test_post_restaurar_devolve_o_409_estruturado_e_nada_muda(app, client_admin,
 
 
 def test_so_existe_uma_autoridade_de_horario_para_entrar_em_execucao() -> None:
-    """Create, update e restore chamam `_ensure_dentro_expediente`; nenhum deles decide horário por conta própria."""
+    """Create, update, restore e iniciar-trabalho (que valida B ANTES de pausar a Demanda anterior) chamam `_ensure_dentro_expediente`; nenhum deles decide horário por conta própria."""
     codigo = inspect.getsource(modulo_demanda_service.DemandaService)
-    assert codigo.count("self._ensure_dentro_expediente(") == 3
-    for metodo in ("create_demanda", "update_demanda", "restaurar_demanda"):
+    assert codigo.count("self._ensure_dentro_expediente(") == 4
+    for metodo in ("create_demanda", "update_demanda", "restaurar_demanda", "iniciar_trabalho"):
         fonte = inspect.getsource(getattr(DemandaService, metodo))
         assert "_ensure_dentro_expediente(" in fonte, metodo
         assert "esta_dentro_janela_trabalho" not in fonte and "momento_local" not in fonte, metodo

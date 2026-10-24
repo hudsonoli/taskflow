@@ -3,7 +3,7 @@
 `POST /demandas/{id}/iniciar-trabalho` (comando explícito — nenhum PATCH de status abre sessão):
 - executor da etapa atual: status → em_execucao + encerra a sessão dele em OUTRA demanda + abre a desta;
 - quem não é executor (gestor organizando o trabalho de outros): só o status, sem sessão pessoal;
-- nunca pausa a demanda anterior nem toca nas sessões de outros responsáveis; falha desfaz tudo.
+- troca de foco: a demanda anterior (a da sessão ativa) vai para `pausada` se o ator era o último executor ativo (ver `tests/test_foco_pausa_anterior.py`); falha desfaz tudo.
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ def test_responsavel_em_a_arrasta_b_e_troca_atomicamente(app, db_session: Sessio
     assert antiga.status == "encerrada" and antiga.motivo_encerramento == "substituicao_sessao_ativa"
     (ativa,) = _ativas(db_session, op.id)
     assert ativa.demanda_id == b["id"]
-    assert _status(db_session, a["id"]) == "em_execucao"  # A NÃO é pausada: outra pessoa pode estar trabalhando nela
+    assert _status(db_session, a["id"]) == "pausada"  # único executor ativo de A: trocar de foco a pausa (a regra completa está em test_foco_pausa_anterior.py)
 
 
 # --------------------------------------------------------------------------------------
@@ -286,9 +286,9 @@ def test_intervalos_operacionais_seguem_o_status_e_nao_a_sessao(app, db_session:
             ).all()
         )
 
-    antes_a = intervalos(a["id"])
     _iniciar(_client_para(app, op), b["id"])
-    assert intervalos(a["id"]) == antes_a  # A: nenhum intervalo aberto/fechado pela troca de foco
+    # A: a troca de foco a pausou (único executor) — o intervalo de execução fechou e o de pausa abriu, pela transição central (detalhes em test_foco_pausa_anterior.py)
+    assert [linha for linha in intervalos(a["id"]) if linha[1]] == [("pausada", True)]
     abertos_b = [linha for linha in intervalos(b["id"]) if linha[1]]
     assert abertos_b == [("em_execucao", True)]  # B: exatamente o intervalo de status em execução, aberto
 
@@ -398,6 +398,7 @@ def test_corrida_de_inicios_nunca_deixa_duas_sessoes_abertas(cenario_commitado) 
     with Fabrica() as db:
         ativas = db.scalar(select(func.count()).select_from(SessaoTrabalho).where(SessaoTrabalho.usuario_id == ids["usuario"], SessaoTrabalho.status == "ativa"))
         assert ativas == 1  # o índice único parcial é a barreira final
-        # toda demanda cuja transição "perdeu" não ficou em_execucao sem causa: quem deu conflito foi desfeito por inteiro
-        em_execucao = db.scalar(select(func.count()).select_from(Demanda).where(Demanda.empresa_id == ids["empresa"], Demanda.status == "em_execucao"))
-        assert em_execucao == resultados.count("ok")
+        # a troca de foco pausa a anterior: só a demanda que tem a sessão ativa fica em execução; quem deu conflito foi desfeito por inteiro (nada ficou em execução sem causa)
+        em_execucao = list(db.scalars(select(Demanda.id).where(Demanda.empresa_id == ids["empresa"], Demanda.status == "em_execucao")).all())
+        ativa_demanda = db.scalar(select(SessaoTrabalho.demanda_id).where(SessaoTrabalho.usuario_id == ids["usuario"], SessaoTrabalho.status == "ativa"))
+        assert em_execucao == [ativa_demanda]

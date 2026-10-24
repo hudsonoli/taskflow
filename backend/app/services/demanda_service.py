@@ -78,6 +78,7 @@ STATUS_PADRAO = "rascunho"
 STATUS_EM_EXECUCAO = "em_execucao"
 STATUS_PAUSADA = "pausada"
 PAUSA_ORIGEM_MANUAL = "manual"
+MOTIVO_TROCA_FOCO = "troca_foco"  # motivo gravado no evento de status quando a Demanda é pausada porque o último executor ativo trocou de foco
 STATUS_BLOQUEADA = "bloqueada"
 STATUS_CONCLUIDA = "concluida"
 
@@ -653,8 +654,10 @@ class DemandaService:
         *,
         actor: Usuario,
         commit: bool = True,
+        motivo_transicao: str | None = None,
     ) -> Demanda:
-        """Recebe a Demanda **já resolvida dentro do escopo** pela rota — nunca um id solto. `commit=False` (comando "iniciar trabalho"): só `flush`; a transação é de quem chama."""
+        """Recebe a Demanda **já resolvida dentro do escopo** pela rota — nunca um id solto. `commit=False` (comando "iniciar trabalho"): só `flush`; a transação é de quem chama.
+        `motivo_transicao` (opcional, uso interno): porquê da mudança de status, gravado no payload do evento `demanda.status_alterado` (ex.: `troca_foco`)."""
         actor_usuario_id = actor.id
         updates = data.model_dump(exclude_unset=True)
         campos_alterados: list[str] = []
@@ -694,6 +697,8 @@ class DemandaService:
                 demanda.status = status_final
                 campos_alterados.append("status")
                 payload_status = {"de": status_anterior, "para": status_final}
+                if motivo_transicao:
+                    payload_status["motivo"] = motivo_transicao
                 # Fase Expediente 1: origem da pausa. A transição manual grava `manual` (a automática por expediente é de outra fase); sair de `pausada` limpa.
                 if status_final == STATUS_PAUSADA:
                     demanda.pausa_origem = PAUSA_ORIGEM_MANUAL
@@ -907,13 +912,20 @@ class DemandaService:
 
         1. se a Demanda não está em execução, vai para `em_execucao` pela MESMA autoridade/validações do PATCH (lock, expediente, intervalos, eventos);
         2. se o ator é EXECUTOR da etapa atual (`eh_executor_da_demanda`), a sessão pessoal ativa dele em OUTRA demanda é encerrada (troca de foco) e a sessão nesta abre;
-        3. quem NÃO é executor (gestor/head organizando o trabalho de outros) só move o status — nenhuma sessão pessoal é criada para ele. Não há pausa da Demanda anterior
-           nem efeito sobre outros responsáveis.
+        3. quem NÃO é executor (gestor/head organizando o trabalho de outros) só move o status — nenhuma sessão pessoal é criada para ele, então não há troca de foco;
+        4. TROCA DE FOCO (executor com sessão ativa em OUTRA Demanda A): a Demanda anterior é a da SESSÃO ATIVA dele (nunca "qualquer uma em execução"). A sessão dele em A
+           fecha (`substituicao_sessao_ativa`) e, se A continua `em_execucao` e NINGUÉM mais tem sessão ativa nela (outro usuário ou departamento), A vai para `pausada` pela
+           MESMA transição central (`update_demanda`: evento de status com `motivo=troca_foco`, intervalo operacional, `pausa_origem=manual`). Se outro responsável segue
+           trabalhando em A, ela permanece `em_execucao` e só a sessão de quem trocou de foco fecha. A em outro status (ex.: `aguardando_cliente`): só a sessão fecha.
 
-        Falha em qualquer passo desfaz TUDO (status incluído). Idempotente: quem já tem sessão ativa nesta Demanda em execução não muda nada. Acesso só pelo escopo derivado
-        do Workflow (`via_workflow`) vale apenas para o executor — para os demais é 404 (o mesmo que o PATCH faria)."""
+        Falha em qualquer passo (ator não elegível, fora do expediente, etapa indisponível…) desfaz TUDO — A nem chega a ser tocada. Idempotente: quem já tem sessão ativa nesta
+        Demanda em execução não muda nada. Acesso só pelo escopo derivado do Workflow (`via_workflow`) vale apenas para o executor — para os demais é 404 (o mesmo que o PATCH faria).
+
+        Concorrência: as DUAS Demandas (A e B) são travadas em ordem de id (duas pessoas trocando A→B e B→A não se enroscam) ANTES de qualquer escrita; a sessão do ator é relida
+        `FOR UPDATE` depois do lock e, se mudou no intervalo, o travamento é refeito. "Há outra sessão ativa em A?" é decidido DENTRO da transação, com as linhas travadas:
+        quem fecha a sessão em A ao mesmo tempo é esperado, e quem tenta abrir em A depois do lock enxerga A já pausada (409)."""
         try:
-            self.repository.bloquear_demanda_para_atualizacao(db, demanda)
+            anterior = self._travar_demandas_do_foco(db, demanda, actor)
             if demanda.status == STATUS_ARQUIVADA:
                 raise DemandaInvalidTransitionError("Demanda arquivada não pode ser editada — restaure-a antes")
             elegivel = self._eh_executor(db, demanda, actor)
@@ -924,6 +936,11 @@ class DemandaService:
                 return demanda  # já está trabalhando aqui: nada a fazer (sem 409 redundante)
             if demanda.status == STATUS_EM_EXECUCAO and not elegivel:
                 raise DemandaTrabalhoSemResponsavelError("Você não é responsável pela etapa atual desta tarefa.")
+            if elegivel:
+                # Validação da nova tarefa ANTES de tocar na anterior (o rollback também cobriria, mas nada de A é escrito se B já é inviável).
+                self._ensure_dentro_expediente(db, demanda.empresa_id, actor)
+            if elegivel and anterior is not None:
+                self._encerrar_foco_anterior(db, anterior, nova=demanda, actor=actor)
             if demanda.status != STATUS_EM_EXECUCAO:
                 self.update_demanda(db, demanda, DemandaUpdate.model_validate({"status": STATUS_EM_EXECUCAO}), actor=actor, commit=False)
             if elegivel:
@@ -955,6 +972,40 @@ class DemandaService:
         except Exception:
             db.rollback()
             raise
+
+    def _travar_demandas_do_foco(self, db: Session, demanda: Demanda, actor: Usuario) -> Demanda | None:
+        """Trava (`FOR UPDATE`, em ordem de id) a Demanda que vai receber o foco e a da SESSÃO ATIVA do ator (a "anterior"), e devolve a anterior — `None` se o ator não tem
+        sessão ativa ou ela já é nesta Demanda. A sessão é relida `FOR UPDATE` depois dos locks; se ela se mudou entre a leitura e o lock, trava a nova e confere de novo."""
+        repo = self.sessao_service.repository
+        travadas: dict[str, Demanda] = {}
+        for _ in range(5):
+            ativa = repo.get_active_by_usuario(db, empresa_id=demanda.empresa_id, usuario_id=actor.id)
+            alvo_id = ativa.demanda_id if ativa is not None and ativa.demanda_id != demanda.id else None
+            for demanda_id in sorted(({demanda.id} | ({alvo_id} if alvo_id else set())) - set(travadas)):
+                alvo = demanda if demanda_id == demanda.id else self.repository.get_by_id(db, demanda_id)
+                if alvo is None:
+                    continue
+                self.repository.bloquear_demanda_para_atualizacao(db, alvo)
+                travadas[demanda_id] = alvo
+            ativa = repo.get_active_by_usuario(db, empresa_id=demanda.empresa_id, usuario_id=actor.id, for_update=True)
+            relido_id = ativa.demanda_id if ativa is not None and ativa.demanda_id != demanda.id else None
+            if relido_id == alvo_id:
+                return travadas.get(alvo_id) if alvo_id else None
+        raise DemandaInvalidTransitionError("O seu foco de trabalho mudou durante a operação — tente novamente")
+
+    def _encerrar_foco_anterior(self, db: Session, anterior: Demanda, *, nova: Demanda, actor: Usuario) -> None:
+        """Troca de foco: fecha a sessão do ator na Demanda anterior e, se ela segue `em_execucao` sem NENHUMA outra sessão ativa (outro usuário ou departamento), a pausa
+        pela transição central de status. Já com as duas Demandas travadas, na transação de `iniciar_trabalho` (sem commit)."""
+        fechada = self.sessao_service.encerrar_sessao_de_outro_foco(
+            db, empresa_id=anterior.empresa_id, usuario_id=actor.id, nova_demanda_id=nova.id, fim_em=agora_utc()
+        )
+        if fechada is None or anterior.status != STATUS_EM_EXECUCAO:
+            return  # nada fechado, ou a anterior nem estava em execução (ex.: aguardando cliente): a sessão fecha e o status fica como está
+        if self.sessao_service.repository.listar_ativas_para_encerramento(db, empresa_id=anterior.empresa_id, demanda_id=anterior.id):
+            return  # outro responsável continua nela: segue em execução
+        self.update_demanda(
+            db, anterior, DemandaUpdate.model_validate({"status": STATUS_PAUSADA}), actor=actor, commit=False, motivo_transicao=MOTIVO_TROCA_FOCO
+        )
 
     def _eh_executor(self, db: Session, demanda: Demanda, usuario: Usuario) -> bool:
         etapas = self._etapas_workflow_por_demanda(db, [demanda.id], demandas=[demanda]).get(demanda.id, [])

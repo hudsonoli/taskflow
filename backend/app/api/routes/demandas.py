@@ -509,7 +509,8 @@ def iniciar_trabalho(
 ):
     """"Começar a trabalhar nesta tarefa" (arrastar para Em execução no Kanban, ou o botão do card). Comando explícito e transacional: leva a Demanda a `em_execucao`
     (mesmas regras do PATCH) e, SE o usuário é executor da etapa atual, troca o foco pessoal — encerra a sessão dele em outra demanda e abre a desta. Quem não é executor
-    (gestor organizando o trabalho de outros) só move o status: nenhuma sessão pessoal é criada. Nunca pausa a demanda anterior nem toca nas sessões de outros responsáveis."""
+    (gestor organizando o trabalho de outros) só move o status: nenhuma sessão pessoal é criada. Troca de foco: a demanda anterior (a da sessão ativa dele) vai para `pausada` SE ele era
+    o último executor ativo nela; se outro responsável segue trabalhando, ela continua em execução e só a sessão dele fecha. Tudo na mesma transação."""
     try:
         demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
         atualizada = demanda_service.iniciar_trabalho(db, demanda, actor=current_user, via_workflow=via_workflow)

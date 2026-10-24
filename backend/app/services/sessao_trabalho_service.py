@@ -258,7 +258,7 @@ class SessaoTrabalhoService:
             try:
                 with db.begin_nested():
                     if usuario_id:
-                        self._encerrar_sessao_de_outro_foco(
+                        self.encerrar_sessao_de_outro_foco(
                             db, empresa_id=empresa_id, usuario_id=usuario_id, nova_demanda_id=demanda_id, fim_em=inicio_em
                         )
                     if not usuario_id:
@@ -313,7 +313,7 @@ class SessaoTrabalhoService:
         if ativa is not None and ativa.demanda_id == demanda_id:
             raise SessaoTrabalhoConflitoError(CODIGO_SESSAO_ATIVA_EXISTENTE, "Você já possui uma atividade em execução nesta tarefa.")
 
-    def _encerrar_sessao_de_outro_foco(
+    def encerrar_sessao_de_outro_foco(
         self, db: Session, *, empresa_id: str, usuario_id: str, nova_demanda_id: str, fim_em: datetime
     ) -> SessaoTrabalho | None:
         """Encerra a sessão ativa da PESSOA em outra demanda (troca de foco). Só a sessão DELA: a Demanda anterior, o status dela, os outros responsáveis e as
