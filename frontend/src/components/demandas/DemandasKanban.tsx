@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { Clock, Lock } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
@@ -64,6 +64,32 @@ export function DemandasKanban({
   );
 
   const activeDemanda = activeId ? demandas.find((demanda) => demanda.id === activeId) : undefined;
+
+  // O trilho esmaece nas bordas em que ainda há colunas escondidas (cada lado desliga ao chegar nele): sugere a rolagem sem pintar nada à toa.
+  const trilhoRef = useRef<HTMLDivElement>(null);
+  const [noInicio, setNoInicio] = useState(true);
+  const [noFim, setNoFim] = useState(true);
+  const sincronizarBordas = useCallback(() => {
+    const trilho = trilhoRef.current;
+    if (!trilho) return;
+    setNoInicio(trilho.scrollLeft < 8);
+    setNoFim(trilho.scrollLeft + trilho.clientWidth >= trilho.scrollWidth - 8);
+  }, []);
+  useEffect(() => {
+    sincronizarBordas();
+    const trilho = trilhoRef.current;
+    if (!trilho) return;
+    const observador = new ResizeObserver(sincronizarBordas);
+    observador.observe(trilho);
+    return () => observador.disconnect();
+  }, [sincronizarBordas]);
+  const mascaraDasBordas: CSSProperties | undefined =
+    noInicio && noFim
+      ? undefined
+      : (() => {
+          const mascara = `linear-gradient(to right, transparent 0%, #000 ${noInicio ? "0%" : "24px"}, #000 ${noFim ? "100%" : "calc(100% - 24px)"}, transparent 100%)`;
+          return { maskImage: mascara, WebkitMaskImage: mascara };
+        })();
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));
@@ -133,8 +159,8 @@ export function DemandasKanban({
       )}
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveId(null)}>
-        <div className="overflow-x-auto pb-2">
-          <div className="flex gap-3">
+        <div ref={trilhoRef} onScroll={sincronizarBordas} style={mascaraDasBordas} className="overflow-x-auto pb-2">
+          <div className="flex items-start gap-3">
             {groupedDemands.map((column) => (
               <DemandaKanbanColumn
                 key={column.id}
