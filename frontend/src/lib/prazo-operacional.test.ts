@@ -52,7 +52,7 @@ test("vazio, nulo e inválido não geram valor (nunca lança)", () => {
 
 test("criação: a Nova Demanda pede data + horário e envia prazoEtapaAtual E dataFimPrevista no mesmo POST (sem segundo PATCH)", () => {
   const modal = ler("components/demandas/NovaDemandaModal.tsx");
-  assert.match(modal, /label="Prazo \(data e horário\)"\s+type="datetime-local"/);
+  assert.match(modal, /<DateTimeField\s+label="Prazo \(data e horário\)"/); // o campo nativo datetime-local foi trocado pelo DateTimeField (mesmo valor local, mesmo contrato)
   assert.match(modal, /value=\{draft\.prazoEtapaAtual \?\? ""\}/);
   assert.match(modal, /dataFimPrevista: dataDoInputLocal\(valor\)/);
   assert.doesNotMatch(modal, /label="Prazo previsto"/); // o campo só de data saiu
@@ -70,10 +70,10 @@ test("edição não apaga a data planejada: limpar o horário não zera dataFimP
   assert.match(modal, /\.\.\.\(valor \? \{ dataFimPrevista: dataDoInputLocal\(valor\) \} : \{\}\)/);
 });
 
-test("drawer: o campo datetime-local usa o relógio local e envia o instante com fuso (antes enviava hora sem fuso)", () => {
+test("drawer: o DateTimeField usa o relógio local e envia o instante com fuso (antes enviava hora sem fuso)", () => {
   const drawer = ler("components/demandas/DemandaFormSections.tsx");
   assert.match(drawer, /useState\(isoParaInputLocal\(demanda\.prazoEtapaAtual\)\)/);
-  assert.match(drawer, /\{ prazoEtapaAtual: inputLocalParaIso\(prazo\) \}/);
+  assert.match(drawer, /\{ prazoEtapaAtual: inputLocalParaIso\(valor\) \}/); // `valor` = o valor local concluído pelo campo (antes: o estado `prazo` no blur)
 });
 
 test("as telas mostram prazoEtapaAtual com data + horário (formatPrazo exibe a hora quando o valor é um instante)", () => {

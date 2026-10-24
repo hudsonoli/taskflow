@@ -79,7 +79,9 @@ export function Calendario({
   }
 
   const grade = montarGrade(mes.ano, mes.mes);
-  const titulo = `${NOMES_DOS_MESES[mes.mes - 1]} de ${mes.ano}`;
+  const nomeDoMes = NOMES_DOS_MESES[mes.mes - 1];
+  const titulo = `${nomeDoMes} de ${mes.ano}`;
+  const tituloVisivel = `${nomeDoMes.charAt(0).toUpperCase()}${nomeDoMes.slice(1)} de ${mes.ano}`; // só a inicial maiúscula ("Dezembro de 2026"), sem capitalizar o "de"
 
   return (
     <div className="w-[296px] max-w-full p-3" data-calendario>
@@ -87,8 +89,8 @@ export function Calendario({
         <button type="button" onClick={() => mudarMes(-1)} aria-label="Mês anterior" className={botaoIcone}>
           <ChevronLeft className="h-4 w-4" aria-hidden />
         </button>
-        <p className="text-sm font-semibold capitalize text-fg" aria-live="polite">
-          {titulo}
+        <p className="text-sm font-semibold text-fg" aria-live="polite">
+          {tituloVisivel}
         </p>
         <button type="button" onClick={() => mudarMes(1)} aria-label="Próximo mês" className={botaoIcone}>
           <ChevronRight className="h-4 w-4" aria-hidden />

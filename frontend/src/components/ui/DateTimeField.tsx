@@ -54,6 +54,8 @@ export function DateTimeField({
   const [tocouData, setTocouData] = useState(false);
   const [tocouHora, setTocouHora] = useState(false);
   const [valorVisto, setValorVisto] = useState(value);
+  // Último valor que JÁ foi concluído (`onCommit`): escolher o dia no calendário e depois sair do campo concluem o MESMO valor — só o primeiro conta, para não haver dois salvamentos enquanto o primeiro ainda está em voo.
+  const [comprometido, setComprometido] = useState(value);
   const [ancora, setAncora] = useState<HTMLDivElement | null>(null);
   const [aberto, setAberto] = useState(false);
   const [focarCalendario, setFocarCalendario] = useState(false);
@@ -64,6 +66,8 @@ export function DateTimeField({
   if (value !== valorVisto) {
     setValorVisto(value);
     if (interpretarTextos(textoData, textoHora, { exigeHora }).valor !== value) {
+      // vindo de fora (hidratou, reverteu por falha): é o novo ponto de partida e pode ser concluído de novo. O eco da PRÓPRIA digitação (textos já equivalem ao valor) não conta como concluído.
+      setComprometido(value);
       const partes = separarValor(value);
       setTextoData(formatarDataBr(partes.data));
       setTextoHora(partes.hora);
@@ -88,7 +92,10 @@ export function DateTimeField({
     if (estado.valor === undefined) return; // parcial/inválido: nada sobe
     if (estado.valor === "" && !anulavel) return; // campo obrigatório: esvaziar não é um valor
     if (estado.valor !== value) onChange?.(estado.valor);
-    if (concluir) onCommit?.(estado.valor);
+    if (concluir && estado.valor !== comprometido) {
+      setComprometido(estado.valor);
+      onCommit?.(estado.valor);
+    }
   }
 
   function aoEscolherDia(iso: string) {
@@ -112,7 +119,10 @@ export function DateTimeField({
     setTocouHora(false);
     fechar();
     if (value !== "") onChange?.("");
-    onCommit?.("");
+    if (comprometido !== "") {
+      setComprometido("");
+      onCommit?.("");
+    }
     entradaDataRef.current?.focus();
   }
 

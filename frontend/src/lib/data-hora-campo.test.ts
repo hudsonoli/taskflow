@@ -175,3 +175,29 @@ test("popover reaproveita o primitive existente (portal fixo com colisão) e sem
   const pacote = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { dependencies: Record<string, string> };
   for (const proibida of ["date-fns", "dayjs", "react-day-picker", "react-datepicker", "luxon", "moment"]) assert.equal(proibida in pacote.dependencies, false, proibida);
 });
+
+test("regressão de timezone POR CAMPO: Prazo atual vai como instante ISO (inputLocalParaIso); Retorno até segue indo como o valor local cru — nada foi harmonizado", () => {
+  const valor = interpretarTextos("26/10/2026", "17:29", EXIGE).valor;
+  assert.equal(valor, "2026-10-26T17:29");
+  // Prazo atual: relógio local → instante com fuso (o caminho de sempre)
+  assert.equal(inputLocalParaIso(valor), new Date(2026, 9, 26, 17, 29, 0, 0).toISOString());
+  // Retorno até: o corpo do PATCH leva `prazoRetornoCliente: prazoRetorno` (o valor local cru, sem conversão) — igual ao datetime-local antigo
+  assert.equal(valor, "2026-10-26T17:29");
+  const envio = semComentarios(ler("components/demandas/EnvioClienteCard.tsx"));
+  assert.match(envio, /prazoRetornoCliente: prazoRetorno,/);
+  assert.doesNotMatch(envio, /inputLocalParaIso/); // continua sem conversão (decisão desta fase: não harmonizar)
+});
+
+test("conclusão sem duplicidade: o campo só conclui (onCommit) quando o valor muda desde a última conclusão; vindo de fora, o ponto de partida é reposto", () => {
+  const campo = semComentarios(ler("components/ui/DateTimeField.tsx"));
+  assert.match(campo, /const \[comprometido, setComprometido\] = useState\(value\);/);
+  assert.match(campo, /if \(concluir && estado\.valor !== comprometido\) \{\s*setComprometido\(estado\.valor\);\s*onCommit\?\.\(estado\.valor\);/);
+  // o eco da própria digitação NÃO conta como "vindo de fora": só reseta quando os textos não equivalem ao novo valor
+  assert.ok(campo.indexOf("setComprometido(value)") > campo.indexOf("interpretarTextos(textoData, textoHora, { exigeHora }).valor !== value")); // dentro do ramo em que os textos NÃO equivalem ao valor novo
+});
+
+test("título do mês só com a inicial maiúscula ('Dezembro de 2026'), sem capitalizar o 'de'", () => {
+  const calendario = semComentarios(ler("components/ui/Calendario.tsx"));
+  assert.doesNotMatch(calendario, /capitalize/);
+  assert.match(calendario, /nomeDoMes\.charAt\(0\)\.toUpperCase\(\)/);
+});
