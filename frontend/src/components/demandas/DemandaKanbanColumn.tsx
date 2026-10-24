@@ -3,6 +3,7 @@
 import { AnimatePresence } from "framer-motion";
 import { useDroppable } from "@dnd-kit/core";
 import type { BadgeTone } from "@/components/ui/Badge";
+import { rotuloDaColunaRecolhida } from "@/lib/kanban-colunas";
 import type { Demanda } from "@/types/demanda";
 import { DemandaKanbanCard } from "./DemandaKanbanCard";
 
@@ -26,6 +27,8 @@ export function DemandaKanbanColumn({
   motivoBloqueio,
   onIniciarTrabalho,
   podeIniciar,
+  recolhida = false,
+  onExpandir,
 }: {
   id: string;
   title: string;
@@ -38,14 +41,47 @@ export function DemandaKanbanColumn({
   motivoBloqueio?: string;
   onIniciarTrabalho?: (demandaId: string) => void;
   podeIniciar?: boolean;
+  /** Sem cards visíveis e com o recolhimento automático ligado: a coluna continua no DOM e continua sendo destino de soltura, só estreita. */
+  recolhida?: boolean;
+  onExpandir?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
+
+  if (recolhida) {
+    const rotulo = rotuloDaColunaRecolhida(title, demandas.length);
+    return (
+      <section
+        ref={setNodeRef}
+        data-kanban-coluna={id}
+        data-recolhida="true"
+        aria-label={title}
+        className={`flex min-h-[300px] w-14 shrink-0 flex-col rounded-[16px] p-1.5 transition-[width,padding,background-color] duration-200 ease-out [corner-shape:squircle] motion-reduce:transition-none ${
+          isOver ? "bg-indigo-50/80 ring-2 ring-indigo-300/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30" : "bg-zinc-100/70 dark:bg-white/[0.04]"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={onExpandir}
+          aria-label={rotulo}
+          title={`${rotulo} ${description}`}
+          className="flex h-full min-h-[280px] w-full flex-col items-center gap-2.5 rounded-[12px] px-1 py-2.5 text-fg-muted transition hover:bg-black/[0.04] hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:hover:bg-white/[0.06]"
+        >
+          <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${PONTO_DA_COLUNA[tone]}`} />
+          <span className="grid h-[18px] min-w-[18px] place-items-center rounded-[6px] bg-black/[0.06] px-1 text-[11px] font-medium tabular-nums [corner-shape:squircle] dark:bg-white/[0.09]">
+            {demandas.length}
+          </span>
+          <span className="max-h-[170px] overflow-hidden text-[12px] font-semibold tracking-[-0.005em] [writing-mode:vertical-rl] rotate-180">{title}</span>
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section
       ref={setNodeRef}
+      data-kanban-coluna={id}
       aria-label={title}
-      className={`flex min-h-[300px] w-[280px] shrink-0 flex-col rounded-[16px] p-3 transition-colors duration-200 [corner-shape:squircle] sm:w-[300px] ${
+      className={`flex min-h-[300px] w-[280px] shrink-0 flex-col rounded-[16px] p-3 transition-[width,padding,background-color] duration-200 [corner-shape:squircle] motion-reduce:transition-none sm:w-[300px] ${
         isOver ? "bg-indigo-50/80 ring-2 ring-indigo-300/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30" : "bg-zinc-100/70 dark:bg-white/[0.04]"
       }`}
     >

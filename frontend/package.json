@@ -22,6 +22,7 @@
     "test:solicitadas": "node --test src/lib/solicitadas-progresso-nav.test.ts",
     "test:prioridade-prazo": "node --test src/lib/prioridade-prazo.test.ts",
     "test:etapa-responsaveis": "node --test src/lib/responsabilidade-etapa.test.ts",
+    "test:kanban-colunas": "node --test src/lib/kanban-colunas.test.ts",
     "test:workflow-cor": "node --test src/lib/workflow-cor.test.ts",
     "test:pauta-colaborador": "node --test src/lib/pauta-operacional.test.ts src/lib/pauta-operacional-ui.test.ts",
     "test:primeiro-acesso": "node --test src/lib/primeiro-acesso.test.ts",
