@@ -1241,6 +1241,14 @@ class DemandaRepository:
         workflow da mesma Demanda (Fase 8A): quem espera o lock enxerga o resultado de quem venceu."""
         db.refresh(demanda, with_for_update=True)
 
+    def bloquear_foco_do_usuario(self, db: Session, *, empresa_id: str, usuario_id: str) -> None:
+        """Serializa os "começar a trabalhar" de UMA pessoa (lock de transação, liberado no commit/rollback). Sem isto, dois inícios simultâneos da mesma pessoa em tarefas diferentes
+        podem ler "sem sessão ativa" ANTES de qualquer um commitar: o segundo fecha a sessão do primeiro pelo caminho de abertura e a tarefa anterior ficaria em execução sem sessão e sem
+        ser pausada. Com o lock, o segundo espera, relê o estado commitado e pausa a anterior pela regra normal. Só PostgreSQL (o resto do sistema também depende dele)."""
+        if db.get_bind().dialect.name != "postgresql":
+            return
+        db.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(f"foco:{empresa_id}:{usuario_id}", 0))))
+
     def listar_etapas_workflow_travadas(self, db: Session, demanda_id: str) -> list[DemandaWorkflowEtapa]:
         """Etapas da Demanda por `ordem`, relidas do banco (ignora cópias antigas do identity map). Chamar DEPOIS do lock."""
         statement = (

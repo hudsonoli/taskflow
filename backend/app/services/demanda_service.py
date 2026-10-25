@@ -921,10 +921,15 @@ class DemandaService:
         Falha em qualquer passo (ator não elegível, fora do expediente, etapa indisponível…) desfaz TUDO — A nem chega a ser tocada. Idempotente: quem já tem sessão ativa nesta
         Demanda em execução não muda nada. Acesso só pelo escopo derivado do Workflow (`via_workflow`) vale apenas para o executor — para os demais é 404 (o mesmo que o PATCH faria).
 
-        Concorrência: as DUAS Demandas (A e B) são travadas em ordem de id (duas pessoas trocando A→B e B→A não se enroscam) ANTES de qualquer escrita; a sessão do ator é relida
+        Concorrência: os inícios da MESMA pessoa são serializados por um lock de transação (advisory, por usuário) antes de ler a sessão dela; as DUAS Demandas (A e B) são travadas em ordem de id (duas pessoas trocando A→B e B→A não se enroscam) ANTES de qualquer escrita; a sessão do ator é relida
         `FOR UPDATE` depois do lock e, se mudou no intervalo, o travamento é refeito. "Há outra sessão ativa em A?" é decidido DENTRO da transação, com as linhas travadas:
         quem fecha a sessão em A ao mesmo tempo é esperado, e quem tenta abrir em A depois do lock enxerga A já pausada (409)."""
         try:
+            # A regra de expediente da empresa é criada de forma preguiçosa com COMMIT próprio (`get_ou_criar`, só na 1ª vez): garantir que existe ANTES de qualquer lock, para que esse commit nunca
+            # solte o lock da pessoa nem os das Demandas no meio do comando.
+            self.regra_expediente_service.get_ou_criar(db, empresa_id=demanda.empresa_id)
+            # Primeiro a PESSOA (serializa os inícios dela), depois as Demandas (A e B em ordem de id): a ordem dos locks é sempre esta.
+            self.repository.bloquear_foco_do_usuario(db, empresa_id=demanda.empresa_id, usuario_id=actor.id)
             anterior = self._travar_demandas_do_foco(db, demanda, actor)
             if demanda.status == STATUS_ARQUIVADA:
                 raise DemandaInvalidTransitionError("Demanda arquivada não pode ser editada — restaure-a antes")

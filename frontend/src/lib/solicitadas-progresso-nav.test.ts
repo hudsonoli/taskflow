@@ -119,7 +119,7 @@ test("Projetos fica imediatamente depois de Tarefas, sem mudar rota, ícone ou g
 
 test("arrastar para Em execução é o comando 'iniciar trabalho' (server-side, transacional); as demais colunas continuam no PATCH de status", () => {
   const kanban = semComentarios(ler("components/demandas/DemandasKanban.tsx"));
-  assert.match(kanban, /if \(novoStatus === "em_execucao"\) onIniciarTrabalho\(demanda\.id\);\s*else onMoveDemanda\(demanda\.id, novoStatus\);/);
+  assert.match(kanban, /if \(decisao\.acao === "iniciar-trabalho"\) onIniciarTrabalho\(demanda\.id\);\s*else onMoveDemanda\(demanda\.id, decisao\.novoStatus\);/);
   const api = semComentarios(ler("lib/api-backend.ts"));
   assert.match(api, /export async function iniciarTrabalhoDemandaReal\(demandaId: string\): Promise<Demanda>/);
   assert.match(api, /\/iniciar-trabalho`, \{ method: "POST"/);

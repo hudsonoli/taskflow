@@ -402,3 +402,39 @@ def test_corrida_de_inicios_nunca_deixa_duas_sessoes_abertas(cenario_commitado) 
         em_execucao = list(db.scalars(select(Demanda.id).where(Demanda.empresa_id == ids["empresa"], Demanda.status == "em_execucao")).all())
         ativa_demanda = db.scalar(select(SessaoTrabalho.demanda_id).where(SessaoTrabalho.usuario_id == ids["usuario"], SessaoTrabalho.status == "ativa"))
         assert em_execucao == [ativa_demanda]
+
+
+def test_corrida_repetida_de_inicios_mantem_o_invariante_so_a_tarefa_com_sessao_fica_em_execucao(cenario_commitado) -> None:
+    """Os inícios da MESMA pessoa são serializados (lock por usuário): em qualquer entrelaçamento, no fim só a tarefa que tem a sessão ativa está em execução — nunca uma tarefa 'em execução'
+    sem sessão deixada para trás por um início que leu 'sem sessão ativa' antes de outro commitar."""
+    Fabrica, ids = cenario_commitado
+    for _rodada in range(10):
+        barreira = threading.Barrier(3)
+        resultados: list[str] = []
+        trava = threading.Lock()
+
+        def iniciar(demanda_id: str) -> None:
+            with Fabrica() as db:
+                servico = DemandaService()
+                ator = db.get(Usuario, ids["usuario"])
+                demanda = db.get(Demanda, demanda_id)
+                barreira.wait(timeout=10)
+                try:
+                    servico.iniciar_trabalho(db, demanda, actor=ator)
+                    saida = "ok"
+                except Exception as exc:  # noqa: BLE001 — só o TIPO importa
+                    saida = type(exc).__name__
+                with trava:
+                    resultados.append(saida)
+
+        threads = [threading.Thread(target=iniciar, args=(d,)) for d in ids["demandas"]]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=60)
+            assert not t.is_alive(), "thread presa — possível deadlock"
+        assert all(r in ("ok", "SessaoTrabalhoConflitoError") for r in resultados), resultados
+        with Fabrica() as db:
+            sessoes = list(db.scalars(select(SessaoTrabalho.demanda_id).where(SessaoTrabalho.usuario_id == ids["usuario"], SessaoTrabalho.status == "ativa")).all())
+            em_execucao = list(db.scalars(select(Demanda.id).where(Demanda.empresa_id == ids["empresa"], Demanda.status == "em_execucao")).all())
+            assert len(sessoes) == 1 and em_execucao == sessoes, (sessoes, em_execucao, resultados)

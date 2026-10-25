@@ -7,6 +7,7 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { avaliarExpedienteOperacional, MOTIVO_INICIAR_FORA_EXPEDIENTE } from "@/lib/escopo-operacional";
 import { useEstadoExpediente } from "@/lib/estadoExpediente";
 import { colunaRecolhida, colunaSobOPonteiro } from "@/lib/kanban-colunas";
+import { decidirSoltura } from "@/lib/kanban-soltura";
 import { usePreferenciaBooleana } from "@/lib/preferencia-visual";
 import type { Demanda, DemandaStatus, DemandaStatusEditavel } from "@/types/demanda";
 import { DemandaKanbanCardOverlay } from "./DemandaKanbanCard";
@@ -164,24 +165,26 @@ export function DemandasKanban({
     const column = kanbanColumns.find((candidate) => candidate.id === over.id);
     const demanda = demandas.find((candidate) => candidate.id === active.id);
     if (!column || !demanda) return;
-    if ((column.statuses as DemandaStatus[]).includes(demanda.status)) return;
 
-    // Colunas que agrupam mais de um status (ex.: Rascunho/Planejada) usam o
-    // primeiro status da lista como destino ao soltar o card.
-    const novoStatus = column.statuses[0];
-
-    // Segunda barreira, além de desabilitar o arraste: mesmo que um card chegue aqui
-    // (drag iniciado dentro do expediente e solto depois do fim do turno, por exemplo),
-    // iniciar fora do horário continua bloqueado.
-    if (novoStatus === "em_execucao" && !expediente.podeIniciar) {
+    // A decisão (qual comando do servidor chamar) é uma função pura: `lib/kanban-soltura.ts`. Colunas que agrupam mais de um status (ex.: Rascunho/Planejada) usam o primeiro status
+    // da lista como destino. Soltar em Em execução é "começar a trabalhar" (comando próprio, troca de foco no servidor); soltar uma tarefa que JÁ está em execução mas sem a sessão desta
+    // pessoa também é esse comando (mesmo do botão "Iniciar trabalho"); as demais colunas seguem o PATCH de status.
+    const decisao = decidirSoltura({
+      statusDaColuna: column.statuses,
+      statusAtual: demanda.status,
+      podeIniciarTrabalho: demanda.podeIniciarTrabalho,
+      trabalhandoAgora: demanda.trabalhandoAgora,
+      podeIniciarNoExpediente: expediente.podeIniciar,
+    });
+    if (decisao.acao === "nada") return;
+    if (decisao.acao === "bloqueado-expediente") {
       setAvisoBloqueio(MOTIVO_INICIAR_FORA_EXPEDIENTE);
       return;
     }
 
     setAvisoBloqueio(null);
-    // Em Em execução NÃO é só mudar o status: é "começar a trabalhar" — comando próprio, sem confirmação, troca de foco fluida. As demais colunas seguem o PATCH de status.
-    if (novoStatus === "em_execucao") onIniciarTrabalho(demanda.id);
-    else onMoveDemanda(demanda.id, novoStatus);
+    if (decisao.acao === "iniciar-trabalho") onIniciarTrabalho(demanda.id);
+    else onMoveDemanda(demanda.id, decisao.novoStatus);
   }
 
   return (

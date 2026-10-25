@@ -387,6 +387,96 @@ def test_cadeia_de_trocas_a_b_c_pausa_a_e_b_e_deixa_so_c(app, db_session: Sessio
     assert db_session.get(Demanda, a["id"]).pausa_origem is None
 
 
+
+# --------------------------------------------------------------------------------------
+# Caminho REAL do Kanban: arrastar para Em execução = POST iniciar-trabalho (P1_KANBAN_FOCUS_SWITCH)
+# --------------------------------------------------------------------------------------
+
+
+def test_tarefa_ja_em_execucao_sem_sessao_ganha_a_sessao_no_arrasto_e_a_troca_seguinte_pausa_a(
+    app, db_session: Session, client_admin: TestClient, operadores: list[Usuario]
+) -> None:
+    """O defeito real: A foi parar em Em execução SEM sessão (campo Status do drawer, ou criada já em execução). O arrasto de A para Em execução tem de abrir a sessão — sem ela, arrastar B
+    não tem 'tarefa anterior' (a da sessão ativa) para pausar e as duas ficam em execução."""
+    op = operadores[0]
+    a = _demanda(client_admin)  # já em execução, sem sessão de ninguém
+    _responsaveis(client_admin, a["id"], op)
+    b = _rascunho(client_admin, op)
+    assert _status(db_session, a["id"]) == "em_execucao" and _ativas(db_session, op.id) == []
+    eventos_status_a = len(_eventos(db_session, a["id"], "demanda.status_alterado"))
+    cliente = _client_para(app, op)
+
+    # 1º arrasto (A → Em execução): o servidor só abre a sessão — nenhuma transição de status redundante
+    assert _iniciar(cliente, a["id"]).status_code == 200
+    (sessao_a,) = _ativas(db_session, op.id)
+    assert sessao_a.demanda_id == a["id"]
+    assert _status(db_session, a["id"]) == "em_execucao"
+    assert len(_eventos(db_session, a["id"], "demanda.status_alterado")) == eventos_status_a
+    assert len(_eventos(db_session, a["id"], "sessao_trabalho_iniciada")) == 1
+
+    # 2º arrasto (B → Em execução): A pausa, B executa, exatamente 1 sessão ativa
+    assert _iniciar(cliente, b["id"]).status_code == 200
+    assert _status(db_session, a["id"]) == "pausada" and _status(db_session, b["id"]) == "em_execucao"
+    (ativa,) = _ativas(db_session, op.id)
+    assert ativa.demanda_id == b["id"]
+    assert _sessao(db_session, sessao_a.id).status == "encerrada"
+    assert len(_pausas_da_troca(db_session, a["id"])) == 1
+    _linha_do_tempo_coerente(db_session, a["id"])
+
+
+def test_patch_de_status_para_em_execucao_nao_abre_sessao_nem_pausa_a_anterior_so_o_comando_faz(
+    app, db_session: Session, client_admin: TestClient, operadores: list[Usuario]
+) -> None:
+    """Contrato que explica o defeito: o PATCH de status (drawer, modal Nova tarefa) NÃO é 'começar a trabalhar'. Por isso o Kanban nunca usa PATCH para Em execução."""
+    op = operadores[0]
+    a, (sessao_a,) = _em_execucao_com_sessao(client_admin, op)
+    b = _rascunho(client_admin, op)
+
+    _patch(client_admin, b["id"], status="em_execucao")  # como o campo Status do drawer faz
+
+    assert _status(db_session, b["id"]) == "em_execucao" and _status(db_session, a["id"]) == "em_execucao"  # A não foi pausada
+    assert _sessao(db_session, sessao_a["id"]).status == "ativa" and [s.demanda_id for s in _ativas(db_session, op.id)] == [a["id"]]  # nenhuma sessão em B
+    assert _pausas_da_troca(db_session, a["id"]) == []
+
+
+def test_gestor_nao_executor_arrastando_a_e_b_so_move_status_sem_sessao_nem_pausa(
+    app, db_session: Session, client_admin: TestClient, client_gestor: TestClient, usuario_gestor: Usuario, operadores: list[Usuario]
+) -> None:
+    """Movimento administrativo preservado: quem organiza o trabalho dos outros move o status das duas; nenhuma sessão pessoal nasce e ninguém é pausado por ele."""
+    dono = operadores[0]
+    a = _rascunho(client_admin, dono)
+    b = _rascunho(client_admin, dono)
+
+    assert _iniciar(client_gestor, a["id"]).status_code == 200
+    assert _iniciar(client_gestor, b["id"]).status_code == 200
+
+    assert _status(db_session, a["id"]) == "em_execucao" and _status(db_session, b["id"]) == "em_execucao"
+    assert _ativas(db_session, usuario_gestor.id) == [] and _ativas(db_session, dono.id) == []
+    assert _pausas_da_troca(db_session, a["id"]) == []
+
+
+def test_cadeia_kanban_com_dois_executores_em_a_nao_pausa_a_e_reload_mostra_o_estado_do_servidor(
+    app, db_session: Session, client_admin: TestClient, operadores: list[Usuario]
+) -> None:
+    """Hudson + Raquel executam A (ambos arrastaram A); Hudson arrasta B: A segue em execução com a sessão da Raquel. O que a tela mostra depois do reload (lista) é o estado do servidor."""
+    hudson, raquel = operadores[0], operadores[1]
+    a = _demanda(client_admin)
+    _responsaveis(client_admin, a["id"], hudson, raquel)
+    b = _rascunho(client_admin, hudson)
+    assert _iniciar(_client_para(app, hudson), a["id"]).status_code == 200
+    assert _iniciar(_client_para(app, raquel), a["id"]).status_code == 200
+
+    assert _iniciar(_client_para(app, hudson), b["id"]).status_code == 200
+
+    assert _status(db_session, a["id"]) == "em_execucao"
+    assert [s.demanda_id for s in _ativas(db_session, hudson.id)] == [b["id"]]
+    assert [s.demanda_id for s in _ativas(db_session, raquel.id)] == [a["id"]]
+    # "reload": a listagem do Hudson reflete o servidor (B com 'trabalhando agora'; A em execução com a sessão da Raquel, não dele)
+    resposta = _client_para(app, hudson).get("/demandas?limit=50").json()
+    lista = {d["id"]: d for d in (resposta["items"] if isinstance(resposta, dict) else resposta)}
+    assert lista[b["id"]]["trabalhandoAgora"] is True and lista[a["id"]]["trabalhandoAgora"] is False
+    assert lista[a["id"]]["status"] == "em_execucao" and lista[b["id"]]["status"] == "em_execucao"
+
 # --------------------------------------------------------------------------------------
 # 6 — concorrência real (dados commitados, várias conexões)
 # --------------------------------------------------------------------------------------

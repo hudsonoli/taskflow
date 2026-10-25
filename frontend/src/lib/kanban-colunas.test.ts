@@ -67,9 +67,11 @@ test("o motor dnd-kit e as regras operacionais NÃO foram tocados: handleDragEnd
   const board = semComentarios(ler("components/demandas/DemandasKanban.tsx"));
   assert.match(board, /const sensors = useSensors\(useSensor\(PointerSensor, \{ activationConstraint: \{ distance: 8 \} \}\)\);/);
   assert.match(board, /function handleDragEnd\(event: DragEndEvent\) \{\s*setActiveId\(null\);\s*const \{ active, over \} = event;/);
-  assert.match(board, /if \(novoStatus === "em_execucao" && !expediente\.podeIniciar\) \{\s*setAvisoBloqueio\(MOTIVO_INICIAR_FORA_EXPEDIENTE\);/);
-  assert.match(board, /if \(novoStatus === "em_execucao"\) onIniciarTrabalho\(demanda\.id\);\s*else onMoveDemanda\(demanda\.id, novoStatus\);/);
-  assert.match(board, /\(column\.statuses as DemandaStatus\[\]\)\.includes\(demanda\.status\)\) return;/);
+  // a decisão do que chamar ao soltar agora é a função pura `decidirSoltura` (lib/kanban-soltura.ts, com testes próprios); o handleDragEnd só a executa
+  assert.match(board, /const decisao = decidirSoltura\(\{[\s\S]*?podeIniciarNoExpediente: expediente\.podeIniciar,\s*\}\);/);
+  assert.match(board, /if \(decisao\.acao === "nada"\) return;/);
+  assert.match(board, /if \(decisao\.acao === "bloqueado-expediente"\) \{\s*setAvisoBloqueio\(MOTIVO_INICIAR_FORA_EXPEDIENTE\);/);
+  assert.match(board, /if \(decisao\.acao === "iniciar-trabalho"\) onIniciarTrabalho\(demanda\.id\);\s*else onMoveDemanda\(demanda\.id, decisao\.novoStatus\);/);
   assert.doesNotMatch(board, /collisionDetection|useSortable|SortableContext/); // nenhum motor novo
   const coluna = semComentarios(ler("components/demandas/DemandaKanbanColumn.tsx"));
   assert.match(coluna, /const \{ setNodeRef, isOver \} = useDroppable\(\{ id \}\);/); // a coluna recolhida continua registrada no dnd-kit
