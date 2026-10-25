@@ -100,7 +100,7 @@ export function TopNav() {
   const navItems = buildNavItems(usuarioAtual, departamentos);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-white/70 backdrop-blur-xl dark:bg-zinc-950/70">
+    <header data-superficie="cabecalho" className="sticky top-0 z-20 border-b border-line bg-white/70 backdrop-blur-xl dark:bg-zinc-950/70">
       <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
         <Link href={tp("meu-dia")} className="flex shrink-0 items-center" aria-label="Início">
           <BrandLogo variant="header" />

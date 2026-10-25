@@ -110,6 +110,7 @@ export function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15 }}
+            data-superficie="menu"
             className="fixed inset-x-2 top-16 z-30 overflow-hidden rounded-2xl border border-line bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80"
           >
             <div className="flex items-center justify-between border-b border-line px-4 py-3">

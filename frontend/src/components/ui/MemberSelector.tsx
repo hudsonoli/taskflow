@@ -346,6 +346,7 @@ export function MemberSelector({
   const popover = open && (
     <div
       onKeyDown={aoTeclarNoPopover}
+      data-superficie="menu"
       style={{ width: posicao.largura, left: posicao.deslocamentoX }}
       className={clsx(
         "absolute z-30 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-line bg-surface shadow-lg",

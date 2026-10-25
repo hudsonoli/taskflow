@@ -11,7 +11,7 @@ import { caminhoDoTenant } from "@/lib/tenant";
 export function SessaoOutraEmpresaView({ slugDaSessao, onSair, saindo }: { slugDaSessao: string; onSair: () => void; saindo: boolean }) {
   return (
     <div className="flex h-screen items-center justify-center bg-app px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-sm">
+      <div data-superficie="cartao-central" className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-sm">
         <div className="mb-3 flex justify-center text-amber-600 dark:text-amber-400">
           <ShieldAlert size={24} />
         </div>

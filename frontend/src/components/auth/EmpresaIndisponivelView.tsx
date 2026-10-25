@@ -7,7 +7,7 @@ import { BrandLogo } from "@/components/branding/BrandLogo";
 export function EmpresaIndisponivelView() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-app px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-sm">
+      <div data-superficie="cartao-central" className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 text-center shadow-sm">
         <div className="mb-4 flex justify-center">
           <BrandLogo variant="auth" />
         </div>

@@ -133,6 +133,7 @@ export function ProfileMenu() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15 }}
+            data-superficie="menu"
             className="absolute right-0 z-30 mt-2 max-h-[calc(100vh-5rem)] w-72 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-2xl border border-line bg-surface shadow-lg"
           >
             {saindo ? (

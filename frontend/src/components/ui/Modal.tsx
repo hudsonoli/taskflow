@@ -33,6 +33,7 @@ export function Modal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
+            data-superficie="overlay"
             className="absolute inset-0 bg-zinc-950/35 backdrop-blur-md"
           />
           <motion.div
@@ -40,6 +41,7 @@ export function Modal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
+            data-superficie="modal"
             className={clsx(
               "relative max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-2xl",
               maxWidthClassName,

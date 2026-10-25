@@ -36,7 +36,7 @@ export function EsqueciSenhaView({ slug }: { slug?: string }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-app px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-sm">
+      <div data-superficie="cartao-central" className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <BrandLogo variant="auth" className="mb-3" />
           {mensagem && (

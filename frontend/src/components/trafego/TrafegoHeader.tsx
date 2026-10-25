@@ -21,6 +21,7 @@ function InfoTooltip({ texto }: { texto: string }) {
       <span
         id={id}
         role="tooltip"
+        data-superficie="tooltip"
         className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-64 -translate-x-1/2 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-normal leading-5 text-fg-muted opacity-0 shadow-lg transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
       >
         {texto}

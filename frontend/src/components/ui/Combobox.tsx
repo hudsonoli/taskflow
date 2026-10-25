@@ -88,7 +88,7 @@ export function Combobox({
       </label>
 
       {open && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-zinc-200 bg-surface p-1 shadow-lg dark:border-zinc-700">
+        <div data-superficie="menu" className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-zinc-200 bg-surface p-1 shadow-lg dark:border-zinc-700">
           {filtered.length === 0 ? (
             <p className="px-3 py-2 text-sm text-fg-subtle">{emptyLabel}</p>
           ) : (

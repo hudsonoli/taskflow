@@ -43,6 +43,7 @@ export function DetailsModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
+            data-superficie="overlay"
             className="absolute inset-0 bg-zinc-950/35 backdrop-blur-md"
           />
           <motion.div
@@ -50,6 +51,7 @@ export function DetailsModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
+            data-superficie="modal"
             className={`relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl ${maxWidthClassName}`}
           >
             <div className="flex items-start justify-between gap-4 border-b border-zinc-100 p-6 dark:border-zinc-800">

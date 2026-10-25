@@ -82,7 +82,7 @@ export function PainelFlutuante({
       ref={painelRef}
       role="dialog"
       aria-label={rotulo}
-      data-superficie={superficie}
+      data-superficie={superficie ?? "painel"}
       style={{
         position: "fixed",
         top: posicao?.top ?? 0,

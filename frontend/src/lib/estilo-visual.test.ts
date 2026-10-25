@@ -143,7 +143,7 @@ test("Calendario/DateTimeField/DateField não carregam classe Glass: só ganchos
   for (const arquivo of ["components/ui/DateTimeField.tsx", "components/ui/DateField.tsx"]) {
     assert.match(semComentarios(ler(arquivo)), /superficie="calendario"/, arquivo);
   }
-  assert.match(semComentarios(ler("components/filtros/PainelFlutuante.tsx")), /data-superficie=\{superficie\}/);
+  assert.match(semComentarios(ler("components/filtros/PainelFlutuante.tsx")), /data-superficie=\{superficie \?\? "painel"\}/);
 });
 
 test("DateField reaproveita Calendario + PainelFlutuante e a hora NÃO entra no calendário", () => {
@@ -240,4 +240,185 @@ test("timezone: nenhuma mudança de semântica (Prazo atual ISO/Z; Retorno até 
   const envio = semComentarios(ler("components/demandas/EnvioClienteCard.tsx"));
   assert.match(envio, /prazoRetornoCliente: prazoRetorno,/);
   assert.doesNotMatch(envio, /inputLocalParaIso/);
+});
+
+// ── P1_GLASS_APP_THEME: Glass no app inteiro ────────────────────────────────────────────────────────────────────
+
+const regrasGlass = blocoGlass.replace(/\/\*[\s\S]*?\*\//g, "");
+const blocoApp = regrasGlass.slice(regrasGlass.indexOf("--glass-canvas"));
+
+test("tokens do app: canvas, casca, painel, input, divisor, sombra, modal, scrim — nos dois modos de cor", () => {
+  const claro = /\[data-visual-style="glass"\]\[data-theme="claro"\] \{([\s\S]*?)\n\}/g;
+  const escuro = /\[data-visual-style="glass"\]\[data-theme="escuro"\] \{([\s\S]*?)\n\}/g;
+  const juntar = (re: RegExp) => [...regrasGlass.matchAll(re)].map((m) => m[1]).join("\n");
+  for (const token of ["canvas", "shell", "panel", "panel-2", "nested", "input", "input-disabled", "divider", "divider-strong", "hover", "card-shadow", "modal-surface", "scrim", "sticky"]) {
+    assert.match(juntar(claro), new RegExp(`--glass-${token}:`), `claro ${token}`);
+    assert.match(juntar(escuro), new RegExp(`--glass-${token}:`), `escuro ${token}`);
+  }
+});
+
+test("canvas só com CSS interno: gradientes radiais com a cor da empresa (sem imagem, sem wallpaper), sutil no claro e um pouco mais no escuro", () => {
+  const juntarBlocos = (tema: string) =>
+    [...regrasGlass.matchAll(new RegExp(`\\[data-visual-style="glass"\\]\\[data-theme="${tema}"\\] \\{([\\s\\S]*?)\\n\\}`, "g"))].map((m) => m[1]).join("\n");
+  const claro = juntarBlocos("claro");
+  assert.match(claro, /--glass-canvas:[\s\S]*?radial-gradient[\s\S]*?var\(--color-indigo-500\)[\s\S]*?var\(--app-bg\)/);
+  const pct = (bloco: string) => [...(/--glass-canvas:([\s\S]*?);/.exec(bloco)?.[1] ?? "").matchAll(/--color-(?:indigo|violet)-\d+\) (\d+)%/g)].map((m) => Number(m[1]));
+  const escuro = juntarBlocos("escuro");
+  assert.ok(Math.max(...pct(claro)) <= 12, "claro: muito sutil");
+  assert.ok(Math.max(...pct(escuro)) > Math.max(...pct(claro)) && Math.max(...pct(escuro)) <= 22, "escuro: um pouco mais perceptível, sem neon");
+  assert.match(regrasGlass, /\[data-visual-style="glass"\] body \{\s*background: var\(--glass-canvas\);\s*background-attachment: fixed;/);
+});
+
+test("orçamento de blur: backdrop-filter SÓ no cabeçalho, nos flutuantes, no scrim/modal e no cartão central — nunca em card, tabela, linha, input ou card do Kanban", () => {
+  const regras = [...regrasGlass.matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map((m) => ({ seletor: m[1].trim(), corpo: m[2] }));
+  const comBlur = regras.filter((r) => /(?<!-)backdrop-filter:\s*(?!none)/.test(r.corpo)).map((r) => r.seletor);
+  assert.ok(comBlur.length > 0 && comBlur.length <= 10, `blur em poucas regras (${comBlur.length})`);
+  for (const seletor of comBlur) {
+    assert.match(seletor, /data-superficie/, seletor); // só superfícies que se declaram
+    assert.doesNotMatch(seletor, /\.bg-surface|thead|\btr\b|\btd\b|\.field|kanban|input|select|textarea|button/, seletor);
+  }
+  for (const proibido of ["kanban", "thead", ".field", "input", "select", "textarea", " td", " tr"]) {
+    const regra = regras.find((r) => r.seletor.includes(proibido) && /backdrop-filter:\s*(?!none)/.test(r.corpo));
+    assert.equal(regra, undefined, proibido);
+  }
+});
+
+test("vidro aninhado: o container flutuante recalibra --surface/--surface-2 para um tom PLANO e os filhos não ganham outro blur", () => {
+  for (const superficie of ["menu", "painel", "tooltip", "modal"]) {
+    const regra = new RegExp(`\\[data-superficie="${superficie}"\\][\\s\\S]*?\\{([^}]*)\\}`).exec(regrasGlass)?.[1] ?? "";
+    assert.match(regra, /--surface: var\(--glass-nested\)/, superficie);
+    assert.match(regra, /--surface-2: var\(--glass-panel-2\)/, superficie);
+  }
+  assert.match(regrasGlass, /\.sticky\.bg-surface \{\s*background-color: var\(--glass-sticky\)/); // células fixas quase opacas: nada que rola aparece por baixo
+});
+
+test("tokens semânticos remapeados centralmente (bg-surface/border-line/.field) e o select nativo mantém fundo opaco", () => {
+  for (const mapa of ["--surface: var(--glass-panel)", "--surface-2: var(--glass-panel-2)", "--line: var(--glass-divider)", "--line-strong: var(--glass-divider-strong)", "--field-bg: var(--glass-input)"]) {
+    assert.ok(regrasGlass.includes(mapa), mapa);
+  }
+  assert.match(regrasGlass, /\[data-theme="claro"\] select\.field \{\s*background-color: #ffffff;/);
+  assert.match(regrasGlass, /\[data-theme="escuro"\] select\.field \{\s*background-color: #0f0f11;/);
+});
+
+test("nada de genérico perigoso: bg-white (knob do Switch) e cores semânticas/de prioridade não são reescritos pelo Glass", () => {
+  assert.doesNotMatch(regrasGlass, /\.bg-white\b|\.dark\\:bg-zinc-900\b/);
+  assert.doesNotMatch(blocoApp, /amber|emerald|red-|green|--danger|--success|--warning|--info|prioridade|brand-gradient\s*\{/i);
+  assert.doesNotMatch(regrasGlass, /\[data-kanban-card\][^{]*\{[^}]*border-left/); // a borda esquerda de prioridade do card nunca é tocada
+  assert.match(regrasGlass, /:not\(\[class\*="bg-indigo-50"\]\)/); // o destaque de "soltar aqui" da coluna sobrevive
+});
+
+test("fallbacks do app: sem blur ou com 'reduzir transparência' o material vira opaco (tokens do app incluídos)", () => {
+  const ultimoSupports = regrasGlass.slice(regrasGlass.lastIndexOf("@supports not"));
+  const reduzido = regrasGlass.slice(regrasGlass.lastIndexOf("@media (prefers-reduced-transparency: reduce)"));
+  for (const bloco of [ultimoSupports, reduzido]) {
+    for (const token of ["shell", "panel", "input", "modal-surface", "scrim"]) assert.match(bloco, new RegExp(`--glass-${token}:`), token);
+  }
+  for (const superficie of ["cabecalho", "menu", "painel", "tooltip", "overlay", "modal", "cartao-central"]) assert.ok(reduzido.includes(`[data-superficie="${superficie}"]`), superficie);
+});
+
+test("ganchos nos primitivos: modal, scrim, cabeçalho, menus, tooltips e cartão central declaram a superfície (corrigir o primitivo, não 30 telas)", () => {
+  const esperado: Record<string, string[]> = {
+    "components/ui/Modal.tsx": ['data-superficie="overlay"', 'data-superficie="modal"'],
+    "components/ui/DetailsModal.tsx": ['data-superficie="overlay"', 'data-superficie="modal"'],
+    "components/layout/TopNav.tsx": ['data-superficie="cabecalho"'],
+    "components/layout/GestaoTopBar.tsx": ['data-superficie="cabecalho"'],
+    "components/layout/ProfileMenu.tsx": ['data-superficie="menu"'],
+    "components/layout/NotificationBell.tsx": ['data-superficie="menu"'],
+    "components/ui/Combobox.tsx": ['data-superficie="menu"'],
+    "components/ui/MemberSelector.tsx": ['data-superficie="menu"'],
+    "components/demandas/ProgressoDemanda.tsx": ['data-superficie="tooltip"'],
+    "components/trafego/TrafegoHeader.tsx": ['data-superficie="tooltip"'],
+    "components/auth/LoginView.tsx": ['data-superficie="cartao-central"'],
+    "components/demandas/DemandaKanbanCard.tsx": ["data-kanban-card"],
+  };
+  for (const [arquivo, ganchos] of Object.entries(esperado)) {
+    const codigo = semComentarios(ler(arquivo));
+    for (const gancho of ganchos) assert.ok(codigo.includes(gancho), `${arquivo}: ${gancho}`);
+  }
+  assert.match(semComentarios(ler("components/filtros/PainelFlutuante.tsx")), /data-superficie=\{superficie \?\? "painel"\}/);
+});
+
+test("o estilo padrão fica intacto: os primitivos só ganharam atributos data-*; nenhuma classe visual foi trocada", () => {
+  // as classes de superfície que existiam continuam nos mesmos elementos (o Glass as sobrepõe só sob o atributo global)
+  assert.match(semComentarios(ler("components/ui/Modal.tsx")), /"relative max-h-\[90vh\] w-full overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-2xl"/);
+  assert.match(semComentarios(ler("components/ui/DetailsModal.tsx")), /relative flex max-h-\[85vh\] w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl/);
+  assert.match(semComentarios(ler("components/layout/TopNav.tsx")), /sticky top-0 z-20 border-b border-line bg-white\/70 backdrop-blur-xl dark:bg-zinc-950\/70/);
+  assert.match(semComentarios(ler("components/ui/Switch.tsx")), /rounded-full bg-white/); // o knob do Switch continua branco sólido
+});
+
+test("auditoria de superfícies Glass: TODA rota de src/app/**/page.tsx está classificada (nenhuma rota esquecida em silêncio)", async () => {
+  const { readdirSync, statSync } = await import("node:fs");
+  const { AUDITORIA_GLASS } = await import("./glass-superficies.ts");
+  const raiz = new URL("../app/", import.meta.url);
+  const achadas: string[] = [];
+  const andar = (dir: URL, prefixo: string) => {
+    for (const nome of readdirSync(dir)) {
+      const caminho = new URL(`${nome}${statSync(new URL(`${nome}`, dir)).isDirectory() ? "/" : ""}`, dir);
+      if (statSync(caminho).isDirectory()) andar(caminho, prefixo ? `${prefixo}/${nome}` : nome);
+      else if (nome === "page.tsx") achadas.push(prefixo);
+    }
+  };
+  andar(raiz, "");
+  const classificadas = AUDITORIA_GLASS.map((item) => item.rota);
+  assert.deepEqual([...achadas].filter((r) => r !== "").sort(), [...classificadas].sort());
+  assert.equal(new Set(classificadas).size, classificadas.length);
+  for (const item of AUDITORIA_GLASS) {
+    assert.ok(item.superficies.length > 0, item.rota);
+    assert.ok(item.glass === "aplicado" || item.glass === "intencionalmente-inalterado", item.rota);
+  }
+});
+
+// ── Contraste automatizado do Glass: o texto continua legível sobre o material TRANSLÚCIDO (pior caso = canvas com o brilho máximo da marca) ─────────────────────────────────────────────
+
+type Rgb = [number, number, number];
+const hex = (h: string): Rgb => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const misturar = (frente: Rgb, alfa: number, fundo: Rgb): Rgb => [0, 1, 2].map((i) => Math.round(frente[i] * alfa + fundo[i] * (1 - alfa))) as Rgb;
+const luminancia = (c: Rgb) => {
+  const [r, g, b] = c.map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contraste = (a: Rgb, b: Rgb) => {
+  const [la, lb] = [luminancia(a), luminancia(b)];
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+/** "--glass-x: color-mix(in srgb, #rrggbb NN%, transparent)" do bloco do tema → { cor, alfa } */
+function mixTransparente(tema: "claro" | "escuro", token: string): { cor: Rgb; alfa: number } {
+  const blocos = [...regrasGlass.matchAll(new RegExp(`\\[data-visual-style="glass"\\]\\[data-theme="${tema}"\\] \\{([\\s\\S]*?)\\n\\}`, "g"))].map((m) => m[1]).join("\n");
+  const m = new RegExp(`--glass-${token}: color-mix\\(in srgb, (#[0-9a-f]{6}) (\\d+(?:\\.\\d+)?)%, transparent\\)`).exec(blocos);
+  assert.ok(m, `${tema} ${token}`);
+  return { cor: hex(m[1]), alfa: Number(m[2]) / 100 };
+}
+const TOKENS_TEXTO = {
+  claro: { fundo: hex("#fafafa"), fg: hex("#18181b"), muted: hex("#5b5b64"), subtle: hex("#6b6b74"), marca: hex("#6366f1"), brilho: 0.11 + 0.08 + 0.07 },
+  escuro: { fundo: hex("#09090b"), fg: hex("#f4f4f5"), muted: hex("#a1a1aa"), subtle: hex("#8f8f99"), marca: hex("#6366f1"), brilho: 0.2 + 0.14 + 0.1 },
+} as const;
+
+test("contraste Glass: texto sobre painel/modal/menu translúcidos (pior caso: canvas com todo o brilho da marca) ≥ 4,5:1 nos dois modos", () => {
+  const resultados: string[] = [];
+  for (const tema of ["claro", "escuro"] as const) {
+    const t = TOKENS_TEXTO[tema];
+    const canvasPiorCaso = misturar(t.marca, t.brilho, t.fundo);
+    for (const [nome, token] of [["painel", "panel"], ["cabeçalho", "shell"], ["modal", "modal-surface"], ["flutuante", "surface"]] as const) {
+      const { cor, alfa } = mixTransparente(tema, token);
+      const superficie = misturar(cor, alfa, canvasPiorCaso);
+      for (const [rotulo, texto] of [["fg", t.fg], ["muted", t.muted], ["subtle", t.subtle]] as const) {
+        const razao = contraste(texto, superficie);
+        resultados.push(`${tema}/${nome}/${rotulo}=${razao.toFixed(2)}`);
+        assert.ok(razao >= 4.5, `${tema} ${nome} ${rotulo}: ${razao.toFixed(2)}`);
+      }
+    }
+  }
+  console.log(`CONTRASTE_GLASS ${resultados.join(" ")}`);
+});
+
+test("contraste Glass: dia selecionado usa o texto-sobre-marca já validado (--on-brand) e o fallback opaco é ainda mais legível", () => {
+  assert.match(regrasGlass, /--glass-selected-text: var\(--on-brand, #ffffff\)/);
+  for (const tema of ["claro", "escuro"] as const) {
+    const t = TOKENS_TEXTO[tema];
+    const opaco = tema === "claro" ? hex("#ffffff") : hex("#18181b");
+    assert.ok(contraste(t.fg, opaco) >= 7 && contraste(t.muted, opaco) >= 4.5, tema);
+  }
 });

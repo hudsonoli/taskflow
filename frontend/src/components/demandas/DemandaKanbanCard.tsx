@@ -109,6 +109,7 @@ export function DemandaKanbanCard({
         {...(arrastavel ? listeners : {})}
         {...attributes}
         type="button"
+        data-kanban-card
         onClick={() => onOpenDetails(demanda.id)}
         title={arrastavel ? undefined : motivoBloqueio}
         className={`group w-full touch-none rounded-[12px] border border-l-[3px] border-black/[0.06] bg-white p-3 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-all duration-200 ease-out hover:-translate-y-px hover:shadow-[0_6px_16px_-6px_rgba(0,0,0,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-white/[0.08] dark:bg-zinc-900 ${SQUIRCLE} ${
@@ -136,6 +137,7 @@ export function DemandaKanbanCard({
 export function DemandaKanbanCardOverlay({ demanda }: { demanda: Demanda }) {
   return (
     <div
+      data-kanban-card
       className={`w-[260px] rotate-[1.6deg] scale-[1.03] cursor-grabbing rounded-[12px] border border-l-[3px] border-black/[0.06] bg-white p-3 text-left shadow-[0_16px_32px_-12px_rgba(0,0,0,0.32)] dark:border-white/[0.08] dark:bg-zinc-900 ${SQUIRCLE} ${prioridadeBordaClasse[demanda.prioridade]}`}
     >
       <CardContent demanda={demanda} />

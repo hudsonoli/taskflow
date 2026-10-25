@@ -85,6 +85,7 @@ export function ProgressoDemanda({ demanda }: { demanda: Demanda }) {
       {posicao && (
         <div
           role="tooltip"
+          data-superficie="tooltip"
           style={{ position: "fixed", top: posicao.top, left: posicao.left, width: LARGURA_DICA }}
           className="pointer-events-none z-50 rounded-xl border border-line bg-surface p-3 text-xs shadow-lg"
         >

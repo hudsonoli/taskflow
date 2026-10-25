@@ -500,3 +500,205 @@ body {
     backdrop-filter: none;
   }
 }
+
+/* ── Glass: TaskFlow completo (P1_GLASS_APP_THEME) ───────────────────────────────────────────────────────────────
+   Mesma linguagem aprovada nos calendários, estendida ao app inteiro — SÓ com `data-visual-style="glass"` (o estilo padrão não é tocado por nada daqui) e ortogonal ao claro/escuro.
+
+   HIERARQUIA DE SUPERFÍCIES (quanto mais fundo/temporário, mais definido o vidro):
+     NÍVEL 0  canvas do app (`body`)           → gradientes CSS internos com a cor da empresa; sem imagem externa
+     NÍVEL 1  cabeçalho (sticky)               → translúcido + blur leve (já havia blur no padrão; sem custo novo)
+     NÍVEL 2  cards, tabelas, toolbars, Kanban → SÓ tokens: fundo translúcido + borda/divisor translúcidos + sombra mínima. SEM backdrop-filter
+     NÍVEL 3  menus, popovers, tooltips        → vidro evidente (blur próprio), um por vez
+     NÍVEL 4  modais/drawers + scrim           → vidro mais opaco para leitura; um por vez
+   POLÍTICA DE VIDRO ANINHADO: o blur mora no CONTAINER; os filhos de uma superfície flutuante recebem um tom translúcido PLANO (`--surface`/`--surface-2` locais) — nunca outro blur
+   (drawer → seção → input não empilham backdrop-filter). ORÇAMENTO DE BLUR: no máximo cabeçalho + 1 flutuante + scrim ao mesmo tempo; NENHUM blur por card, linha, input ou card do Kanban.
+   Cores semânticas (prioridade, status, aviso, erro, workflow) e botões primários NÃO são vidro. Densidade/geometria não mudam: é material, não escala. */
+[data-visual-style="glass"][data-theme="claro"] {
+  --glass-canvas:
+    radial-gradient(62rem 40rem at 6% -10%, color-mix(in srgb, var(--color-indigo-500) 11%, transparent), transparent 62%),
+    radial-gradient(52rem 38rem at 104% 6%, color-mix(in srgb, var(--color-violet-600) 8%, transparent), transparent 62%),
+    radial-gradient(70rem 42rem at 50% 118%, color-mix(in srgb, var(--color-indigo-400) 7%, transparent), transparent 62%),
+    var(--app-bg);
+  --glass-shell: color-mix(in srgb, #ffffff 66%, transparent);
+  --glass-panel: color-mix(in srgb, #ffffff 66%, transparent);
+  --glass-panel-2: color-mix(in srgb, var(--fg) 4.5%, transparent);
+  --glass-nested: color-mix(in srgb, var(--fg) 3.5%, transparent);
+  --glass-input: color-mix(in srgb, #ffffff 84%, transparent);
+  --glass-input-disabled: color-mix(in srgb, var(--fg) 6%, transparent);
+  --glass-divider: color-mix(in srgb, var(--fg) 10%, transparent);
+  --glass-divider-strong: color-mix(in srgb, var(--fg) 17%, transparent);
+  --glass-hover: color-mix(in srgb, var(--fg) 6%, transparent);
+  --glass-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 1px 2px rgba(24, 24, 27, 0.05), 0 10px 26px -16px rgba(24, 24, 27, 0.2);
+  --glass-modal-surface: color-mix(in srgb, #ffffff 94%, transparent);
+  --glass-scrim: color-mix(in srgb, #0b0b10 30%, transparent);
+  --glass-sticky: color-mix(in srgb, #ffffff 94%, transparent);
+}
+[data-visual-style="glass"][data-theme="escuro"] {
+  --glass-canvas:
+    radial-gradient(62rem 40rem at 6% -10%, color-mix(in srgb, var(--color-indigo-500) 20%, transparent), transparent 62%),
+    radial-gradient(52rem 38rem at 104% 6%, color-mix(in srgb, var(--color-violet-600) 14%, transparent), transparent 62%),
+    radial-gradient(70rem 42rem at 50% 118%, color-mix(in srgb, var(--color-indigo-400) 10%, transparent), transparent 62%),
+    var(--app-bg);
+  --glass-shell: color-mix(in srgb, #0d0d11 62%, transparent);
+  --glass-panel: color-mix(in srgb, #1a1a1f 58%, transparent);
+  --glass-panel-2: color-mix(in srgb, #ffffff 6%, transparent);
+  --glass-nested: color-mix(in srgb, #ffffff 5%, transparent);
+  --glass-input: color-mix(in srgb, #0b0b0e 62%, transparent);
+  --glass-input-disabled: color-mix(in srgb, #ffffff 5%, transparent);
+  --glass-divider: color-mix(in srgb, #ffffff 11%, transparent);
+  --glass-divider-strong: color-mix(in srgb, #ffffff 18%, transparent);
+  --glass-hover: color-mix(in srgb, #ffffff 8%, transparent);
+  --glass-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px -16px rgba(0, 0, 0, 0.65);
+  --glass-modal-surface: color-mix(in srgb, #1b1b20 95%, transparent);
+  --glass-scrim: color-mix(in srgb, #000000 55%, transparent);
+  --glass-sticky: color-mix(in srgb, #16161a 95%, transparent);
+}
+
+/* NÍVEL 0 — canvas. O fundo vive no `body` (viewport fixo, sem repintura por rolagem); os wrappers `bg-app` ficam transparentes para deixá-lo aparecer. */
+[data-visual-style="glass"] body {
+  background: var(--glass-canvas);
+  background-attachment: fixed;
+}
+[data-visual-style="glass"] .bg-app {
+  background: transparent;
+}
+
+/* Tokens semânticos remapeados: tudo que já usa bg-surface / border-line / .field ganha o material Glass SEM editar telas. */
+[data-visual-style="glass"][data-theme="claro"],
+[data-visual-style="glass"][data-theme="escuro"] {
+  --surface: var(--glass-panel);
+  --surface-2: var(--glass-panel-2);
+  --surface-hover: var(--glass-hover);
+  --line: var(--glass-divider);
+  --line-strong: var(--glass-divider-strong);
+  --field-bg: var(--glass-input);
+  --field-bg-disabled: var(--glass-input-disabled);
+}
+
+/* `<select>` nativo: com fundo translúcido o Chromium pinta a caixa clara — mantém o MESMO fundo opaco do estilo padrão (sem blur nem vidro individual em controle nativo). */
+[data-visual-style="glass"][data-theme="claro"] select.field {
+  background-color: #ffffff;
+}
+[data-visual-style="glass"][data-theme="escuro"] select.field {
+  background-color: #0f0f11;
+}
+
+/* NÍVEL 1 — cabeçalho */
+[data-visual-style="glass"] [data-superficie="cabecalho"] {
+  background: var(--glass-shell);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  backdrop-filter: blur(16px) saturate(1.35);
+  border-bottom-color: var(--glass-divider);
+}
+
+/* NÍVEL 2 — cards/containers: sombra mínima e topo luminoso; a borda já vem do token --line (translúcido) */
+[data-visual-style="glass"] .bg-surface.shadow-sm,
+[data-visual-style="glass"] [data-superficie="cartao-central"] {
+  box-shadow: var(--glass-card-shadow);
+}
+[data-visual-style="glass"] [data-superficie="cartao-central"] {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+}
+/* Células/colunas fixas precisam de fundo quase opaco: translúcido deixaria o conteúdo que rola aparecer por baixo (Gantt da Pauta, barra de seleção de arquivos) */
+[data-visual-style="glass"] .sticky.bg-surface {
+  background-color: var(--glass-sticky);
+}
+
+/* Tabelas: o container já é um card (tokens); cabeçalho translúcido; linhas planas; divisores translúcidos. Nenhum blur por linha. */
+[data-visual-style="glass"] thead {
+  background-color: var(--glass-panel-2);
+}
+[data-visual-style="glass"] .border-zinc-100,
+[data-visual-style="glass"] .border-zinc-200,
+[data-visual-style="glass"] .dark\:border-zinc-800,
+[data-visual-style="glass"] .dark\:border-zinc-700 {
+  border-color: var(--glass-divider);
+}
+[data-visual-style="glass"] .divide-zinc-100 > :not(:last-child),
+[data-visual-style="glass"] .dark\:divide-zinc-800 > :not(:last-child) {
+  border-color: var(--glass-divider);
+}
+
+/* Kanban (aprovado — só material): colunas NÍVEL 1 muito leve (sem borda real: não muda geometria; o destaque de "soltar aqui" continua o índigo da própria coluna); cards NÍVEL 2 sem blur. */
+[data-visual-style="glass"] [data-kanban-coluna]:not([class*="bg-indigo-50"]) {
+  background: var(--glass-nested);
+  box-shadow: inset 0 0 0 1px var(--glass-divider);
+}
+[data-visual-style="glass"] [data-kanban-card] {
+  background: var(--glass-panel);
+  border-top-color: var(--glass-divider);
+  border-right-color: var(--glass-divider);
+  border-bottom-color: var(--glass-divider);
+  box-shadow: var(--glass-card-shadow);
+}
+
+/* NÍVEL 3 — menus, painéis flutuantes, tooltips: vidro evidente (um por vez). Os filhos ficam planos (política de vidro aninhado). */
+[data-visual-style="glass"] :is([data-superficie="menu"], [data-superficie="painel"], [data-superficie="tooltip"]) {
+  --surface: var(--glass-nested);
+  --surface-2: var(--glass-panel-2);
+  background: var(--glass-overlay), var(--glass-surface);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+  backdrop-filter: blur(14px) saturate(1.35);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  color: var(--glass-text);
+}
+[data-visual-style="glass"] [data-superficie="tooltip"] {
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  backdrop-filter: blur(8px) saturate(1.2);
+}
+
+/* NÍVEL 4 — scrim e modais/drawers (DetailsModal e Modal): mais opacos para leitura; seções internas planas */
+[data-visual-style="glass"] [data-superficie="overlay"] {
+  background: var(--glass-scrim);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+[data-visual-style="glass"] [data-superficie="modal"] {
+  --surface: var(--glass-nested);
+  --surface-2: var(--glass-panel-2);
+  background: var(--glass-overlay), var(--glass-modal-surface);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Fallbacks do app inteiro (mesma política do calendário): sem suporte a blur ou com "reduzir transparência" o material vira OPACO e continua legível — o contraste nunca depende do blur */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-visual-style="glass"][data-theme="claro"] {
+    --glass-shell: #fbfbfc;
+    --glass-panel: #ffffff;
+    --glass-input: #ffffff;
+    --glass-modal-surface: #fbfbfc;
+    --glass-scrim: color-mix(in srgb, #0b0b10 45%, transparent);
+  }
+  [data-visual-style="glass"][data-theme="escuro"] {
+    --glass-shell: #0f0f13;
+    --glass-panel: #18181b;
+    --glass-input: #0f0f11;
+    --glass-modal-surface: #1c1c21;
+    --glass-scrim: color-mix(in srgb, #000000 70%, transparent);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-visual-style="glass"][data-theme="claro"] {
+    --glass-shell: #fbfbfc;
+    --glass-panel: #ffffff;
+    --glass-input: #ffffff;
+    --glass-modal-surface: #fbfbfc;
+    --glass-scrim: color-mix(in srgb, #0b0b10 45%, transparent);
+  }
+  [data-visual-style="glass"][data-theme="escuro"] {
+    --glass-shell: #0f0f13;
+    --glass-panel: #18181b;
+    --glass-input: #0f0f11;
+    --glass-modal-surface: #1c1c21;
+    --glass-scrim: color-mix(in srgb, #000000 70%, transparent);
+  }
+  [data-visual-style="glass"] :is([data-superficie="cabecalho"], [data-superficie="menu"], [data-superficie="painel"], [data-superficie="tooltip"], [data-superficie="overlay"], [data-superficie="modal"], [data-superficie="cartao-central"]) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
