@@ -115,7 +115,7 @@ test("cabeçalho/menu do tenant: logo da empresa; sem logo, o NOME da empresa (T
 
 test("login tenant: empresa é a identidade PRINCIPAL (logo + nome do slug), TaskFlow é secundário; sem empresa padrão", () => {
   const login = semComentarios(ler("components/auth/LoginView.tsx"));
-  assert.match(login, /<BrandLogo variant="auth" className="mb-3" \/>/);
+  assert.match(login, /<BrandLogo variant="auth" className="mb-6" \/>/);
   assert.match(login, /\{nomeEmpresa \?\? `Entrar no \$\{NOME_PRODUTO\}`\}/);
   assert.match(login, /\{nomeEmpresa && <p[^>]*>Entrar no \{NOME_PRODUTO\}<\/p>\}/);
   assert.doesNotMatch(login, /EMPRESA_CODIGO|BOX|boxcom/i);

@@ -18,7 +18,7 @@ const NUA = "tela-nua" as const;
 
 export const AUDITORIA_GLASS: readonly RotaGlass[] = [
   { rota: "e/[slug]", shell: TENANT, superficies: "redireciona para o Meu dia", glass: "aplicado" },
-  { rota: "e/[slug]/login", shell: NUA, superficies: "canvas + cartão central (vidro com blur único)", glass: "aplicado", observacao: "o estilo vem do localStorage do navegador; sem preferência no servidor" },
+  { rota: "e/[slug]/login", shell: NUA, superficies: "tela própria SEMPRE clara (layout dividido + painel de marca); ignora tema e estilo Glass", glass: "intencionalmente-inalterado", observacao: "decisão de produto: login só em tema claro" },
   { rota: "e/[slug]/esqueci-senha", shell: NUA, superficies: "canvas + cartão central", glass: "aplicado" },
   { rota: "e/[slug]/redefinir-senha", shell: NUA, superficies: "canvas + cartão central", glass: "aplicado" },
   { rota: "e/[slug]/trocar-senha-inicial", shell: NUA, superficies: "canvas + cartão central", glass: "aplicado" },

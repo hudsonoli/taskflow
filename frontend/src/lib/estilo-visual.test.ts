@@ -328,7 +328,7 @@ test("ganchos nos primitivos: modal, scrim, cabeçalho, menus, tooltips e cartã
     "components/ui/MemberSelector.tsx": ['data-superficie="menu"'],
     "components/demandas/ProgressoDemanda.tsx": ['data-superficie="tooltip"'],
     "components/trafego/TrafegoHeader.tsx": ['data-superficie="tooltip"'],
-    "components/auth/LoginView.tsx": ['data-superficie="cartao-central"'],
+    "components/auth/EsqueciSenhaView.tsx": ['data-superficie="cartao-central"'], // (o login tem tela própria, sempre clara: ver login-claro.test.ts)
     "components/demandas/DemandaKanbanCard.tsx": ["data-kanban-card"],
   };
   for (const [arquivo, ganchos] of Object.entries(esperado)) {

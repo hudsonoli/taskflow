@@ -348,6 +348,14 @@ body {
   --viz-series-8: #e66767;
 }
 
+/* Tela de login (LoginView): SEMPRE clara. O próprio componente re-escopa os tokens com data-theme="claro"; aqui o <html> acompanha (barras de rolagem e áreas de overscroll não ficam escuras). */
+html:has([data-login-claro]) {
+  color-scheme: light;
+}
+html:has([data-login-claro]) body {
+  background: #ffffff;
+}
+
 /* ── Estilo visual Glass (P1_GLASS_CALENDAR_THEME) ───────────────────────────────────────────────────────────────
    Eixo SEPARADO do modo de cor: `data-visual-style="default|glass"` no <html> (lib/estilo-visual.ts; gravado antes do primeiro paint) × `data-theme="claro|escuro"`.
    Glass NÃO é um terceiro tema e, nesta fase, só toca as superfícies de calendário/data: o popover que se declara `data-superficie="calendario"` (PainelFlutuante) e os ganchos
