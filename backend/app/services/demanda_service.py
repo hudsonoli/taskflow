@@ -908,12 +908,13 @@ class DemandaService:
     # ----------------------------------------------------------------------------------
 
     def iniciar_trabalho(self, db: Session, demanda: Demanda, *, actor: Usuario, via_workflow: bool = False) -> Demanda:
-        """"Começar a trabalhar nesta tarefa": comando EXPLÍCITO (nunca efeito colateral de qualquer PATCH de status). Numa única transação:
+        """"Começar a trabalhar nesta tarefa": comando EXPLÍCITO e ÚNICO significado de "arrastar para Em execução" no Kanban (nunca efeito colateral de um PATCH de status). Só quem é EXECUTOR da
+        etapa atual (`eh_executor_da_demanda`) pode iniciar: quem não é (gestor/head/dono que não executa a etapa) recebe 403 e NADA muda — nem status, nem sessão. Mudar o status
+        administrativamente continua sendo o PATCH de status (drawer/formulário), nunca este comando. Numa única transação:
 
         1. se a Demanda não está em execução, vai para `em_execucao` pela MESMA autoridade/validações do PATCH (lock, expediente, intervalos, eventos);
-        2. se o ator é EXECUTOR da etapa atual (`eh_executor_da_demanda`), a sessão pessoal ativa dele em OUTRA demanda é encerrada (troca de foco) e a sessão nesta abre;
-        3. quem NÃO é executor (gestor/head organizando o trabalho de outros) só move o status — nenhuma sessão pessoal é criada para ele, então não há troca de foco;
-        4. TROCA DE FOCO (executor com sessão ativa em OUTRA Demanda A): a Demanda anterior é a da SESSÃO ATIVA dele (nunca "qualquer uma em execução"). A sessão dele em A
+        2. a sessão pessoal ativa do ator em OUTRA demanda é encerrada (troca de foco) e a sessão nesta abre;
+        3. TROCA DE FOCO (executor com sessão ativa em OUTRA Demanda A): a Demanda anterior é a da SESSÃO ATIVA dele (nunca "qualquer uma em execução"). A sessão dele em A
            fecha (`substituicao_sessao_ativa`) e, se A continua `em_execucao` e NINGUÉM mais tem sessão ativa nela (outro usuário ou departamento), A vai para `pausada` pela
            MESMA transição central (`update_demanda`: evento de status com `motivo=troca_foco`, intervalo operacional, `pausa_origem=manual`). Se outro responsável segue
            trabalhando em A, ela permanece `em_execucao` e só a sessão de quem trocou de foco fecha. A em outro status (ex.: `aguardando_cliente`): só a sessão fecha.
@@ -936,41 +937,40 @@ class DemandaService:
             elegivel = self._eh_executor(db, demanda, actor)
             if via_workflow and not elegivel:
                 raise DemandaNotFoundError("Demanda não encontrada")
+            if not elegivel:
+                # Iniciar trabalho é a intenção PESSOAL de trabalhar: sem responsabilidade efetiva pela etapa atual não há o que iniciar — e o comando nunca vira "só mover o status".
+                raise DemandaTrabalhoSemResponsavelError("Você não pode iniciar trabalho nesta tarefa: só quem é responsável pela etapa atual pode.")
             ativa = self.sessao_service.repository.get_active_by_usuario(db, empresa_id=demanda.empresa_id, usuario_id=actor.id)
-            if elegivel and ativa is not None and ativa.demanda_id == demanda.id and demanda.status == STATUS_EM_EXECUCAO:
+            if ativa is not None and ativa.demanda_id == demanda.id and demanda.status == STATUS_EM_EXECUCAO:
                 return demanda  # já está trabalhando aqui: nada a fazer (sem 409 redundante)
-            if demanda.status == STATUS_EM_EXECUCAO and not elegivel:
-                raise DemandaTrabalhoSemResponsavelError("Você não é responsável pela etapa atual desta tarefa.")
-            if elegivel:
-                # Validação da nova tarefa ANTES de tocar na anterior (o rollback também cobriria, mas nada de A é escrito se B já é inviável).
-                self._ensure_dentro_expediente(db, demanda.empresa_id, actor)
-            if elegivel and anterior is not None:
+            # Validação da nova tarefa ANTES de tocar na anterior (o rollback também cobriria, mas nada de A é escrito se B já é inviável).
+            self._ensure_dentro_expediente(db, demanda.empresa_id, actor)
+            if anterior is not None:
                 self._encerrar_foco_anterior(db, anterior, nova=demanda, actor=actor)
             if demanda.status != STATUS_EM_EXECUCAO:
                 self.update_demanda(db, demanda, DemandaUpdate.model_validate({"status": STATUS_EM_EXECUCAO}), actor=actor, commit=False)
-            if elegivel:
-                agora = agora_utc()
-                evento = self.sessao_service.evento_service.create_evento(
-                    db,
-                    EventoCreate(
-                        empresaId=demanda.empresa_id,
-                        tipo="sessao_trabalho_iniciada",
-                        entidadeTipo="demanda",
-                        entidadeId=demanda.id,
-                        usuarioId=actor.id,
-                        payload={"demandaId": demanda.id},
-                        occurredAt=agora,
-                    ),
-                    commit=False,
-                )
-                self.sessao_service.abrir(
-                    db,
-                    empresa_id=demanda.empresa_id,
-                    demanda_id=demanda.id,
-                    evento_inicio_id=evento.id,
-                    inicio_em=agora,
-                    usuario_id=actor.id,
-                )
+            agora = agora_utc()
+            evento = self.sessao_service.evento_service.create_evento(
+                db,
+                EventoCreate(
+                    empresaId=demanda.empresa_id,
+                    tipo="sessao_trabalho_iniciada",
+                    entidadeTipo="demanda",
+                    entidadeId=demanda.id,
+                    usuarioId=actor.id,
+                    payload={"demandaId": demanda.id},
+                    occurredAt=agora,
+                ),
+                commit=False,
+            )
+            self.sessao_service.abrir(
+                db,
+                empresa_id=demanda.empresa_id,
+                demanda_id=demanda.id,
+                evento_inicio_id=evento.id,
+                inicio_em=agora,
+                usuario_id=actor.id,
+            )
             db.commit()
             db.refresh(demanda)
             return demanda

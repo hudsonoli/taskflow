@@ -308,8 +308,8 @@ export function DemandasView() {
     }
   }
 
-  // Arrastar para Em execução / "Iniciar trabalho": comando transacional do servidor (status + troca de foco pessoal, quando a pessoa é executora). O que a tela mostra vem da
-  // resposta e do refetch — nada de otimismo sobre sessão.
+  // Arrastar para Em execução / "Iniciar trabalho": comando transacional do servidor (status + sessão pessoal + troca de foco; só para quem executa a etapa). O que a tela mostra vem da
+  // resposta e do refetch — nada de otimismo sobre sessão. Se o servidor recusa (403/404/409/expediente), nada mudou: a mensagem aparece e a lista é relida para o card ficar onde está.
   async function iniciarTrabalho(demandaId: string) {
     setErro(null);
     try {
@@ -319,10 +319,16 @@ export function DemandasView() {
       setEstatisticasTick((tick) => tick + 1);
     } catch (error) {
       setErro(mensagemDeErro(error));
+      setRefetchTick((tick) => tick + 1);
     }
   }
 
   function handleMoveDemand(demandaId: string, novoStatus: DemandaStatusEditavel) {
+    // Rede de segurança: Em execução NUNCA é um PATCH de status vindo do Kanban — é o comando de iniciar trabalho (o `decidirSoltura` já garante; isto cobre qualquer chamada futura).
+    if (novoStatus === "em_execucao") {
+      void iniciarTrabalho(demandaId);
+      return;
+    }
     // Bloquear exige motivo — pedir antes evita um 422 previsível.
     if (novoStatus === "bloqueada") {
       setBloqueandoId(demandaId);

@@ -439,20 +439,22 @@ def test_patch_de_status_para_em_execucao_nao_abre_sessao_nem_pausa_a_anterior_s
     assert _pausas_da_troca(db_session, a["id"]) == []
 
 
-def test_gestor_nao_executor_arrastando_a_e_b_so_move_status_sem_sessao_nem_pausa(
+def test_gestor_nao_executor_arrastando_a_e_b_e_recusado_sem_fallback_e_o_status_administrativo_segue_pelo_patch(
     app, db_session: Session, client_admin: TestClient, client_gestor: TestClient, usuario_gestor: Usuario, operadores: list[Usuario]
 ) -> None:
-    """Movimento administrativo preservado: quem organiza o trabalho dos outros move o status das duas; nenhuma sessão pessoal nasce e ninguém é pausado por ele."""
+    """Arrastar para Em execução é SEMPRE iniciar trabalho: quem não executa a etapa é recusado (403), sem mover status, sem sessão e sem pausar ninguém. O PATCH de status (controle
+    administrativo) continua existindo e é o único caminho para 'só mudar o status'."""
     dono = operadores[0]
     a = _rascunho(client_admin, dono)
     b = _rascunho(client_admin, dono)
 
-    assert _iniciar(client_gestor, a["id"]).status_code == 200
-    assert _iniciar(client_gestor, b["id"]).status_code == 200
+    assert _iniciar(client_gestor, a["id"]).status_code == 403
+    assert _iniciar(client_gestor, b["id"]).status_code == 403
 
-    assert _status(db_session, a["id"]) == "em_execucao" and _status(db_session, b["id"]) == "em_execucao"
+    assert _status(db_session, a["id"]) == "rascunho" and _status(db_session, b["id"]) == "rascunho"
     assert _ativas(db_session, usuario_gestor.id) == [] and _ativas(db_session, dono.id) == []
     assert _pausas_da_troca(db_session, a["id"]) == []
+    assert _patch(client_admin, a["id"], status="em_execucao")["status"] == "em_execucao"  # administrativo preservado
 
 
 def test_cadeia_kanban_com_dois_executores_em_a_nao_pausa_a_e_reload_mostra_o_estado_do_servidor(

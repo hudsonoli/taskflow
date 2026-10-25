@@ -56,6 +56,11 @@ def _rascunho(client_admin: TestClient, *responsaveis: Usuario) -> dict:
     return demanda
 
 
+def _eventos_status(db: Session, demanda_id: str) -> int:
+    db.expire_all()
+    return db.scalar(text("SELECT count(*) FROM eventos WHERE entidade_id = :d AND tipo = 'demanda.status_alterado'"), {"d": demanda_id})
+
+
 def _status(db: Session, demanda_id: str) -> str:
     db.expire_all()
     return db.get(Demanda, demanda_id).status
@@ -100,27 +105,31 @@ def test_responsavel_em_a_arrasta_b_e_troca_atomicamente(app, db_session: Sessio
 # --------------------------------------------------------------------------------------
 
 
-def test_gestor_nao_responsavel_move_o_status_sem_criar_sessao_pessoal(
+def test_gestor_nao_responsavel_nao_inicia_trabalho_e_nada_muda(
     db_session: Session, client_admin: TestClient, client_gestor: TestClient, usuario_gestor: Usuario, operadores: list[Usuario]
 ) -> None:
+    """Arrastar para Em execução é SEMPRE 'iniciar trabalho' (intenção pessoal). Quem não executa a etapa é recusado (403) — nunca vira 'só mover o status' (isso é o PATCH administrativo)."""
     joao = operadores[0]
     b = _rascunho(client_admin, joao)
     resposta = _iniciar(client_gestor, b["id"])
-    assert resposta.status_code == 200, resposta.text
-    assert resposta.json()["status"] == "em_execucao" and resposta.json()["trabalhandoAgora"] is False and resposta.json()["podeIniciarTrabalho"] is False
-    assert _ativas(db_session, usuario_gestor.id) == []  # o gestor organizou; não está executando
-    assert _sessoes(db_session, b["id"]) == []  # nem a sessão de João foi criada por ele
+    assert resposta.status_code == 403, resposta.text
+    assert _status(db_session, b["id"]) == "rascunho"  # o status NÃO foi movido
+    assert _ativas(db_session, usuario_gestor.id) == [] and _sessoes(db_session, b["id"]) == []
+    assert _eventos_status(db_session, b["id"]) == 0  # nem evento de status
+    # o controle administrativo próprio (PATCH de status) segue disponível
+    assert _patch(client_admin, b["id"], status="em_execucao")["status"] == "em_execucao"
 
 
-def test_gestor_nao_executor_nao_encerra_nem_troca_nada_dele_mesmo(
+def test_gestor_nao_executor_recusado_preserva_o_foco_que_ele_ja_tinha(
     db_session: Session, client_admin: TestClient, client_gestor: TestClient, usuario_gestor: Usuario, operadores: list[Usuario]
 ) -> None:
-    """Mesmo com sessão ativa própria em outra demanda, mover uma tarefa alheia não troca o foco do gestor."""
+    """Com sessão ativa própria em A, tentar iniciar uma tarefa alheia B é recusado e o foco em A (sessão E status) fica intacto — nada é pausado nem fechado."""
     a = _demanda(client_admin)
     sessao = _abrir_ok(client_admin, a["id"], usuario_gestor.id)
     b = _rascunho(client_admin, operadores[0])
-    assert _iniciar(client_gestor, b["id"]).status_code == 200
+    assert _iniciar(client_gestor, b["id"]).status_code == 403
     assert _sessao(db_session, sessao["id"]).status == "ativa"
+    assert _status(db_session, a["id"]) == "em_execucao" and _status(db_session, b["id"]) == "rascunho"
 
 
 def test_operador_nao_executor_so_move_o_status_se_o_rbac_permitir_e_nao_ganha_sessao(
@@ -257,18 +266,19 @@ def test_falha_ao_abrir_a_sessao_desfaz_tambem_a_mudanca_de_status_e_o_encerrame
     assert db_session.scalar(text("SELECT count(*) FROM demanda_status_intervalos WHERE demanda_id=:d AND status='em_execucao'"), {"d": b["id"]}) == 0
 
 
-def test_etapa_atual_pausada_move_o_status_e_nao_cria_sessao(
+def test_etapa_atual_pausada_nao_admite_iniciar_trabalho_e_nada_muda(
     app, db_session: Session, client_admin: TestClient, operadores: list[Usuario]
 ) -> None:
-    """Etapa atual PAUSADA: o executor não é elegível a sessão — o comando não finge trabalho: o status é movido (organização) e nenhuma sessão nasce."""
+    """Etapa atual PAUSADA: ninguém é elegível a executá-la — iniciar trabalho é recusado (não finge trabalho nem move o status)."""
     op = operadores[0]
     demanda = _demanda_com_workflow(client_admin, [_etapa("Única", usuarios=[op.id])])
     _responsaveis(client_admin, demanda["id"], op)  # responsável da DEMANDA (escopo-base); a etapa atual pausada não admite sessão
     db_session.execute(text("UPDATE demanda_workflow_etapas SET status='pausada' WHERE demanda_id=:d"), {"d": demanda["id"]})
     db_session.flush()
+    status_antes = _status(db_session, demanda["id"])
     resposta = _iniciar(_client_para(app, op), demanda["id"])
-    assert resposta.status_code == 200 and resposta.json()["trabalhandoAgora"] is False
-    assert _ativas(db_session, op.id) == []
+    assert resposta.status_code in (403, 404), resposta.text
+    assert _ativas(db_session, op.id) == [] and _status(db_session, demanda["id"]) == status_antes
 
 
 def test_intervalos_operacionais_seguem_o_status_e_nao_a_sessao(app, db_session: Session, client_admin: TestClient, operadores: list[Usuario]) -> None:
@@ -438,3 +448,14 @@ def test_corrida_repetida_de_inicios_mantem_o_invariante_so_a_tarefa_com_sessao_
             sessoes = list(db.scalars(select(SessaoTrabalho.demanda_id).where(SessaoTrabalho.usuario_id == ids["usuario"], SessaoTrabalho.status == "ativa")).all())
             em_execucao = list(db.scalars(select(Demanda.id).where(Demanda.empresa_id == ids["empresa"], Demanda.status == "em_execucao")).all())
             assert len(sessoes) == 1 and em_execucao == sessoes, (sessoes, em_execucao, resultados)
+
+
+def test_dono_admin_que_nao_executa_a_etapa_tambem_e_recusado_e_o_status_administrativo_continua_pelo_patch(
+    db_session: Session, client_admin: TestClient, operadores: list[Usuario]
+) -> None:
+    """Sem exceção por papel: o dono/admin legado que arrasta uma tarefa que não executa também recebe 403 e nada muda; o PATCH de status é o caminho administrativo."""
+    b = _rascunho(client_admin, operadores[0])
+    assert _iniciar(client_admin, b["id"]).status_code == 403
+    assert _status(db_session, b["id"]) == "rascunho" and _sessoes(db_session, b["id"]) == []
+    assert _patch(client_admin, b["id"], status="em_execucao")["status"] == "em_execucao"
+    assert _sessoes(db_session, b["id"]) == []  # o PATCH continua NÃO abrindo sessão (é administrativo)

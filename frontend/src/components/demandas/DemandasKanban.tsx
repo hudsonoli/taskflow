@@ -167,13 +167,11 @@ export function DemandasKanban({
     if (!column || !demanda) return;
 
     // A decisão (qual comando do servidor chamar) é uma função pura: `lib/kanban-soltura.ts`. Colunas que agrupam mais de um status (ex.: Rascunho/Planejada) usam o primeiro status
-    // da lista como destino. Soltar em Em execução é "começar a trabalhar" (comando próprio, troca de foco no servidor); soltar uma tarefa que JÁ está em execução mas sem a sessão desta
-    // pessoa também é esse comando (mesmo do botão "Iniciar trabalho"); as demais colunas seguem o PATCH de status.
+    // da lista como destino. Soltar em Em execução significa SEMPRE "começar a trabalhar" (comando autoritativo de sessão/foco, qualquer que seja o status atual e a pessoa; se o servidor
+    // recusar, a tarefa fica onde estava e a mensagem do servidor aparece — sem fallback para PATCH); as demais colunas seguem o PATCH de status.
     const decisao = decidirSoltura({
       statusDaColuna: column.statuses,
       statusAtual: demanda.status,
-      podeIniciarTrabalho: demanda.podeIniciarTrabalho,
-      trabalhandoAgora: demanda.trabalhandoAgora,
       podeIniciarNoExpediente: expediente.podeIniciar,
     });
     if (decisao.acao === "nada") return;
