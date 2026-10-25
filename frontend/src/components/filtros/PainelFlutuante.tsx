@@ -18,6 +18,7 @@ export function PainelFlutuante({
   rotulo,
   children,
   largura = LARGURA_PADRAO,
+  superficie,
 }: {
   ancora: HTMLElement;
   onFechar: () => void;
@@ -25,6 +26,8 @@ export function PainelFlutuante({
   rotulo: string;
   children: ReactNode;
   largura?: number;
+  /** gancho de estilo (`data-superficie`): o estilo visual opcional (globals.css) só enxerga as superfícies que se declaram — ex.: "calendario". Não muda comportamento. */
+  superficie?: string;
 }) {
   const painelRef = useRef<HTMLDivElement>(null);
   const [posicao, setPosicao] = useState<{ top: number; left: number } | null>(null);
@@ -79,6 +82,7 @@ export function PainelFlutuante({
       ref={painelRef}
       role="dialog"
       aria-label={rotulo}
+      data-superficie={superficie}
       style={{
         position: "fixed",
         top: posicao?.top ?? 0,

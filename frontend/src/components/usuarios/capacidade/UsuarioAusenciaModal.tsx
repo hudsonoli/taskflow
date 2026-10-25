@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { DateField } from "@/components/ui/DateField";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
@@ -89,12 +89,11 @@ export function UsuarioAusenciaModal({
         <Select label="Tipo" value={draft.tipo} onChange={(e) => atualizar({ tipo: e.target.value as TipoAusencia })} options={OPCOES_TIPO_AUSENCIA.map((o) => ({ value: o.value, label: o.label }))} />
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Input
+            <DateField
               label="Data inicial"
-              type="date"
+              anulavel={false}
               value={draft.inicio}
-              onChange={(e) => {
-                const inicio = e.target.value;
+              onChange={(inicio) => {
                 // conveniência: sem fim (ou fim antes do novo início) o fim acompanha o início — um dia só até o usuário mudar
                 atualizar({ inicio, ...(draft.fim === "" || draft.fim < inicio ? { fim: inicio } : {}) });
               }}
@@ -106,7 +105,7 @@ export function UsuarioAusenciaModal({
             )}
           </div>
           <div>
-            <Input label="Data final" type="date" value={draft.fim} min={draft.inicio || undefined} onChange={(e) => atualizar({ fim: e.target.value })} />
+            <DateField label="Data final" anulavel={false} value={draft.fim} min={draft.inicio || undefined} onChange={(fim) => atualizar({ fim })} />
             {(tentou || draft.fim !== "") && erros.fim && (
               <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
                 {erros.fim}

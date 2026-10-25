@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
+import { DateField } from "@/components/ui/DateField";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Select } from "@/components/ui/Select";
@@ -107,19 +108,17 @@ export function DadosProjetoSection({ projeto, onChange, somenteLeitura }: Proje
           value={projeto.campanha}
           onChange={(event) => updateProjeto(projeto, { campanha: event.target.value }, onChange)}
         />
-        <Input
+        <DateField
           label="Data de início"
           disabled={somenteLeitura}
-          type="date"
           value={projeto.dataInicio}
-          onChange={(event) => updateProjeto(projeto, { dataInicio: event.target.value }, onChange)}
+          onChange={(valor) => updateProjeto(projeto, { dataInicio: valor }, onChange)}
         />
-        <Input
+        <DateField
           label="Data prevista"
           disabled={somenteLeitura}
-          type="date"
           value={projeto.dataFimPrevista}
-          onChange={(event) => updateProjeto(projeto, { dataFimPrevista: event.target.value }, onChange)}
+          onChange={(valor) => updateProjeto(projeto, { dataFimPrevista: valor }, onChange)}
         />
         <Select
           label="Status"

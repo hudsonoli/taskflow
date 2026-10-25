@@ -11,6 +11,7 @@ import { variaveisDaMarca } from "@/lib/branding-tokens";
 import { SESSION_COOKIE_NAME } from "@/lib/server/backend";
 import { obterBrandingPublico } from "@/lib/server/branding";
 import { COOKIE_TEMA, SCRIPT_TEMA_SISTEMA, normalizarPreferencia, resolveEffectiveTheme } from "@/lib/tema";
+import { SCRIPT_ESTILO_VISUAL } from "@/lib/estilo-visual";
 import { NOME_PRODUTO, tituloDaPagina } from "@/lib/produto";
 import { CONTEXTO_APROVACAO, CONTEXTO_GESTAO, HEADER_CONTEXTO, HEADER_TENANT_SLUG, normalizarSlug, slugVisual } from "@/lib/tenant";
 import "./globals.css";
@@ -88,11 +89,11 @@ export default async function RootLayout({
       style={variaveis}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      {preferencia === "sistema" && (
-        <head>
-          <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA_SISTEMA }} />
-        </head>
-      )}
+      <head>
+        {preferencia === "sistema" && <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA_SISTEMA }} />}
+        {/* Estilo visual (default | glass) deste navegador: grava data-visual-style no <html> antes do primeiro paint (sem flash Padrão → Glass); o servidor não renderiza o atributo. */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_ESTILO_VISUAL }} />
+      </head>
       <body className="min-h-full">
         <BrandingProvider
           inicial={branding}

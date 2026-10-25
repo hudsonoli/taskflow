@@ -347,3 +347,156 @@ body {
   --viz-series-7: #9085e9;
   --viz-series-8: #e66767;
 }
+
+/* ── Estilo visual Glass (P1_GLASS_CALENDAR_THEME) ───────────────────────────────────────────────────────────────
+   Eixo SEPARADO do modo de cor: `data-visual-style="default|glass"` no <html> (lib/estilo-visual.ts; gravado antes do primeiro paint) × `data-theme="claro|escuro"`.
+   Glass NÃO é um terceiro tema e, nesta fase, só toca as superfícies de calendário/data: o popover que se declara `data-superficie="calendario"` (PainelFlutuante) e os ganchos
+   `data-cal` do componente Calendario. O comportamento nunca depende destas regras. Sem imagem externa: o "vidro" é translúcido + blur + gradientes CSS internos + a cor da empresa.
+   Os valores ficam nos tokens `--glass-*` (um lugar só); as regras abaixo só os consomem. */
+[data-visual-style="glass"] {
+  --glass-blur: 22px;
+  --glass-radius: 1.25rem;
+  --glass-selected: var(--brand-gradient, linear-gradient(to bottom right, var(--color-indigo-500), var(--color-violet-600)));
+  --glass-selected-text: var(--on-brand, #ffffff);
+  --glass-text: var(--fg);
+  --glass-muted: var(--fg-muted);
+  --glass-focus: var(--focus-ring);
+}
+[data-visual-style="glass"][data-theme="claro"] {
+  --glass-surface: color-mix(in srgb, #ffffff 84%, transparent);
+  --glass-surface-hover: color-mix(in srgb, var(--fg) 8%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 0 0 1px rgba(24, 24, 27, 0.09), 0 22px 46px -16px rgba(24, 24, 27, 0.34), 0 4px 10px -4px rgba(24, 24, 27, 0.12);
+  --glass-today: var(--color-indigo-600);
+  --glass-navigation: color-mix(in srgb, var(--fg) 7%, transparent);
+  --glass-overlay:
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--color-indigo-500) 13%, transparent), transparent 62%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 55%);
+}
+[data-visual-style="glass"][data-theme="escuro"] {
+  --glass-surface: color-mix(in srgb, #1b1b20 86%, transparent);
+  --glass-surface-hover: color-mix(in srgb, #ffffff 11%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --glass-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 26px 54px -16px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --glass-today: var(--color-indigo-400);
+  --glass-navigation: color-mix(in srgb, #ffffff 10%, transparent);
+  --glass-overlay:
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--color-indigo-500) 20%, transparent), transparent 62%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 50%);
+}
+
+[data-visual-style="glass"] [data-superficie="calendario"] {
+  background: var(--glass-overlay), var(--glass-surface);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius);
+  box-shadow: var(--glass-shadow);
+  color: var(--glass-text);
+}
+[data-visual-style="glass"] [data-cal="titulo"] {
+  color: var(--glass-text);
+  letter-spacing: -0.01em;
+}
+[data-visual-style="glass"] [data-cal="nav"] {
+  border-radius: 9999px;
+  background: var(--glass-navigation);
+  color: var(--glass-text);
+}
+[data-visual-style="glass"] [data-cal="nav"]:hover {
+  background: var(--glass-surface-hover);
+}
+[data-visual-style="glass"] [data-cal="semana"] {
+  color: var(--glass-muted);
+}
+[data-visual-style="glass"] [data-cal="dia"] {
+  position: relative;
+  border-radius: 9999px;
+  color: var(--glass-text);
+}
+[data-visual-style="glass"] [data-cal="dia"][data-fora-do-mes] {
+  color: var(--glass-muted);
+}
+[data-visual-style="glass"] [data-cal="dia"]:hover:not([data-selecionado]):not([data-inerte]) {
+  background: var(--glass-surface-hover);
+}
+/* Hoje, mesmo sem estar selecionado: anel + peso + pontinho (não depende só de cor) */
+[data-visual-style="glass"] [data-cal="dia"][data-hoje]:not([data-selecionado]) {
+  box-shadow: inset 0 0 0 1.5px var(--glass-today);
+  font-weight: 600;
+}
+[data-visual-style="glass"] [data-cal="dia"][data-hoje]::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 9999px;
+  background: var(--glass-today);
+}
+[data-visual-style="glass"] [data-cal="dia"][data-selecionado] {
+  background: var(--glass-selected);
+  color: var(--glass-selected-text);
+  font-weight: 700;
+  box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--color-indigo-600) 70%, transparent);
+}
+[data-visual-style="glass"] [data-cal="dia"][data-hoje][data-selecionado]::after {
+  background: var(--glass-selected-text);
+}
+[data-visual-style="glass"] [data-cal="dia"]:focus-visible,
+[data-visual-style="glass"] [data-cal="nav"]:focus-visible,
+[data-visual-style="glass"] [data-cal="acao"]:focus-visible {
+  outline: 2px solid var(--glass-focus);
+  outline-offset: 2px;
+}
+[data-visual-style="glass"] [data-cal="rodape"] {
+  border-top-color: color-mix(in srgb, var(--fg) 12%, transparent);
+}
+[data-visual-style="glass"] [data-cal="acao"] {
+  border-radius: 9999px;
+  color: var(--glass-today);
+}
+[data-visual-style="glass"] [data-cal="acao"]:hover {
+  background: var(--glass-surface-hover);
+}
+
+/* Entrada discreta do popover (só com movimento permitido); nada anima por dia */
+@keyframes glass-calendario-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-visual-style="glass"] [data-superficie="calendario"] {
+    animation: glass-calendario-entrada 0.16s ease-out;
+  }
+}
+
+/* Sem suporte a blur, ou com "reduzir transparência" no sistema: superfície OPACA (a leitura vem antes do efeito) */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-visual-style="glass"][data-theme="claro"] {
+    --glass-surface: #fbfbfc;
+  }
+  [data-visual-style="glass"][data-theme="escuro"] {
+    --glass-surface: #1c1c21;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-visual-style="glass"][data-theme="claro"] {
+    --glass-surface: #fbfbfc;
+  }
+  [data-visual-style="glass"][data-theme="escuro"] {
+    --glass-surface: #1c1c21;
+  }
+  [data-visual-style="glass"] [data-superficie="calendario"] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

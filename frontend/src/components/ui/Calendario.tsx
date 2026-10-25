@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import clsx from "clsx";
-import { deIso, montarGrade, NOMES_DOS_MESES, paraIso, ROTULOS_SEMANA, rotuloDoDia, somarDias, somarMeses } from "@/lib/data-hora-campo";
+import { deIso, diaForaDoIntervalo, montarGrade, NOMES_DOS_MESES, paraIso, ROTULOS_SEMANA, rotuloDoDia, somarDias, somarMeses } from "@/lib/data-hora-campo";
 
 /**
- * Calendário compacto (só DATA — nada de lista de horas/minutos; a hora é outro controle). Neutro: usa os tokens atuais do TaskFlow e não tem lógica de tema, para poder ser
- * estilizado depois sem tocar no comportamento. Semana de domingo a sábado (pt-BR). Teclado: setas movem o dia, Home/End o início/fim da semana, PageUp/PageDown o mês,
+ * Calendário compacto (só DATA — nada de lista de horas/minutos; a hora é outro controle). Sem lógica de tema: usa os tokens atuais do TaskFlow e expõe ganchos `data-cal` para o
+ * estilo visual opcional (globals.css, atributo global do <html>) — o comportamento nunca depende dele. Semana de domingo a sábado (pt-BR). Teclado: setas movem o dia, Home/End o início/fim da semana, PageUp/PageDown o mês,
  * Enter/Espaço escolhem. O dia atual e o escolhido são distinguíveis sem depender só de cor (anel vs. preenchimento + `aria-current`/`aria-selected`).
  */
 export function Calendario({
@@ -16,6 +16,8 @@ export function Calendario({
   aoLimpar,
   aoFechar,
   focarAoAbrir = true,
+  min,
+  max,
 }: {
   /** "YYYY-MM-DD" ou "" */
   valor: string;
@@ -24,6 +26,9 @@ export function Calendario({
   aoLimpar?: () => void;
   aoFechar?: () => void;
   focarAoAbrir?: boolean;
+  /** "YYYY-MM-DD": dias fora do intervalo ficam inertes (continuam focáveis para o teclado, mas não escolhem nada) */
+  min?: string;
+  max?: string;
 }) {
   const hoje = paraIso(new Date());
   const inicial = deIso(valor) ? valor : hoje;
@@ -86,13 +91,13 @@ export function Calendario({
   return (
     <div className="w-[296px] max-w-full p-3" data-calendario>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <button type="button" onClick={() => mudarMes(-1)} aria-label="Mês anterior" className={botaoIcone}>
+        <button type="button" data-cal="nav" onClick={() => mudarMes(-1)} aria-label="Mês anterior" className={botaoIcone}>
           <ChevronLeft className="h-4 w-4" aria-hidden />
         </button>
-        <p className="text-sm font-semibold text-fg" aria-live="polite">
+        <p data-cal="titulo" className="text-sm font-semibold text-fg" aria-live="polite">
           {tituloVisivel}
         </p>
-        <button type="button" onClick={() => mudarMes(1)} aria-label="Próximo mês" className={botaoIcone}>
+        <button type="button" data-cal="nav" onClick={() => mudarMes(1)} aria-label="Próximo mês" className={botaoIcone}>
           <ChevronRight className="h-4 w-4" aria-hidden />
         </button>
       </div>
@@ -100,7 +105,7 @@ export function Calendario({
       <div ref={gradeRef} role="grid" aria-label={titulo} onKeyDown={aoTeclar}>
         <div role="row" className="grid grid-cols-7">
           {ROTULOS_SEMANA.map((rotulo) => (
-            <span key={rotulo} role="columnheader" className="py-1 text-center text-[11px] font-medium uppercase text-fg-subtle">
+            <span key={rotulo} data-cal="semana" role="columnheader" className="py-1 text-center text-[11px] font-medium uppercase text-fg-subtle">
               {rotulo}
             </span>
           ))}
@@ -110,20 +115,28 @@ export function Calendario({
             {semana.map((dia) => {
               const escolhido = dia.iso === valor;
               const ehHoje = dia.iso === hoje;
+              const inerte = diaForaDoIntervalo(dia.iso, min, max);
               return (
                 <button
                   key={dia.iso}
                   type="button"
                   role="gridcell"
+                  data-cal="dia"
+                  data-hoje={ehHoje || undefined}
+                  data-selecionado={escolhido || undefined}
+                  data-fora-do-mes={!dia.doMes || undefined}
+                  data-inerte={inerte || undefined}
+                  aria-disabled={inerte || undefined}
                   data-dia={dia.iso}
                   tabIndex={dia.iso === focado ? 0 : -1}
                   aria-label={rotuloDoDia(dia.iso)}
                   aria-selected={escolhido}
                   aria-current={ehHoje ? "date" : undefined}
-                  onClick={() => aoEscolher(dia.iso)}
+                  onClick={() => !inerte && aoEscolher(dia.iso)}
                   onFocus={() => setFocado(dia.iso)}
                   className={clsx(
                     "mx-auto my-0.5 flex h-8 w-8 items-center justify-center rounded-lg text-[13px] tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60",
+                    inerte && "cursor-not-allowed opacity-40",
                     escolhido
                       ? "bg-indigo-600 font-semibold text-white dark:bg-indigo-500"
                       : clsx("hover:bg-zinc-100 dark:hover:bg-zinc-800", dia.doMes ? "text-fg" : "text-fg-subtle", ehHoje && "font-semibold ring-1 ring-inset ring-indigo-500/70"),
@@ -137,18 +150,18 @@ export function Calendario({
         ))}
       </div>
 
-      <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
-        <button type="button" onClick={() => aoEscolher(hoje)} className={botaoTexto}>
+      <div data-cal="rodape" className="mt-2 flex items-center justify-between border-t border-line pt-2">
+        <button type="button" data-cal="acao" aria-disabled={diaForaDoIntervalo(hoje, min, max) || undefined} onClick={() => !diaForaDoIntervalo(hoje, min, max) && aoEscolher(hoje)} className={botaoTexto}>
           Hoje
         </button>
         <div className="flex items-center gap-1">
           {aoLimpar && (
-            <button type="button" onClick={aoLimpar} className={botaoTexto}>
+            <button type="button" data-cal="acao" onClick={aoLimpar} className={botaoTexto}>
               Limpar
             </button>
           )}
           {aoFechar && (
-            <button type="button" onClick={aoFechar} className={botaoTexto}>
+            <button type="button" data-cal="acao" onClick={aoFechar} className={botaoTexto}>
               Fechar
             </button>
           )}

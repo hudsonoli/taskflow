@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FolderPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { DateField } from "@/components/ui/DateField";
 import { MemberSelector } from "@/components/ui/MemberSelector";
 import { Modal } from "@/components/ui/Modal";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -107,18 +108,8 @@ export function NovoProjetoModal({
           ]}
         />
         <Input label="Campanha" value={draft.campanha} onChange={(event) => updateDraft({ campanha: event.target.value })} />
-        <Input
-          label="Data de início"
-          type="date"
-          value={draft.dataInicio}
-          onChange={(event) => updateDraft({ dataInicio: event.target.value })}
-        />
-        <Input
-          label="Data prevista"
-          type="date"
-          value={draft.dataFimPrevista}
-          onChange={(event) => updateDraft({ dataFimPrevista: event.target.value })}
-        />
+        <DateField label="Data de início" value={draft.dataInicio} onChange={(valor) => updateDraft({ dataInicio: valor })} />
+        <DateField label="Data prevista" value={draft.dataFimPrevista} onChange={(valor) => updateDraft({ dataFimPrevista: valor })} />
         <Select
           label="Status"
           value={draft.status}

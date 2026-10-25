@@ -22,6 +22,7 @@
     "test:solicitadas": "node --test src/lib/solicitadas-progresso-nav.test.ts",
     "test:prioridade-prazo": "node --test src/lib/prioridade-prazo.test.ts",
     "test:datetime-field": "node --test src/lib/data-hora-campo.test.ts",
+    "test:glass-calendar": "node --test src/lib/estilo-visual.test.ts",
     "test:etapa-responsaveis": "node --test src/lib/responsabilidade-etapa.test.ts",
     "test:kanban-colunas": "node --test src/lib/kanban-colunas.test.ts",
     "test:workflow-cor": "node --test src/lib/workflow-cor.test.ts",

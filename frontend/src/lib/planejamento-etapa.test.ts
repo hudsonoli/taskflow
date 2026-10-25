@@ -191,6 +191,7 @@ test("tela da etapa: autoridade vem do servidor, rótulos próprios e separaçã
   const tela = ler("components/demandas/PlanejamentoEtapa.tsx");
   assert.match(tela, /!somenteLeitura && etapa\.podeEditarPlanejamento === true/);
   assert.match(tela, /label="Planejado de"/);
+  assert.match(tela, /rotuloAcessivel=\{`Planejado de, etapa \$\{etapa\.nome\}`\}/); // o nome acessível por etapa foi preservado
   assert.match(tela, /label="Planejado até"/);
   assert.match(tela, /Salvar planejamento/);
   assert.match(tela, /TEXTO_PLANEJAMENTO_INCOMPLETO/);
@@ -200,7 +201,9 @@ test("tela da etapa: autoridade vem do servidor, rótulos próprios e separaçã
   assert.match(tela, /estadoDoFormulario\(atual, \{ inicio, fim \}\)/);
   assert.match(tela, /disabled=\{salvando \|\| !formulario\.podeSalvar\}/);
   assert.doesNotMatch(semComentarios(tela), /new Date|Date\.parse|inicio\s*[<>]\s*fim|fim\s*[<>]\s*inicio/);
-  assert.equal((tela.match(/type="date"/g) ?? []).length, 2);
+  // as duas datas (DATE puro, sem UTC) agora usam o DateField compartilhado — o mesmo valor "YYYY-MM-DD" ou "" que o input nativo entregava
+  assert.equal((tela.match(/<DateField/g) ?? []).length, 2);
+  assert.doesNotMatch(tela, /type="date"/);
   // não reaproveita o prazo, nem implementa estados que são da Fase B
   const codigo = semComentarios(tela);
   assert.doesNotMatch(codigo, /prazoEtapaAtual|formatPrazo|semDiaUtil|sem_dia_util|janelaVencida|janela_vencida/);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { DateField } from "@/components/ui/DateField";
 import { ajustarPlanejamentoEtapaReal } from "@/lib/api-backend";
 import {
   TEXTO_AJUDA_PLANEJAMENTO,
@@ -57,10 +57,10 @@ export function PlanejamentoEtapa({ demandaId, etapa, somenteLeitura, onChange }
       )}
       {podeEditar && (editando ? (
         <div className="mt-2 flex flex-wrap items-end gap-2">
-          <Input label="Planejado de" aria-label={`Planejado de, etapa ${etapa.nome}`} type="date" value={inicio} disabled={salvando}
-            onChange={(e) => setInicio(e.target.value)} />
-          <Input label="Planejado até" aria-label={`Planejado até, etapa ${etapa.nome}`} type="date" value={fim} disabled={salvando}
-            onChange={(e) => setFim(e.target.value)} />
+          <DateField label="Planejado de" rotuloAcessivel={`Planejado de, etapa ${etapa.nome}`} value={inicio} disabled={salvando} className="w-44"
+            onChange={setInicio} />
+          <DateField label="Planejado até" rotuloAcessivel={`Planejado até, etapa ${etapa.nome}`} value={fim} disabled={salvando} className="w-44"
+            onChange={setFim} />
           <Button type="button" disabled={salvando || !formulario.podeSalvar} onClick={() => void salvar()}>{salvando ? "Salvando…" : "Salvar planejamento"}</Button>
           <Button type="button" variant="secondary" disabled={salvando} onClick={() => { setEditando(false); setErro(null); }}>Cancelar</Button>
           <p className="w-full">{TEXTO_AJUDA_PLANEJAMENTO} Deixe os dois vazios para limpar.</p>

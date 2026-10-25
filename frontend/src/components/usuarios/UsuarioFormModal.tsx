@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Calculator, Plus, Trash2, User, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { DateField } from "@/components/ui/DateField";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
@@ -207,12 +208,7 @@ export function UsuarioFormModal({
                 onChange={(event) => updateDraft({ cpf: formatCPF(event.target.value) })}
                 placeholder="000.000.000-00"
               />
-              <Input
-                label="Data de nascimento"
-                type="date"
-                value={draft.dataNascimento}
-                onChange={(event) => updateDraft({ dataNascimento: event.target.value })}
-              />
+              <DateField label="Data de nascimento" value={draft.dataNascimento} onChange={(valor) => updateDraft({ dataNascimento: valor })} />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

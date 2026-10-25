@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, KeyRound, LogOut, Monitor, Moon, ShieldCheck, Sun, UserRound } from "lucide-react";
+import { Bell, KeyRound, Layers, LogOut, Monitor, Moon, ShieldCheck, Sparkles, Sun, UserRound } from "lucide-react";
 import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { useAppData } from "@/lib/AppDataContext";
 import { useBranding } from "@/lib/BrandingContext";
+import { ROTULOS_ESTILO_VISUAL, type EstiloVisual } from "@/lib/estilo-visual";
+import { useEstiloVisual } from "@/lib/useEstiloVisual";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import { formatarBadge } from "@/lib/notificacoes";
 import { useNotificacoes } from "@/lib/NotificacoesContext";
@@ -25,6 +27,12 @@ const OPCOES_TEMA = [
   { valor: "escuro", rotulo: "Escuro", icone: Moon },
   { valor: "sistema", rotulo: "Sistema", icone: Monitor },
 ] as const;
+
+// Estilo visual (eixo separado do tema claro/escuro): hoje afeta só as superfícies de calendário/data.
+const OPCOES_ESTILO: ReadonlyArray<{ valor: EstiloVisual; icone: typeof Layers }> = [
+  { valor: "default", icone: Layers },
+  { valor: "glass", icone: Sparkles },
+];
 
 const itemClassName =
   "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-fg transition hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus";
@@ -50,6 +58,7 @@ export function ProfileMenu() {
   const { resumo, recarregar } = useNotificacoes();
   const { departamentos } = useDiretorioDepartamentos();
   const [erroTema, setErroTema] = useState<string | null>(null);
+  const [estiloVisual, definirEstiloVisual] = useEstiloVisual();
   const router = useRouter();
   const tp = useTenantPath();
   const emGestao = ehRotaDeGestao(usePathname());
@@ -236,6 +245,38 @@ export function ProfileMenu() {
                       {erroTema}
                     </p>
                   )}
+                </div>
+
+                <div className="border-b border-line px-4 py-3">
+                  <Secao id="menu-estilo-rotulo" titulo="Estilo" />
+                  <div role="radiogroup" aria-labelledby="menu-estilo-rotulo" className="flex flex-col gap-0.5">
+                    {OPCOES_ESTILO.map(({ valor, icone: Icone }) => {
+                      const ativo = estiloVisual === valor;
+                      return (
+                        <button
+                          key={valor}
+                          type="button"
+                          role="radio"
+                          aria-checked={ativo}
+                          onClick={() => definirEstiloVisual(valor)}
+                          className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm font-medium text-fg transition hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                        >
+                          <span
+                            aria-hidden
+                            className={clsx(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+                              ativo ? "border-indigo-600 dark:border-indigo-400" : "border-field-line",
+                            )}
+                          >
+                            {ativo && <span className="h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400" />}
+                          </span>
+                          <Icone className="h-4 w-4 text-fg-subtle" />
+                          {ROTULOS_ESTILO_VISUAL[valor]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1.5 px-2 text-xs text-fg-muted">Vale para calendários e seletores de data, neste navegador.</p>
                 </div>
 
                 <div className="p-1.5">

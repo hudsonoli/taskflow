@@ -90,6 +90,28 @@ export function interpretarTextos(textoData: string, textoHora: string, opcoes: 
   return { valor, erroData, erroHora };
 }
 
+export type EstadoDaData = {
+  /** o valor "YYYY-MM-DD" quando o texto é uma data completa e válida; "" quando está vazio, parcial ou inválido */
+  valor: string;
+  /** só existe quando há texto que NÃO é uma data válida (vazio não é erro: quem exige a data valida no envio) */
+  erro: string | null;
+};
+
+/**
+ * Campo só de DATA (`DateField`). Mesma semântica do `<input type="date">` nativo que ele substitui: data completa e válida → "YYYY-MM-DD"; vazio, parcial ou inválido → "" — os formulários
+ * que já tratavam o valor nativo continuam funcionando sem mudança. Diferente do DateTimeField (que salva ao concluir), aqui nada é salvo por conta própria.
+ */
+export function interpretarData(texto: string): EstadoDaData {
+  if (texto.trim() === "") return { valor: "", erro: null };
+  const iso = parseDataBr(texto);
+  return iso ? { valor: iso, erro: null } : { valor: "", erro: MENSAGEM_DATA_INVALIDA };
+}
+
+/** `min`/`max` ("YYYY-MM-DD", opcionais): o dia está fora do intervalo permitido? (ISO compara em ordem lexicográfica.) */
+export function diaForaDoIntervalo(iso: string, min?: string, max?: string): boolean {
+  return (Boolean(min) && iso < (min as string)) || (Boolean(max) && iso > (max as string));
+}
+
 // ── calendário ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export function paraIso(data: Date): string {

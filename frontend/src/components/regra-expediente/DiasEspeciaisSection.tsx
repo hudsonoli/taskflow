@@ -5,6 +5,7 @@ import { CalendarPlus, Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { DateField } from "@/components/ui/DateField";
 import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { atualizarDiaEspecialReal, criarDiaEspecialReal, removerDiaEspecialReal } from "@/lib/api-backend";
@@ -112,7 +113,7 @@ export function DiasEspeciaisSection({ dias, onChange }: { dias: DiaEspecial[]; 
 
       {aberto && (
         <div className="mt-4 grid gap-3 rounded-xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/30 md:grid-cols-[10rem_minmax(0,1fr)_14rem]">
-          <Input label="Data" type="date" value={data} onChange={(event) => setData(event.target.value)} />
+          <DateField label="Data" value={data} onChange={setData} anulavel={false} />
           <Input label="Nome" value={nome} maxLength={120} placeholder="Ex.: Nossa Senhora Aparecida" onChange={(event) => setNome(event.target.value)} />
           <Select
             label="Tipo"

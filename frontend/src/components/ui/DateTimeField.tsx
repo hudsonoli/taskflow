@@ -230,6 +230,7 @@ export function DateTimeField({
         <PainelFlutuante
           ancora={ancora}
           rotulo={`Calendário — ${label}`}
+          superficie="calendario"
           largura={296}
           onFechar={fechar}
         >
