@@ -324,11 +324,8 @@ export function DemandasView() {
   }
 
   function handleMoveDemand(demandaId: string, novoStatus: DemandaStatusEditavel) {
-    // Rede de segurança: Em execução NUNCA é um PATCH de status vindo do Kanban — é o comando de iniciar trabalho (o `decidirSoltura` já garante; isto cobre qualquer chamada futura).
-    if (novoStatus === "em_execucao") {
-      void iniciarTrabalho(demandaId);
-      return;
-    }
+    // Movimento ADMINISTRATIVO de status (PATCH, sujeito ao RBAC do servidor). Quem decide se um arrasto para Em execução chega aqui é o `decidirSoltura` (só não executor com autoridade); o
+    // executor efetivo usa `iniciarTrabalho` direto, pelo Kanban — nunca por aqui e nunca como fallback de um erro.
     // Bloquear exige motivo — pedir antes evita um 422 previsível.
     if (novoStatus === "bloqueada") {
       setBloqueandoId(demandaId);

@@ -243,6 +243,10 @@ export type Demanda = {
   podeIniciarTrabalho?: boolean;
   /** Calculado pelo SERVIDOR: o usuário logado tem sessão pessoal ATIVA nesta tarefa agora. */
   trabalhandoAgora?: boolean;
+  /** Calculado pelo SERVIDOR, só responsabilidade: o usuário logado é executor efetivo da tarefa (regra central), qualquer que seja o status/expediente/perfil. Decide o Kanban → Em execução. */
+  ehExecutorEfetivo?: boolean;
+  /** Calculado pelo SERVIDOR, só autoridade: o usuário logado pode alterar o status desta tarefa (`demandas.editar` efetiva e escrita nela). Decide o movimento administrativo do Kanban. */
+  podeAlterarStatus?: boolean;
   /** Progresso AUTORITATIVO calculado pelo servidor (etapas concluídas ÷ etapas do fluxo). A interface só exibe — nunca recalcula. */
   progresso?: DemandaProgresso;
 };

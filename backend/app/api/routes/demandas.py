@@ -86,6 +86,15 @@ historico_service = DemandaHistoricoService()
 # como nos cadastros, via `require_permissao("demandas.arquivar")`.
 
 
+def _marcar_acesso(leitura, *, via_workflow: bool, so_acompanha: bool | None = None) -> None:
+    """Modo de acesso da resposta. Acesso só de Workflow ou só de acompanhamento NÃO concede o PATCH de status: `podeAlterarStatus` cai para falso (o servidor também recusa)."""
+    leitura.acesso_apenas_workflow = via_workflow
+    if so_acompanha is not None:
+        leitura.acesso_somente_acompanhamento = so_acompanha
+    if via_workflow or so_acompanha:
+        leitura.pode_alterar_status = False
+
+
 def handle_demanda_error(exc: Exception) -> None:
     if isinstance(exc, DemandaNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -494,8 +503,7 @@ def get_demanda(
         # Por último, a AUTORIA: quem solicitou a demanda continua podendo acompanhá-la (só leitura) depois de ela passar para outra etapa/departamento.
         demanda, via_workflow, so_acompanha = demanda_com_acesso_de_leitura(db, current_user, str(demanda_id), demanda_service, escopo_leitura)
         leitura = demanda_service.to_read(db, demanda, usuario=current_user, somente_leitura=escopo_leitura is not None or so_acompanha)
-        leitura.acesso_apenas_workflow = via_workflow
-        leitura.acesso_somente_acompanhamento = so_acompanha
+        _marcar_acesso(leitura, via_workflow=via_workflow, so_acompanha=so_acompanha)
         return leitura
     except Exception as exc:
         handle_demanda_error(exc)
@@ -514,7 +522,7 @@ def iniciar_trabalho(
         demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
         atualizada = demanda_service.iniciar_trabalho(db, demanda, actor=current_user, via_workflow=via_workflow)
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
-        resposta.acesso_apenas_workflow = via_workflow
+        _marcar_acesso(resposta, via_workflow=via_workflow)
         return resposta
     except SessaoTrabalhoConflitoError as exc:
         # 409 estruturado, o mesmo contrato de `POST /sessoes-trabalho/abrir` (a transação inteira já foi desfeita, status incluído).
@@ -648,7 +656,7 @@ def ajustar_esforco_etapa(
             db, demanda, etapa_id=str(etapa_id), esforco_minutos=payload.esforco_estimado_minutos, actor=current_user,
         )
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
-        resposta.acesso_apenas_workflow = via_workflow
+        _marcar_acesso(resposta, via_workflow=via_workflow)
         return resposta
     except Exception as exc:
         handle_demanda_error(exc)
@@ -697,7 +705,7 @@ def ajustar_planejamento_etapa(
             db, demanda, etapa_id=str(etapa_id), campos=campos, actor=current_user,
         )
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
-        resposta.acesso_apenas_workflow = via_workflow
+        _marcar_acesso(resposta, via_workflow=via_workflow)
         return resposta
     except Exception as exc:
         handle_demanda_error(exc)
@@ -717,7 +725,7 @@ def concluir_etapa_workflow(
         demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
         atualizada = workflow_service.concluir_etapa(db, demanda, etapa_id=str(etapa_id), actor=current_user)
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
-        resposta.acesso_apenas_workflow = via_workflow
+        _marcar_acesso(resposta, via_workflow=via_workflow)
         return resposta
     except Exception as exc:
         handle_demanda_error(exc)
@@ -736,7 +744,7 @@ def aprovar_etapa_workflow(
         demanda, via_workflow = demanda_com_acesso_de_workflow(db, current_user, str(demanda_id), demanda_service)
         atualizada = workflow_service.aprovar_etapa(db, demanda, etapa_id=str(etapa_id), actor=current_user)
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
-        resposta.acesso_apenas_workflow = via_workflow
+        _marcar_acesso(resposta, via_workflow=via_workflow)
         return resposta
     except Exception as exc:
         handle_demanda_error(exc)
@@ -759,7 +767,7 @@ def rejeitar_etapa_workflow(
             db, demanda, etapa_id=str(etapa_id), motivo=payload.motivo, actor=current_user
         )
         resposta = demanda_service.to_read(db, atualizada, usuario=current_user)
-        resposta.acesso_apenas_workflow = via_workflow
+        _marcar_acesso(resposta, via_workflow=via_workflow)
         return resposta
     except Exception as exc:
         handle_demanda_error(exc)

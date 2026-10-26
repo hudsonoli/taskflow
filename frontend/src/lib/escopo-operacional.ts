@@ -258,6 +258,10 @@ export function podeVerFinanceiroEfetivo(usuario: Usuario): boolean {
 export const MOTIVO_ARRASTAR_FORA_EXPEDIENTE =
   "Fora do horário de expediente as tarefas não podem ser movidas no quadro.";
 
+/** Soltar em Em execução sem ser responsável pela etapa e sem autoridade para alterar o status: nem iniciar trabalho nem mudar o status. */
+export const MOTIVO_SEM_RESPONSABILIDADE_NEM_AUTORIDADE =
+  "Você não é responsável por esta tarefa nem tem permissão para alterar o status dela, então ela não pode ser movida para Em execução.";
+
 export const MOTIVO_INICIAR_FORA_EXPEDIENTE =
   "Fora do horário de expediente uma tarefa não pode ser iniciada.";
 

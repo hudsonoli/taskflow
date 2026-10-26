@@ -1591,6 +1591,8 @@ type DemandaReadApi = {
   acessoSomenteAcompanhamento?: boolean;
   podeIniciarTrabalho?: boolean;
   trabalhandoAgora?: boolean;
+  ehExecutorEfetivo?: boolean;
+  podeAlterarStatus?: boolean;
   progresso?: DemandaProgresso | null;
   dataInicio: string | null;
   dataFimPrevista: string | null;
@@ -1683,6 +1685,8 @@ function mapDemandaReadToDemanda(data: DemandaReadApi): Demanda {
     acessoSomenteAcompanhamento: data.acessoSomenteAcompanhamento === true,
     podeIniciarTrabalho: data.podeIniciarTrabalho === true,
     trabalhandoAgora: data.trabalhandoAgora === true,
+    ehExecutorEfetivo: data.ehExecutorEfetivo === true,
+    podeAlterarStatus: data.podeAlterarStatus === true,
     progresso: data.progresso ?? undefined,
   };
 }

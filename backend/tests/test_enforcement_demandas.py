@@ -416,7 +416,23 @@ def test_lista_nao_gera_n_mais_1_de_overrides(client_admin: TestClient, db_sessi
 
     assert resposta.status_code == 200
     assert len(resposta.json()) >= 5
-    assert len(chamadas) == 1
+    # uma do guard + uma para os sinais `podeAlterarStatus` da PÁGINA (P1_KANBAN_ADMIN_RUNNING_PATH): constante, não cresce com o número de demandas (sem N+1)
+    assert len(chamadas) == 2
+
+    for _ in range(5):
+        _criar(client_admin)
+    mais = []
+
+    def _contar_mais(conn, cursor, statement, parameters, context, executemany):
+        if "usuario_permissao" in statement:
+            mais.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _contar_mais)
+    try:
+        assert client_admin.get("/demandas").status_code == 200
+    finally:
+        event.remove(engine, "before_cursor_execute", _contar_mais)
+    assert len(mais) == len(chamadas)  # dobrar a página não muda a contagem
 
 
 # --------------------------------------------------------------------------------------

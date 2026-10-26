@@ -4,7 +4,7 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragMoveEvent, type DragStartEvent } from "@dnd-kit/core";
 import { Clock, Lock } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
-import { avaliarExpedienteOperacional, MOTIVO_INICIAR_FORA_EXPEDIENTE } from "@/lib/escopo-operacional";
+import { avaliarExpedienteOperacional, MOTIVO_INICIAR_FORA_EXPEDIENTE, MOTIVO_SEM_RESPONSABILIDADE_NEM_AUTORIDADE } from "@/lib/escopo-operacional";
 import { useEstadoExpediente } from "@/lib/estadoExpediente";
 import { colunaRecolhida, colunaSobOPonteiro } from "@/lib/kanban-colunas";
 import { decidirSoltura } from "@/lib/kanban-soltura";
@@ -167,16 +167,23 @@ export function DemandasKanban({
     if (!column || !demanda) return;
 
     // A decisão (qual comando do servidor chamar) é uma função pura: `lib/kanban-soltura.ts`. Colunas que agrupam mais de um status (ex.: Rascunho/Planejada) usam o primeiro status
-    // da lista como destino. Soltar em Em execução significa SEMPRE "começar a trabalhar" (comando autoritativo de sessão/foco, qualquer que seja o status atual e a pessoa; se o servidor
-    // recusar, a tarefa fica onde estava e a mensagem do servidor aparece — sem fallback para PATCH); as demais colunas seguem o PATCH de status.
+    // da lista como destino. As demais colunas seguem o PATCH de status; Em execução é decidido ANTES da mutation pelos sinais do SERVIDOR (executor efetivo / pode alterar status): executor → iniciar trabalho (sessão e foco único); não executor com autoridade →
+    // mudança administrativa de status, sem sessão; sem nenhum dos dois → bloqueado. Nunca há fallback após um erro (o POST de quem não executa continua 403).
     const decisao = decidirSoltura({
       statusDaColuna: column.statuses,
       statusAtual: demanda.status,
       podeIniciarNoExpediente: expediente.podeIniciar,
+      ehExecutorEfetivo: demanda.ehExecutorEfetivo === true,
+      podeAlterarStatus: demanda.podeAlterarStatus === true,
     });
     if (decisao.acao === "nada") return;
     if (decisao.acao === "bloqueado-expediente") {
       setAvisoBloqueio(MOTIVO_INICIAR_FORA_EXPEDIENTE);
+      return;
+    }
+
+    if (decisao.acao === "bloqueado-sem-autoridade") {
+      setAvisoBloqueio(MOTIVO_SEM_RESPONSABILIDADE_NEM_AUTORIDADE);
       return;
     }
 

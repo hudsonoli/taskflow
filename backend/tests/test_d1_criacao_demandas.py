@@ -295,7 +295,8 @@ def test_admin_sem_override_gera_uma_query(client_admin: TestClient, db_session:
         event.remove(engine, "before_cursor_execute", listener)
 
     assert resposta.status_code == 201
-    assert len(chamadas) == 1
+    # uma do guard (`require_demandas_criar`) + uma para o sinal `podeAlterarStatus` da resposta (P1_KANBAN_ADMIN_RUNNING_PATH): constante por requisição, nunca por item
+    assert len(chamadas) == 2
 
 
 def test_operador_comum_sem_override_gera_no_maximo_tres_queries_relacionais(

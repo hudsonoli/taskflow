@@ -514,6 +514,13 @@ class DemandaRead(BaseModel):
     # atual (ou da Demanda, sem fluxo) e a Demanda admite trabalho; `trabalhandoAgora` = tem sessão pessoal ATIVA nesta Demanda. A interface só exibe "Iniciar trabalho".
     pode_iniciar_trabalho: bool = Field(default=False, alias="podeIniciarTrabalho")
     trabalhando_agora: bool = Field(default=False, alias="trabalhandoAgora")
+    # Os DOIS sinais de que o Kanban decide "Em execução" ANTES de qualquer mutation (a interface nunca recalcula responsabilidade nem RBAC):
+    #  - `ehExecutorEfetivo`: SÓ responsabilidade — o ator é executor da etapa atual (ou da Demanda, sem fluxo) pela regra central (`eh_executor_da_demanda`), qualquer que seja o status,
+    #    o expediente ou o perfil. Quem é: arrastar para Em execução = `POST /iniciar-trabalho` (sessão pessoal/foco único). Não mistura nada além da responsabilidade.
+    #  - `podeAlterarStatus`: SÓ autoridade — o ator tem `demandas.editar` efetiva (perfil + exceções) e escreve nesta Demanda (falso em leitura global/acompanhamento/acesso só de Workflow).
+    #    Quem não é executor mas tem autoridade: o movimento é o PATCH administrativo de status, sem sessão e sem tocar no foco pessoal.
+    eh_executor_efetivo: bool = Field(default=False, alias="ehExecutorEfetivo")
+    pode_alterar_status: bool = Field(default=False, alias="podeAlterarStatus")
     # `checklist`/`arquivos` (2E.3) e `comentarios`/`historico` (2E.4) NÃO aparecem mais
     # aqui — todos têm tabela e endpoint dedicado agora (`/demandas/{id}/checklist`,
     # `/arquivos`, `/comentarios`, `/historico`). Embuti-los de novo infligiria em toda

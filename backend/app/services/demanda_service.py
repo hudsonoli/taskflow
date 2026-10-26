@@ -39,6 +39,7 @@ from app.repositories.usuario_repository import UsuarioRepository
 from app.repositories.workflow_modelo_repository import WorkflowModeloRepository
 from app.core.planejamento_etapa import estado_da_janela
 from app.core.executor_etapa import STATUS_SEM_TRABALHO, eh_executor_da_demanda, resolver_responsabilidade_etapa
+from app.core.permissoes import PerfilInvalidoError
 from app.schemas.evento import EventoCreate
 from app.schemas.demanda import (
     DemandaCreate,
@@ -57,6 +58,7 @@ from app.services.demanda_intervalo_service import (
 from app.services.domain_event_publisher import DomainEventPublisher
 from app.services.expediente_trabalho import DemandaForaDeExpedienteError, garantir_trabalho_permitido  # noqa: F401  (re-exporta o erro: contrato antigo)
 from app.services.regra_expediente_service import RegraExpedienteService
+from app.services.usuario_permissao_service import UsuarioPermissaoService
 from app.services.sessao_trabalho_service import (
     MOTIVO_ARQUIVAMENTO,
     MOTIVO_PAUSA,
@@ -214,6 +216,7 @@ class DemandaService:
         self.intervalo_service = intervalo_service or DemandaIntervaloService()
         # Fase 11B.2A — transições da Demanda que tornam impossível continuar o trabalho encerram as sessões ativas (na MESMA transação).
         self.sessao_service = sessao_service or SessaoTrabalhoService()
+        self.usuario_permissao_service = UsuarioPermissaoService()
         self.cliente_repository = cliente_repository or ClienteRepository()
         self.projeto_repository = projeto_repository or ProjetoRepository()
         self.usuario_repository = usuario_repository or UsuarioRepository()
@@ -1375,6 +1378,7 @@ class DemandaService:
         etapas = etapas_por_demanda.get(demanda.id, [])
         self._aplicar_responsabilidade_efetiva(etapas, responsaveis, departamentos)
         em_andamento = self._demandas_com_sessao_ativa_do_usuario(db, usuario, somente_leitura)
+        pode_editar = self._pode_editar_demandas(db, usuario, somente_leitura)
         return DemandaRead.model_validate(
             {
                 **self._campos_base(demanda),
@@ -1382,7 +1386,7 @@ class DemandaService:
                 "departamentoResponsavelIds": departamentos,
                 "workflowEtapas": etapas,
                 "etapaAtualId": self._derivar_etapa_atual_id(etapas),
-                **self._flags_iniciar_trabalho(demanda, usuario, etapas, responsaveis, departamentos, em_andamento, somente_leitura),
+                **self._flags_iniciar_trabalho(demanda, usuario, etapas, responsaveis, departamentos, em_andamento, somente_leitura, pode_editar),
             }
         )
 
@@ -1403,6 +1407,7 @@ class DemandaService:
             responsaveis_gerais=responsaveis, departamentos_gerais=departamentos,
         )
         em_andamento = self._demandas_com_sessao_ativa_do_usuario(db, usuario, somente_leitura)
+        pode_editar = self._pode_editar_demandas(db, usuario, somente_leitura)
         for demanda_id_lote, etapas_do_lote in etapas_por_demanda.items():
             self._aplicar_responsabilidade_efetiva(etapas_do_lote, responsaveis.get(demanda_id_lote, []), departamentos.get(demanda_id_lote, []))
         return [
@@ -1414,7 +1419,7 @@ class DemandaService:
                     "workflowEtapas": (etapas := etapas_por_demanda.get(demanda.id, [])),
                     "etapaAtualId": self._derivar_etapa_atual_id(etapas),
                     **self._flags_iniciar_trabalho(
-                        demanda, usuario, etapas, responsaveis.get(demanda.id, []), departamentos.get(demanda.id, []), em_andamento, somente_leitura
+                        demanda, usuario, etapas, responsaveis.get(demanda.id, []), departamentos.get(demanda.id, []), em_andamento, somente_leitura, pode_editar
                     ),
                 }
             )
@@ -1440,6 +1445,15 @@ class DemandaService:
             return frozenset()
         return frozenset(self.sessao_service.demanda_ids_ativas_do_usuario(db, empresa_id=usuario.empresa_id, usuario_id=usuario.id))
 
+    def _pode_editar_demandas(self, db: Session, usuario: Usuario | None, somente_leitura: bool) -> bool:
+        """`demandas.editar` EFETIVA do usuário (perfil + exceções) — a MESMA permissão que o `PATCH /demandas/{id}` exige. Uma consulta por página/detalhe. Perfil inválido: fail-closed (falso)."""
+        if usuario is None or somente_leitura:
+            return False
+        try:
+            return "demandas.editar" in self.usuario_permissao_service.obter_permissoes_efetivas(db, usuario)
+        except PerfilInvalidoError:
+            return False
+
     @staticmethod
     def _flags_iniciar_trabalho(
         demanda: Demanda,
@@ -1449,13 +1463,17 @@ class DemandaService:
         departamentos: list,
         em_andamento: frozenset[str],
         somente_leitura: bool,
+        pode_editar: bool = False,
     ) -> dict:
         if usuario is None or somente_leitura:
             return {}
-        pode = demanda.status not in STATUS_SEM_TRABALHO and eh_executor_da_demanda(
-            usuario, etapas=etapas, demanda_usuario_ids=responsaveis, demanda_departamento_ids=departamentos
-        )
-        return {"podeIniciarTrabalho": pode, "trabalhandoAgora": demanda.id in em_andamento}
+        executor = eh_executor_da_demanda(usuario, etapas=etapas, demanda_usuario_ids=responsaveis, demanda_departamento_ids=departamentos)
+        return {
+            "podeIniciarTrabalho": demanda.status not in STATUS_SEM_TRABALHO and executor,
+            "trabalhandoAgora": demanda.id in em_andamento,
+            "ehExecutorEfetivo": executor,
+            "podeAlterarStatus": pode_editar,
+        }
 
     def _etapas_workflow_por_demanda(
         self,
