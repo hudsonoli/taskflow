@@ -54,7 +54,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.escopo import departamentos_como_head, eh_atendimento
-from app.core.permissoes import PERFIL_ADMIN, PERFIL_GESTOR, PerfilInvalidoError, validar_permissao_existente
+from app.core.permissoes import DEFAULTS_POR_PERFIL, PERFIL_ADMIN, PERFIL_GESTOR, PerfilInvalidoError, validar_permissao_existente
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.usuario import Usuario
@@ -248,6 +248,39 @@ def require_demandas_criar() -> Callable[..., Usuario]:
         if eh_atendimento(db, current_user):
             return current_user
 
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
+
+    return dependency
+
+
+def require_permissao_ou_atendimento(permissao: str) -> Callable[..., Usuario]:
+    """Como `require_permissao`, mas o Atendimento também passa — por RELAÇÃO (`eh_atendimento`), não por perfil (mesmo desenho de `require_demandas_criar`).
+
+    Existe porque o Atendimento (perfil Usuário no departamento Atendimento) é quem demanda as tarefas dos clientes para os departamentos da agência e organiza essas tarefas em Projetos:
+    precisa VER e CRIAR projetos sem virar gestor. A regra:
+
+    1. Override explícito sempre vence: `"negar"` bloqueia qualquer um (inclusive Atendimento); `"conceder"` libera.
+    2. Sem override: o default do `perfil_base` tem a permissão (admin/gestor) → passa.
+    3. Sem override: é Atendimento (`eh_atendimento`) → passa.
+    4. Qualquer outro caso: 403 (fail-closed; perfil inválido também cai aqui).
+
+    SÓ a permissão pedida é aberta — quem usa este helper decide o ALCANCE (a carteira do Atendimento é imposta no service). Editar/arquivar continuam em `require_permissao` (Atendimento não os recebe).
+    """
+    validar_permissao_existente(permissao)  # falha na importação, não em runtime
+
+    def dependency(
+        current_user: Usuario = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> Usuario:
+        efeito = _usuario_permissao_service.obter_efeito_override(db, usuario=current_user, permissao=permissao)
+        if efeito == "negar":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
+        if efeito == "conceder":
+            return current_user
+        if permissao in DEFAULTS_POR_PERFIL.get(current_user.perfil_base, frozenset()):
+            return current_user
+        if eh_atendimento(db, current_user):
+            return current_user
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ACESSO_NEGADO)
 
     return dependency

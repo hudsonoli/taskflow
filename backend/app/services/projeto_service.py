@@ -4,7 +4,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.escopo import clientes_sob_responsabilidade, eh_atendimento
+from app.core.escopo import PERFIS_VISAO_TOTAL, clientes_sob_responsabilidade, eh_atendimento
 from app.core.referencias import gerar_proxima_referencia
 from app.core.relogio import agora_utc
 from app.domain.event_types import DomainEventType
@@ -98,6 +98,7 @@ class ProjetoService:
         *,
         empresa_id: str,
         actor_usuario_id: str | None = None,
+        actor: Usuario | None = None,
     ) -> Projeto:
         now = agora_utc()
         nome_normalizado = self._normalizar_nome(data.nome)
@@ -109,6 +110,7 @@ class ProjetoService:
         try:
             if cliente_id is not None:
                 self._ensure_cliente_valido(db, empresa_id, cliente_id)
+                self._ensure_cliente_na_carteira_do_atendimento(db, actor, cliente_id)
             for usuario_id in responsavel_ids:
                 self._ensure_usuario_valido(db, empresa_id, usuario_id)
             for departamento_id in departamento_ids:
@@ -211,6 +213,7 @@ class ProjetoService:
         departamento_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        actor: Usuario | None = None,
     ) -> list[Projeto]:
         return self.repository.list(
             db,
@@ -219,9 +222,27 @@ class ProjetoService:
             search=search,
             cliente_id=cliente_id,
             departamento_id=departamento_id,
+            cliente_ids_permitidos=self._carteira_do_atendimento(db, actor),
             limit=limit,
             offset=offset,
         )
+
+    @staticmethod
+    def _atendimento_restrito(db: Session, actor: Usuario | None) -> bool:
+        """O ator vê/cria projetos SÓ pela relação com o Atendimento (perfil Usuário no departamento Atendimento) — admin e gestor (visão total) nunca são restringidos, mesmo estando no
+        Atendimento. Mesma regra de `_ensure_contexto_cliente_permitido_para_atendimento` (demandas) e dos diretórios: gatilho por relação (`eh_atendimento`), carteira como fonte única."""
+        return actor is not None and actor.perfil_base not in PERFIS_VISAO_TOTAL and eh_atendimento(db, actor)
+
+    def _carteira_do_atendimento(self, db: Session, actor: Usuario | None) -> list[str] | None:
+        """`None` = sem restrição; lista (possivelmente vazia) = só projetos desses clientes ou internos (sem cliente)."""
+        if not self._atendimento_restrito(db, actor):
+            return None
+        return clientes_sob_responsabilidade(db, actor)
+
+    def _ensure_cliente_na_carteira_do_atendimento(self, db: Session, actor: Usuario | None, cliente_id: str) -> None:
+        carteira = self._carteira_do_atendimento(db, actor)
+        if carteira is not None and cliente_id not in carteira:
+            raise ProjetoClienteInvalidoError("Cliente não permitido para este usuário")
 
     def list_diretorio(self, db: Session, *, empresa_id: str, actor: Usuario) -> list[Projeto]:
         """Fase 2G.10B, D1.2E — mesma regra de `ClienteService.list_diretorio`, com projeto
@@ -236,10 +257,14 @@ class ProjetoService:
             )
         return self.repository.list_diretorio(db, empresa_id=empresa_id)
 
-    def get_projeto(self, db: Session, projeto_id: str) -> Projeto:
+    def get_projeto(self, db: Session, projeto_id: str, *, actor: Usuario | None = None) -> Projeto:
         projeto = self.repository.get_by_id(db, projeto_id)
         if projeto is None:
             raise ProjetoNotFoundError("Projeto não encontrado")
+        if projeto.cliente_id is not None:
+            carteira = self._carteira_do_atendimento(db, actor)
+            if carteira is not None and projeto.cliente_id not in carteira:
+                raise ProjetoNotFoundError("Projeto não encontrado")  # fora da carteira: 404, sem confirmar que existe
         return projeto
 
     # ----------------------------------------------------------------------------------

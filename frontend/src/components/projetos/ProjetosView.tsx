@@ -7,6 +7,8 @@ import { EstadoCarregando } from "@/components/operacional/EstadoCarregando";
 import { EstadoErro } from "@/components/operacional/EstadoErro";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Tabs } from "@/components/ui/Tabs";
+import { useAppData } from "@/lib/AppDataContext";
+import { podeGerirProjetos } from "@/lib/escopo-operacional";
 import {
   ProjetoArquivadoConflictError,
   arquivarProjetoReal,
@@ -32,6 +34,8 @@ const VISOES: Array<{ id: VisaoProjetos; label: string }> = [
 ];
 
 export function ProjetosView() {
+  const { usuarioAtual } = useAppData();
+  const podeGerir = usuarioAtual ? podeGerirProjetos(usuarioAtual) : false;
   const [visao, setVisao] = useState<VisaoProjetos>("projetos");
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -215,6 +219,7 @@ export function ProjetosView() {
           onEdit={openEdit}
           onArquivar={setArquivarProjetoId}
           onRestaurar={handleRestaurar}
+          podeGerir={podeGerir}
         />
       )}
 
@@ -254,6 +259,7 @@ export function ProjetosView() {
         projeto={selectedProject}
         onClose={() => setSelectedProjectId(null)}
         onEdit={openEdit}
+        podeGerir={podeGerir}
       />
     </div>
   );

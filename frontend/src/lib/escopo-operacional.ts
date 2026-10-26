@@ -179,6 +179,19 @@ export function podeAcessarMinhasDemandas(usuario: Usuario, departamentos: Depar
 }
 
 /**
+ * Projetos (ver e CRIAR): administração (admin/gestor) e o Atendimento — quem demanda as tarefas dos clientes para os departamentos e as organiza em projetos. Espelho de UX de
+ * `require_permissao_ou_atendimento` no servidor (que decide de verdade: 403 aos demais e, para o Atendimento, só a carteira + projetos internos).
+ */
+export function podeAcessarProjetos(usuario: Usuario, departamentos: DepartamentoDiretorioItem[]): boolean {
+  return podeAcessarAreaAdministrativa(usuario) || resolverEhAtendimento(usuario, departamentos);
+}
+
+/** Editar, arquivar/restaurar projetos e os modelos de campanha continuam só da administração: o Atendimento vê e cria, não altera nem arquiva. */
+export function podeGerirProjetos(usuario: Usuario): boolean {
+  return podeAcessarAreaAdministrativa(usuario);
+}
+
+/**
  * "Gestor autorizado" nesta fase reaproveita `perfisComAcessoFinanceiro` (só usado
  * internamente aqui — nenhuma tela deve checar perfil diretamente). Uma concessão
  * explícita por pessoa é trabalho de fase futura, quando existir permissão granular real.

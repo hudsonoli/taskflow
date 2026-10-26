@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
 from app.dependencies.authorization import ensure_resource_empresa
-from app.dependencies.permissoes import require_permissao
+from app.dependencies.permissoes import require_permissao, require_permissao_ou_atendimento
 from app.models.usuario import Usuario
 from app.schemas.projeto import (
     ProjetoArquivar,
@@ -61,12 +61,12 @@ def handle_projeto_error(exc: Exception) -> None:
 @router.post("", response_model=ProjetoRead, status_code=status.HTTP_201_CREATED)
 def create_projeto(
     payload: ProjetoCreate,
-    current_user: Usuario = Depends(require_permissao("projetos.criar")),
+    current_user: Usuario = Depends(require_permissao_ou_atendimento("projetos.criar")),
     db: Session = Depends(get_db),
 ):
     try:
         criado = projeto_service.create_projeto(
-            db, payload, empresa_id=current_user.empresa_id, actor_usuario_id=current_user.id
+            db, payload, empresa_id=current_user.empresa_id, actor_usuario_id=current_user.id, actor=current_user
         )
         return projeto_service.to_read(db, criado)
     except Exception as exc:
@@ -81,11 +81,12 @@ def list_projetos(
     departamento_id: UUID | None = Query(default=None, alias="departamentoId"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: Usuario = Depends(require_permissao("projetos.visualizar")),
+    current_user: Usuario = Depends(require_permissao_ou_atendimento("projetos.visualizar")),
     db: Session = Depends(get_db),
 ):
     projetos = projeto_service.list_projetos(
         db,
+        actor=current_user,
         empresa_id=current_user.empresa_id,
         status=status_projeto,
         search=search,
@@ -112,11 +113,11 @@ def list_diretorio(
 @router.get("/{projeto_id}", response_model=ProjetoRead)
 def get_projeto(
     projeto_id: UUID,
-    current_user: Usuario = Depends(require_permissao("projetos.visualizar")),
+    current_user: Usuario = Depends(require_permissao_ou_atendimento("projetos.visualizar")),
     db: Session = Depends(get_db),
 ):
     try:
-        projeto = projeto_service.get_projeto(db, str(projeto_id))
+        projeto = projeto_service.get_projeto(db, str(projeto_id), actor=current_user)
         ensure_resource_empresa(projeto.empresa_id, current_user)
         return projeto_service.to_read(db, projeto)
     except Exception as exc:

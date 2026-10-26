@@ -59,10 +59,13 @@ export function ProjetoDetailsDrawer({
   projeto,
   onClose,
   onEdit,
+  podeGerir = true,
 }: {
   projeto?: Projeto;
   onClose: () => void;
   onEdit: (projetoId: string) => void;
+  /** Editar e Modelo (campanha) são da administração; o Atendimento só inspeciona. */
+  podeGerir?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState("dados");
   const { clientes } = useDiretorioClientes();
@@ -84,7 +87,7 @@ export function ProjetoDetailsDrawer({
     <DetailsModal
       open={projeto !== undefined}
       onClose={onClose}
-      onEdit={projeto ? () => onEdit(projeto.id) : undefined}
+      onEdit={projeto && podeGerir ? () => onEdit(projeto.id) : undefined}
       editLabel="Editar projeto"
       title={projeto?.nome ?? "Projeto"}
       description={projeto ? `${projeto.codigoReferencia} · ${nomeCliente}` : undefined}
@@ -133,7 +136,7 @@ export function ProjetoDetailsDrawer({
             </p>
           </div>
 
-          <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+          <Tabs tabs={podeGerir ? tabs : tabs.filter((aba) => aba.id !== "modelo")} activeTab={activeTab} onChange={setActiveTab} />
 
           {activeTab === "dados" && <DadosProjetoSection projeto={projeto} somenteLeitura />}
           {activeTab === "demandas" && <ProjetoDemandasSection projetoId={projeto.id} />}
@@ -144,7 +147,7 @@ export function ProjetoDetailsDrawer({
               nenhum "PATCH por tecla digitada". A regra de "drawer só inspeciona" (ver
               docstring acima) existe pra evitar exatamente isso nas OUTRAS seções — aqui não
               se aplica, então fica interativa mesmo dentro do painel de inspeção. */}
-          {activeTab === "modelo" && <ModeloCampanhaSection projeto={projeto} />}
+          {activeTab === "modelo" && podeGerir && <ModeloCampanhaSection projeto={projeto} />}
           {activeTab === "equipe" && <EquipeProjetoSection projeto={projeto} somenteLeitura />}
           {activeTab === "arquivos" && <ArquivosContextView projetoId={projeto.id} compacto />}
           {activeTab === "historico" && <HistoricoProjetoSection />}

@@ -24,6 +24,7 @@ import { useAppData } from "@/lib/AppDataContext";
 import { useDiretorioDepartamentos } from "@/lib/diretorioDepartamentos";
 import {
   podeAcessarAreaAdministrativa,
+  podeAcessarProjetos,
   podeAcessarCentralTrafego,
   podeAcessarMeuDepartamento,
   podeAcessarMinhasDemandas,
@@ -76,12 +77,14 @@ function buildNavItems(usuarioAtual: Usuario | undefined, departamentos: Departa
   if (podeAcessarCentralTrafego(usuarioAtual)) {
     items.push({ label: "Tráfego", href: "/trafego", icon: Activity });
   }
-  // Projetos, Relatórios e Configurações dependem de rotas que devolvem 403 para operador
-  // (`/projetos`, `/clientes`, `/usuarios`, …). Enquanto for assim, não entram no menu.
-  if (podeAcessarAreaAdministrativa(usuarioAtual)) {
+  // Projetos: administração e Atendimento (quem demanda e organiza as tarefas dos clientes). Relatórios e Configurações dependem de rotas que devolvem 403 para operador
+  // (`/clientes`, `/usuarios`, …). Enquanto for assim, não entram no menu.
+  if (podeAcessarProjetos(usuarioAtual, departamentos)) {
     // Projetos fica logo depois de Tarefas (mesma lista alimenta desktop e mobile); só a ORDEM mudou — rota, ícone e gate são os mesmos.
     const indiceTarefas = items.findIndex((item) => item.href === "/tarefas");
     items.splice(indiceTarefas + 1, 0, { label: "Projetos", href: "/projetos", icon: Kanban });
+  }
+  if (podeAcessarAreaAdministrativa(usuarioAtual)) {
     items.push({ label: "Relatórios", href: "/relatorios", icon: BarChart3 }, { label: "Configurações", href: "/configuracoes", icon: Settings });
   }
   return items;

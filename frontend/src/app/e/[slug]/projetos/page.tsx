@@ -1,10 +1,10 @@
-import { AreaAdministrativaGuard } from "@/components/operacional/AreaAdministrativaGuard";
+import { ProjetosAcessoGuard } from "@/components/operacional/ProjetosAcessoGuard";
 import { ProjetosView } from "@/components/projetos/ProjetosView";
 
 export default function ProjetosPage() {
   return (
-    <AreaAdministrativaGuard>
+    <ProjetosAcessoGuard>
       <ProjetosView />
-    </AreaAdministrativaGuard>
+    </ProjetosAcessoGuard>
   );
 }

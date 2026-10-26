@@ -58,10 +58,15 @@ class ProjetoRepository:
         search: str | None = None,
         cliente_id: str | None = None,
         departamento_id: str | None = None,
+        cliente_ids_permitidos: list[str] | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Projeto]:
         statement = select(Projeto).where(Projeto.empresa_id == empresa_id)
+
+        if cliente_ids_permitidos is not None:
+            # Atendimento: carteira OU projeto interno (sem cliente) — a mesma regra do diretório. Lista vazia é filtro válido (carteira vazia), por isso `is not None`.
+            statement = statement.where(or_(Projeto.cliente_id.in_(cliente_ids_permitidos), Projeto.cliente_id.is_(None)))
 
         if status:
             statement = statement.where(Projeto.status == status)

@@ -54,12 +54,15 @@ export function ProjetosTable({
   onEdit,
   onArquivar,
   onRestaurar,
+  podeGerir = true,
 }: {
   projetos: Projeto[];
   onOpenDetails: (projetoId: string) => void;
   onEdit: (projetoId: string) => void;
   onArquivar: (projetoId: string) => void;
   onRestaurar: (projetoId: string) => void;
+  /** Editar/arquivar/restaurar: só a administração. O Atendimento vê e cria, mas não altera nem arquiva (o servidor também recusa). */
+  podeGerir?: boolean;
 }) {
   const { clientes } = useDiretorioClientes();
   const { usuarios, resolvendo } = useUsuariosComIds(projetos.flatMap((projeto) => projeto.responsavelIds));
@@ -148,7 +151,7 @@ export function ProjetosTable({
                         <Eye className="h-3.5 w-3.5" />
                         Detalhes
                       </Button>
-                      {arquivado ? (
+                      {!podeGerir ? null : arquivado ? (
                         <Button variant="secondary" onClick={() => onRestaurar(projeto.id)} className="px-3 py-1.5 text-xs">
                           <ArchiveRestore className="h-3.5 w-3.5" />
                           Restaurar
