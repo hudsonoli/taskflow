@@ -30,7 +30,7 @@ export function TrafegoGargalosTabela({ linhas }: { linhas: LinhaGargalo[] }) {
             <tr>
               <th className="px-3 py-2.5">Etapa</th>
               <th className="px-3 py-2.5 text-right" title="Tarefas abertas hoje cuja etapa atual é esta">
-                WIP
+                Agora
               </th>
               <th className="px-3 py-2.5 text-right" title={`${ROTULO_TEMPO.execucao}: média por ocorrência`}>
                 Execução (média)

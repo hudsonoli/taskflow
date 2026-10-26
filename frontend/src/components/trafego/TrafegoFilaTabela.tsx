@@ -11,7 +11,7 @@ const TOM_ESTADO: Record<LinhaFila["estados"][number]["id"], BadgeTone> = {
 };
 
 /**
- * Fila ATUAL (WIP) por definição de etapa: quantas tarefas abertas estão nela, há quanto tempo está a mais antiga NA ETAPA e em que estados. Idade na etapa ≠ idade no estado: devolver a
+ * Fila ATUAL ("Agora") por definição de etapa: quantas tarefas abertas estão nela, há quanto tempo está a mais antiga NA ETAPA e em que estados. Idade na etapa ≠ idade no estado: devolver a
  * tarefa à etapa anterior recomeça a contagem. Quando a medição começou com a tarefa já na etapa, a idade real pode ser maior (tooltip) — informação, não erro.
  */
 export function TrafegoFilaTabela({ linhas }: { linhas: LinhaFila[] }) {
@@ -22,7 +22,9 @@ export function TrafegoFilaTabela({ linhas }: { linhas: LinhaFila[] }) {
           <thead className="border-b border-line bg-surface-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-subtle">
             <tr>
               <th className="px-3 py-2.5">Etapa</th>
-              <th className="px-3 py-2.5 text-right">WIP</th>
+              <th className="px-3 py-2.5 text-right" title="Tarefas abertas hoje cuja etapa atual é esta">
+                Agora
+              </th>
               <th className="px-3 py-2.5 text-right" title="Há quanto tempo a tarefa mais antiga está nesta etapa">
                 Mais antiga há
               </th>

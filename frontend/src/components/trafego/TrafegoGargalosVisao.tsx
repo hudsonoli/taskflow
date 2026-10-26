@@ -145,7 +145,7 @@ export function TrafegoGargalosVisao({ etapa, onLimparEtapa }: { etapa: { id: st
           <ul aria-label="Situação atual" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Resumo icone={<Ban size={16} />} titulo="Bloqueadas agora" valor={dados.atual.bloqueadas} ajuda="tarefas neste estado" />
             <Resumo icone={<Hourglass size={16} />} titulo="Aguardando cliente agora" valor={dados.atual.aguardandoCliente} ajuda="tarefas neste estado" />
-            <Resumo icone={<Layers size={16} />} titulo="WIP total" valor={dados.atual.wip} ajuda="tarefas abertas no fluxo" />
+            <Resumo icone={<Layers size={16} />} titulo="Total agora" valor={dados.atual.wip} ajuda="tarefas abertas no fluxo" />
           </ul>
 
           <section aria-label="Tempo por etapa" className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
