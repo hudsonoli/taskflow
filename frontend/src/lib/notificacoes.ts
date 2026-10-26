@@ -63,9 +63,14 @@ export function iniciais(nome: string): string {
 /** Tipo do evento que avisa "a etapa de Workflow que é sua virou a atual" (Fase 8C). */
 export const TIPO_ETAPA_DE_WORKFLOW_ATUALIZADA = "demanda.workflow_etapa_atualizada";
 
-/** Aba do drawer da demanda aberta ao clicar na notificação: a de etapa de Workflow vai direto para "workflow"; as demais, "dados". */
-export function abaDaNotificacao(tipo: string): "workflow" | "dados" {
-  return tipo === TIPO_ETAPA_DE_WORKFLOW_ATUALIZADA ? "workflow" : "dados";
+/** Tipo do evento "você foi @mencionado em um comentário": um evento por ação, com os destinatários novos no payload. */
+export const TIPO_USUARIOS_MENCIONADOS = "demanda.usuarios_mencionados";
+
+/** Aba do drawer da demanda aberta ao clicar na notificação: a de etapa de Workflow vai direto para "workflow", a de @menção para "atividade" (onde está o comentário); as demais, "dados". */
+export function abaDaNotificacao(tipo: string): "workflow" | "atividade" | "dados" {
+  if (tipo === TIPO_ETAPA_DE_WORKFLOW_ATUALIZADA) return "workflow";
+  if (tipo === TIPO_USUARIOS_MENCIONADOS) return "atividade";
+  return "dados";
 }
 
 /** Contexto secundário da notificação: identificador emitido da demanda (fallback: referência) + nome. Nunca monta `#número` à mão. */

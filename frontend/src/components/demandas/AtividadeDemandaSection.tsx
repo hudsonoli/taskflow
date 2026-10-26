@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { MessageSquare, Pencil, Send, Trash2, X } from "lucide-react";
 import {
   criarComentarioDemanda,
   editarComentarioDemanda,
   excluirComentarioDemanda,
+  listarMencionaveisDemanda,
   listComentariosDemanda,
 } from "@/lib/api-backend";
 import { useAppData } from "@/lib/AppDataContext";
 import { podeAcessarAreaAdministrativa } from "@/lib/escopo-operacional";
+import { idsDasMencoes, reconciliarSelecionadas, segmentarComMencoes, type Mencionavel } from "@/lib/mencoes";
 import { useUsuariosComIds } from "@/lib/useUsuariosComIds";
 import type { Demanda, DemandaComentario } from "@/types/demanda";
+import { MencaoTextarea } from "./MencaoTextarea";
 import { useEscopoLeituraDemanda } from "./leituraDemanda";
 
 function SectionShell({ children }: { children: ReactNode }) {
@@ -42,7 +45,8 @@ function formatarDataHora(iso: string): string {
  * Este componente só REFLETE a permissão (mostra/esconde botão) — quem barra de verdade é
  * `DemandaComentarioService`, que devolve 403 mesmo que a UI deixasse passar.
  *
- * Sem @mention, anexo, reação ou thread nesta fase — ver docstring de `DemandaComentario`.
+ * @menções (V1): "@" abre a lista de pessoas elegíveis; escolher grava "@Nome" no texto e a identidade (id) à parte. O servidor revalida e notifica só os mencionados novos.
+ * Sem anexo, reação ou thread — ver docstring de `DemandaComentario`.
  */
 export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
   const { usuarioAtual } = useAppData();
@@ -58,6 +62,14 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [textoEdicao, setTextoEdicao] = useState("");
   const [processandoId, setProcessandoId] = useState<string | null>(null);
+  const [selecionadas, setSelecionadas] = useState<Mencionavel[]>([]);
+  const [selecionadasEdicao, setSelecionadasEdicao] = useState<Mencionavel[]>([]);
+  const [publicando, setPublicando] = useState(false);
+
+  const buscarMencionaveis = useCallback(
+    (consulta: string, sinal: AbortSignal) => listarMencionaveisDemanda(demanda.id, consulta, sinal),
+    [demanda.id],
+  );
 
   const podeModerar = usuarioAtual ? podeAcessarAreaAdministrativa(usuarioAtual) : false;
 
@@ -86,20 +98,26 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
 
   async function comentar() {
     const conteudo = texto.trim();
-    if (!conteudo) return;
+    if (!conteudo || publicando) return; // trava o duplo envio: um clique = um comentário = no máximo uma notificação por pessoa
     setErro(null);
+    setPublicando(true);
     try {
-      const criado = await criarComentarioDemanda(demanda.id, conteudo);
+      const criado = await criarComentarioDemanda(demanda.id, conteudo, idsDasMencoes(reconciliarSelecionadas(conteudo, selecionadas)));
       setComentarios((atual) => [criado, ...atual]);
       setTexto("");
-    } catch {
-      setErro("Não foi possível publicar o comentário.");
+      setSelecionadas([]);
+    } catch (error) {
+      setErro(error instanceof Error && error.message ? error.message : "Não foi possível publicar o comentário.");
+    } finally {
+      setPublicando(false);
     }
   }
 
   function iniciarEdicao(comentario: DemandaComentario) {
     setEditandoId(comentario.id);
     setTextoEdicao(comentario.texto);
+    // as menções já guardadas voltam como selecionadas: reenviar o mesmo conjunto não notifica ninguém de novo
+    setSelecionadasEdicao((comentario.mencoes ?? []).map((m) => ({ id: m.usuarioId, nome: m.nome })));
   }
 
   async function salvarEdicao(comentarioId: string) {
@@ -108,11 +126,11 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
     setProcessandoId(comentarioId);
     setErro(null);
     try {
-      const atualizado = await editarComentarioDemanda(demanda.id, comentarioId, conteudo);
+      const atualizado = await editarComentarioDemanda(demanda.id, comentarioId, conteudo, idsDasMencoes(reconciliarSelecionadas(conteudo, selecionadasEdicao)));
       setComentarios((atual) => atual.map((item) => (item.id === comentarioId ? atualizado : item)));
       setEditandoId(null);
-    } catch {
-      setErro("Não foi possível salvar a edição.");
+    } catch (error) {
+      setErro(error instanceof Error && error.message ? error.message : "Não foi possível salvar a edição.");
     } finally {
       setProcessandoId(null);
     }
@@ -135,23 +153,27 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
     <SectionShell>
       {!somenteLeitura && (
       <div className="flex items-start gap-2">
-        <textarea
+        <MencaoTextarea
+          className="flex-1"
           value={texto}
-          onChange={(event) => setTexto(event.target.value)}
-          onKeyDown={(event) => {
+          onValueChange={setTexto}
+          selecionadas={selecionadas}
+          onSelecionadasChange={setSelecionadas}
+          buscar={buscarMencionaveis}
+          onKeyDownExtra={(event) => {
             if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
               event.preventDefault();
               void comentar();
             }
           }}
-          placeholder="Comentar sobre a tarefa…"
+          placeholder="Comentar sobre a tarefa… use @ para mencionar alguém"
+          ariaLabel="Novo comentário"
           rows={2}
-          className="field w-full resize-none rounded-xl py-2.5 px-3 text-sm"
         />
         <button
           type="button"
           onClick={() => void comentar()}
-          disabled={!texto.trim()}
+          disabled={!texto.trim() || publicando}
           className="inline-flex shrink-0 items-center justify-center rounded-xl bg-indigo-600 p-2.5 text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Comentar"
         >
@@ -215,19 +237,24 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
 
                 {editandoId === comentario.id ? (
                   <div className="mt-1.5 flex items-start gap-2">
-                    <textarea
+                    <MencaoTextarea
+                      className="flex-1"
                       autoFocus
                       value={textoEdicao}
-                      onChange={(event) => setTextoEdicao(event.target.value)}
-                      onKeyDown={(event) => {
+                      onValueChange={setTextoEdicao}
+                      selecionadas={selecionadasEdicao}
+                      onSelecionadasChange={setSelecionadasEdicao}
+                      buscar={buscarMencionaveis}
+                      onKeyDownExtra={(event) => {
                         if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                           event.preventDefault();
                           void salvarEdicao(comentario.id);
                         }
                         if (event.key === "Escape") setEditandoId(null);
                       }}
+                      ariaLabel="Editar comentário"
                       rows={2}
-                      className="w-full resize-none rounded-xl border border-indigo-300 bg-surface px-3 py-2 text-sm text-fg outline-none"
+                      inputClassName="w-full resize-none rounded-xl border border-indigo-300 bg-surface px-3 py-2 text-sm text-fg outline-none"
                     />
                     <button
                       type="button"
@@ -248,7 +275,17 @@ export function AtividadeDemandaSection({ demanda }: { demanda: Demanda }) {
                     </button>
                   </div>
                 ) : (
-                  <p className="mt-1.5 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{comentario.texto}</p>
+                  <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                    {segmentarComMencoes(comentario.texto, comentario.mencoes ?? []).map((trecho, posicao) =>
+                      trecho.tipo === "mencao" ? (
+                        <span key={posicao} className="rounded bg-indigo-50 px-1 font-medium text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
+                          {trecho.valor}
+                        </span>
+                      ) : (
+                        <span key={posicao}>{trecho.valor}</span>
+                      ),
+                    )}
+                  </p>
                 )}
               </div>
             );

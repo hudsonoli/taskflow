@@ -111,6 +111,8 @@ class DomainEventType(StrEnum):
     DEMANDA_COMENTARIO_CRIADO = "demanda.comentario_criado"
     DEMANDA_COMENTARIO_EDITADO = "demanda.comentario_editado"
     DEMANDA_COMENTARIO_REMOVIDO = "demanda.comentario_removido"
+    # @menções em comentário: UM evento por ação (criar/editar), com os destinatários NOVOS em `destinatarioUsuarioIds` — alimenta só a central de notificações (fora da timeline).
+    DEMANDA_USUARIOS_MENCIONADOS = "demanda.usuarios_mencionados"
 
     # Completa a timeline com marcos que já existiam como campo/ação mas nunca viravam
     # evento (Fase 2E.4).

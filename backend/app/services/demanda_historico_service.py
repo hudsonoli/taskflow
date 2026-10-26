@@ -12,6 +12,8 @@ TIPOS_FORA_DA_TIMELINE = (
     # externo). Estes dois existem só para a central de notificações — mostrá-los duplicaria a mesma ação.
     "demanda.aprovacao_externa_aprovada",
     "demanda.aprovacao_externa_ajustes",
+    # @menções: o comentário já aparece como "Comentário publicado/editado"; este evento existe só para a central de notificações (e carrega a prévia do texto).
+    "demanda.usuarios_mencionados",
 )
 
 

@@ -2352,6 +2352,7 @@ export type DemandaComentarioReadApi = {
   createdAt: string;
   updatedAt: string;
   editadoEm: string | null;
+  mencoes?: { usuarioId: string; nome: string }[];
 };
 
 function mapComentarioReadToComentario(data: DemandaComentarioReadApi): DemandaComentario {
@@ -2363,10 +2364,16 @@ export async function listComentariosDemanda(demandaId: string, escopo?: EscopoL
   return comentarios.map(mapComentarioReadToComentario);
 }
 
-export async function criarComentarioDemanda(demandaId: string, texto: string): Promise<DemandaComentario> {
+/** Quem pode ser @mencionado NESTA tarefa (o servidor filtra empresa, status e acesso). Nunca devolve e-mail/telefone. */
+export async function listarMencionaveisDemanda(demandaId: string, consulta: string, signal?: AbortSignal): Promise<{ id: string; nome: string; cargo?: string | null }[]> {
+  const parametros = new URLSearchParams({ q: consulta, limit: "8" });
+  return request(`/demandas/${encodeURIComponent(demandaId)}/mencionaveis?${parametros.toString()}`, { signal });
+}
+
+export async function criarComentarioDemanda(demandaId: string, texto: string, mencoesUsuarioIds: string[] = []): Promise<DemandaComentario> {
   const comentario = await request<DemandaComentarioReadApi>(`/demandas/${demandaId}/comentarios`, {
     method: "POST",
-    body: JSON.stringify({ texto }),
+    body: JSON.stringify({ texto, mencoesUsuarioIds }),
   });
   return mapComentarioReadToComentario(comentario);
 }
@@ -2375,10 +2382,11 @@ export async function editarComentarioDemanda(
   demandaId: string,
   comentarioId: string,
   texto: string,
+  mencoesUsuarioIds: string[] = [],
 ): Promise<DemandaComentario> {
   const comentario = await request<DemandaComentarioReadApi>(
     `/demandas/${demandaId}/comentarios/${comentarioId}`,
-    { method: "PATCH", body: JSON.stringify({ texto }) },
+    { method: "PATCH", body: JSON.stringify({ texto, mencoesUsuarioIds }) },
   );
   return mapComentarioReadToComentario(comentario);
 }

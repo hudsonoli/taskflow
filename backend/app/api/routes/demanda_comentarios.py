@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.escopo_leitura import EscopoLeitura, demanda_com_acesso_de_leitura, escopo_para_leitura
-from app.core.escopo import resolver_escopo_criador
+from app.core.escopo import EscopoNaoAutorizadoError, resolver_escopo_criador
 from app.core.identidade_sistema import ids_de_contas_de_sistema
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user_password_ready
@@ -14,7 +14,9 @@ from app.schemas.demanda_comentario import (
     DemandaComentarioCreate,
     DemandaComentarioRead,
     DemandaComentarioUpdate,
+    MencionavelRead,
 )
+from app.services.comentario_mencao_service import MencaoInvalidaError
 from app.services.demanda_comentario_service import (
     DemandaComentarioNaoAutorizadoError,
     DemandaComentarioNotFoundError,
@@ -39,6 +41,8 @@ def handle_comentario_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     if isinstance(exc, DemandaComentarioNaoAutorizadoError):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if isinstance(exc, MencaoInvalidaError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     raise exc
 
 
@@ -68,6 +72,42 @@ def _demanda_para_comentar(demanda_id: UUID, current_user: Usuario, db: Session)
         return demanda_service.get_demanda(db, str(demanda_id), escopo=resolver_escopo_criador(current_user)), True
 
 
+def _read_com_mencoes(db: Session, comentario) -> DemandaComentarioRead:
+    mencoes = comentario_service.mencao_service.listar_por_comentarios(db, [comentario.id])
+    return comentario_service.to_read(comentario, mencoes=mencoes.get(comentario.id))
+
+
+def _pode_ler_a_demanda(db: Session, demanda_id: str):
+    """Predicado de menção: o usuário LÊ esta Demanda pelas mesmas regras do detalhe (escopo-base, escopo derivado do Workflow ou autoria). A menção nunca concede acesso."""
+
+    def pode_ler(usuario: Usuario) -> bool:
+        try:
+            demanda_com_acesso_de_leitura(db, usuario, demanda_id, demanda_service, None)
+            return True
+        except (DemandaNotFoundError, EscopoNaoAutorizadoError):
+            return False
+
+    return pode_ler
+
+
+@router.get("/{demanda_id}/mencionaveis", response_model=list[MencionavelRead])
+def listar_mencionaveis(
+    demanda_id: UUID,
+    q: str = Query(default="", max_length=80),
+    limit: int = Query(default=8, ge=1, le=20),
+    current_user: Usuario = Depends(get_current_user_password_ready),
+    db: Session = Depends(get_db),
+):
+    """Autocomplete de @menção: só quem pode ser mencionado NESTA tarefa (mesma empresa, ativo, com acesso a ela). Quem pode comentar pode buscar."""
+    try:
+        demanda, _ = _demanda_para_comentar(demanda_id, current_user, db)
+        return comentario_service.mencao_service.buscar_mencionaveis(
+            db, empresa_id=demanda.empresa_id, autor_id=current_user.id, consulta=q, limite=limit, pode_ler=_pode_ler_a_demanda(db, demanda.id)
+        )
+    except Exception as exc:
+        handle_comentario_error(exc)
+
+
 @router.get("/{demanda_id}/comentarios", response_model=list[DemandaComentarioRead])
 def listar_comentarios(
     demanda_id: UUID,
@@ -83,8 +123,9 @@ def listar_comentarios(
             if current_user.is_system_account
             else ids_de_contas_de_sistema(db, (comentario.autor_usuario_id for comentario in comentarios))
         )
+        mencoes = comentario_service.mencao_service.listar_por_comentarios(db, [comentario.id for comentario in comentarios])
         return [
-            comentario_service.to_read(comentario, autor_sistema=comentario.autor_usuario_id in sistema)
+            comentario_service.to_read(comentario, autor_sistema=comentario.autor_usuario_id in sistema, mencoes=mencoes.get(comentario.id))
             for comentario in comentarios
         ]
     except Exception as exc:
@@ -103,8 +144,10 @@ def criar_comentario(
     try:
         demanda, so_criador = _demanda_para_comentar(demanda_id, current_user, db)
         # O comentário do SOLICITANTE não é a "primeira resposta" da operação ao cliente: não fixa `sla_primeira_resposta_em`.
-        comentario = comentario_service.criar_comentario(db, demanda, payload, autor=current_user, fixar_primeira_resposta=not so_criador)
-        return comentario_service.to_read(comentario)
+        comentario = comentario_service.criar_comentario(
+            db, demanda, payload, autor=current_user, fixar_primeira_resposta=not so_criador, pode_ler=_pode_ler_a_demanda(db, demanda.id)
+        )
+        return _read_com_mencoes(db, comentario)
     except Exception as exc:
         handle_comentario_error(exc)
 
@@ -120,9 +163,9 @@ def editar_comentario(
     try:
         demanda, _ = _demanda_para_comentar(demanda_id, current_user, db)  # a regra "só o autor edita" é do service
         comentario = comentario_service.editar_comentario(
-            db, demanda, str(comentario_id), payload, current_user=current_user
+            db, demanda, str(comentario_id), payload, current_user=current_user, pode_ler=_pode_ler_a_demanda(db, demanda.id)
         )
-        return comentario_service.to_read(comentario)
+        return _read_com_mencoes(db, comentario)
     except Exception as exc:
         handle_comentario_error(exc)
 

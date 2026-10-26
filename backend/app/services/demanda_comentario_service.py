@@ -14,7 +14,9 @@ from app.schemas.demanda_comentario import (
     DemandaComentarioCreate,
     DemandaComentarioRead,
     DemandaComentarioUpdate,
+    MencaoRead,
 )
+from app.services.comentario_mencao_service import ComentarioMencaoService, PodeLer
 from app.services.domain_event_publisher import DomainEventPublisher
 
 TIPO_ENTIDADE = "demanda"
@@ -48,12 +50,14 @@ class DemandaComentarioService:
         repository: DemandaComentarioRepository | None = None,
         demanda_repository: DemandaRepository | None = None,
         event_publisher: DomainEventPublisher | None = None,
+        mencao_service: ComentarioMencaoService | None = None,
     ) -> None:
         self.repository = repository or DemandaComentarioRepository()
         # Só pro UPDATE condicional de sla_primeira_resposta_em (Fase 2G.6D2B) — este service
         # nunca lê/decide nada sobre a Demanda em si além disso.
         self.demanda_repository = demanda_repository or DemandaRepository()
         self.event_publisher = event_publisher or DomainEventPublisher()
+        self.mencao_service = mencao_service or ComentarioMencaoService()
 
     def list_comentarios(self, db: Session, demanda_id: str) -> list[DemandaComentario]:
         return self.repository.list_by_demanda(db, demanda_id)
@@ -67,7 +71,14 @@ class DemandaComentarioService:
         return comentario
 
     def criar_comentario(
-        self, db: Session, demanda: Demanda, data: DemandaComentarioCreate, *, autor: Usuario, fixar_primeira_resposta: bool = True
+        self,
+        db: Session,
+        demanda: Demanda,
+        data: DemandaComentarioCreate,
+        *,
+        autor: Usuario,
+        fixar_primeira_resposta: bool = True,
+        pode_ler: PodeLer | None = None,
     ) -> DemandaComentario:
         """Primeiro comentário da Demanda também fixa `sla_primeira_resposta_em` — definição
         V1 aprovada no relatório da Fase 2G.6D2A (ver docstring de app/models/demanda.py,
@@ -102,6 +113,10 @@ class DemandaComentarioService:
                 db, demanda, DomainEventType.DEMANDA_COMENTARIO_CRIADO, autor.id,
                 extra_payload={"comentarioId": comentario.id}, occurred_at=now,
             )
+            # @menções na MESMA transação do comentário: se a validação recusar, nem o comentário nem a notificação persistem.
+            self.mencao_service.sincronizar(
+                db, demanda=demanda, comentario=comentario, autor=autor, usuario_ids=data.mencoes_usuario_ids, pode_ler=pode_ler
+            )
             db.commit()
             db.refresh(comentario)
             return comentario
@@ -117,6 +132,7 @@ class DemandaComentarioService:
         data: DemandaComentarioUpdate,
         *,
         current_user: Usuario,
+        pode_ler: PodeLer | None = None,
     ) -> DemandaComentario:
         try:
             comentario = self._get_comentario_da_demanda(db, demanda.id, comentario_id)
@@ -125,17 +141,23 @@ class DemandaComentarioService:
                     "Somente o autor pode editar o próprio comentário"
                 )
 
-            if data.texto == comentario.texto:
+            texto_mudou = data.texto != comentario.texto
+            if not texto_mudou and data.mencoes_usuario_ids is None:
                 return comentario
 
-            now = agora_utc()
-            comentario.texto = data.texto
-            comentario.updated_at = now
-            comentario.editado_em = now
-            self.repository.update(db, comentario)
-            self._publish_event(
-                db, demanda, DomainEventType.DEMANDA_COMENTARIO_EDITADO, current_user.id,
-                extra_payload={"comentarioId": comentario.id}, occurred_at=now,
+            if texto_mudou:
+                now = agora_utc()
+                comentario.texto = data.texto
+                comentario.updated_at = now
+                comentario.editado_em = now
+                self.repository.update(db, comentario)
+                self._publish_event(
+                    db, demanda, DomainEventType.DEMANDA_COMENTARIO_EDITADO, current_user.id,
+                    extra_payload={"comentarioId": comentario.id}, occurred_at=now,
+                )
+            # Só as menções NOVAS (atuais − anteriores) notificam; reenviar a mesma edição não notifica de novo.
+            self.mencao_service.sincronizar(
+                db, demanda=demanda, comentario=comentario, autor=current_user, usuario_ids=data.mencoes_usuario_ids, pode_ler=pode_ler
             )
             db.commit()
             db.refresh(comentario)
@@ -174,7 +196,9 @@ class DemandaComentarioService:
             raise
 
     @staticmethod
-    def to_read(comentario: DemandaComentario, *, autor_sistema: bool = False) -> DemandaComentarioRead:
+    def to_read(
+        comentario: DemandaComentario, *, autor_sistema: bool = False, mencoes: list[tuple[str, str]] | None = None
+    ) -> DemandaComentarioRead:
         """`autor_sistema`: o tenant não recebe o id de uma conta de sistema (vira None + `autorSistema`); o
         comentário, o texto e os horários seguem intactos."""
         return DemandaComentarioRead(
@@ -186,6 +210,7 @@ class DemandaComentarioService:
             createdAt=comentario.created_at,
             updatedAt=comentario.updated_at,
             editadoEm=comentario.editado_em,
+            mencoes=[MencaoRead(usuarioId=usuario_id, nome=nome) for usuario_id, nome in (mencoes or [])],
         )
 
     def _publish_event(

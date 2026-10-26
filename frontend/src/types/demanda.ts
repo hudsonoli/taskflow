@@ -137,6 +137,8 @@ export type DemandaComentario = {
   createdAt: string;
   updatedAt: string;
   editadoEm: string | null;
+  /** @menções guardadas pelo servidor (identidade = usuarioId); vazio em comentários sem menção ou antigos. */
+  mencoes?: { usuarioId: string; nome: string }[];
 };
 
 /**

@@ -20,6 +20,7 @@ from app.models import (  # noqa: E402,F401
     configuracao_email,
     configuracao_personalizacao,
     notificacao_leitura,
+    demanda_comentario_mencao,
     demanda,
     demanda_arquivo,
     demanda_checklist_item,

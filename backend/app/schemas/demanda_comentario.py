@@ -21,6 +21,8 @@ def _texto_nao_pode_ser_so_espaco(value: str) -> str:
 
 class DemandaComentarioCreate(BaseModel):
     texto: str = Field(min_length=1, max_length=4000)
+    # @menções ESTRUTURADAS (ids de quem foi escolhido no autocomplete); o servidor revalida tenant, status, acesso e a presença do "@Nome" no texto. Ausente = nenhuma.
+    mencoes_usuario_ids: list[UUID] | None = Field(default=None, alias="mencoesUsuarioIds", max_length=50)
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -32,6 +34,8 @@ class DemandaComentarioCreate(BaseModel):
 
 class DemandaComentarioUpdate(BaseModel):
     texto: str = Field(min_length=1, max_length=4000)
+    # Ausente (None) = não mexer nas menções; lista (inclusive vazia) = o conjunto ATUAL de menções do comentário (novas notificam, removidas somem do estado).
+    mencoes_usuario_ids: list[UUID] | None = Field(default=None, alias="mencoesUsuarioIds", max_length=50)
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -39,6 +43,23 @@ class DemandaComentarioUpdate(BaseModel):
     @classmethod
     def texto_valido(cls, value: str) -> str:
         return _texto_nao_pode_ser_so_espaco(value)
+
+
+class MencaoRead(BaseModel):
+    usuario_id: UUID = Field(alias="usuarioId")
+    nome: str
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class MencionavelRead(BaseModel):
+    """Sugestão do autocomplete: só o necessário para escolher e inserir o token (sem e-mail, telefone ou documento)."""
+
+    id: UUID
+    nome: str
+    cargo: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DemandaComentarioRead(BaseModel):
@@ -51,6 +72,7 @@ class DemandaComentarioRead(BaseModel):
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
     editado_em: datetime | None = Field(default=None, alias="editadoEm")
+    mencoes: list[MencaoRead] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

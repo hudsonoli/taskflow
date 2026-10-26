@@ -46,6 +46,9 @@ TIPO_ATRIBUICAO = "demanda.responsavel_adicionado"
 # Fase 8C: avisa quem precisa agir na etapa que acabou de virar a atual. Os destinatários vêm EXPLÍCITOS no payload (`destinatarioUsuarioIds`,
 # calculados na progressão — `core/workflow_destinatarios.py`): quem é responsável pela ETAPA nem sempre é responsável pela DEMANDA.
 TIPO_ETAPA_ATUALIZADA = "demanda.workflow_etapa_atualizada"
+# @menção em comentário: UM evento por ação; os destinatários (só os NOVOS mencionados, nunca o autor) vêm EXPLÍCITOS em `destinatarioUsuarioIds`, como na etapa de Workflow. Quem é responsável
+# pela demanda e NÃO foi mencionado não recebe: por isso este tipo fica fora do predicado "minhas demandas" e tem o seu próprio.
+TIPO_MENCAO = "demanda.usuarios_mencionados"
 
 # tipo do evento → título. Só entra na central o que está aqui; evento novo não "vaza" sozinho.
 TITULOS: dict[str, str] = {
@@ -60,6 +63,7 @@ TITULOS: dict[str, str] = {
     "demanda.arquivada": "Tarefa arquivada",
     "demanda.restaurada": "Tarefa restaurada",
     TIPO_ETAPA_ATUALIZADA: "Nova etapa de Workflow disponível",  # título por tipo de etapa: ver `_titulo`
+    TIPO_MENCAO: "Você foi mencionado em um comentário",  # o autor aparece em `autorNome`; a prévia do texto vai no detalhe
     # Fase 9B — decisão do cliente no Portal de Aprovação (autor = nome declarado do cliente; o motivo dos ajustes fica no histórico)
     "demanda.aprovacao_externa_aprovada": "Cliente aprovou a etapa de aprovação",
     "demanda.aprovacao_externa_ajustes": "Cliente solicitou ajustes",
@@ -108,6 +112,8 @@ def _detalhe(tipo: str, payload: dict | None) -> str | None:
         return dados.get("motivoBloqueio") or None
     if tipo == "demanda.arquivo_enviado":
         return dados.get("nomeOriginal") or None
+    if tipo == TIPO_MENCAO:
+        return dados.get("previa") or None
     if tipo == TIPO_ETAPA_ATUALIZADA or tipo in TIPOS_APROVACAO_EXTERNA:
         nome = dados.get("etapaNome")
         return f"Etapa {dados.get('etapaOrdem')}: {nome}" if nome and dados.get("etapaOrdem") else (nome or None)
@@ -137,7 +143,7 @@ class NotificacaoService:
         desde = agora_utc() - timedelta(days=JANELA_DIAS)
         # (a) eventos das demandas em que eu sou RESPONSÁVEL (regra de sempre)
         das_minhas_demandas = and_(
-            Evento.tipo.in_([t for t in TITULOS if t != TIPO_ETAPA_ATUALIZADA]),
+            Evento.tipo.in_([t for t in TITULOS if t not in (TIPO_ETAPA_ATUALIZADA, TIPO_MENCAO)]),
             # só das demandas em que eu sou responsável (hoje)
             Evento.entidade_id.in_(select(DemandaResponsavel.demanda_id).where(DemandaResponsavel.usuario_id == usuario.id)),
             # nunca a minha própria ação
@@ -151,11 +157,16 @@ class NotificacaoService:
             Evento.tipo == TIPO_ETAPA_ATUALIZADA,
             cast(Evento.payload, JSONB).contains({"destinatarioUsuarioIds": [usuario.id]}),
         )
+        # (c) @menção: eu estou entre os destinatários EXPLÍCITOS (o servidor só os grava depois de validar empresa, status e acesso à tarefa; a notificação não concede visibilidade).
+        mencionado = and_(
+            Evento.tipo == TIPO_MENCAO,
+            cast(Evento.payload, JSONB).contains({"destinatarioUsuarioIds": [usuario.id]}),
+        )
         return [
             Evento.empresa_id == usuario.empresa_id,
             Evento.entidade_tipo == "demanda",
             Evento.occurred_at >= desde,
-            or_(das_minhas_demandas, etapa_para_mim),
+            or_(das_minhas_demandas, etapa_para_mim, mencionado),
         ]
 
     @staticmethod
