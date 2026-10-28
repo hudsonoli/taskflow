@@ -12,7 +12,13 @@ export type PautaContexto = {
   onOpenDetails: (demandaId: string) => void;
 };
 
-/** Texto curto de quem é responsável NESTE agrupamento: colaborador → só os colegas ("Com João") ou o departamento; projeto → todos os nomes. */
+/** Identificador técnico (UUID) nunca é rótulo: se algum resolvedor devolver um, o texto é descartado em vez de exibido. */
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+export function semIdentificadorTecnico(texto: string | null | undefined): string | null {
+  return texto && !UUID.test(texto) ? texto : null;
+}
+
+/** Texto curto de quem é responsável NESTE agrupamento: colaborador → só os colegas ("João") ou o departamento; projeto → todos os nomes. */
 export function rotuloDeResponsaveis(item: PautaItem, contexto: PautaContexto, usuarioDoGrupo?: string): string | null {
   const { usuarioIds, departamentoIds } = item.responsabilidadeEfetiva;
   if (usuarioIds.length === 0) {
@@ -21,7 +27,7 @@ export function rotuloDeResponsaveis(item: PautaItem, contexto: PautaContexto, u
   }
   const nomes = (contexto.visao === "colaborador" ? usuarioIds.filter((id) => id !== usuarioDoGrupo) : usuarioIds).map(contexto.nomePessoa);
   if (nomes.length === 0) return null;
-  return contexto.visao === "colaborador" ? `Com ${nomes.join(", ")}` : nomes.join(", ");
+  return nomes.join(", ");
 }
 
 export function rotuloDeOrigem(item: PautaItem): string | null {
@@ -32,5 +38,5 @@ export function rotuloDeOrigem(item: PautaItem): string | null {
 }
 
 export function contextoDoItem(item: PautaItem, contexto: PautaContexto): string {
-  return [contexto.nomeCliente(item.clienteId), contexto.nomeProjeto(item.projetoId)].filter(Boolean).join(" / ");
+  return [contexto.nomeCliente(item.clienteId), contexto.nomeProjeto(item.projetoId)].map(semIdentificadorTecnico).filter(Boolean).join(" / ");
 }

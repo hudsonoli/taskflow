@@ -641,6 +641,14 @@ html:has([data-login-claro]) body {
   box-shadow: var(--glass-card-shadow);
 }
 
+/* Pauta (só material, mesmos tokens): o Gantt é UMA superfície (o card já herda token + sombra acima; cabeçalho e coluna de nomes usam `--glass-sticky` pela regra de `.sticky.bg-surface`);
+   o alternador ativo ganha o destaque de marca. Sem blur por linha, célula ou botão. */
+[data-visual-style="glass"] [data-pauta="alternador"] [aria-pressed="true"] {
+  background: var(--glass-selected);
+  color: var(--glass-selected-text);
+  box-shadow: none;
+}
+
 /* NÍVEL 3 — menus, painéis flutuantes, tooltips: vidro evidente (um por vez). Os filhos ficam planos (política de vidro aninhado). */
 [data-visual-style="glass"] :is([data-superficie="menu"], [data-superficie="painel"], [data-superficie="tooltip"]) {
   --surface: var(--glass-nested);

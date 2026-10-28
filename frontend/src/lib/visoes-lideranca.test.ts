@@ -122,10 +122,10 @@ test("selo 'em execução agora' na Pauta: só ids de demanda (sem pessoa nem te
 
 test("etapa sem planejamento / com planejamento incompleto aparece na Pauta, sem barra enganosa e sem usar prazo", () => {
   const gantt = semComentarios(ler("components/pauta/PautaGantt.tsx"));
-  assert.match(gantt, /Planejamento incompleto \(\$\{incompletas\.length\}\)/);
-  assert.match(gantt, /Não planejadas \(\$\{naoPlanejadas\.length\}\)/);
+  assert.match(gantt, /Planejamento incompleto · \$\{incompletas\.length\}/);
+  assert.match(gantt, /Não planejadas · \$\{naoPlanejadas\.length\}/);
   assert.match(gantt, /Início: \{formatarDiaMes\(planejamento\.inicio\)\} · Fim: não definido/);
-  assert.match(gantt, /Sem janela planejada/);
+  assert.match(gantt, /Não planejada\s*<\/span>/); // linha sem janela: texto discreto, sem barra
   assert.match(gantt, /posicaoDaJanela\(planejamento\.inicio, planejamento\.fim, periodoInicio, periodoFim\)/); // geometria = só o planejamento
   assert.doesNotMatch(gantt, /prazo/i); // prazo nunca posiciona nada
   assert.match(semComentarios(ler("components/pauta/PautaLista.tsx")), /fim não definido/);

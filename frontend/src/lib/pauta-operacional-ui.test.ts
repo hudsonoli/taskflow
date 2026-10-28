@@ -44,7 +44,8 @@ test("a origem da responsabilidade vai só em tooltip/linha secundária, e só d
   assert.match(contexto, /"Definido na etapa"/);
   assert.match(contexto, /`Departamento: /);
   const gantt = semComentarios(ler("components/pauta/PautaGantt.tsx"));
-  assert.match(gantt, /title=\{origem \? `\$\{item\.etapaNome\} — \$\{origem\}` : item\.etapaNome\}/);
+  assert.match(gantt, /const detalhe = \[[^\]]*origem\]\.filter\(Boolean\)\.join\(" — "\)/); // a origem da responsabilidade vai no tooltip da linha
+  assert.match(gantt, /title=\{detalhe\}/);
   const grupos = semComentarios(ler("lib/pauta-operacional.ts"));
   assert.match(grupos, /"Sem responsável individual"/);
   assert.match(grupos, /"Sem responsável"/);

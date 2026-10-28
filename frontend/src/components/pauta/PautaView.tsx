@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTenantPath } from "@/lib/useTenantPath";
@@ -28,7 +27,7 @@ import {
   type ModoPauta,
   type VisaoPauta,
 } from "@/lib/pauta-operacional";
-import { resolverClienteNome, resolverProjetoNome } from "@/lib/referencias";
+import { resolverClienteNome, resolverClientePorReferencia, resolverProjetoNome } from "@/lib/referencias";
 import { useFiltrosNaUrl } from "@/lib/useFiltrosNaUrl";
 import { DemandaDetailsDrawer } from "@/components/demandas/DemandaDetailsDrawer";
 import type { Demanda } from "@/types/demanda";
@@ -115,7 +114,8 @@ export function PautaView() {
     const nomesPessoas = new Map((dados?.pessoas ?? []).map((pessoa) => [pessoa.id, pessoa.nome]));
     return {
       visao,
-      nomeCliente: (clienteId) => (clienteId ? resolverClienteNome(clienteId, clientes) : null),
+      // `resolverClienteNome` devolve a própria referência (UUID) quando o cliente não está no diretório: na Pauta isso nunca vira rótulo.
+      nomeCliente: (clienteId) => (clienteId && resolverClientePorReferencia(clienteId, clientes) ? resolverClienteNome(clienteId, clientes) : null),
       nomeProjeto: (projetoId) => (projetoId ? resolverProjetoNome(projetoId, projetos) : null),
       nomeDepartamento: (departamentoId) => departamentos.find((departamento) => departamento.id === departamentoId)?.nome ?? "Departamento indisponível",
       nomePessoa: (usuarioId) => nomesPessoas.get(usuarioId) ?? "Usuário indisponível",
@@ -210,28 +210,9 @@ export function PautaView() {
   const truncadas = dados ? [dados.totais.planejadas, dados.totais.incompletas, dados.totais.naoPlanejadas].filter((balde) => balde.truncado) : [];
 
   return (
-    <div className="flex flex-col gap-6">
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.2, 0.9, 0.3, 1] }}
-        className="rounded-xl border border-line bg-surface p-4 shadow-sm"
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
-              <CalendarClock className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-fg">Pauta</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-5 text-fg-muted">
-                Agenda operacional por etapa: quem está responsável, quando e em qual cliente/projeto. A barra mostra o planejamento da etapa (não o prazo); etapa sem planejamento, planejamento
-                incompleto e trabalho sem pessoa definida continuam visíveis.
-              </p>
-            </div>
-          </div>
-        </div>
-      </motion.div>
+    <div className="flex flex-col gap-4">
+      {/* O título visual é o item ativo da navegação superior; o h1 fica só para leitores de tela (sem bloco repetido acima da toolbar). */}
+      <h1 className="sr-only">Pauta</h1>
 
       <PautaToolbar
         query={query}
